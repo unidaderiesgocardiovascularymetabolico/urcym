@@ -254,6 +254,10 @@
     .hc-badge-fc { background:var(--teal-light); color:var(--teal); }
     .hc-badge-peso { background:var(--blue-light); color:var(--blue); }
     .hc-cuerpo { padding:16px; font-size:14px; line-height:1.8; color:var(--text); }
+    .hc-snapshot { background:#f8f9fc; border-left:3px solid var(--blue); border-radius:0 6px 6px 0; padding:6px 10px; margin:6px 16px 2px 16px; font-size:11.5px; }
+    .hc-snap-row { display:flex; align-items:flex-start; gap:8px; margin-bottom:3px; flex-wrap:wrap; }
+    .hc-snap-row:last-child { margin-bottom:0; }
+    .hc-snap-label { font-weight:700; color:var(--text-soft); min-width:28px; font-size:10px; text-transform:uppercase; padding-top:2px; }
     @media(max-width:768px) {
       .evol-body { grid-template-columns:1fr; }
     }
@@ -752,6 +756,7 @@ let modoEdicion = false;
 let dniEdicion = null;
 let ultimoDniCargado = null;
 let pacienteActual = null;
+let evolClinicaSnapshot = null; // snapshot clínico de la evolución en curso
 
 // ===== LOGIN =====
 function selectUser(u) {
@@ -1062,6 +1067,29 @@ function switchTab(tab) {
   });
 }
 
+// ===== RENDER SNAPSHOT CLÍNICO EN HISTORIA =====
+function renderSnapshotCompacto(snapshotJson) {
+  if(!snapshotJson) return '';
+  let snap;
+  try { snap = typeof snapshotJson === 'string' ? JSON.parse(snapshotJson) : snapshotJson; } catch(e) { return ''; }
+  const c = snap.clinica;
+  const meds = snap.medicacion || [];
+  if(!c) return '';
+  const DX_L={dx_acv:'ACV',dx_albuminuria:'Albuminuria',dx_atero_subcl:'Atero Subcl.',dx_dbt1:'DBT 1',dx_dbt2:'DBT 2',dx_dbt_otro:'DBT Otro',dx_dis:'Dislipemia',dx_eap:'EAP',dx_epoc:'EPOC',dx_erc:'ERC',dx_fa:'FA',dx_hiperu:'HiperU',dx_hta:'HTA',dx_hta2:'HTA 2',dx_hvi:'HVI',dx_iam:'IAM',dx_icc:'ICC',dx_masld:'MASLD',dx_ms:'S. Met.',dx_neu_dbt:'Neu DBT',dx_obe:'Obesidad',dx_predbt:'PreDBT',dx_rp_dbt:'RP DBT',dx_sahos:'SAHOS',dx_sob:'Sobrepeso'};
+  const GIN_L={dx_pe:'PE',dx_rciu:'RCIU',dx_ppt:'PPT',dx_sop:'SOP',dx_dbtg:'DBT-G',dx_htag:'HTA-G',dx_ms_gineco:'SM-G',dx_menopausia:'Menop.'};
+  const FAM_L={fam_hta:'HTA-F',fam_dbt:'DBT-F',fam_obe:'OBE-F',fam_dis:'DIS-F',fam_iam:'IAM-F',fam_acv:'ACV-F',fam_erc:'ERC-F',fam_ms:'SM-F'};
+  let dxHtml = '';
+  Object.entries(DX_L).forEach(([k,v])=>{ if(c[k]) dxHtml+='<span class="evh-tag">'+v+'</span>'; });
+  Object.entries(GIN_L).forEach(([k,v])=>{ if(c[k]) dxHtml+='<span class="evh-tag-pink">'+v+'</span>'; });
+  Object.entries(FAM_L).forEach(([k,v])=>{ if(c[k]) dxHtml+='<span class="evh-tag-green">'+v+'</span>'; });
+  const medHtml = meds.length ? meds.map(m=>'<span class="evh-med-item">'+m.farmaco+' '+m.dosis+'</span>').join(' · ') : '<span style="font-size:11px;color:var(--text-soft)">Sin medicación</span>';
+  if(!dxHtml && !meds.length) return '';
+  return '<div class="hc-snapshot">' +
+    (dxHtml ? '<div class="hc-snap-row"><span class="hc-snap-label">Dx</span><div>'+dxHtml+'</div></div>' : '') +
+    '<div class="hc-snap-row"><span class="hc-snap-label">Med</span><div>'+medHtml+'</div></div>' +
+  '</div>';
+}
+
 // ===== VER PREVIAS =====
 async function abrirPrevias() {
   if(!pacienteActual) return;
@@ -1072,7 +1100,8 @@ async function abrirPrevias() {
   if(!data || !data.length) { cont.innerHTML='<div class="empty-state"><div>📋</div><p>No hay evoluciones previas.</p></div>'; return; }
   cont.innerHTML = data.map(e => {
     const fh=new Date(e.fecha_hora);
-    return '<div class="hc-entrada"><div class="hc-header"><span class="hc-fecha">'+fh.toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'})+' '+fh.toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'})+'</span><span class="hc-medico">'+(e.medico||'')+'</span>'+(e.ta_promedio?'<span class="hc-badge-ta">TA: '+e.ta_promedio+'</span>':'')+(e.fc_promedio?'<span class="hc-badge-fc">FC: '+e.fc_promedio+' lpm</span>':'')+(e.peso?'<span class="hc-badge-peso">'+e.peso+' kg</span>':'')+'</div><div class="hc-cuerpo">'+(e.contenido_html||'')+'</div></div>';
+    const snapshotHtml = renderSnapshotCompacto(e.clinica_snapshot);
+    return '<div class="hc-entrada"><div class="hc-header"><span class="hc-fecha">'+fh.toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'})+' '+fh.toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'})+'</span><span class="hc-medico">'+(e.medico||'')+'</span>'+(e.ta_promedio?'<span class="hc-badge-ta">TA: '+e.ta_promedio+'</span>':'')+(e.fc_promedio?'<span class="hc-badge-fc">FC: '+e.fc_promedio+' lpm</span>':'')+(e.peso?'<span class="hc-badge-peso">'+e.peso+' kg</span>':'')+'</div>'+snapshotHtml+'<div class="hc-cuerpo">'+(e.contenido_html||'')+'</div></div>';
   }).join('');
 }
 
@@ -1100,6 +1129,17 @@ function generarTextoClinico(c, meds) {
   if(habParts.length) lines.push('HÁBITOS: '+habParts.join(' · '));
   if(!lines.length) return '';
   return '<div class="bloque-clinico" style="font-family:Arial,sans-serif;font-size:10pt;color:#333;border:1px solid #e0e0e0;padding:8px 10px;border-radius:6px;background:#fafafa;margin-bottom:10px;line-height:1.7">'+lines.join('<br>')+'</div>';
+}
+
+// ===== SNAPSHOT CLÍNICO =====
+async function cargarSnapshotInicial(dni) {
+  const [cr, mr] = await Promise.all([
+    sb.from('paciente_clinica').select('*').eq('dni_paciente', dni).single(),
+    sb.from('medicacion').select('*').eq('dni_paciente', dni).eq('activo', true).order('grupo')
+  ]);
+  if(cr.data) {
+    evolClinicaSnapshot = { clinica: cr.data, medicacion: mr.data || [] };
+  }
 }
 
 // ===== NUEVA guardarClinica CON VOLCADO =====
@@ -1145,6 +1185,8 @@ async function guardarClinica() {
     const tmp = document.createElement('div'); tmp.innerHTML = texto;
     editor.insertBefore(tmp.firstChild, editor.firstChild);
   }
+  // Actualizar snapshot de la evolución en curso
+  evolClinicaSnapshot = { clinica: clinicaData, medicacion: meds };
   cerrarModal('modalClinica');
   actualizarEncabezadoVariable(dni);
 }
@@ -1221,7 +1263,10 @@ function abrirEvolucion(dni) {
   });
   actualizarPromedios();
   actualizarIMC();
+  evolClinicaSnapshot = null; // resetear snapshot al abrir nueva evolución
   actualizarEncabezadoVariable(p.dni);
+  // Cargar snapshot inicial desde datos actuales
+  cargarSnapshotInicial(p.dni);
   showPage('evolucion');
 }
 
@@ -1254,6 +1299,7 @@ async function cargarHistoria(dni) {
     const fh = new Date(e.fecha_hora);
     const fechaStr = fh.toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'});
     const horaStr = fh.toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'});
+    const snapshotHtml = renderSnapshotCompacto(e.clinica_snapshot);
     return '<div class="hc-entrada">' +
       '<div class="hc-header">' +
         '<span class="hc-fecha">' + fechaStr + ' ' + horaStr + '</span>' +
@@ -1262,6 +1308,7 @@ async function cargarHistoria(dni) {
         (e.fc_promedio ? '<span class="hc-badge-fc">FC: '+e.fc_promedio+' lpm</span>' : '') +
         (e.peso ? '<span class="hc-badge-peso">Peso: '+e.peso+' kg</span>' : '') +
       '</div>' +
+      snapshotHtml +
       '<div class="hc-cuerpo">' + (e.contenido_html || '') + '</div>' +
     '</div>';
   }).join('');
@@ -1298,7 +1345,8 @@ async function guardarEvolucion() {
     fc_promedio: fc_prom,
     peso: document.getElementById('evol_peso').value||null,
     talla: document.getElementById('evol_talla').value||null,
-    fecha_hora: new Date().toISOString()
+    fecha_hora: new Date().toISOString(),
+    clinica_snapshot: evolClinicaSnapshot ? JSON.stringify(evolClinicaSnapshot) : null
   });
   if(error) {
     alert('Error al guardar: ' + error.message);
