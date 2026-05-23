@@ -980,6 +980,176 @@ async function guardarPaciente() {
     if(e.target===this) cerrarModal(id);
   });
 });
+
+// ===== EVOLUCION =====
+function abrirEvolucion(dni) {
+  const p = pacientesData.find(x=>x.dni===dni);
+  if(!p) return;
+  pacienteActual = p;
+  document.getElementById('evol_nombre').textContent = p.apellido + ', ' + p.nombre;
+  document.getElementById('evol_dni').textContent = 'DNI: ' + p.dni;
+  document.getElementById('evol_fnac').textContent = 'F. Nac: ' + formatFecha(p.fecha_nacimiento);
+  document.getElementById('evol_edad').textContent = edadDesde(p.fecha_nacimiento) + ' años';
+  document.getElementById('evol_os').textContent = p.obra_social || 'Sin obra social';
+  document.getElementById('evol_editor').innerHTML = '';
+  ['evol_ta1s','evol_ta1d','evol_ta2s','evol_ta2d','evol_ta3s','evol_ta3d','evol_fc1','evol_fc2','evol_fc3','evol_peso','evol_talla'].forEach(id=>{
+    const el = document.getElementById(id); if(el) el.value='';
+  });
+  actualizarPromedios();
+  actualizarIMC();
+  showPage('evolucion');
+}
+
+function verHistoria(dni) {
+  const p = pacientesData.find(x=>x.dni===dni);
+  if(!p) return;
+  pacienteActual = p;
+  document.getElementById('hc_nombre').textContent = p.apellido + ', ' + p.nombre;
+  document.getElementById('hc_dni').textContent = 'DNI: ' + p.dni;
+  document.getElementById('hc_edad').textContent = edadDesde(p.fecha_nacimiento) + ' años';
+  document.getElementById('hc_os').textContent = p.obra_social || '';
+  cargarHistoria(dni);
+  showPage('historia_clinica');
+}
+
+function formatFecha(f) {
+  if(!f) return '';
+  return new Date(f+'T12:00:00').toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'});
+}
+
+async function cargarHistoria(dni) {
+  const cont = document.getElementById('hc_lista');
+  cont.innerHTML = '<div class="loading">Cargando historia clínica...</div>';
+  const { data, error } = await sb.from('evoluciones').select('*').eq('dni_paciente', dni).order('fecha_hora', {ascending:false});
+  if(error || !data || !data.length) {
+    cont.innerHTML = '<div class="empty-state"><div>📋</div><p>No hay evoluciones registradas para este paciente.</p></div>';
+    return;
+  }
+  cont.innerHTML = data.map(e => {
+    const fh = new Date(e.fecha_hora);
+    const fechaStr = fh.toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'});
+    const horaStr = fh.toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'});
+    return '<div class="hc-entrada">' +
+      '<div class="hc-header">' +
+        '<span class="hc-fecha">' + fechaStr + ' ' + horaStr + '</span>' +
+        '<span class="hc-medico">' + (e.medico||'') + '</span>' +
+        (e.ta_promedio ? '<span class="hc-badge-ta">TA: '+e.ta_promedio+'</span>' : '') +
+        (e.fc_promedio ? '<span class="hc-badge-fc">FC: '+e.fc_promedio+' lpm</span>' : '') +
+        (e.peso ? '<span class="hc-badge-peso">Peso: '+e.peso+' kg</span>' : '') +
+      '</div>' +
+      '<div class="hc-cuerpo">' + (e.contenido_html || '') + '</div>' +
+    '</div>';
+  }).join('');
+  // Actualizar ultima consulta en tabla
+  if(data[0]) {
+    const uc = document.getElementById('uc-' + dni);
+    if(uc) uc.textContent = new Date(data[0].fecha_hora).toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'});
+  }
+}
+
+async function guardarEvolucion() {
+  const p = pacienteActual;
+  if(!p) return;
+  const contenido = document.getElementById('evol_editor').innerHTML;
+  const btnGuardar = document.getElementById('btnGuardarEvol');
+  btnGuardar.disabled = true;
+  btnGuardar.textContent = 'Guardando...';
+  const ta_prom = calcPromedioTA();
+  const fc_prom = calcPromedioFC();
+  const { error } = await sb.from('evoluciones').insert({
+    dni_paciente: p.dni,
+    medico: currentUser.titulo,
+    contenido_html: contenido,
+    ta1s: document.getElementById('evol_ta1s').value||null,
+    ta1d: document.getElementById('evol_ta1d').value||null,
+    ta2s: document.getElementById('evol_ta2s').value||null,
+    ta2d: document.getElementById('evol_ta2d').value||null,
+    ta3s: document.getElementById('evol_ta3s').value||null,
+    ta3d: document.getElementById('evol_ta3d').value||null,
+    fc1: document.getElementById('evol_fc1').value||null,
+    fc2: document.getElementById('evol_fc2').value||null,
+    fc3: document.getElementById('evol_fc3').value||null,
+    ta_promedio: ta_prom,
+    fc_promedio: fc_prom,
+    peso: document.getElementById('evol_peso').value||null,
+    talla: document.getElementById('evol_talla').value||null,
+    fecha_hora: new Date().toISOString()
+  });
+  if(error) {
+    alert('Error al guardar: ' + error.message);
+    btnGuardar.disabled = false;
+    btnGuardar.textContent = '💾 Guardar evolución';
+    return;
+  }
+  btnGuardar.textContent = '✅ Guardado';
+  setTimeout(() => {
+    btnGuardar.disabled = false;
+    btnGuardar.textContent = '💾 Guardar evolución';
+    showPage('pacientes');
+    cargarPacientes();
+  }, 1500);
+}
+
+function calcPromedioTA() {
+  const s2 = parseFloat(document.getElementById('evol_ta2s').value);
+  const d2 = parseFloat(document.getElementById('evol_ta2d').value);
+  const s3 = parseFloat(document.getElementById('evol_ta3s').value);
+  const d3 = parseFloat(document.getElementById('evol_ta3d').value);
+  if(s2&&d2&&s3&&d3) return Math.round((s2+s3)/2) + '/' + Math.round((d2+d3)/2);
+  if(s2&&d2) return s2+'/'+d2;
+  return null;
+}
+
+function calcPromedioFC() {
+  const f2 = parseFloat(document.getElementById('evol_fc2').value);
+  const f3 = parseFloat(document.getElementById('evol_fc3').value);
+  if(f2&&f3) return Math.round((f2+f3)/2);
+  if(f2) return f2;
+  return null;
+}
+
+function actualizarPromedios() {
+  const pTA = calcPromedioTA();
+  const pFC = calcPromedioFC();
+  const el = document.getElementById('evol_promedio_display');
+  if(el) {
+    let txt = '';
+    if(pTA) txt += 'TA ' + pTA + ' mmHg';
+    if(pFC) txt += (txt?' &nbsp;|&nbsp; ':'') + 'FC ' + pFC + ' lpm';
+    el.innerHTML = txt ? '<strong>Promedio de tres tomas protocolarizadas:</strong> ' + txt : '';
+  }
+  const marker = document.getElementById('evol_ta_marker');
+  if(marker) {
+    const pTA2 = calcPromedioTA(); const pFC2 = calcPromedioFC();
+    if(pTA2||pFC2) {
+      let m = '<strong>Promedio de tres tomas protocolarizadas:</strong>';
+      if(pTA2) m += ' TA '+pTA2+' mmHg';
+      if(pFC2) m += (pTA2?' |':'')+' FC '+pFC2+' lpm';
+      marker.innerHTML = '<p style="color:var(--blue);font-size:13px;padding:4px 0">'+m+'</p>';
+    } else { marker.innerHTML=''; }
+  }
+}
+
+function actualizarIMC() {
+  const peso = parseFloat(document.getElementById('evol_peso').value);
+  const talla = parseFloat(document.getElementById('evol_talla').value);
+  const el = document.getElementById('evol_imc');
+  if(!el) return;
+  if(peso && talla) {
+    const imc = (peso / ((talla/100)**2)).toFixed(1);
+    let cat='', color='';
+    if(imc<18.5){cat='Bajo peso';color='var(--blue)';}
+    else if(imc<25){cat='Normal';color='#27ae60';}
+    else if(imc<30){cat='Sobrepeso';color='#e08c3a';}
+    else{cat='Obesidad';color='var(--red)';}
+    el.innerHTML='<span style="color:'+color+';font-size:15px">'+imc+'</span><span style="font-size:10px;color:'+color+';margin-left:4px">'+cat+'</span>';
+  } else { el.innerHTML='—'; }
+}
+
+function formatCmd(cmd, val) {
+  document.getElementById('evol_editor').focus();
+  document.execCommand(cmd, false, val||null);
+}
 </script>
 </body>
 </html>
