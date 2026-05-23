@@ -283,6 +283,39 @@
     .hc-snap-row { display:flex; align-items:flex-start; gap:8px; margin-bottom:3px; flex-wrap:wrap; }
     .hc-snap-row:last-child { margin-bottom:0; }
     .hc-snap-label { font-weight:700; color:var(--text-soft); min-width:28px; font-size:10px; text-transform:uppercase; padding-top:2px; }
+
+    /* Botón historial mini en encabezado variable */
+    .btn-hx-mini { background:none; border:none; font-size:12px; cursor:pointer; opacity:.6; vertical-align:middle; padding:0 2px; }
+    .btn-hx-mini:hover { opacity:1; }
+    /* Pestañas paciente (lab, estudios, antrop) */
+    .pac-tabs { display:flex; gap:4px; border-bottom:2px solid var(--border); margin-bottom:16px; }
+    .pac-tab { padding:8px 16px; border:none; background:none; cursor:pointer; font-family:var(--font-main); font-size:13px; font-weight:500; color:var(--text-soft); border-bottom:2px solid transparent; margin-bottom:-2px; transition:all .2s; }
+    .pac-tab.active { color:var(--blue); border-bottom-color:var(--blue); font-weight:600; }
+    /* Grid lab/antrop */
+    .lab-grid { display:grid; grid-template-columns:160px 1fr; gap:0; }
+    .lab-row { display:contents; }
+    .lab-label { font-size:12px; font-weight:600; background:var(--gray); padding:5px 10px; border:1px solid var(--border); border-right:none; display:flex; align-items:center; }
+    .lab-label.cat { background:#e8f3fc; color:var(--blue); font-size:11px; text-transform:uppercase; letter-spacing:.05em; }
+    .lab-vals { display:flex; gap:0; overflow-x:auto; }
+    .lab-val-col { min-width:90px; flex-shrink:0; }
+    .lab-val-header { font-size:10px; font-weight:700; color:var(--text-soft); background:var(--gray); padding:5px 8px; border:1px solid var(--border); text-align:center; white-space:nowrap; }
+    .lab-val-cell { border:1px solid var(--border); border-top:none; padding:3px 6px; }
+    .lab-val-cell input { width:100%; border:none; background:transparent; font-size:12px; text-align:center; font-family:var(--font-main); outline:none; color:var(--text); }
+    .lab-add-fecha { display:flex; gap:8px; align-items:center; margin-bottom:10px; flex-wrap:wrap; }
+    .lab-add-fecha input[type=date] { padding:6px 10px; border:1.5px solid var(--border); border-radius:8px; font-size:13px; font-family:var(--font-main); background:white; }
+    /* Indicaciones en evolución */
+    .evol-indicaciones { margin-top:14px; background:white; border:1.5px solid var(--border); border-radius:14px; padding:16px; }
+    .evol-ind-title { font-family:var(--font-display); font-size:11px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--text-soft); margin-bottom:10px; display:flex; align-items:center; gap:8px; }
+    .evol-ind-title::after { content:''; flex:1; height:1px; background:var(--border); }
+    .evol-ind-editor { width:100%; min-height:100px; padding:10px; border:1.5px solid var(--border); border-radius:9px; font-family:var(--font-main); font-size:13px; line-height:1.7; resize:vertical; background:var(--gray); outline:none; }
+    .evol-ind-editor:focus { border-color:var(--blue); background:white; }
+    .evol-ind-actions { display:flex; gap:8px; margin-top:8px; flex-wrap:wrap; }
+    /* Modal historial */
+    .hx-entrada { padding:10px 0; border-bottom:1px solid var(--border); font-size:13px; }
+    .hx-entrada:last-child { border-bottom:none; }
+    .hx-fecha { font-weight:700; color:var(--blue); font-size:12px; margin-bottom:4px; }
+    .hx-detalle { color:var(--text); line-height:1.6; }
+
     @media(max-width:768px) {
       .evol-body { grid-template-columns:1fr; }
       .evol-update-grid { grid-template-columns:1fr; }
@@ -413,10 +446,43 @@
 
     <!-- OTROS -->
     <div class="page" id="page-historia">
-      <div class="page-title">Historia Clínica</div>
-      <div class="page-subtitle">Módulo en desarrollo</div>
-      <div class="empty-state"><div>📋</div><p>Próximamente disponible</p></div>
+      <div class="evol-topbar">
+        <button class="btn-volver" onclick="showPage('pacientes')">← Volver</button>
+        <div style="flex:1;font-family:var(--font-display);font-size:16px;font-weight:700" id="hpac_nombre"></div>
+      </div>
+      <div style="padding:20px 24px">
+        <div class="pac-tabs">
+          <button class="pac-tab active" onclick="switchPacTab('lab',this)">🧪 Laboratorio</button>
+          <button class="pac-tab" onclick="switchPacTab('estudios',this)">📋 Estudios complementarios</button>
+          <button class="pac-tab" onclick="switchPacTab('antrop',this)">📐 Antropometría</button>
+        </div>
+        <div id="pac-tab-lab">
+          <div class="lab-add-fecha">
+            <label style="font-size:12px;font-weight:600;color:var(--text-soft)">Agregar fecha:</label>
+            <input type="date" id="lab_fecha_nueva"/>
+            <button class="btn btn-teal" onclick="agregarColumnaLab()" style="width:auto;margin:0;padding:6px 14px;font-size:12px">+ Agregar</button>
+          </div>
+          <div id="lab_tabla_wrap" style="overflow-x:auto"></div>
+        </div>
+        <div id="pac-tab-estudios" style="display:none">
+          <div class="lab-add-fecha">
+            <label style="font-size:12px;font-weight:600;color:var(--text-soft)">Agregar fecha:</label>
+            <input type="date" id="est_fecha_nueva"/>
+            <button class="btn btn-teal" onclick="agregarColumnaEst()" style="width:auto;margin:0;padding:6px 14px;font-size:12px">+ Agregar</button>
+          </div>
+          <div id="est_tabla_wrap" style="overflow-x:auto"></div>
+        </div>
+        <div id="pac-tab-antrop" style="display:none">
+          <div class="lab-add-fecha">
+            <label style="font-size:12px;font-weight:600;color:var(--text-soft)">Agregar fecha:</label>
+            <input type="date" id="ant_fecha_nueva"/>
+            <button class="btn btn-teal" onclick="agregarColumnaAnt()" style="width:auto;margin:0;padding:6px 14px;font-size:12px">+ Agregar</button>
+          </div>
+          <div id="ant_tabla_wrap" style="overflow-x:auto"></div>
+        </div>
+      </div>
     </div>
+
     <div class="page" id="page-agenda">
       <div class="page-title">Agenda</div>
       <div class="page-subtitle">Módulo en desarrollo</div>
@@ -472,11 +538,11 @@
       <!-- ENCABEZADO VARIABLE sticky -->
       <div class="evol-header-var" id="evol_header_var">
         <div class="evh-section">
-          <div class="evh-title">Diagnósticos</div>
+          <div class="evh-title">Diagnósticos <button class="btn-hx-mini" onclick="abrirHistorialDx()" title="Historial diagnósticos">🕐</button></div>
           <div id="evh_dx" class="evh-tags"></div>
         </div>
         <div class="evh-section">
-          <div class="evh-title">Medicación actual</div>
+          <div class="evh-title">Medicación actual <button class="btn-hx-mini" onclick="abrirHistorialMed()" title="Historial medicación">🕐</button></div>
           <div id="evh_med" class="evh-meds"></div>
         </div>
         <div class="evh-section evh-section-small">
@@ -505,7 +571,6 @@
             <button onclick="formatCmd('insertUnorderedList')" title="Lista">•</button>
             <button onclick="formatCmd('insertOrderedList')" title="Lista num." style="font-size:11px">1.</button>
             <div class="evol-toolbar-sep"></div>
-            <button onclick="insertarFechaHora()" title="Insertar fecha/hora" style="font-size:11px">📅</button>
             <button onclick="formatCmd('removeFormat')" title="Quitar formato" style="font-size:10px;width:auto;padding:0 6px">✕fmt</button>
           </div>
 
@@ -516,13 +581,9 @@
           <div class="evol-update-panel">
             <div class="evol-update-title">Actualización clínica de esta consulta</div>
             <div class="evol-update-grid">
-              <div class="evol-update-item">
-                <label>Diagnóstico nuevo / cambio</label>
-                <input type="text" id="upd_dx_nuevo" placeholder="Ej: HTA 2, DBT 2..." />
-              </div>
-              <div class="evol-update-item">
-                <label>Cambio de tratamiento</label>
-                <input type="text" id="upd_tto" placeholder="Ej: se agrega Enalapril 10mg..." />
+              <div class="evol-update-item" style="grid-column:1/-1">
+                <label>Cambio de tratamiento / observación</label>
+                <input type="text" id="upd_tto" placeholder="Ej: se agrega Enalapril 10mg, se suspende..." />
               </div>
               <div class="evol-update-item">
                 <label>Actividad física</label>
@@ -546,7 +607,18 @@
               </div>
             </div>
             <div class="evol-update-btn">
-              <button class="btn btn-teal" onclick="volcarActualizacion()" style="width:auto;margin:0;padding:8px 20px;font-size:13px">↓ Volcar al texto</button>
+              <button class="btn btn-teal" onclick="volcarActualizacion()" style="width:auto;margin:0;padding:8px 20px;font-size:13px">↓ Volcar y actualizar</button>
+            </div>
+          </div>
+
+          <!-- INDICACIONES -->
+          <div class="evol-indicaciones">
+            <div class="evol-ind-title">Indicaciones para el paciente</div>
+            <textarea id="evol_indicaciones" class="evol-ind-editor" placeholder="Escribí las indicaciones para el paciente...&#10;• Medicación&#10;• Dieta&#10;• Actividad física&#10;• Próximo control"></textarea>
+            <div class="evol-ind-actions">
+              <button class="btn btn-secondary" onclick="volcarIndicacionesAlEditor()" style="width:auto;margin:0;padding:7px 16px;font-size:12px">↑ Volcar a evolución</button>
+              <button class="btn btn-teal" onclick="generarPDFIndicacionesEvol()" style="width:auto;margin:0;padding:7px 16px;font-size:12px">⬇ PDF</button>
+              <button class="btn" onclick="enviarMailIndicacionesEvol()" style="width:auto;margin:0;padding:7px 16px;font-size:12px;background:var(--gray);border:1.5px solid var(--border);color:var(--text)">✉ Email</button>
             </div>
           </div>
         </div>
@@ -592,6 +664,8 @@
                 <input type="number" id="evol_tap_s" placeholder="—" oninput="actualizarTAParado()"/>
                 <label>DIA</label>
                 <input type="number" id="evol_tap_d" placeholder="—" oninput="actualizarTAParado()"/>
+                <label>FC</label>
+                <input type="number" id="evol_tap_fc" placeholder="—" oninput="actualizarTAParado()"/>
               </div>
               <div id="evol_tap_result" class="ta-parado-result"></div>
             </div>
@@ -1345,7 +1419,7 @@ async function cargarDatosClinica(dni) {
   await cargarMedicacion(dni);
 }
 
-['modalPaciente','modalReceta','modalIndicaciones'].forEach(id=>{
+['modalPaciente','modalReceta','modalIndicaciones','modalHistorialDx','modalHistorialMed'].forEach(id=>{
   document.getElementById(id).addEventListener('click',function(e){
     if(e.target===this) cerrarModal(id);
   });
@@ -1362,10 +1436,11 @@ function abrirEvolucion(dni) {
   document.getElementById('evol_edad').textContent = edadDesde(p.fecha_nacimiento) + ' años';
   document.getElementById('evol_os').textContent = p.obra_social || 'Sin obra social';
   document.getElementById('evol_editor').innerHTML = '';
-  ['evol_ta1s','evol_ta1d','evol_ta2s','evol_ta2d','evol_ta3s','evol_ta3d','evol_fc1','evol_fc2','evol_fc3','evol_peso','evol_talla','evol_cintura','evol_tap_s','evol_tap_d'].forEach(id=>{
+  ['evol_ta1s','evol_ta1d','evol_ta2s','evol_ta2d','evol_ta3s','evol_ta3d','evol_fc1','evol_fc2','evol_fc3','evol_peso','evol_talla','evol_cintura','evol_tap_s','evol_tap_d','evol_tap_fc'].forEach(id=>{
     const el = document.getElementById(id); if(el) el.value='';
   });
-  ['upd_dx_nuevo','upd_tto'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  ['upd_tto'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  const indEl=document.getElementById('evol_indicaciones');if(indEl)indEl.value='';
   ['upd_actividad','upd_alimentacion'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   const tapRes = document.getElementById('evol_tap_result'); if(tapRes) tapRes.textContent='';
   actualizarPromedios();
@@ -1456,8 +1531,10 @@ async function guardarEvolucion() {
     cintura: document.getElementById('evol_cintura').value||null,
     tap_s: document.getElementById('evol_tap_s').value||null,
     tap_d: document.getElementById('evol_tap_d').value||null,
+    tap_fc: document.getElementById('evol_tap_fc').value||null,
     fecha_hora: new Date().toISOString(),
-    clinica_snapshot: evolClinicaSnapshot ? JSON.stringify(evolClinicaSnapshot) : null
+    clinica_snapshot: evolClinicaSnapshot ? JSON.stringify(evolClinicaSnapshot) : null,
+    indicaciones: document.getElementById('evol_indicaciones').value||null
   });
   if(error) {
     alert('Error al guardar: ' + error.message);
@@ -1493,6 +1570,7 @@ async function guardarEvolucion() {
 function actualizarTAParado() {
   const s = parseFloat(document.getElementById('evol_tap_s').value);
   const d = parseFloat(document.getElementById('evol_tap_d').value);
+  const fc = parseFloat(document.getElementById('evol_tap_fc').value);
   const el = document.getElementById('evol_tap_result');
   if(s && d) {
     const ref_s = parseFloat(document.getElementById('evol_ta2s').value)||0;
@@ -1500,7 +1578,8 @@ function actualizarTAParado() {
     const diff_s = s - ref_s;
     const diff_d = d - ref_d;
     let nota = (ref_s && (diff_s <= -20 || diff_d <= -10)) ? ' <span style="color:var(--red);font-weight:700">⚠️ HO</span>' : '';
-    el.innerHTML = '<span style="font-weight:600;color:var(--text)">'+s+'/'+d+'</span><span style="font-size:10px;color:var(--text-soft);margin-left:4px">mmHg</span>'+nota;
+    let fcStr = fc ? ' · FC ' + fc + ' lpm' : '';
+    el.innerHTML = '<span style="font-weight:600;color:var(--text)">'+s+'/'+d+'</span><span style="font-size:10px;color:var(--text-soft);margin-left:4px">mmHg'+fcStr+'</span>'+nota;
   } else {
     el.textContent = '';
   }
@@ -1518,22 +1597,258 @@ function insertarFechaHora() {
 
 // ===== VOLCAR ACTUALIZACIÓN CLÍNICA AL EDITOR =====
 function volcarActualizacion() {
-  const dxNuevo = document.getElementById('upd_dx_nuevo').value.trim();
   const tto = document.getElementById('upd_tto').value.trim();
   const act = document.getElementById('upd_actividad').value;
   const ali = document.getElementById('upd_alimentacion').value;
-  if(!dxNuevo && !tto && !act && !ali) return;
+  if(!tto && !act && !ali) return;
   const lines = [];
-  if(dxNuevo) lines.push('Diagnóstico: ' + dxNuevo);
   if(tto) lines.push('Tratamiento: ' + tto);
   if(act) lines.push('Actividad física: ' + act);
   if(ali) lines.push('Alimentación: ' + ali);
-  const html = '<div class="bloque-actualizacion" style="font-family:Arial,sans-serif;font-size:10pt;color:#333;border:1px solid #d0e4f5;padding:8px 10px;border-radius:6px;background:#f0f8ff;margin-bottom:10px;line-height:1.7"><strong>Actualización de esta consulta:</strong><br>' + lines.join('<br>') + '</div>';
+  const bloque = '<div class="bloque-actualizacion" style="font-family:Arial,sans-serif;font-size:10pt;color:#333;border:1px solid #d0e4f5;padding:8px 10px;border-radius:6px;background:#f0f8ff;margin-bottom:10px;line-height:1.7"><strong>Actualización de esta consulta:</strong><br>' + lines.join('<br>') + '</div>';
   const editor = document.getElementById('evol_editor');
   const prev = editor.querySelector('.bloque-actualizacion'); if(prev) prev.remove();
-  const tmp = document.createElement('div'); tmp.innerHTML = html;
+  const tmp = document.createElement('div'); tmp.innerHTML = bloque;
   editor.insertBefore(tmp.firstChild, editor.firstChild);
+  // Si hay cambios de hábitos, actualizar encabezado
+  if(pacienteActual && (act || ali)) actualizarEncabezadoVariable(pacienteActual.dni);
 }
+
+
+// ===== HISTORIAL DX =====
+async function abrirHistorialDx() {
+  if(!pacienteActual) return;
+  document.getElementById('modalHistorialDx').classList.add('open');
+  const cont = document.getElementById('historial_dx_lista');
+  cont.innerHTML = '<div class="loading">Cargando...</div>';
+  const { data } = await sb.from('evoluciones').select('fecha_hora,clinica_snapshot').eq('dni_paciente', pacienteActual.dni).order('fecha_hora', {ascending:false});
+  if(!data || !data.length) { cont.innerHTML='<p style="color:var(--text-soft);font-size:13px">Sin historial registrado.</p>'; return; }
+  const DX_L={dx_acv:'ACV',dx_albuminuria:'Albuminuria',dx_atero_subcl:'Atero Subcl.',dx_dbt1:'DBT 1',dx_dbt2:'DBT 2',dx_dbt_otro:'DBT Otro',dx_dis:'Dislipemia',dx_eap:'EAP',dx_epoc:'EPOC',dx_erc:'ERC',dx_fa:'FA',dx_hiperu:'HiperU',dx_hta:'HTA',dx_hta2:'HTA 2',dx_hvi:'HVI',dx_iam:'IAM',dx_icc:'ICC',dx_masld:'MASLD',dx_ms:'S. Met.',dx_neu_dbt:'Neu DBT',dx_obe:'Obesidad',dx_predbt:'PreDBT',dx_rp_dbt:'RP DBT',dx_sahos:'SAHOS',dx_sob:'Sobrepeso',dx_pe:'PE',dx_rciu:'RCIU',dx_ppt:'PPT',dx_sop:'SOP',dx_dbtg:'DBT-G',dx_htag:'HTA-G',dx_ms_gineco:'SM-G',dx_menopausia:'Menop.'};
+  let prevSet = null;
+  const items = data.filter(e=>e.clinica_snapshot).map(e => {
+    let snap; try{ snap=JSON.parse(e.clinica_snapshot); }catch(er){ return ''; }
+    const c = snap.clinica; if(!c) return '';
+    const curSet = new Set(Object.keys(DX_L).filter(k=>c[k]).map(k=>DX_L[k]));
+    let cambios = [];
+    if(prevSet !== null) {
+      curSet.forEach(v=>{ if(!prevSet.has(v)) cambios.push('+'+v); });
+      prevSet.forEach(v=>{ if(!curSet.has(v)) cambios.push('−'+v); });
+    }
+    prevSet = curSet;
+    const dxStr = [...curSet].join(', ') || 'Sin diagnósticos';
+    const fecha = new Date(e.fecha_hora).toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'});
+    const cambStr = cambios.length ? '<span style="color:var(--blue);font-weight:600"> → '+cambios.join(', ')+'</span>' : '';
+    return '<div class="hx-entrada"><div class="hx-fecha">'+fecha+cambStr+'</div><div class="hx-detalle">'+dxStr+'</div></div>';
+  }).filter(Boolean);
+  cont.innerHTML = items.length ? items.join('') : '<p style="color:var(--text-soft);font-size:13px">Sin snapshots disponibles.</p>';
+}
+
+// ===== HISTORIAL MEDICACIÓN =====
+async function abrirHistorialMed() {
+  if(!pacienteActual) return;
+  document.getElementById('modalHistorialMed').classList.add('open');
+  const cont = document.getElementById('historial_med_lista');
+  cont.innerHTML = '<div class="loading">Cargando...</div>';
+  const { data } = await sb.from('evoluciones').select('fecha_hora,clinica_snapshot').eq('dni_paciente', pacienteActual.dni).order('fecha_hora', {ascending:false});
+  if(!data || !data.length) { cont.innerHTML='<p style="color:var(--text-soft);font-size:13px">Sin historial registrado.</p>'; return; }
+  let prevMedStr = null;
+  const items = data.filter(e=>e.clinica_snapshot).map(e => {
+    let snap; try{ snap=JSON.parse(e.clinica_snapshot); }catch(er){ return ''; }
+    const meds = snap.medicacion||[]; if(!meds.length && prevMedStr===null) return '';
+    const medStr = meds.map(m=>m.farmaco+' '+m.dosis+(m.frecuencia?' '+m.frecuencia:'')).join(', ') || 'Sin medicación';
+    const hayCambio = prevMedStr !== null && medStr !== prevMedStr;
+    prevMedStr = medStr;
+    const fecha = new Date(e.fecha_hora).toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'});
+    const cambTag = hayCambio ? '<span style="color:var(--red);font-size:10px;font-weight:700;margin-left:6px">CAMBIO</span>' : '';
+    return '<div class="hx-entrada"><div class="hx-fecha">'+fecha+cambTag+'</div><div class="hx-detalle">'+medStr+'</div></div>';
+  }).filter(Boolean);
+  cont.innerHTML = items.length ? items.join('') : '<p style="color:var(--text-soft);font-size:13px">Sin snapshots disponibles.</p>';
+}
+
+// ===== INDICACIONES EN EVOLUCIÓN =====
+function volcarIndicacionesAlEditor() {
+  const txt = document.getElementById('evol_indicaciones').value.trim();
+  if(!txt) return;
+  const editor = document.getElementById('evol_editor');
+  const lines = txt.split('\n').map(l=>l.trim()).filter(Boolean).map(l=>'• '+l).join('<br>');
+  const bloque = '<div class="bloque-indicaciones" style="font-family:Arial,sans-serif;font-size:10pt;color:#333;border:1px solid #d5e8d4;padding:8px 10px;border-radius:6px;background:#f8fff7;margin-bottom:10px;line-height:1.8"><strong>Indicaciones:</strong><br>'+lines+'</div>';
+  const prev = editor.querySelector('.bloque-indicaciones'); if(prev) prev.remove();
+  const tmp = document.createElement('div'); tmp.innerHTML = bloque;
+  editor.appendChild(tmp.firstChild);
+}
+
+function generarPDFIndicacionesEvol() {
+  const p = pacienteActual; if(!p) return;
+  const txt = document.getElementById('evol_indicaciones').value.trim();
+  if(!txt) { alert('No hay indicaciones para generar.'); return; }
+  const u = users[selectedUser];
+  const hoy = new Date().toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'});
+  const firmaImg = selectedUser==='barbara' ? firmaBarbaraB64 : firmaOmarB64;
+  const firmaRatio = selectedUser==='barbara' ? 1.01 : 1.58;
+  const firmaH = Math.round(48 * firmaRatio);
+  const lines = txt.split('\n').map(l=>l.trim()).filter(Boolean).map(l=>'<li style="margin-bottom:4px">'+l+'</li>').join('');
+  const content = `<div style="font-family:Arial,sans-serif;font-size:11pt;padding:20px;max-width:700px">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;border-bottom:2px solid #3089ca;padding-bottom:12px">
+      <div><div style="font-size:14pt;font-weight:700;color:#3089ca">${u.name}</div><div style="font-size:10pt;color:#666">${u.mp}</div><div style="font-size:9pt;color:#666">URCyM · 2246 58-8469</div></div>
+      <div style="font-size:10pt;color:#666">${hoy}</div>
+    </div>
+    <div style="margin-bottom:16px"><strong>Paciente:</strong> ${p.apellido}, ${p.nombre} · DNI ${p.dni}</div>
+    <div style="font-size:12pt;font-weight:700;margin-bottom:10px;color:#1a2535">Indicaciones</div>
+    <ul style="margin:0;padding-left:20px;line-height:1.8">${lines}</ul>
+    <div style="margin-top:40px;display:flex;align-items:flex-end;gap:12px">
+      <img src="${firmaImg}" style="height:${firmaH}px;object-fit:contain"/>
+      <div><div style="font-size:10pt;font-weight:600">${u.name}</div><div style="font-size:9pt;color:#666">${u.mp}</div></div>
+    </div>
+  </div>`;
+  const el = document.createElement('div'); el.innerHTML = content; document.body.appendChild(el);
+  html2pdf().set({margin:10,filename:'Indicaciones_'+p.apellido+'_'+hoy.replace(/\//g,'-')+'.pdf',html2canvas:{scale:2},jsPDF:{unit:'mm',format:'a4'}}).from(el).save().then(()=>el.remove());
+}
+
+function enviarMailIndicacionesEvol() {
+  const p = pacienteActual; if(!p) return;
+  const txt = document.getElementById('evol_indicaciones').value.trim();
+  if(!txt || !p.email) { alert(!txt?'Sin indicaciones.':'El paciente no tiene email registrado.'); return; }
+  const hoy = new Date().toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'});
+  const u = users[selectedUser];
+  const asunto = encodeURIComponent('Indicaciones médicas - URCyM - '+hoy);
+  const cuerpo = encodeURIComponent('Estimado/a '+p.nombre+',\n\nSus indicaciones del '+hoy+':\n\n'+txt+'\n\nSaludos,\n'+u.name+'\nURCyM - 2246 58-8469');
+  window.location.href = 'mailto:'+p.email+'?subject='+asunto+'&body='+cuerpo;
+}
+
+// ===== PESTAÑAS PACIENTE =====
+let labDatos = { columnas:[], filas:[] };
+let estDatos = { columnas:[], filas:[] };
+let antDatos = { columnas:[], filas:[] };
+let pacHistoriaDni = null;
+
+const LAB_FILAS = [
+  {cat:true, label:'HEMOGRAMA'},
+  {label:'Hb'},{label:'Rto plaquetas'},
+  {cat:true, label:'BIOQUÍMICA'},
+  {label:'Glucemia'},{label:'Creatinina'},{label:'Ácido Úrico'},
+  {label:'TGO'},{label:'TGP'},{label:'BT/FAL'},
+  {cat:true, label:'PERFIL LIPÍDICO'},
+  {label:'CT'},{label:'HDL'},{label:'TG'},{label:'LDL'},{label:'no HDL'},{label:'ApoB'},
+  {cat:true, label:'OTROS'},
+  {label:'Hba1c'},{label:'RAC'},{label:'PRCus'},{label:'Renina'},{label:'Aldosterona'},
+  {label:'PRA/PAC'},{label:'Sodio'},{label:'Potasio'},{label:'D3'},{label:'TSH'},
+  {label:'ERS'},{label:'Albúmina'},{label:'Lpa(a)'}
+];
+
+const ANT_FILAS = [
+  {cat:true, label:'MEDICIONES'},
+  {label:'Peso (kg)'},{label:'Altura (cm'},
+  {cat:true, label:'COMPOSICIÓN CORPORAL'},
+  {label:'IMC'},{label:'% grasa'},{label:'% músculo'},{label:'Grasa visceral'},
+  {cat:true, label:'MEDIDAS'},
+  {label:'Perímetro de cintura'},{label:'Fuera de presión'},{label:'Cintura/Estatura'},{label:'Cintura/Cadera'},{label:'Cadera'},{label:'Cuello'}
+];
+
+function switchPacTab(tab, btn) {
+  ['lab','estudios','antrop'].forEach(t => {
+    document.getElementById('pac-tab-'+t).style.display = t===tab?'block':'none';
+  });
+  document.querySelectorAll('.pac-tab').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+}
+
+function renderTablaGenerica(datos, filas, wrapId) {
+  const wrap = document.getElementById(wrapId);
+  if(!wrap) return;
+  if(!datos.columnas.length) { wrap.innerHTML='<p style="color:var(--text-soft);font-size:13px;padding:12px 0">Agregá una fecha para comenzar.</p>'; return; }
+  let html = '<div class="lab-grid">';
+  // Header fechas
+  html += '<div class="lab-row"><div class="lab-label" style="background:var(--blue);color:white;font-weight:700">Parámetro</div><div class="lab-vals">';
+  datos.columnas.forEach((c,ci) => {
+    html += '<div class="lab-val-col"><div class="lab-val-header">'+new Date(c+'T12:00:00').toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'})+'</div></div>';
+  });
+  html += '</div></div>';
+  // Filas
+  filas.forEach((f,fi) => {
+    if(f.cat) {
+      html += '<div class="lab-row"><div class="lab-label cat">'+f.label+'</div><div class="lab-vals">';
+      datos.columnas.forEach((_,ci) => { html += '<div class="lab-val-col"><div style="border:1px solid var(--border);background:#e8f3fc;height:27px"></div></div>'; });
+      html += '</div></div>';
+    } else {
+      html += '<div class="lab-row"><div class="lab-label">'+f.label+'</div><div class="lab-vals">';
+      datos.columnas.forEach((_,ci) => {
+        const val = (datos.filas[fi]||[])[ci]||'';
+        html += '<div class="lab-val-col"><div class="lab-val-cell"><input type="text" value="'+val+'" data-fi="'+fi+'" data-ci="'+ci+'" oninput="actualizarCelda(this,''+wrapId+'')" /></div></div>';
+      });
+      html += '</div></div>';
+    }
+  });
+  html += '</div>';
+  wrap.innerHTML = html;
+}
+
+function actualizarCelda(input, wrapId) {
+  const fi = parseInt(input.dataset.fi);
+  const ci = parseInt(input.dataset.ci);
+  const datos = wrapId==='lab_tabla_wrap' ? labDatos : wrapId==='est_tabla_wrap' ? estDatos : antDatos;
+  if(!datos.filas[fi]) datos.filas[fi] = [];
+  datos.filas[fi][ci] = input.value;
+  guardarDatosPac(wrapId);
+}
+
+async function guardarDatosPac(wrapId) {
+  if(!pacHistoriaDni) return;
+  const tipo = wrapId==='lab_tabla_wrap'?'lab':wrapId==='est_tabla_wrap'?'est':'ant';
+  const datos = tipo==='lab'?labDatos:tipo==='est'?estDatos:antDatos;
+  await sb.from('paciente_tablas').upsert({dni_paciente:pacHistoriaDni, tipo, datos:JSON.stringify(datos)},{onConflict:'dni_paciente,tipo'});
+}
+
+function agregarColumna(fechaId, datos, filas, wrapId) {
+  const f = document.getElementById(fechaId).value;
+  if(!f) return;
+  if(!datos.columnas.includes(f)) {
+    datos.columnas.push(f);
+    datos.columnas.sort();
+  }
+  renderTablaGenerica(datos, filas, wrapId);
+  guardarDatosPac(wrapId);
+}
+function agregarColumnaLab() { agregarColumna('lab_fecha_nueva', labDatos, LAB_FILAS, 'lab_tabla_wrap'); }
+function agregarColumnaEst() { 
+  if(!estDatos.filas.length) { estDatos.filas = Array(20).fill(null).map(()=>[]); }
+  agregarColumna('est_fecha_nueva', estDatos, EST_FILAS, 'est_tabla_wrap'); 
+}
+function agregarColumnaAnt() { agregarColumna('ant_fecha_nueva', antDatos, ANT_FILAS, 'ant_tabla_wrap'); }
+
+const EST_FILAS = [
+  {cat:true,label:'ECG'},{label:'Ritmo'},{label:'Intervalo PR'},{label:'QRS'},{label:'QTc'},{label:'HVI'},
+  {cat:true,label:'ECOCARDIOGRAMA'},{label:'FEVI'},{label:'HVI eco'},{label:'Disfunción diastólica'},{label:'Obs'},
+  {cat:true,label:'DOPPLER CAROTÍDEO'},{label:'EIM'},{label:'Placas'},{label:'Obs'},
+  {cat:true,label:'FONDO DE OJO'},{label:'Resultado'},{label:'Obs'},
+  {cat:true,label:'OTROS'},{label:'Obs'}
+];
+
+async function abrirHistoriaPaciente(dni) {
+  pacHistoriaDni = dni;
+  const p = pacientesData.find(x=>x.dni===dni);
+  if(p) document.getElementById('hpac_nombre').textContent = p.apellido+', '+p.nombre;
+  labDatos = {columnas:[],filas:[]}; estDatos = {columnas:[],filas:[]}; antDatos = {columnas:[],filas:[]};
+  // Poner fecha de hoy por defecto
+  const hoy = new Date().toISOString().split('T')[0];
+  document.getElementById('lab_fecha_nueva').value = hoy;
+  document.getElementById('est_fecha_nueva').value = hoy;
+  document.getElementById('ant_fecha_nueva').value = hoy;
+  // Cargar datos guardados
+  const { data } = await sb.from('paciente_tablas').select('*').eq('dni_paciente', dni);
+  if(data) data.forEach(row => {
+    try {
+      const d = JSON.parse(row.datos);
+      if(row.tipo==='lab') labDatos = d;
+      else if(row.tipo==='est') estDatos = d;
+      else if(row.tipo==='ant') antDatos = d;
+    } catch(e){}
+  });
+  renderTablaGenerica(labDatos, LAB_FILAS, 'lab_tabla_wrap');
+  renderTablaGenerica(estDatos, EST_FILAS, 'est_tabla_wrap');
+  renderTablaGenerica(antDatos, ANT_FILAS, 'ant_tabla_wrap');
+  showPage('historia');
+}
+
 
 function calcPromedioTA() {
   const s2 = parseFloat(document.getElementById('evol_ta2s').value);
@@ -1581,8 +1896,11 @@ function volcarPromedioAlEditor() {
     if(pFC) ln += ' · FC ' + pFC + ' lpm';
     lineas.push(ln);
   }
+  const tapFc = document.getElementById('evol_tap_fc').value;
   if(tapS && tapD) {
-    lineas.push('TA ortostática (parado 3 min): ' + tapS + '/' + tapD + ' mmHg');
+    let tapLine = 'TA ortostática (parado 3 min): ' + tapS + '/' + tapD + ' mmHg';
+    if(tapFc) tapLine += ' · FC ' + tapFc + ' lpm';
+    lineas.push(tapLine);
   }
   // Quitar bloque anterior si existe
   const prev = editor.querySelector('.bloque-ta');
@@ -1843,6 +2161,26 @@ function calcAlcohol(){
       <button onclick="cerrarModal('modalPrevias')" style="background:none;border:none;font-size:22px;cursor:pointer;color:var(--text-soft)">✕</button>
     </div>
     <div id="previas_lista"></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modalHistorialDx">
+  <div class="modal" style="max-width:600px;max-height:80vh;overflow-y:auto">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <div class="modal-title" style="margin:0">Historial de diagnósticos</div>
+      <button onclick="cerrarModal('modalHistorialDx')" style="background:none;border:none;font-size:22px;cursor:pointer;color:var(--text-soft)">✕</button>
+    </div>
+    <div id="historial_dx_lista"><div class="loading">Cargando...</div></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modalHistorialMed">
+  <div class="modal" style="max-width:600px;max-height:80vh;overflow-y:auto">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <div class="modal-title" style="margin:0">Historial de medicación</div>
+      <button onclick="cerrarModal('modalHistorialMed')" style="background:none;border:none;font-size:22px;cursor:pointer;color:var(--text-soft)">✕</button>
+    </div>
+    <div id="historial_med_lista"><div class="loading">Cargando...</div></div>
   </div>
 </div>
 </body>
