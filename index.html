@@ -5,600 +5,595 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>URCyM — Sistema de Historia Clínica</title>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,300&display=swap" rel="stylesheet"/>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
     :root {
-      --blue: #3089ca;
-      --blue-dark: #1f6aab;
-      --blue-light: #e8f3fc;
-      --blue-glow: rgba(48, 137, 202, 0.18);
-      --gray: #f4f7fb;
-      --gray-circle: #e8ecf1;
-      --text: #1a2535;
-      --text-soft: #6b7a8d;
-      --white: #ffffff;
-      --border: rgba(48,137,202,0.15);
-      --shadow: 0 8px 40px rgba(48,137,202,0.13);
+      --blue: #3089ca; --blue-dark: #1f6aab; --blue-light: #e8f3fc;
+      --blue-glow: rgba(48,137,202,0.18); --gray: #f4f7fb;
+      --text: #1a2535; --text-soft: #6b7a8d; --white: #ffffff;
+      --border: rgba(48,137,202,0.15); --shadow: 0 8px 40px rgba(48,137,202,0.13);
     }
+    html,body { height:100%; font-family:'DM Sans',sans-serif; color:var(--text); background:#f0f4f9; }
+    body { min-height:100vh; }
 
-    html, body {
-      height: 100%;
-      font-family: 'DM Sans', sans-serif;
-      background: var(--gray);
-      color: var(--text);
+    /* ===== LOGIN ===== */
+    #loginCard {
+      display:flex; align-items:center; justify-content:center;
+      min-height:100vh; padding:20px;
+      background: radial-gradient(ellipse 80% 60% at 70% 10%,rgba(48,137,202,.10) 0%,transparent 60%),
+                  radial-gradient(ellipse 60% 50% at 10% 90%,rgba(48,137,202,.07) 0%,transparent 55%), #f0f4f9;
     }
-
-    body {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      min-height: 100vh;
-      padding: 20px;
-      background:
-        radial-gradient(ellipse 80% 60% at 70% 10%, rgba(48,137,202,0.10) 0%, transparent 60%),
-        radial-gradient(ellipse 60% 50% at 10% 90%, rgba(48,137,202,0.07) 0%, transparent 55%),
-        #f0f4f9;
-    }
-
-    /* Decorative background circles */
-    body::before {
-      content: '';
-      position: fixed;
-      top: -120px; right: -120px;
-      width: 420px; height: 420px;
-      border-radius: 50%;
-      border: 1.5px solid rgba(48,137,202,0.10);
-      pointer-events: none;
-    }
-    body::after {
-      content: '';
-      position: fixed;
-      bottom: -80px; left: -80px;
-      width: 300px; height: 300px;
-      border-radius: 50%;
-      border: 1.5px solid rgba(48,137,202,0.08);
-      pointer-events: none;
-    }
-
     .card {
-      background: var(--white);
-      border-radius: 24px;
-      box-shadow: var(--shadow), 0 1px 0 rgba(255,255,255,0.9) inset;
-      padding: 48px 44px 40px;
-      width: 100%;
-      max-width: 420px;
-      border: 1px solid var(--border);
-      animation: fadeUp 0.5s ease both;
+      background:var(--white); border-radius:24px;
+      box-shadow:var(--shadow); padding:48px 44px 40px;
+      width:100%; max-width:420px; border:1px solid var(--border);
+      animation:fadeUp .5s ease both;
     }
-
-    @keyframes fadeUp {
-      from { opacity: 0; transform: translateY(18px); }
-      to   { opacity: 1; transform: translateY(0); }
+    @keyframes fadeUp { from{opacity:0;transform:translateY(18px)} to{opacity:1;transform:translateY(0)} }
+    .logo-wrap { display:flex; flex-direction:column; align-items:center; margin-bottom:32px; }
+    .logo-wrap img { width:100px; height:100px; object-fit:contain; }
+    .logo-title { font-family:'Outfit',sans-serif; font-size:13px; font-weight:500; letter-spacing:.12em; text-transform:uppercase; color:var(--text-soft); text-align:center; line-height:1.5; }
+    .logo-title span { display:block; font-size:11px; letter-spacing:.08em; color:#aab4bf; margin-top:2px; }
+    .divider { display:flex; align-items:center; gap:10px; margin-bottom:28px; }
+    .divider::before,.divider::after { content:''; flex:1; height:1px; background:var(--border); }
+    .divider-text { font-size:11px; font-weight:500; letter-spacing:.1em; text-transform:uppercase; color:#b0bcc9; }
+    .user-selector { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:24px; }
+    .user-btn { display:flex; flex-direction:column; align-items:center; gap:6px; padding:14px 10px; border-radius:14px; border:1.5px solid var(--border); background:var(--gray); cursor:pointer; transition:all .2s; font-family:'DM Sans',sans-serif; }
+    .user-btn:hover,.user-btn.active { border-color:var(--blue); background:var(--blue-light); }
+    .user-btn.active { box-shadow:0 0 0 3px var(--blue-glow); }
+    .user-avatar { width:40px; height:40px; border-radius:50%; background:var(--blue); display:flex; align-items:center; justify-content:center; font-family:'Outfit',sans-serif; font-weight:600; font-size:14px; color:white; }
+    .user-name { font-size:11.5px; font-weight:500; color:var(--text); text-align:center; line-height:1.3; }
+    .user-role { font-size:10px; color:var(--text-soft); text-align:center; }
+    .form-group { margin-bottom:16px; }
+    label { display:block; font-size:12px; font-weight:500; letter-spacing:.06em; text-transform:uppercase; color:var(--text-soft); margin-bottom:7px; }
+    input[type="password"],input[type="text"],input[type="date"],input[type="email"],input[type="tel"],select {
+      width:100%; padding:11px 14px; border-radius:12px; border:1.5px solid var(--border);
+      background:var(--gray); font-family:'DM Sans',sans-serif; font-size:14px; color:var(--text); outline:none; transition:border-color .2s,box-shadow .2s;
     }
+    input:focus,select:focus { border-color:var(--blue); background:white; box-shadow:0 0 0 3px var(--blue-glow); }
+    .error-msg { display:none; font-size:12px; color:#e05252; margin-top:7px; padding:8px 12px; background:#fff0f0; border-radius:8px; border:1px solid #f8d0d0; }
+    .error-msg.visible { display:block; }
+    .btn { width:100%; padding:13px; border-radius:14px; border:none; background:var(--blue); color:white; font-family:'Outfit',sans-serif; font-size:15px; font-weight:600; letter-spacing:.04em; cursor:pointer; transition:background .2s,transform .15s,box-shadow .2s; box-shadow:0 4px 16px rgba(48,137,202,.30); margin-top:8px; }
+    .btn:hover { background:var(--blue-dark); transform:translateY(-1px); }
+    .btn:disabled { background:#b0c8e0; cursor:not-allowed; box-shadow:none; transform:none; }
+    .btn-secondary { background:white; color:var(--blue); border:1.5px solid var(--blue); box-shadow:none; }
+    .btn-secondary:hover { background:var(--blue-light); }
+    .card-footer { margin-top:24px; text-align:center; font-size:11px; color:#c0cad4; }
 
-    /* Logo */
-    .logo-wrap {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      margin-bottom: 32px;
+    /* ===== APP SHELL ===== */
+    #app { display:none; min-height:100vh; }
+    .topbar {
+      background:white; padding:14px 28px; display:flex; align-items:center;
+      justify-content:space-between; box-shadow:0 1px 0 var(--border); position:sticky; top:0; z-index:100;
     }
+    .topbar-brand { display:flex; align-items:center; gap:12px; }
+    .topbar-brand img { width:36px; height:36px; object-fit:contain; }
+    .topbar-brand h1 { font-family:'Outfit',sans-serif; font-size:18px; font-weight:700; color:var(--blue); }
+    .topbar-brand p { font-size:10px; color:var(--text-soft); letter-spacing:.06em; text-transform:uppercase; }
+    .topbar-right { display:flex; align-items:center; gap:12px; }
+    .topbar-user { font-size:13px; font-weight:500; color:var(--text); }
+    .btn-logout { padding:7px 14px; border-radius:10px; border:1.5px solid var(--border); background:transparent; font-size:12px; font-weight:500; color:var(--text-soft); cursor:pointer; transition:all .2s; }
+    .btn-logout:hover { border-color:#e05252; color:#e05252; background:#fff0f0; }
 
-    .logo-circle {
-      position: relative;
-      width: 96px; height: 96px;
-      margin-bottom: 14px;
-    }
+    /* ===== NAV ===== */
+    .nav-tabs { background:white; border-bottom:1px solid var(--border); padding:0 28px; display:flex; gap:4px; overflow-x:auto; }
+    .nav-tab { padding:12px 18px; font-size:13px; font-weight:500; color:var(--text-soft); cursor:pointer; border-bottom:2px solid transparent; white-space:nowrap; transition:all .2s; }
+    .nav-tab:hover { color:var(--blue); }
+    .nav-tab.active { color:var(--blue); border-bottom-color:var(--blue); }
 
-    .logo-circle svg {
-      width: 96px; height: 96px;
-    }
+    /* ===== CONTENT ===== */
+    .content { padding:28px; max-width:1100px; margin:0 auto; }
+    .page { display:none; animation:fadeUp .3s ease both; }
+    .page.active { display:block; }
 
-    .logo-title {
-      font-family: 'Outfit', sans-serif;
-      font-size: 13px;
-      font-weight: 500;
-      letter-spacing: 0.12em;
-      text-transform: uppercase;
-      color: var(--text-soft);
-      text-align: center;
-      line-height: 1.5;
-    }
+    /* ===== DASHBOARD ===== */
+    .dash-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:14px; margin-top:20px; }
+    .dash-card { background:white; border-radius:18px; padding:24px; border:1px solid var(--border); cursor:pointer; transition:all .2s; }
+    .dash-card:hover { transform:translateY(-3px); box-shadow:var(--shadow); border-color:var(--blue); }
+    .dash-card-icon { width:44px; height:44px; border-radius:12px; background:var(--blue-light); display:flex; align-items:center; justify-content:center; font-size:22px; margin-bottom:12px; }
+    .dash-card h3 { font-family:'Outfit',sans-serif; font-size:15px; font-weight:600; color:var(--text); margin-bottom:4px; }
+    .dash-card p { font-size:12px; color:var(--text-soft); }
+    .coming-soon { font-size:10px; font-weight:600; letter-spacing:.08em; text-transform:uppercase; color:var(--blue); background:var(--blue-light); padding:3px 8px; border-radius:20px; display:inline-block; margin-top:8px; }
+    .page-title { font-family:'Outfit',sans-serif; font-size:22px; font-weight:700; color:var(--text); margin-bottom:4px; }
+    .page-subtitle { font-size:13px; color:var(--text-soft); margin-bottom:24px; }
 
-    .logo-title span {
-      display: block;
-      font-size: 11px;
-      letter-spacing: 0.08em;
-      color: #aab4bf;
-      margin-top: 2px;
-    }
+    /* ===== PACIENTES ===== */
+    .toolbar { display:flex; gap:12px; align-items:center; margin-bottom:20px; flex-wrap:wrap; }
+    .search-box { flex:1; min-width:200px; position:relative; }
+    .search-box input { padding-left:36px; }
+    .search-box::before { content:'🔍'; position:absolute; left:12px; top:50%; transform:translateY(-50%); font-size:13px; }
+    .table-wrap { background:white; border-radius:16px; border:1px solid var(--border); overflow:hidden; }
+    table { width:100%; border-collapse:collapse; }
+    th { background:var(--gray); padding:12px 16px; text-align:left; font-size:11px; font-weight:600; letter-spacing:.06em; text-transform:uppercase; color:var(--text-soft); }
+    td { padding:13px 16px; font-size:13px; border-top:1px solid var(--border); }
+    tr:hover td { background:#fafcff; }
+    .badge { display:inline-block; padding:3px 10px; border-radius:20px; font-size:11px; font-weight:500; }
+    .badge-blue { background:var(--blue-light); color:var(--blue); }
+    .btn-sm { padding:5px 12px; border-radius:8px; border:1.5px solid var(--border); background:white; font-size:12px; cursor:pointer; transition:all .2s; color:var(--text); }
+    .btn-sm:hover { border-color:var(--blue); color:var(--blue); }
+    .empty-state { text-align:center; padding:60px 20px; color:var(--text-soft); }
+    .empty-state div { font-size:40px; margin-bottom:12px; }
+    .empty-state p { font-size:14px; }
 
-    /* Divider */
-    .divider {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      margin-bottom: 28px;
-    }
-    .divider::before, .divider::after {
-      content: '';
-      flex: 1;
-      height: 1px;
-      background: var(--border);
-    }
-    .divider-text {
-      font-size: 11px;
-      font-weight: 500;
-      letter-spacing: 0.1em;
-      text-transform: uppercase;
-      color: #b0bcc9;
-    }
+    /* ===== MODAL / FORM ===== */
+    .modal-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,.3); z-index:200; align-items:center; justify-content:center; padding:20px; }
+    .modal-overlay.open { display:flex; }
+    .modal { background:white; border-radius:20px; padding:32px; width:100%; max-width:600px; max-height:90vh; overflow-y:auto; animation:fadeUp .3s ease; }
+    .modal-title { font-family:'Outfit',sans-serif; font-size:18px; font-weight:700; margin-bottom:24px; color:var(--text); }
+    .form-grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+    .form-grid .full { grid-column:1/-1; }
+    .form-actions { display:flex; gap:10px; margin-top:24px; }
+    .form-actions .btn { margin-top:0; }
+    .edad-badge { font-size:12px; color:var(--blue); font-weight:500; margin-top:4px; }
 
-    /* User selector */
-    .user-selector {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 10px;
-      margin-bottom: 24px;
-    }
+    /* ===== LOADING ===== */
+    .loading { text-align:center; padding:40px; color:var(--text-soft); font-size:14px; }
 
-    .user-btn {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 6px;
-      padding: 14px 10px;
-      border-radius: 14px;
-      border: 1.5px solid var(--border);
-      background: var(--gray);
-      cursor: pointer;
-      transition: all 0.2s ease;
-      font-family: 'DM Sans', sans-serif;
-    }
-
-    .user-btn:hover {
-      border-color: var(--blue);
-      background: var(--blue-light);
-    }
-
-    .user-btn.active {
-      border-color: var(--blue);
-      background: var(--blue-light);
-      box-shadow: 0 0 0 3px var(--blue-glow);
-    }
-
-    .user-avatar {
-      width: 40px; height: 40px;
-      border-radius: 50%;
-      background: var(--blue);
-      display: flex; align-items: center; justify-content: center;
-      font-family: 'Outfit', sans-serif;
-      font-weight: 600;
-      font-size: 14px;
-      color: white;
-      letter-spacing: 0.02em;
-    }
-
-    .user-btn.active .user-avatar {
-      background: var(--blue-dark);
-    }
-
-    .user-name {
-      font-size: 11.5px;
-      font-weight: 500;
-      color: var(--text);
-      text-align: center;
-      line-height: 1.3;
-    }
-
-    .user-role {
-      font-size: 10px;
-      color: var(--text-soft);
-      text-align: center;
-      line-height: 1.3;
-    }
-
-    /* Form */
-    .form-group {
-      margin-bottom: 16px;
-    }
-
-    label {
-      display: block;
-      font-size: 12px;
-      font-weight: 500;
-      letter-spacing: 0.06em;
-      text-transform: uppercase;
-      color: var(--text-soft);
-      margin-bottom: 7px;
-    }
-
-    input[type="password"] {
-      width: 100%;
-      padding: 13px 16px;
-      border-radius: 12px;
-      border: 1.5px solid var(--border);
-      background: var(--gray);
-      font-family: 'DM Sans', sans-serif;
-      font-size: 15px;
-      color: var(--text);
-      outline: none;
-      transition: border-color 0.2s, box-shadow 0.2s;
-      letter-spacing: 0.12em;
-    }
-
-    input[type="password"]:focus {
-      border-color: var(--blue);
-      background: white;
-      box-shadow: 0 0 0 3px var(--blue-glow);
-    }
-
-    /* Error */
-    .error-msg {
-      display: none;
-      font-size: 12px;
-      color: #e05252;
-      margin-top: 7px;
-      padding: 8px 12px;
-      background: #fff0f0;
-      border-radius: 8px;
-      border: 1px solid #f8d0d0;
-    }
-
-    .error-msg.visible { display: block; }
-
-    /* Submit */
-    .btn-login {
-      width: 100%;
-      padding: 14px;
-      border-radius: 14px;
-      border: none;
-      background: var(--blue);
-      color: white;
-      font-family: 'Outfit', sans-serif;
-      font-size: 15px;
-      font-weight: 600;
-      letter-spacing: 0.04em;
-      cursor: pointer;
-      transition: background 0.2s, transform 0.15s, box-shadow 0.2s;
-      box-shadow: 0 4px 16px rgba(48,137,202,0.30);
-      margin-top: 8px;
-    }
-
-    .btn-login:hover {
-      background: var(--blue-dark);
-      box-shadow: 0 6px 22px rgba(48,137,202,0.38);
-      transform: translateY(-1px);
-    }
-
-    .btn-login:active { transform: translateY(0); }
-
-    .btn-login:disabled {
-      background: #b0c8e0;
-      cursor: not-allowed;
-      box-shadow: none;
-      transform: none;
-    }
-
-    /* Footer */
-    .card-footer {
-      margin-top: 24px;
-      text-align: center;
-      font-size: 11px;
-      color: #c0cad4;
-      letter-spacing: 0.04em;
-    }
-
-    /* Dashboard (hidden initially) */
-    #dashboard {
-      display: none;
-      width: 100%;
-      max-width: 900px;
-      animation: fadeUp 0.4s ease both;
-    }
-
-    .dash-header {
-      background: white;
-      border-radius: 20px;
-      padding: 24px 32px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      box-shadow: var(--shadow);
-      border: 1px solid var(--border);
-      margin-bottom: 20px;
-      flex-wrap: wrap;
-      gap: 12px;
-    }
-
-    .dash-brand {
-      display: flex;
-      align-items: center;
-      gap: 14px;
-    }
-
-    .dash-logo {
-      width: 44px; height: 44px;
-    }
-
-    .dash-title {
-      font-family: 'Outfit', sans-serif;
-    }
-
-    .dash-title h1 {
-      font-size: 18px;
-      font-weight: 700;
-      color: var(--blue);
-      letter-spacing: -0.01em;
-    }
-
-    .dash-title p {
-      font-size: 11px;
-      color: var(--text-soft);
-      letter-spacing: 0.06em;
-      text-transform: uppercase;
-    }
-
-    .dash-user {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-    }
-
-    .dash-user-info {
-      text-align: right;
-    }
-
-    .dash-user-info strong {
-      display: block;
-      font-size: 13px;
-      font-weight: 600;
-      color: var(--text);
-    }
-
-    .dash-user-info small {
-      font-size: 11px;
-      color: var(--text-soft);
-    }
-
-    .btn-logout {
-      padding: 8px 16px;
-      border-radius: 10px;
-      border: 1.5px solid var(--border);
-      background: transparent;
-      font-family: 'DM Sans', sans-serif;
-      font-size: 12px;
-      font-weight: 500;
-      color: var(--text-soft);
-      cursor: pointer;
-      transition: all 0.2s;
-    }
-
-    .btn-logout:hover {
-      border-color: #e05252;
-      color: #e05252;
-      background: #fff0f0;
-    }
-
-    .dash-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-      gap: 14px;
-    }
-
-    .dash-card {
-      background: white;
-      border-radius: 18px;
-      padding: 28px 24px;
-      border: 1px solid var(--border);
-      box-shadow: 0 2px 16px rgba(48,137,202,0.07);
-      cursor: pointer;
-      transition: all 0.2s ease;
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-    }
-
-    .dash-card:hover {
-      transform: translateY(-3px);
-      box-shadow: 0 8px 28px rgba(48,137,202,0.14);
-      border-color: var(--blue);
-    }
-
-    .dash-card-icon {
-      width: 44px; height: 44px;
-      border-radius: 12px;
-      background: var(--blue-light);
-      display: flex; align-items: center; justify-content: center;
-      font-size: 22px;
-    }
-
-    .dash-card h3 {
-      font-family: 'Outfit', sans-serif;
-      font-size: 15px;
-      font-weight: 600;
-      color: var(--text);
-    }
-
-    .dash-card p {
-      font-size: 12px;
-      color: var(--text-soft);
-      line-height: 1.4;
-    }
-
-    .coming-soon {
-      font-size: 10px;
-      font-weight: 600;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-      color: var(--blue);
-      background: var(--blue-light);
-      padding: 3px 8px;
-      border-radius: 20px;
-      width: fit-content;
-    }
-
-    @media (max-width: 480px) {
-      .card { padding: 32px 24px 28px; }
-      .dash-header { padding: 18px 20px; }
-      .dash-grid { grid-template-columns: 1fr 1fr; }
+    @media(max-width:600px) {
+      .card { padding:28px 18px; }
+      .content { padding:16px; }
+      .form-grid { grid-template-columns:1fr; }
+      .topbar { padding:12px 16px; }
     }
   </style>
 </head>
 <body>
 
-<!-- LOGIN -->
-<div class="card" id="loginCard">
-
-  <div class="logo-wrap">
-    <!-- SVG logo recreado desde el diseño original -->
-    <div class="logo-circle">
-      <img src="logo.svg" alt="URCyM Logo" style="width:96px;height:96px;object-fit:contain;"/>
+<!-- ===== LOGIN ===== -->
+<div id="loginCard">
+  <div class="card">
+    <div class="logo-wrap">
+      <img src="logo.svg" alt="URCyM"/>
+      <div class="logo-title">
+        Sistema de Historia Clínica
+        <span>Unidad de Riesgo Cardiovascular y Metabólico</span>
+      </div>
     </div>
-    <div class="logo-title">
-      Sistema de Historia Clínica
-      <span>Unidad de Riesgo Cardiovascular y Metabólico</span>
+    <div class="divider"><span class="divider-text">Seleccioná tu perfil</span></div>
+    <div class="user-selector">
+      <button class="user-btn" id="btn-barbara" onclick="selectUser('barbara')">
+        <div class="user-avatar">BG</div>
+        <div class="user-name">Dra. Bárbara Guerrero</div>
+        <div class="user-role">Hipertensión · Obesidad</div>
+      </button>
+      <button class="user-btn" id="btn-omar" onclick="selectUser('omar')">
+        <div class="user-avatar">OB</div>
+        <div class="user-name">Dr. Omar Bertani</div>
+        <div class="user-role">Diabetes · Hipertensión</div>
+      </button>
     </div>
+    <div class="form-group">
+      <label>Contraseña</label>
+      <input type="password" id="password" placeholder="••••••••"/>
+      <div class="error-msg" id="errorMsg">Contraseña incorrecta.</div>
+    </div>
+    <button class="btn" id="btnLogin" onclick="doLogin()" disabled>Ingresar al sistema</button>
+    <div class="card-footer">URCyM © 2026 · Acceso restringido</div>
   </div>
-
-  <div class="divider"><span class="divider-text">Seleccioná tu perfil</span></div>
-
-  <div class="user-selector">
-    <button class="user-btn" id="btn-barbara" onclick="selectUser('barbara')">
-      <div class="user-avatar">BG</div>
-      <div class="user-name">Dra. Bárbara Guerrero</div>
-      <div class="user-role">Hipertensión · Obesidad</div>
-    </button>
-    <button class="user-btn" id="btn-omar" onclick="selectUser('omar')">
-      <div class="user-avatar">OB</div>
-      <div class="user-name">Dr. Omar Bertani</div>
-      <div class="user-role">Diabetes · Hipertensión</div>
-    </button>
-  </div>
-
-  <div class="form-group">
-    <label for="password">Contraseña</label>
-    <input type="password" id="password" placeholder="••••••••" autocomplete="current-password"/>
-    <div class="error-msg" id="errorMsg">Usuario o contraseña incorrectos.</div>
-  </div>
-
-  <button class="btn-login" id="btnLogin" onclick="doLogin()" disabled>Ingresar al sistema</button>
-
-  <div class="card-footer">URCyM © 2026 · Acceso restringido</div>
 </div>
 
-<!-- DASHBOARD -->
-<div id="dashboard">
-  <div class="dash-header">
-    <div class="dash-brand">
-      <img src="logo.svg" class="dash-logo" alt="URCyM Logo" style="object-fit:contain;"/>
-      <div class="dash-title">
+<!-- ===== APP ===== -->
+<div id="app">
+  <div class="topbar">
+    <div class="topbar-brand">
+      <img src="logo.svg" alt="URCyM"/>
+      <div>
         <h1>URCyM</h1>
         <p>Unidad de Riesgo Cardiovascular y Metabólico</p>
       </div>
     </div>
-    <div class="dash-user">
-      <div class="dash-user-info">
-        <strong id="dashUserName"></strong>
-        <small id="dashUserRole"></small>
-      </div>
+    <div class="topbar-right">
+      <span class="topbar-user" id="topbarUser"></span>
       <button class="btn-logout" onclick="logout()">Salir</button>
     </div>
   </div>
 
-  <div class="dash-grid">
-    <div class="dash-card">
-      <div class="dash-card-icon">👤</div>
-      <h3>Pacientes</h3>
-      <p>Registro y búsqueda de pacientes</p>
-      <span class="coming-soon">Próximamente</span>
+  <div class="nav-tabs">
+    <div class="nav-tab active" onclick="showPage('dashboard')">🏠 Inicio</div>
+    <div class="nav-tab" onclick="showPage('pacientes')">👤 Pacientes</div>
+    <div class="nav-tab" onclick="showPage('historia')">📋 Historia Clínica</div>
+    <div class="nav-tab" onclick="showPage('agenda')">📅 Agenda</div>
+    <div class="nav-tab" onclick="showPage('estudios')">🔬 Estudios</div>
+  </div>
+
+  <div class="content">
+
+    <!-- DASHBOARD -->
+    <div class="page active" id="page-dashboard">
+      <div class="page-title">Bienvenido/a</div>
+      <div class="page-subtitle" id="dashWelcome"></div>
+      <div class="dash-grid">
+        <div class="dash-card" onclick="showPage('pacientes')">
+          <div class="dash-card-icon">👤</div>
+          <h3>Pacientes</h3>
+          <p>Registro y búsqueda de pacientes</p>
+        </div>
+        <div class="dash-card">
+          <div class="dash-card-icon">📋</div>
+          <h3>Historia Clínica</h3>
+          <p>Evoluciones y antecedentes</p>
+          <span class="coming-soon">Próximamente</span>
+        </div>
+        <div class="dash-card">
+          <div class="dash-card-icon">📅</div>
+          <h3>Agenda</h3>
+          <p>Turnos y calendario</p>
+          <span class="coming-soon">Próximamente</span>
+        </div>
+        <div class="dash-card">
+          <div class="dash-card-icon">🔬</div>
+          <h3>Estudios</h3>
+          <p>Laboratorio y complementarios</p>
+          <span class="coming-soon">Próximamente</span>
+        </div>
+        <div class="dash-card">
+          <div class="dash-card-icon">📊</div>
+          <h3>Reportes</h3>
+          <p>Estadísticas y seguimiento</p>
+          <span class="coming-soon">Próximamente</span>
+        </div>
+      </div>
     </div>
-    <div class="dash-card">
-      <div class="dash-card-icon">📋</div>
-      <h3>Historia Clínica</h3>
-      <p>Evoluciones y antecedentes</p>
-      <span class="coming-soon">Próximamente</span>
+
+    <!-- PACIENTES -->
+    <div class="page" id="page-pacientes">
+      <div class="page-title">Pacientes</div>
+      <div class="page-subtitle">Registro y seguimiento de pacientes</div>
+      <div class="toolbar">
+        <div class="search-box">
+          <input type="text" id="searchInput" placeholder="Buscar por nombre o DNI..." oninput="filtrarPacientes()"/>
+        </div>
+        <button class="btn" style="width:auto;margin-top:0" onclick="abrirModalNuevo()">+ Nuevo paciente</button>
+      </div>
+      <div class="table-wrap">
+        <div id="tablePacientes"><div class="loading">Cargando pacientes...</div></div>
+      </div>
     </div>
-    <div class="dash-card">
-      <div class="dash-card-icon">📅</div>
-      <h3>Agenda</h3>
-      <p>Turnos y calendario</p>
-      <span class="coming-soon">Próximamente</span>
+
+    <!-- OTROS (próximamente) -->
+    <div class="page" id="page-historia">
+      <div class="page-title">Historia Clínica</div>
+      <div class="page-subtitle">Módulo en desarrollo</div>
+      <div class="empty-state"><div>📋</div><p>Próximamente disponible</p></div>
     </div>
-    <div class="dash-card">
-      <div class="dash-card-icon">🔬</div>
-      <h3>Estudios</h3>
-      <p>Laboratorio y complementarios</p>
-      <span class="coming-soon">Próximamente</span>
+    <div class="page" id="page-agenda">
+      <div class="page-title">Agenda</div>
+      <div class="page-subtitle">Módulo en desarrollo</div>
+      <div class="empty-state"><div>📅</div><p>Próximamente disponible</p></div>
     </div>
-    <div class="dash-card">
-      <div class="dash-card-icon">🏥</div>
-      <h3>Consultorio</h3>
-      <p>Configuración y datos</p>
-      <span class="coming-soon">Próximamente</span>
+    <div class="page" id="page-estudios">
+      <div class="page-title">Estudios</div>
+      <div class="page-subtitle">Módulo en desarrollo</div>
+      <div class="empty-state"><div>🔬</div><p>Próximamente disponible</p></div>
     </div>
-    <div class="dash-card">
-      <div class="dash-card-icon">📊</div>
-      <h3>Reportes</h3>
-      <p>Estadísticas y seguimiento</p>
-      <span class="coming-soon">Próximamente</span>
+
+  </div>
+</div>
+
+<!-- ===== MODAL NUEVO/EDITAR PACIENTE ===== -->
+<div class="modal-overlay" id="modalPaciente">
+  <div class="modal">
+    <div class="modal-title" id="modalTitulo">Nuevo Paciente</div>
+    <div class="form-grid">
+      <div class="form-group">
+        <label>DNI *</label>
+        <input type="text" id="f_dni" placeholder="Sin puntos" maxlength="10"/>
+      </div>
+      <div class="form-group">
+        <label>Fecha de nacimiento *</label>
+        <input type="date" id="f_fecha" onchange="calcularEdad()"/>
+        <div class="edad-badge" id="edadBadge"></div>
+      </div>
+      <div class="form-group">
+        <label>Apellido *</label>
+        <input type="text" id="f_apellido" placeholder="Apellido"/>
+      </div>
+      <div class="form-group">
+        <label>Nombre *</label>
+        <input type="text" id="f_nombre" placeholder="Nombre"/>
+      </div>
+      <div class="form-group">
+        <label>Sexo</label>
+        <select id="f_sexo">
+          <option value="">Seleccionar...</option>
+          <option>Masculino</option>
+          <option>Femenino</option>
+          <option>Otro</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Teléfono</label>
+        <input type="tel" id="f_telefono" placeholder="Ej: 11-5555-1234"/>
+      </div>
+      <div class="form-group full">
+        <label>Email</label>
+        <input type="email" id="f_email" placeholder="correo@email.com"/>
+      </div>
+      <div class="form-group">
+        <label>Obra Social</label>
+        <select id="f_obra_social"></select>
+      </div>
+      <div class="form-group">
+        <label>Número de afiliado</label>
+        <input type="text" id="f_afiliado" placeholder="Nº afiliado"/>
+      </div>
+      <div class="form-group full">
+        <label>Profesional/es a cargo</label>
+        <div style="display:flex;gap:12px;margin-top:4px">
+          <label style="display:flex;align-items:center;gap:6px;text-transform:none;font-size:13px;letter-spacing:0">
+            <input type="checkbox" id="prof_barbara" value="Dra. Bárbara Guerrero"> Dra. Bárbara Guerrero
+          </label>
+          <label style="display:flex;align-items:center;gap:6px;text-transform:none;font-size:13px;letter-spacing:0">
+            <input type="checkbox" id="prof_omar" value="Dr. Omar Bertani"> Dr. Omar Bertani
+          </label>
+        </div>
+      </div>
+    </div>
+    <div class="error-msg" id="formError"></div>
+    <div class="form-actions">
+      <button class="btn btn-secondary" onclick="cerrarModal()">Cancelar</button>
+      <button class="btn" id="btnGuardar" onclick="guardarPaciente()">Guardar paciente</button>
     </div>
   </div>
 </div>
 
 <script>
-  const users = {
-    barbara: {
-      password: '1234',
-      name: 'Dra. Bárbara Guerrero',
-      role: 'Hipertensión · Obesidad'
-    },
-    omar: {
-      password: '1234',
-      name: 'Dr. Omar Bertani',
-      role: 'Diabetes · Hipertensión'
-    }
+// ===== SUPABASE =====
+const { createClient } = supabase;
+const sb = createClient(
+  'https://qdjzetylyojfjdottjrk.supabase.co',
+  'sb_publishable_qe6L1Uc7mRwsen7lzZlllw_DzOXonwL'
+);
+
+// ===== USUARIOS =====
+const users = {
+  barbara: { password:'1234', name:'Dra. Bárbara Guerrero', role:'Hipertensión · Obesidad' },
+  omar:    { password:'1234', name:'Dr. Omar Bertani',      role:'Diabetes · Hipertensión' }
+};
+let currentUser = null;
+let pacientesData = [];
+let modoEdicion = false;
+let dniEdicion = null;
+
+// ===== LOGIN =====
+let selectedUser = null;
+function selectUser(u) {
+  selectedUser = u;
+  document.querySelectorAll('.user-btn').forEach(b=>b.classList.remove('active'));
+  document.getElementById('btn-'+u).classList.add('active');
+  document.getElementById('btnLogin').disabled = false;
+  document.getElementById('password').focus();
+}
+function doLogin() {
+  if(!selectedUser) return;
+  const pwd = document.getElementById('password').value;
+  if(pwd === users[selectedUser].password) {
+    currentUser = users[selectedUser];
+    document.getElementById('loginCard').style.display = 'none';
+    document.getElementById('app').style.display = 'block';
+    document.getElementById('topbarUser').textContent = currentUser.name;
+    document.getElementById('dashWelcome').textContent = 'Hola, ' + currentUser.name;
+    cargarPacientes();
+  } else {
+    document.getElementById('errorMsg').classList.add('visible');
+  }
+}
+function logout() {
+  currentUser = null; selectedUser = null;
+  document.getElementById('password').value = '';
+  document.getElementById('app').style.display = 'none';
+  document.getElementById('loginCard').style.display = 'flex';
+  document.querySelectorAll('.user-btn').forEach(b=>b.classList.remove('active'));
+  document.getElementById('btnLogin').disabled = true;
+}
+document.getElementById('password').addEventListener('keydown',e=>{ if(e.key==='Enter') doLogin(); });
+
+// ===== NAVEGACIÓN =====
+function showPage(page) {
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.nav-tab').forEach(t=>t.classList.remove('active'));
+  document.getElementById('page-'+page).classList.add('active');
+  const tabs = document.querySelectorAll('.nav-tab');
+  const map = {dashboard:0,pacientes:1,historia:2,agenda:3,estudios:4};
+  if(map[page]!==undefined) tabs[map[page]].classList.add('active');
+  if(page==='pacientes') cargarPacientes();
+}
+
+// ===== OBRAS SOCIALES =====
+const obrasSociales = [
+  '','ACCORD SALUD','ACEMI','ACTIVA','AMEG','AMSA','APE','APOC','APROSS',
+  'ASSISTCARD','ASOCIART','AVALIAN','AXA','BINARIA SEGUROS','BRINCAR',
+  'CAUSA','CEMIC','CIRCULO MEDICO','CLACSEC','COBERTURA','CODEMA',
+  'COESBA','COLON','COMEI','COMMEDICA','CONSOLIDAR','COOPERACION',
+  'COSAM','COSMOS','CPOSBA','CUYUM MEDICA','DABER','DASPU','DOCTHOS',
+  'DOSUBA','ECLIPSUR','ECOMEDICA','ELPOS','EMERGENCIAS','EMMA','EMSA',
+  'ENSALUD','EPSALUD','ESPIR','ESSIN','EXEMPT','EXISTENCIA','FATSA',
+  'FEDERADA SALUD','FEMI','FETAL','GALENO','GEP','GREMIAL SALUD',
+  'HEREDITAS','HOMINIS','HOSPITAL BRITANICO','HUMANITAS','IACA',
+  'IOSFA','IOMA','IOSEP','IPAM','ISSN','JERÁRQUICOS SALUD','LIFE',
+  'LUHESA','LUIS PASTEUR','MEDICUS','MEDIFE','MEDICARE','MENADIS',
+  'MERCURY SALUD','MIGRATA','NACER','NATIVA','OBSBA','OBUOBA',
+  'OCABA','OCAMP','OCARA','OCEL','OCLADE','OCSSAS','OESN','OJEAP',
+  'OMEC','OMINT','OMSEP','OMSS','OMSTEP','ONAC','ONCCA','OPAD',
+  'OPADI','OPAMSS','OPES','OPSA','ORCA','OREMI','OSAD','OSAM',
+  'OSBA','OSBE','OSBPRA','OSCE','OSCHOCA','OSCOEMA','OSCOP','OSDO',
+  'OSEC','OSECAC','OSEF','OSEITO','OSELADRA','OSEM','OSFATLYF',
+  'OSFATUN','OSGEP','OSIM','OSINDEPP','OSLERA','OSME','OSMESS',
+  'OSMOBI','OSMORED','OSNAP','OSNCAPIF','OSPE','OSPEDYC','OSPF',
+  'OSPIA','OSPLAD','OSPM','OSPMT','OSPOS','OSPRERA','OSPS','OSSEG',
+  'OSSI','OSSTMA','OSSUMIN','OSTEP','OSTRA','OSTUSS','OSVARA',
+  'OSVE','OTVARA','PAIDEIKA','PAMI','PARTIDO MEDICA','PLAN NACER',
+  'PLUSSALUDABLE','POLICLINICO BANCARIO','POLMED','PREMEDIC',
+  'PREVIMEDIC','PREVINCA','PRICO','PROFESIONAL','PROVEER','PROVINCIA',
+  'PRUDENCIA MEDICA','QUALITAS','REGIONAL MEDICA','SAMI','SANCOR',
+  'SANDNOR','SANITAS','SEGURCOOP','SEGUROS RIVADAVIA','SIPSSA',
+  'SMSJ','SOLIDARIA','SWISS MEDICAL','TPC','UNIMED','UNIÓN PERSONAL',
+  'UNISALUD','UPAS','UPCN','UPCOBA','UOM','UTA','UTN','UVEH',
+  'VALORSALUD','VIDA SANA','VITTAL','VITALMAS','PARTICULAR'
+].sort();
+
+function cargarSelectObrasSociales() {
+  const sel = document.getElementById('f_obra_social');
+  sel.innerHTML = obrasSociales.map(o=> `<option value="${o}">${o||'Seleccionar...'}</option>`).join('');
+}
+
+// ===== CALCULAR EDAD =====
+function calcularEdad() {
+  const fecha = document.getElementById('f_fecha').value;
+  if(!fecha) { document.getElementById('edadBadge').textContent=''; return; }
+  const hoy = new Date();
+  const nac = new Date(fecha);
+  let edad = hoy.getFullYear() - nac.getFullYear();
+  const m = hoy.getMonth() - nac.getMonth();
+  if(m < 0 || (m===0 && hoy.getDate() < nac.getDate())) edad--;
+  document.getElementById('edadBadge').textContent = edad >= 0 ? `${edad} años` : '';
+}
+
+// ===== CARGAR PACIENTES =====
+async function cargarPacientes() {
+  const { data, error } = await sb.from('pacientes').select('*').order('apellido');
+  if(error) { console.error(error); return; }
+  pacientesData = data || [];
+  renderTabla(pacientesData);
+}
+
+function renderTabla(data) {
+  const cont = document.getElementById('tablePacientes');
+  if(!data.length) {
+    cont.innerHTML = `<div class="empty-state"><div>👤</div><p>No hay pacientes registrados todavía.<br>Hacé clic en "+ Nuevo paciente" para agregar el primero.</p></div>`;
+    return;
+  }
+  const hoy = new Date();
+  cont.innerHTML = `<table>
+    <thead><tr>
+      <th>Apellido y nombre</th><th>DNI</th><th>Edad</th><th>Obra Social</th><th>Teléfono</th><th>Acciones</th>
+    </tr></thead>
+    <tbody>${data.map(p => {
+      const nac = new Date(p.fecha_nacimiento);
+      let edad = hoy.getFullYear()-nac.getFullYear();
+      const m = hoy.getMonth()-nac.getMonth();
+      if(m<0||(m===0&&hoy.getDate()<nac.getDate())) edad--;
+      return `<tr>
+        <td><strong>${p.apellido}, ${p.nombre}</strong></td>
+        <td>${p.dni}</td>
+        <td>${edad} años</td>
+        <td>${p.obra_social ? `<span class="badge badge-blue">${p.obra_social}</span>` : '-'}</td>
+        <td>${p.telefono||'-'}</td>
+        <td><button class="btn-sm" onclick="editarPaciente('${p.dni}')">✏️ Editar</button></td>
+      </tr>`;
+    }).join('')}</tbody>
+  </table>`;
+}
+
+function filtrarPacientes() {
+  const q = document.getElementById('searchInput').value.toLowerCase();
+  const filtrado = pacientesData.filter(p =>
+    p.apellido.toLowerCase().includes(q) ||
+    p.nombre.toLowerCase().includes(q) ||
+    p.dni.includes(q)
+  );
+  renderTabla(filtrado);
+}
+
+// ===== MODAL =====
+function abrirModalNuevo() {
+  modoEdicion = false; dniEdicion = null;
+  document.getElementById('modalTitulo').textContent = 'Nuevo Paciente';
+  document.getElementById('f_dni').disabled = false;
+  ['f_dni','f_apellido','f_nombre','f_email','f_telefono','f_afiliado'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('f_fecha').value='';
+  document.getElementById('f_sexo').value='';
+  document.getElementById('f_obra_social').value='';
+  document.getElementById('edadBadge').textContent='';
+  document.getElementById('prof_barbara').checked=false;
+  document.getElementById('prof_omar').checked=false;
+  document.getElementById('formError').style.display='none';
+  cargarSelectObrasSociales();
+  document.getElementById('modalPaciente').classList.add('open');
+}
+
+async function editarPaciente(dni) {
+  modoEdicion = true; dniEdicion = dni;
+  const p = pacientesData.find(x=>x.dni===dni);
+  if(!p) return;
+  cargarSelectObrasSociales();
+  document.getElementById('modalTitulo').textContent = 'Editar Paciente';
+  document.getElementById('f_dni').value = p.dni;
+  document.getElementById('f_dni').disabled = true;
+  document.getElementById('f_apellido').value = p.apellido;
+  document.getElementById('f_nombre').value = p.nombre;
+  document.getElementById('f_fecha').value = p.fecha_nacimiento;
+  document.getElementById('f_sexo').value = p.sexo||'';
+  document.getElementById('f_telefono').value = p.telefono||'';
+  document.getElementById('f_email').value = p.email||'';
+  document.getElementById('f_obra_social').value = p.obra_social||'';
+  document.getElementById('f_afiliado').value = p.numero_afiliado||'';
+  calcularEdad();
+  // cargar profesionales
+  const { data } = await sb.from('paciente_profesionales').select('*').eq('dni_paciente', dni);
+  const profs = (data||[]).map(x=>x.profesional);
+  document.getElementById('prof_barbara').checked = profs.includes('Dra. Bárbara Guerrero');
+  document.getElementById('prof_omar').checked = profs.includes('Dr. Omar Bertani');
+  document.getElementById('formError').style.display='none';
+  document.getElementById('modalPaciente').classList.add('open');
+}
+
+function cerrarModal() {
+  document.getElementById('modalPaciente').classList.remove('open');
+}
+
+async function guardarPaciente() {
+  const dni = document.getElementById('f_dni').value.trim();
+  const apellido = document.getElementById('f_apellido').value.trim();
+  const nombre = document.getElementById('f_nombre').value.trim();
+  const fecha = document.getElementById('f_fecha').value;
+  const errEl = document.getElementById('formError');
+
+  if(!dni||!apellido||!nombre||!fecha) {
+    errEl.textContent='Completá los campos obligatorios: DNI, apellido, nombre y fecha de nacimiento.';
+    errEl.style.display='block'; return;
+  }
+
+  const paciente = {
+    dni, apellido, nombre,
+    fecha_nacimiento: fecha,
+    sexo: document.getElementById('f_sexo').value||null,
+    telefono: document.getElementById('f_telefono').value.trim()||null,
+    email: document.getElementById('f_email').value.trim()||null,
+    obra_social: document.getElementById('f_obra_social').value||null,
+    numero_afiliado: document.getElementById('f_afiliado').value.trim()||null,
   };
 
-  let selectedUser = null;
-
-  function selectUser(user) {
-    selectedUser = user;
-    document.querySelectorAll('.user-btn').forEach(b => b.classList.remove('active'));
-    document.getElementById('btn-' + user).classList.add('active');
-    document.getElementById('btnLogin').disabled = false;
-    document.getElementById('errorMsg').classList.remove('visible');
-    document.getElementById('password').focus();
+  let error;
+  if(modoEdicion) {
+    ({ error } = await sb.from('pacientes').update(paciente).eq('dni', dniEdicion));
+  } else {
+    ({ error } = await sb.from('pacientes').insert(paciente));
   }
 
-  function doLogin() {
-    if (!selectedUser) return;
-    const pwd = document.getElementById('password').value;
-    const user = users[selectedUser];
-    if (pwd === user.password) {
-      document.getElementById('loginCard').style.display = 'none';
-      document.getElementById('dashboard').style.display = 'block';
-      document.getElementById('dashUserName').textContent = user.name;
-      document.getElementById('dashUserRole').textContent = user.role;
-    } else {
-      document.getElementById('errorMsg').classList.add('visible');
-      document.getElementById('password').focus();
-    }
+  if(error) {
+    errEl.textContent = error.code==='23505' ? 'Ya existe un paciente con ese DNI.' : 'Error al guardar: '+error.message;
+    errEl.style.display='block'; return;
   }
 
-  function logout() {
-    selectedUser = null;
-    document.getElementById('password').value = '';
-    document.getElementById('dashboard').style.display = 'none';
-    document.getElementById('loginCard').style.display = 'block';
-    document.querySelectorAll('.user-btn').forEach(b => b.classList.remove('active'));
-    document.getElementById('btnLogin').disabled = true;
-  }
+  // profesionales
+  await sb.from('paciente_profesionales').delete().eq('dni_paciente', dni);
+  const profs = [];
+  if(document.getElementById('prof_barbara').checked) profs.push({dni_paciente:dni, profesional:'Dra. Bárbara Guerrero'});
+  if(document.getElementById('prof_omar').checked) profs.push({dni_paciente:dni, profesional:'Dr. Omar Bertani'});
+  if(profs.length) await sb.from('paciente_profesionales').insert(profs);
 
-  document.getElementById('password').addEventListener('keydown', function(e) {
-    if (e.key === 'Enter') doLogin();
-  });
+  cerrarModal();
+  cargarPacientes();
+}
+
+// cerrar modal al hacer click afuera
+document.getElementById('modalPaciente').addEventListener('click', function(e) {
+  if(e.target===this) cerrarModal();
+});
+
+cargarSelectObrasSociales();
 </script>
 </body>
 </html>
