@@ -316,6 +316,12 @@
     .hx-fecha { font-weight:700; color:var(--blue); font-size:12px; margin-bottom:4px; }
     .hx-detalle { color:var(--text); line-height:1.6; }
 
+
+    /* Panel tto grid */
+    @media(max-width:900px) {
+      #upd_tto_accion, #upd_tto_grupo, #upd_tto_farmaco, #upd_tto_dosis, #upd_tto_frecuencia { width:100%; }
+    }
+
     @media(max-width:768px) {
       .evol-body { grid-template-columns:1fr; }
       .evol-update-grid { grid-template-columns:1fr; }
@@ -582,8 +588,25 @@
             <div class="evol-update-title">Actualización clínica de esta consulta</div>
             <div class="evol-update-grid">
               <div class="evol-update-item" style="grid-column:1/-1">
-                <label>Cambio de tratamiento / observación</label>
-                <input type="text" id="upd_tto" placeholder="Ej: se agrega Enalapril 10mg, se suspende..." />
+                <label>Cambio de tratamiento</label>
+                <div style="display:grid;grid-template-columns:130px 1fr 90px 120px 28px;gap:6px;align-items:center;margin-bottom:6px">
+                  <select id="upd_tto_accion" style="padding:6px 8px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;font-family:var(--font-main);background:white">
+                    <option value="se agrega">Se agrega</option>
+                    <option value="se modifica">Se modifica</option>
+                    <option value="se suspende">Se suspende</option>
+                    <option value="se mantiene">Se mantiene</option>
+                  </select>
+                  <select id="upd_tto_grupo" onchange="actualizarFarmacosUpd()" style="padding:6px 8px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;font-family:var(--font-main);background:white">
+                    <option value="">Grupo</option>
+                  </select>
+                  <select id="upd_tto_farmaco" style="padding:6px 8px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;font-family:var(--font-main);background:white">
+                    <option value="">Fármaco</option>
+                  </select>
+                  <input type="text" id="upd_tto_dosis" placeholder="Dosis" style="padding:6px 8px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;font-family:var(--font-main)"/>
+                  <input type="text" id="upd_tto_frecuencia" placeholder="Frec." style="padding:6px 8px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;font-family:var(--font-main)"/>
+                </div>
+                <div id="upd_tto_lista" style="display:flex;flex-wrap:wrap;gap:4px;min-height:20px"></div>
+                <button type="button" onclick="agregarTtoUpd()" style="margin-top:6px;padding:5px 12px;border:1.5px solid var(--blue);border-radius:8px;background:var(--blue-light);color:var(--blue);font-size:11px;cursor:pointer;font-family:var(--font-main)">+ Agregar</button>
               </div>
               <div class="evol-update-item">
                 <label>Actividad física</label>
@@ -658,15 +681,15 @@
 
             <!-- TA parado a los 3 min -->
             <div class="ta-parado-section">
-              <div class="ta-parado-label">TA parado (3 min)</div>
-              <div class="ta-parado-row">
-                <label>SIS</label>
-                <input type="number" id="evol_tap_s" placeholder="—" oninput="actualizarTAParado()"/>
-                <label>DIA</label>
-                <input type="number" id="evol_tap_d" placeholder="—" oninput="actualizarTAParado()"/>
-                <label>FC</label>
-                <input type="number" id="evol_tap_fc" placeholder="—" oninput="actualizarTAParado()"/>
-              </div>
+              <div class="ta-parado-label">TA ortostática (parado 3 min)</div>
+              <table class="ta-table" style="margin-top:4px">
+                <thead><tr><th>SIS</th><th>DIA</th><th>FC</th></tr></thead>
+                <tbody><tr>
+                  <td><input type="number" id="evol_tap_s" placeholder="—" oninput="actualizarTAParado()"/></td>
+                  <td><input type="number" id="evol_tap_d" placeholder="—" oninput="actualizarTAParado()"/></td>
+                  <td><input type="number" id="evol_tap_fc" placeholder="—" oninput="actualizarTAParado()"/></td>
+                </tr></tbody>
+              </table>
               <div id="evol_tap_result" class="ta-parado-result"></div>
             </div>
           </div>
@@ -1047,7 +1070,7 @@ function renderTabla(data) {
         '<td id="uc-' + p.dni + '" style="font-size:12px;color:var(--text-soft)">—</td>' +
         '<td><div class="acciones">' +
           '<button class="btn-accion evolucionar" onclick="abrirEvolucion(\'' + p.dni + '\')">✚ Evolucionar</button>' +
-          '<button class="btn-accion ver-hc" onclick="verHistoria(\'' + p.dni + '\')">📋 Historia</button>' +
+          '<button class="btn-accion ver-hc" onclick="abrirHistoriaPaciente(\'' + p.dni + '\')">📋 Lab/Estudios</button>' +
           '<button class="btn-accion receta" onclick="abrirDocumento(\'receta\',\'' + p.dni + '\')">💊 Receta</button>' +
           '<button class="btn-accion indicaciones" onclick="abrirDocumento(\'indicaciones\',\'' + p.dni + '\')">📝 Indicaciones</button>' +
           '<button class="btn-accion editar" onclick="editarPaciente(\'' + p.dni + '\')">✏️ Editar</button>' +
@@ -1441,6 +1464,8 @@ function abrirEvolucion(dni) {
   });
   ['upd_tto'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   const indEl=document.getElementById('evol_indicaciones');if(indEl)indEl.value='';
+  updTtoItems = []; renderTtoUpd();
+  initGruposUpd();
   ['upd_actividad','upd_alimentacion'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   const tapRes = document.getElementById('evol_tap_result'); if(tapRes) tapRes.textContent='';
   actualizarPromedios();
@@ -1596,13 +1621,53 @@ function insertarFechaHora() {
 }
 
 // ===== VOLCAR ACTUALIZACIÓN CLÍNICA AL EDITOR =====
+
+// ===== PANEL INFERIOR TRATAMIENTO =====
+function initGruposUpd() {
+  const sel = document.getElementById('upd_tto_grupo');
+  if(!sel) return;
+  sel.innerHTML = '<option value="">Grupo</option>' + GRUPOS_MED.map(g=>'<option value="'+g+'">'+g+'</option>').join('');
+}
+
+function actualizarFarmacosUpd() {
+  const grupo = document.getElementById('upd_tto_grupo').value;
+  const sel = document.getElementById('upd_tto_farmaco');
+  sel.innerHTML = '<option value="">Fármaco</option>'+(FARMACOS_MED[grupo]||[]).map(f=>'<option value="'+f+'">'+f+'</option>').join('');
+}
+
+let updTtoItems = [];
+
+function agregarTtoUpd() {
+  const accion = document.getElementById('upd_tto_accion').value;
+  const farmaco = document.getElementById('upd_tto_farmaco').value || document.getElementById('upd_tto_grupo').value;
+  const dosis = document.getElementById('upd_tto_dosis').value.trim();
+  const frec = document.getElementById('upd_tto_frecuencia').value.trim();
+  if(!farmaco) return;
+  const txt = accion + ' ' + farmaco + (dosis?' '+dosis:'') + (frec?' '+frec:'');
+  updTtoItems.push(txt);
+  renderTtoUpd();
+  document.getElementById('upd_tto_farmaco').value = '';
+  document.getElementById('upd_tto_dosis').value = '';
+  document.getElementById('upd_tto_frecuencia').value = '';
+}
+
+function renderTtoUpd() {
+  const lista = document.getElementById('upd_tto_lista');
+  if(!lista) return;
+  lista.innerHTML = updTtoItems.map((t,i) =>
+    '<span style="display:inline-flex;align-items:center;gap:4px;background:var(--blue-light);color:var(--blue);padding:3px 8px;border-radius:10px;font-size:12px">'
+    +t+'<button onclick="quitarTtoUpd('+i+')" style="background:none;border:none;cursor:pointer;color:var(--blue);font-size:13px;line-height:1;padding:0">×</button></span>'
+  ).join('');
+}
+
+function quitarTtoUpd(i) { updTtoItems.splice(i,1); renderTtoUpd(); }
+
 function volcarActualizacion() {
-  const tto = document.getElementById('upd_tto').value.trim();
   const act = document.getElementById('upd_actividad').value;
   const ali = document.getElementById('upd_alimentacion').value;
-  if(!tto && !act && !ali) return;
+  if(!updTtoItems.length && !act && !ali) return;
   const lines = [];
-  if(tto) lines.push('Tratamiento: ' + tto);
+  if(updTtoItems.length) lines.push('Tratamiento: ' + updTtoItems.join(' · '));
   if(act) lines.push('Actividad física: ' + act);
   if(ali) lines.push('Alimentación: ' + ali);
   const bloque = '<div class="bloque-actualizacion" style="font-family:Arial,sans-serif;font-size:10pt;color:#333;border:1px solid #d0e4f5;padding:8px 10px;border-radius:6px;background:#f0f8ff;margin-bottom:10px;line-height:1.7"><strong>Actualización de esta consulta:</strong><br>' + lines.join('<br>') + '</div>';
@@ -1629,18 +1694,25 @@ async function abrirHistorialDx() {
     let snap; try{ snap=JSON.parse(e.clinica_snapshot); }catch(er){ return ''; }
     const c = snap.clinica; if(!c) return '';
     const curSet = new Set(Object.keys(DX_L).filter(k=>c[k]).map(k=>DX_L[k]));
-    let cambios = [];
+    let agregados = [], quitados = [];
     if(prevSet !== null) {
-      curSet.forEach(v=>{ if(!prevSet.has(v)) cambios.push('+'+v); });
-      prevSet.forEach(v=>{ if(!curSet.has(v)) cambios.push('−'+v); });
+      curSet.forEach(v=>{ if(!prevSet.has(v)) agregados.push(v); });
+      prevSet.forEach(v=>{ if(!curSet.has(v)) quitados.push(v); });
     }
+    const hayCambio = prevSet === null || agregados.length || quitados.length;
     prevSet = curSet;
-    const dxStr = [...curSet].join(', ') || 'Sin diagnósticos';
+    if(!hayCambio) return '';
     const fecha = new Date(e.fecha_hora).toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'});
-    const cambStr = cambios.length ? '<span style="color:var(--blue);font-weight:600"> → '+cambios.join(', ')+'</span>' : '';
-    return '<div class="hx-entrada"><div class="hx-fecha">'+fecha+cambStr+'</div><div class="hx-detalle">'+dxStr+'</div></div>';
+    let detalle = '';
+    if(prevSet === null || (agregados.length===0 && quitados.length===0)) {
+      detalle = 'Diagnósticos iniciales: '+([...curSet].join(', ')||'Ninguno');
+    } else {
+      if(agregados.length) detalle += '<span style="color:#27ae60;font-weight:600">+ '+agregados.join(', ')+'</span> ';
+      if(quitados.length) detalle += '<span style="color:var(--red);font-weight:600">− '+quitados.join(', ')+'</span>';
+    }
+    return '<div class="hx-entrada"><div class="hx-fecha">'+fecha+'</div><div class="hx-detalle">'+detalle+'</div></div>';
   }).filter(Boolean);
-  cont.innerHTML = items.length ? items.join('') : '<p style="color:var(--text-soft);font-size:13px">Sin snapshots disponibles.</p>';
+  cont.innerHTML = items.length ? items.join('') : '<p style="color:var(--text-soft);font-size:13px">Sin cambios registrados.</p>';
 }
 
 // ===== HISTORIAL MEDICACIÓN =====
@@ -1654,15 +1726,16 @@ async function abrirHistorialMed() {
   let prevMedStr = null;
   const items = data.filter(e=>e.clinica_snapshot).map(e => {
     let snap; try{ snap=JSON.parse(e.clinica_snapshot); }catch(er){ return ''; }
-    const meds = snap.medicacion||[]; if(!meds.length && prevMedStr===null) return '';
+    const meds = snap.medicacion||[];
     const medStr = meds.map(m=>m.farmaco+' '+m.dosis+(m.frecuencia?' '+m.frecuencia:'')).join(', ') || 'Sin medicación';
-    const hayCambio = prevMedStr !== null && medStr !== prevMedStr;
+    if(prevMedStr !== null && medStr === prevMedStr) return '';
+    const esInicial = prevMedStr === null;
     prevMedStr = medStr;
     const fecha = new Date(e.fecha_hora).toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'});
-    const cambTag = hayCambio ? '<span style="color:var(--red);font-size:10px;font-weight:700;margin-left:6px">CAMBIO</span>' : '';
-    return '<div class="hx-entrada"><div class="hx-fecha">'+fecha+cambTag+'</div><div class="hx-detalle">'+medStr+'</div></div>';
+    const tag = esInicial ? '' : ' <span style="color:var(--red);font-size:10px;font-weight:700">CAMBIO</span>';
+    return '<div class="hx-entrada"><div class="hx-fecha">'+fecha+tag+'</div><div class="hx-detalle">'+medStr+'</div></div>';
   }).filter(Boolean);
-  cont.innerHTML = items.length ? items.join('') : '<p style="color:var(--text-soft);font-size:13px">Sin snapshots disponibles.</p>';
+  cont.innerHTML = items.length ? items.join('') : '<p style="color:var(--text-soft);font-size:13px">Sin cambios registrados.</p>';
 }
 
 // ===== INDICACIONES EN EVOLUCIÓN =====
