@@ -270,6 +270,8 @@
     /* HC lectura */
     .hc-entrada { background:white; border-radius:14px; border:1px solid var(--border); margin-bottom:16px; overflow:hidden; }
     .hc-header { display:flex; align-items:center; gap:10px; padding:12px 16px; background:var(--gray); border-bottom:1px solid var(--border); flex-wrap:wrap; }
+    .hc-header.med-barbara { background:#e8f3fc; border-bottom:2px solid #3089ca; }
+    .hc-header.med-omar { background:#e8f5f0; border-bottom:2px solid #27ae60; }
     .hc-fecha { font-family:var(--font-display); font-size:13px; font-weight:700; color:var(--text); }
     .hc-medico { font-size:12px; color:var(--text-soft); font-style:italic; }
     .hc-badge-ta, .hc-badge-fc, .hc-badge-peso { font-size:11px; padding:2px 8px; border-radius:10px; font-weight:600; }
@@ -526,20 +528,20 @@
                 <label>Actividad física</label>
                 <select id="upd_actividad">
                   <option value="">Sin cambios</option>
-                  <option>Sedentarismo</option>
-                  <option>Caminata regular</option>
-                  <option>Ejercicio moderado</option>
-                  <option>Ejercicio intenso</option>
+                  <option value="sedentarismo">Sedentarismo</option>
+                  <option value="aerobica">Aeróbica</option>
+                  <option value="fuerza">Fuerza</option>
+                  <option value="mixto">Mixto</option>
                 </select>
               </div>
               <div class="evol-update-item">
                 <label>Alimentación</label>
                 <select id="upd_alimentacion">
                   <option value="">Sin cambios</option>
-                  <option>Hiposódica</option>
-                  <option>Hipocalórica</option>
-                  <option>Mediterránea</option>
-                  <option>Sin restricciones</option>
+                  <option value="no saludable">No saludable</option>
+                  <option value="saludable">Saludable</option>
+                  <option value="hiposodica">Hiposódica</option>
+                  <option value="vegetariana">Vegetariana</option>
                 </select>
               </div>
             </div>
@@ -1160,6 +1162,14 @@ function switchTab(tab) {
   });
 }
 
+// ===== COLOR POR PROFESIONAL =====
+function medicoAClase(medico) {
+  if(!medico) return '';
+  if(medico.toLowerCase().includes('bárbara') || medico.toLowerCase().includes('barbara')) return 'med-barbara';
+  if(medico.toLowerCase().includes('bertani') || medico.toLowerCase().includes('omar')) return 'med-omar';
+  return '';
+}
+
 // ===== RENDER SNAPSHOT CLÍNICO EN HISTORIA =====
 function renderSnapshotCompacto(snapshotJson) {
   if(!snapshotJson) return '';
@@ -1194,7 +1204,8 @@ async function abrirPrevias() {
   cont.innerHTML = data.map(e => {
     const fh=new Date(e.fecha_hora);
     const snapshotHtml = renderSnapshotCompacto(e.clinica_snapshot);
-    return '<div class="hc-entrada"><div class="hc-header"><span class="hc-fecha">'+fh.toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'})+' '+fh.toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'})+'</span><span class="hc-medico">'+(e.medico||'')+'</span>'+(e.ta_promedio?'<span class="hc-badge-ta">TA: '+e.ta_promedio+'</span>':'')+(e.fc_promedio?'<span class="hc-badge-fc">FC: '+e.fc_promedio+' lpm</span>':'')+(e.peso?'<span class="hc-badge-peso">'+e.peso+' kg</span>':'')+'</div>'+snapshotHtml+'<div class="hc-cuerpo">'+(e.contenido_html||'')+'</div></div>';
+    const mClase = medicoAClase(e.medico);
+    return '<div class="hc-entrada"><div class="hc-header '+mClase+'"><span class="hc-fecha">'+fh.toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'})+' '+fh.toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'})+'</span><span class="hc-medico">'+(e.medico||'')+'</span>'+(e.ta_promedio?'<span class="hc-badge-ta">TA: '+e.ta_promedio+'</span>':'')+(e.fc_promedio?'<span class="hc-badge-fc">FC: '+e.fc_promedio+' lpm</span>':'')+(e.peso?'<span class="hc-badge-peso">'+e.peso+' kg</span>':'')+'</div>'+snapshotHtml+'<div class="hc-cuerpo">'+(e.contenido_html||'')+'</div></div>';
   }).join('');
 }
 
@@ -1396,8 +1407,9 @@ async function cargarHistoria(dni) {
     const fechaStr = fh.toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'});
     const horaStr = fh.toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'});
     const snapshotHtml = renderSnapshotCompacto(e.clinica_snapshot);
+    const mClase = medicoAClase(e.medico);
     return '<div class="hc-entrada">' +
-      '<div class="hc-header">' +
+      '<div class="hc-header '+mClase+'">' +
         '<span class="hc-fecha">' + fechaStr + ' ' + horaStr + '</span>' +
         '<span class="hc-medico">' + (e.medico||'') + '</span>' +
         (e.ta_promedio ? '<span class="hc-badge-ta">TA: '+e.ta_promedio+'</span>' : '') +
@@ -1463,19 +1475,36 @@ async function guardarEvolucion() {
 }
 
 // ===== TA PARADO =====
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 function actualizarTAParado() {
   const s = parseFloat(document.getElementById('evol_tap_s').value);
   const d = parseFloat(document.getElementById('evol_tap_d').value);
   const el = document.getElementById('evol_tap_result');
   if(s && d) {
-    const diff_s = s - (parseFloat(document.getElementById('evol_ta2s').value)||0);
-    const diff_d = d - (parseFloat(document.getElementById('evol_ta2d').value)||0);
-    let nota = '';
-    if(diff_s <= -20 || diff_d <= -10) nota = ' ⚠️ HO';
-    el.innerHTML = '<span style="font-weight:600;color:var(--text)">'+s+'/'+d+'</span><span style="font-size:10px;color:var(--text-soft);margin-left:4px">mmHg'+nota+'</span>';
+    const ref_s = parseFloat(document.getElementById('evol_ta2s').value)||0;
+    const ref_d = parseFloat(document.getElementById('evol_ta2d').value)||0;
+    const diff_s = s - ref_s;
+    const diff_d = d - ref_d;
+    let nota = (ref_s && (diff_s <= -20 || diff_d <= -10)) ? ' <span style="color:var(--red);font-weight:700">⚠️ HO</span>' : '';
+    el.innerHTML = '<span style="font-weight:600;color:var(--text)">'+s+'/'+d+'</span><span style="font-size:10px;color:var(--text-soft);margin-left:4px">mmHg</span>'+nota;
   } else {
     el.textContent = '';
   }
+  volcarPromedioAlEditor();
 }
 
 // ===== INSERTAR FECHA/HORA EN EDITOR =====
@@ -1533,6 +1562,37 @@ function actualizarPromedios() {
     if(pTA) txt += 'TA ' + pTA + ' mmHg';
     if(pFC) txt += (txt?' &nbsp;|&nbsp; ':'') + 'FC ' + pFC + ' lpm';
     el.innerHTML = txt ? '<strong>Promedio 3 tomas protocolarizadas:</strong><br>' + txt : '<span style="color:#b0bcc9;font-size:11px">Completar tomas 2 y 3</span>';
+  }
+  volcarPromedioAlEditor();
+}
+
+function volcarPromedioAlEditor() {
+  const pTA = calcPromedioTA();
+  const pFC = calcPromedioFC();
+  const tapS = document.getElementById('evol_tap_s').value;
+  const tapD = document.getElementById('evol_tap_d').value;
+  const editor = document.getElementById('evol_editor');
+  if(!editor) return;
+  // Construir texto del bloque TA
+  let lineas = [];
+  if(pTA || pFC) {
+    let ln = '<strong>Promedio de tres tomas protocolarizadas:</strong>';
+    if(pTA) ln += ' TA ' + pTA + ' mmHg';
+    if(pFC) ln += ' · FC ' + pFC + ' lpm';
+    lineas.push(ln);
+  }
+  if(tapS && tapD) {
+    lineas.push('TA ortostática (parado 3 min): ' + tapS + '/' + tapD + ' mmHg');
+  }
+  // Quitar bloque anterior si existe
+  const prev = editor.querySelector('.bloque-ta');
+  if(lineas.length === 0) { if(prev) prev.remove(); return; }
+  const html = '<div class="bloque-ta" style="font-family:Arial,sans-serif;font-size:10pt;color:#1a2535;border-left:3px solid #3089ca;padding:6px 10px;margin-bottom:10px;line-height:1.8;background:#f0f8ff">' + lineas.join('<br>') + '</div>';
+  if(prev) {
+    prev.outerHTML = html;
+  } else {
+    const tmp = document.createElement('div'); tmp.innerHTML = html;
+    editor.insertBefore(tmp.firstChild, editor.firstChild);
   }
 }
 
