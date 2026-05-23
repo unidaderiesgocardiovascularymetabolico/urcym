@@ -308,11 +308,18 @@
       </div>
       <div class="form-group full">
         <label>Email</label>
-        <input type="email" id="f_email" placeholder="correo@email.com"/>
+        <div style="position:relative">
+          <input type="text" id="f_email" placeholder="correo@email.com" autocomplete="off" oninput="emailSugerencias(this.value)" onblur="setTimeout(()=>{document.getElementById('emailDrop').style.display='none'},150)" style="width:100%;padding:11px 14px;border-radius:12px;border:1.5px solid var(--border);background:var(--gray);font-family:DM Sans,sans-serif;font-size:14px;color:var(--text);outline:none"/>
+          <div id="emailDrop" style="display:none;position:absolute;top:100%;left:0;right:0;background:white;border:1.5px solid var(--border);border-radius:10px;z-index:999;box-shadow:0 4px 16px rgba(0,0,0,.10);overflow:hidden;margin-top:2px"></div>
+        </div>
       </div>
       <div class="form-group">
         <label>Obra Social</label>
-        <select id="f_obra_social"></select>
+        <div style="position:relative">
+          <input type="text" id="f_obra_social_input" placeholder="Escribí para buscar..." autocomplete="off" oninput="filtrarObrasSociales(this.value)" onblur="setTimeout(()=>{document.getElementById('osDrop').style.display='none'},150)" style="width:100%;padding:11px 14px;border-radius:12px;border:1.5px solid var(--border);background:var(--gray);font-family:DM Sans,sans-serif;font-size:14px;color:var(--text);outline:none"/>
+          <input type="hidden" id="f_obra_social"/>
+          <div id="osDrop" style="display:none;position:absolute;top:100%;left:0;right:0;background:white;border:1.5px solid var(--border);border-radius:10px;z-index:999;box-shadow:0 4px 16px rgba(0,0,0,.10);max-height:200px;overflow-y:auto;margin-top:2px"></div>
+        </div>
       </div>
       <div class="form-group">
         <label>Número de afiliado</label>
@@ -434,8 +441,41 @@ const obrasSociales = [
 ].sort();
 
 function cargarSelectObrasSociales() {
-  const sel = document.getElementById('f_obra_social');
-  sel.innerHTML = obrasSociales.map(o=> `<option value="${o}">${o||'Seleccionar...'}</option>`).join('');
+  // no-op, ahora usamos input con buscador
+}
+
+function filtrarObrasSociales(q) {
+  const drop = document.getElementById('osDrop');
+  const lista = q ? obrasSociales.filter(o=>o && o.toLowerCase().includes(q.toLowerCase())) : obrasSociales.filter(o=>o);
+  if(!lista.length) { drop.style.display='none'; return; }
+  drop.innerHTML = lista.map(o=>`<div onclick="elegirOS('${o}')" style="padding:10px 14px;font-size:13px;cursor:pointer;border-bottom:1px solid #f0f4f9" onmouseover="this.style.background='#e8f3fc'" onmouseout="this.style.background=''">${o}</div>`).join('');
+  drop.style.display='block';
+}
+
+function elegirOS(os) {
+  document.getElementById('f_obra_social_input').value = os;
+  document.getElementById('f_obra_social').value = os;
+  document.getElementById('osDrop').style.display='none';
+}
+
+const dominiosEmail = ['gmail.com','hotmail.com','hotmail.es','outlook.com','yahoo.com'];
+
+function emailSugerencias(val) {
+  const drop = document.getElementById('emailDrop');
+  if(!val || !val.includes('@')) { drop.style.display='none'; return; }
+  const [user, dominio] = val.split('@');
+  if(!user) { drop.style.display='none'; return; }
+  const sugs = dominio
+    ? dominiosEmail.filter(d=>d.startsWith(dominio)).map(d=>user+'@'+d)
+    : dominiosEmail.map(d=>user+'@'+d);
+  if(!sugs.length) { drop.style.display='none'; return; }
+  drop.innerHTML = sugs.map(s=>`<div onclick="elegirEmail('${s}')" style="padding:10px 14px;font-size:13px;cursor:pointer;border-bottom:1px solid #f0f4f9" onmouseover="this.style.background='#e8f3fc'" onmouseout="this.style.background=''">${s}</div>`).join('');
+  drop.style.display='block';
+}
+
+function elegirEmail(email) {
+  document.getElementById('f_email').value = email;
+  document.getElementById('emailDrop').style.display='none';
 }
 
 // ===== CALCULAR EDAD =====
@@ -505,6 +545,7 @@ function abrirModalNuevo() {
   document.getElementById('f_fecha').value='';
   document.getElementById('f_sexo').value='';
   document.getElementById('f_obra_social').value='';
+  document.getElementById('f_obra_social_input').value='';
   document.getElementById('edadBadge').textContent='';
   document.getElementById('prof_barbara').checked=false;
   document.getElementById('prof_omar').checked=false;
@@ -528,6 +569,7 @@ async function editarPaciente(dni) {
   document.getElementById('f_telefono').value = p.telefono||'';
   document.getElementById('f_email').value = p.email||'';
   document.getElementById('f_obra_social').value = p.obra_social||'';
+  document.getElementById('f_obra_social_input').value = p.obra_social||'';
   document.getElementById('f_afiliado').value = p.numero_afiliado||'';
   calcularEdad();
   // cargar profesionales
