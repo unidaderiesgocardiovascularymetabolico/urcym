@@ -1591,11 +1591,25 @@ function actualizarCelda(input) {
 
 async function guardarDatosPac(wrapId) {
   const dni = pacHistoriaDni || pacienteActual?.dni;
-  if(!dni) return;
+  if(!dni) { console.warn('guardarDatosPac: sin DNI'); return; }
   const tipo = ['lab_tabla_wrap','evlab_wrap'].includes(wrapId)?'lab':['est_tabla_wrap','evest_wrap'].includes(wrapId)?'est':'ant';
   const datos = tipo==='lab'?labDatos:tipo==='est'?estDatos:antDatos;
-  // Guardar directo en Supabase — sin manipular columnas
-  await sb.from('paciente_tablas').upsert({dni_paciente:dni, tipo, datos:JSON.stringify(datos)},{onConflict:'dni_paciente,tipo'});
+  console.log('[guardar]', tipo, 'columnas:', datos.columnas, 'dni:', dni);
+  const { error } = await sb.from('paciente_tablas').upsert(
+    {dni_paciente:dni, tipo, datos:JSON.stringify(datos)},
+    {onConflict:'dni_paciente,tipo'}
+  );
+  if(error) {
+    console.error('[guardarDatosPac ERROR]', error);
+    // Mostrar error visible al médico
+    const msg = document.createElement('div');
+    msg.style.cssText = 'position:fixed;bottom:20px;right:20px;background:#e25247;color:white;padding:10px 16px;border-radius:10px;z-index:9999;font-size:13px;font-family:var(--font-main)';
+    msg.textContent = '⚠️ Error al guardar: ' + (error.message || JSON.stringify(error));
+    document.body.appendChild(msg);
+    setTimeout(()=>msg.remove(), 5000);
+  } else {
+    console.log('[guardar OK]', tipo);
+  }
 }
 
 async function guardarBorradorEvol(dni) {
@@ -2281,8 +2295,10 @@ async function switchPacMainTab(tab) {
     if(!labDatos.filas) labDatos.filas = [];
     if(!labDatos.unidades) labDatos.unidades = {};
     if(!labDatos.extraFilas) labDatos.extraFilas = [];
+    console.log('[switchTab lab] labDatos.columnas antes:', [...labDatos.columnas], 'hoy:', hoy);
     // Agregar columna de hoy si no existe — representa la carga actual
     if(!labDatos.columnas.includes(hoy)) { labDatos.columnas.push(hoy); labDatos.columnas.sort(); }
+    console.log('[switchTab lab] labDatos.columnas después:', [...labDatos.columnas]);
     _colEditando = null;
     renderTablaGenerica(labDatos, LAB_FILAS, 'evlab_wrap', labDatos.columnas.indexOf(hoy));
     renderLpa();
@@ -2371,6 +2387,7 @@ function activarEdicionLab() {
 
 async function guardarLabYVolver() {
   // Guardar laboratorio — el médico eligió guardar explícitamente
+  console.log('[guardarLab] columnas:', labDatos.columnas, 'filas con datos:', labDatos.filas?.filter(f=>f&&f.some(v=>v)).length);
   await guardarDatosPac('lab_tabla_wrap');
   sincronizarRO();
   limpiarDirty('lab');
@@ -2851,13 +2868,13 @@ function enviarMailIndicacionesEvol() {
 
 
 async function cargarDatosTablasEvol(dni) {
-  // Cargar datos históricos sin agregar columna de hoy.
-  // La columna de hoy se agrega en switchPacMainTab cuando el médico abre la pestaña.
   pacHistoriaDni = dni;
   labDatos = {columnas:[],filas:[],unidades:{},extraFilas:[]}; 
   estDatos = {columnas:[],filas:[],unidades:{},extraFilas:[]}; 
   antDatos = {columnas:[],filas:[],unidades:{},extraFilas:[]};
-  const { data } = await sb.from('paciente_tablas').select('*').eq('dni_paciente', dni);
+  const { data, error } = await sb.from('paciente_tablas').select('*').eq('dni_paciente', dni);
+  if(error) { console.error('[cargarDatosTablas ERROR]', error); return; }
+  console.log('[cargarDatosTablas] filas encontradas:', data ? data.length : 0, data ? data.map(r=>r.tipo) : []);
   if(data) data.forEach(row => {
     try {
       const d = JSON.parse(row.datos);
@@ -2865,12 +2882,13 @@ async function cargarDatosTablasEvol(dni) {
       if(!d.unidades) d.unidades = {};
       if(!d.columnas) d.columnas = [];
       if(!d.filas) d.filas = [];
-      // NO agregar columna de hoy aquí — eso lo hace switchPacMainTab
+      console.log('[cargarDatosTablas] tipo:', row.tipo, 'columnas:', d.columnas);
       if(row.tipo==='lab') labDatos = d;
       else if(row.tipo==='est') estDatos = d;
       else if(row.tipo==='ant') antDatos = d;
-    } catch(e){}
+    } catch(e){ console.error('[cargarDatosTablas parse ERROR]', e); }
   });
+  console.log('[cargarDatosTablas] labDatos.columnas:', labDatos.columnas);
 }
 
 async function abrirHistoriaPaciente(dni) {
