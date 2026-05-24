@@ -224,15 +224,17 @@
       position: relative;
     }
     .evol-col-main {
-      margin-right: 300px;
-      margin-left: 52px;
       padding: 16px 20px;
       min-width: 0;
       box-sizing: border-box;
     }
+    #page-evolucion.active .evol-col-main {
+      margin-right: 300px;
+      margin-left: 52px;
+    }
     .evol-col-right {
       position: fixed;
-      top: 160px;
+      top: 108px;
       right: 0;
       width: 300px;
       bottom: 0;
@@ -240,6 +242,7 @@
       border-left: 1px solid var(--border);
       overflow-y: auto;
       z-index: 80;
+      display: none;
     }
     /* Sidebar derecha PA + PREVENT */
     .evol-sidebar {
@@ -252,19 +255,22 @@
     /* Sidebar izquierda — accesos rápidos */
     .evol-sidebar-left {
       position: fixed;
-      top: 160px;
+      top: 108px;
       left: 0;
       width: 52px;
       bottom: 0;
       background: white;
       border-right: 1px solid var(--border);
-      display: flex;
+      display: none;
       flex-direction: column;
       align-items: center;
       padding: 14px 0;
       gap: 6px;
       z-index: 80;
     }
+    #page-evolucion.active .evol-sidebar-left { display: flex; }
+    .evol-col-right { display: none; }
+    #page-evolucion.active .evol-col-right { display: block; }
     .evol-sidebar-left-icon {
       width: 38px; height: 38px; border-radius: 10px;
       display: flex; align-items: center; justify-content: center;
@@ -864,10 +870,7 @@
 
         <!-- Tabla principal -->
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;gap:8px;flex-wrap:wrap">
-          <div style="display:flex;align-items:center;gap:8px">
-            <span id="lab_modo_label" style="font-size:12px;color:var(--text-soft);font-style:italic">Completando nueva entrada</span>
-            <button id="btn_editar_lab" onclick="activarEdicionLab()" style="padding:6px 14px;border:1.5px solid var(--blue);border-radius:8px;background:var(--blue-light);color:var(--blue);font-size:12px;cursor:pointer;font-family:var(--font-main)">✏️ Editar laboratorio</button>
-          </div>
+          <span id="lab_modo_label" style="font-size:12px;color:var(--text-soft);font-style:italic">Laboratorio del paciente</span>
           <button onclick="guardarLabYVolver()" style="padding:8px 22px;border:none;border-radius:9px;background:var(--teal);color:white;font-size:13px;cursor:pointer;font-family:var(--font-main);font-weight:600;box-shadow:0 2px 8px rgba(77,188,190,.25)">💾 Guardar laboratorio</button>
         </div>
         <div style="width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;margin-top:4px"><div id="evlab_wrap" style="min-width:max-content"></div></div>
@@ -2536,6 +2539,10 @@ async function guardarEvolucion() {
     return;
   }
   limpiarDirty('evol');
+  // Auto-guardar laboratorio si tiene datos cargados
+  if(labDatos.columnas && labDatos.columnas.length) {
+    await guardarDatosPac('lab_tabla_wrap');
+  }
   // Limpiar borrador del editor al guardar evolución real
   await sb.from('paciente_tablas').delete().eq('dni_paciente', p.dni).eq('tipo','evol_borrador');
   btnGuardar.textContent = '✅ Guardado';
@@ -2848,27 +2855,18 @@ async function cargarDatosTablasEvol(dni) {
   labDatos = {columnas:[],filas:[],unidades:{},extraFilas:[]}; 
   estDatos = {columnas:[],filas:[],unidades:{},extraFilas:[]}; 
   antDatos = {columnas:[],filas:[],unidades:{},extraFilas:[]};
-  const hoy = new Date().toISOString().split('T')[0];
   const { data } = await sb.from('paciente_tablas').select('*').eq('dni_paciente', dni);
   if(data) data.forEach(row => {
     try {
       const d = JSON.parse(row.datos);
       if(!d.extraFilas) d.extraFilas = [];
       if(!d.unidades) d.unidades = {};
+      if(!d.columnas) d.columnas = [];
+      if(!d.filas) d.filas = [];
       if(row.tipo==='lab') labDatos = d;
       else if(row.tipo==='est') estDatos = d;
       else if(row.tipo==='ant') antDatos = d;
     } catch(e){}
-  });
-  // Ensure today's column is always present
-  ['lab','est','ant'].forEach(tipo => {
-    const d = tipo==='lab'?labDatos:tipo==='est'?estDatos:antDatos;
-    if(!d.columnas) d.columnas = [];
-    if(!d.filas) d.filas = [];
-    if(!d.unidades) d.unidades = {};
-    if(!d.extraFilas) d.extraFilas = [];
-    if(!d.columnas.includes(hoy)) d.columnas.push(hoy);
-    d.columnas.sort();
   });
 }
 
