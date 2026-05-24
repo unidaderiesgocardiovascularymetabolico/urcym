@@ -2144,6 +2144,7 @@ function switchPacMainTab(tab) {
     if(!labDatos.columnas) labDatos.columnas = [];
     if(!labDatos.filas) labDatos.filas = [];
     if(!labDatos.unidades) labDatos.unidades = {};
+    if(!labDatos.extraFilas) labDatos.extraFilas = [];
     if(!labDatos.columnas.includes(hoy)) { labDatos.columnas.push(hoy); labDatos.columnas.sort(); }
     renderTablaGenerica(labDatos, LAB_FILAS, 'evlab_wrap', labDatos.columnas.indexOf(hoy));
     renderLpa();
@@ -2152,6 +2153,7 @@ function switchPacMainTab(tab) {
     if(!antDatos.columnas) antDatos.columnas = [];
     if(!antDatos.filas) antDatos.filas = [];
     if(!antDatos.unidades) antDatos.unidades = {};
+    if(!antDatos.extraFilas) antDatos.extraFilas = [];
     if(!antDatos.columnas.includes(hoy)) { antDatos.columnas.push(hoy); antDatos.columnas.sort(); }
     renderTablaGenerica(antDatos, ANT_FILAS, 'evant_wrap', antDatos.columnas.indexOf(hoy));
   }
@@ -2159,6 +2161,7 @@ function switchPacMainTab(tab) {
     if(!estDatos.columnas) estDatos.columnas = [];
     if(!estDatos.filas) estDatos.filas = [];
     if(!estDatos.unidades) estDatos.unidades = {};
+    if(!estDatos.extraFilas) estDatos.extraFilas = [];
     if(!estDatos.columnas.includes(hoy)) { estDatos.columnas.push(hoy); estDatos.columnas.sort(); }
     renderTablaGenerica(estDatos, EST_FILAS, 'evest_wrap', estDatos.columnas.indexOf(hoy));
   }
@@ -2651,23 +2654,31 @@ function enviarMailIndicacionesEvol() {
 
 async function cargarDatosTablasEvol(dni) {
   pacHistoriaDni = dni;
-  labDatos = {columnas:[],filas:[]}; estDatos = {columnas:[],filas:[]}; antDatos = {columnas:[],filas:[]};
+  labDatos = {columnas:[],filas:[],unidades:{},extraFilas:[]}; 
+  estDatos = {columnas:[],filas:[],unidades:{},extraFilas:[]}; 
+  antDatos = {columnas:[],filas:[],unidades:{},extraFilas:[]};
   const hoy = new Date().toISOString().split('T')[0];
-  const el_lab = document.getElementById('evlab_fecha_nueva'); if(el_lab) el_lab.value = hoy;
-  const el_est = document.getElementById('evest_fecha_nueva'); if(el_est) el_est.value = hoy;
-  const el_ant = document.getElementById('evant_fecha_nueva'); if(el_ant) el_ant.value = hoy;
   const { data } = await sb.from('paciente_tablas').select('*').eq('dni_paciente', dni);
   if(data) data.forEach(row => {
     try {
       const d = JSON.parse(row.datos);
+      if(!d.extraFilas) d.extraFilas = [];
+      if(!d.unidades) d.unidades = {};
       if(row.tipo==='lab') labDatos = d;
       else if(row.tipo==='est') estDatos = d;
       else if(row.tipo==='ant') antDatos = d;
     } catch(e){}
   });
-  if(labDatos.columnas) labDatos.columnas.sort();
-  if(estDatos.columnas) estDatos.columnas.sort();
-  if(antDatos.columnas) antDatos.columnas.sort();
+  // Ensure today's column is always present
+  ['lab','est','ant'].forEach(tipo => {
+    const d = tipo==='lab'?labDatos:tipo==='est'?estDatos:antDatos;
+    if(!d.columnas) d.columnas = [];
+    if(!d.filas) d.filas = [];
+    if(!d.unidades) d.unidades = {};
+    if(!d.extraFilas) d.extraFilas = [];
+    if(!d.columnas.includes(hoy)) d.columnas.push(hoy);
+    d.columnas.sort();
+  });
 }
 
 async function abrirHistoriaPaciente(dni) {
