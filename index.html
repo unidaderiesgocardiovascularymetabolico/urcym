@@ -1233,7 +1233,7 @@ function renderTablaReadonly(datos, filas, wrapId) {
   }
   const sexoPac = pacienteActual?.sexo==='Femenino'?'F':'H';
   const allFilas = [...filas, ...(datos.extraFilas||[]).map(lbl=>({label:lbl,key:'extra_'+lbl,unidades:[''],defU:0,ref:null}))];
-  let h = '<table style="border-collapse:collapse;font-size:12px;table-layout:auto;white-space:nowrap;width:100%">';
+  let h = '<table style="border-collapse:collapse;font-size:12px;table-layout:auto;white-space:nowrap;width:auto;min-width:100%">';
   h += '<thead><tr>';
   h += '<th style="background:var(--blue);color:white;padding:6px 12px;text-align:left;font-size:11px;font-weight:700;white-space:nowrap;position:sticky;left:0;z-index:2;min-width:170px">Parámetro</th>';
   h += '<th style="background:var(--blue);color:white;padding:6px 8px;text-align:center;font-size:11px;min-width:70px">Unidad</th>';
@@ -2827,9 +2827,30 @@ async function cargarDatosTablasEvol(dni) {
 
 async function abrirHistoriaPaciente(dni) {
   const p = pacientesData.find(x=>x.dni===dni);
-  if(p) document.getElementById('hpac_nombre').textContent = p.apellido+', '+p.nombre;
-  await cargarDatosTablasEvol(dni);
-  sincronizarRO();
+  if(!p) return;
+  document.getElementById('hpac_nombre').textContent = p.apellido+', '+p.nombre;
+  // Cargar datos sin inyectar columna de hoy (solo lectura)
+  const tmpLab = {columnas:[],filas:[],unidades:{},extraFilas:[]};
+  const tmpEst = {columnas:[],filas:[],unidades:{},extraFilas:[]};
+  const tmpAnt = {columnas:[],filas:[],unidades:{},extraFilas:[]};
+  const { data } = await sb.from('paciente_tablas').select('*').eq('dni_paciente', dni);
+  if(data) data.forEach(row => {
+    try {
+      const d = JSON.parse(row.datos);
+      if(!d.extraFilas) d.extraFilas = [];
+      if(!d.unidades) d.unidades = {};
+      if(row.tipo==='lab') Object.assign(tmpLab, d);
+      else if(row.tipo==='est') Object.assign(tmpEst, d);
+      else if(row.tipo==='ant') Object.assign(tmpAnt, d);
+    } catch(e){}
+  });
+  // Guardar paciente actual temporalmente para que ref() funcione
+  const prevPac = pacienteActual;
+  pacienteActual = p;
+  renderTablaReadonly(tmpLab, LAB_FILAS, 'rolab_wrap');
+  renderTablaReadonly(tmpEst, EST_FILAS, 'roest_wrap');
+  renderTablaReadonly(tmpAnt, ANT_FILAS, 'roant_wrap');
+  pacienteActual = prevPac;
   showPage('historia');
 }
 
