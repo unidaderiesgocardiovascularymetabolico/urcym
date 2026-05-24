@@ -788,6 +788,18 @@
 
       <!-- PANEL LABORATORIO -->
       <div id="pmain-lab" style="display:none;padding:20px 24px">
+
+        <!-- Lp(a): campo especial, máx 2 registros -->
+        <div style="background:white;border:1.5px solid var(--border);border-radius:12px;padding:14px 18px;margin-bottom:16px;display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+          <div style="font-size:12px;font-weight:700;color:var(--text-soft);text-transform:uppercase;letter-spacing:.06em;min-width:60px">Lp(a)</div>
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap" id="lpa_campos">
+            <!-- renderizado por JS -->
+          </div>
+          <button onclick="agregarLpa()" id="btn_agregar_lpa" style="padding:5px 12px;border:1.5px solid var(--blue);border-radius:8px;background:var(--blue-light);color:var(--blue);font-size:11px;cursor:pointer;font-family:var(--font-main)">+ Agregar</button>
+          <span style="font-size:10px;color:var(--text-soft)">Máx. 2 registros · mg/dL o nmol/L</span>
+        </div>
+
+        <!-- Tabla principal -->
         <div class="lab-add-fecha">
           <label style="font-size:12px;font-weight:600;color:var(--text-soft)">Fecha:</label>
           <input type="date" id="evlab_fecha_nueva"/>
@@ -1562,6 +1574,44 @@ async function cargarDatosClinica(dni) {
 });
 
 // ===== TABS PRINCIPALES PACIENTE =====
+// ===== LP(a) ESPECIAL =====
+function renderLpa() {
+  const cont = document.getElementById('lpa_campos');
+  const btn = document.getElementById('btn_agregar_lpa');
+  if(!cont) return;
+  const lpaData = labDatos.lpa || [];
+  cont.innerHTML = lpaData.map((entry, i) =>
+    '<div style="display:flex;align-items:center;gap:6px;background:var(--gray);border-radius:8px;padding:5px 10px">' +
+    '<span style="font-size:11px;color:var(--text-soft)">'+(i===0?'1°':'2°')+'</span>' +
+    '<input type="text" value="'+(entry.valor||'')+'" onchange="guardarLpa('+i+',\'valor\',this.value)" placeholder="Valor" style="width:70px;padding:4px 6px;border:1.5px solid var(--border);border-radius:6px;font-size:12px;text-align:center"/>' +
+    '<select onchange="guardarLpa('+i+',\'unidad\',this.value)" style="padding:4px 6px;border:1.5px solid var(--border);border-radius:6px;font-size:12px">' +
+    '<option value="mg/dL"'+(entry.unidad==='mg/dL'?' selected':'')+'>mg/dL</option>' +
+    '<option value="nmol/L"'+(entry.unidad==='nmol/L'?' selected':'')+'>nmol/L</option>' +
+    '</select>' +
+    '<input type="date" value="'+(entry.fecha||'')+'" onchange="guardarLpa('+i+',\'fecha\',this.value)" style="padding:4px 6px;border:1.5px solid var(--border);border-radius:6px;font-size:11px"/>' +
+    '<button onclick="borrarLpa('+i+')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:14px">×</button>' +
+    '</div>'
+  ).join('');
+  if(btn) btn.style.display = lpaData.length >= 2 ? 'none' : '';
+}
+function agregarLpa() {
+  if(!labDatos.lpa) labDatos.lpa = [];
+  if(labDatos.lpa.length >= 2) return;
+  labDatos.lpa.push({ valor:'', unidad:'mg/dL', fecha: new Date().toISOString().split('T')[0] });
+  renderLpa(); guardarDatosPac('lab_tabla_wrap');
+}
+function guardarLpa(i, campo, val) {
+  if(!labDatos.lpa) labDatos.lpa = [];
+  if(!labDatos.lpa[i]) labDatos.lpa[i] = {};
+  labDatos.lpa[i][campo] = val;
+  guardarDatosPac('lab_tabla_wrap');
+}
+function borrarLpa(i) {
+  if(!labDatos.lpa) return;
+  labDatos.lpa.splice(i,1);
+  renderLpa(); guardarDatosPac('lab_tabla_wrap');
+}
+
 function switchPacMainTab(tab) {
   ['evol','lab','ant','est'].forEach(t => {
     const panel = document.getElementById('pmain-'+t);
@@ -1575,6 +1625,7 @@ function switchPacMainTab(tab) {
     if(el && !el.value) el.value = hoy;
     if(labDatos.columnas) labDatos.columnas.sort();
     renderTablaGenerica(labDatos, LAB_FILAS, 'evlab_wrap');
+    renderLpa();
   }
   if(tab==='ant') {
     const el = document.getElementById('evant_fecha_nueva');
@@ -2068,8 +2119,6 @@ const LAB_FILAS = [
   {label:'ERS', key:'ERS', ref:null},
   {label:'Albúmina', key:'Albumina',
     ref:(v)=>parseFloat(v)<3.5, refTxt:'<3.5 g/dL'},
-  {label:'Lpa(a)', key:'Lpaa',
-    ref:(v)=>parseFloat(v)>30, refTxt:'>30 mg/dL'}
 ];
 
 const ANT_FILAS = [
@@ -2158,6 +2207,7 @@ function switchPacTab(tab, btn) {
 function renderTablaGenerica(datos, filas, wrapId) {
   const wrap = document.getElementById(wrapId);
   if(!wrap) return;
+  if(!datos.filas) datos.filas = [];
   if(!datos.columnas.length) { wrap.innerHTML='<p style="color:var(--text-soft);font-size:13px;padding:12px 0">Agregá una fecha para comenzar.</p>'; return; }
   let html = '<div class="lab-grid">';
   // Header fechas
