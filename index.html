@@ -587,7 +587,7 @@
           </div>
 
           <!-- Editor principal -->
-          <div id="evol_editor" class="evol-editor" contenteditable="true" spellcheck="true" placeholder="Escribí la evolución aquí..."></div>
+          <div id="evol_editor" class="evol-editor" contenteditable="true" spellcheck="true" placeholder="Escribí la evolución aquí..." oninput="marcarDirty('evol')"></div>
 
           <!-- Panel de actualización clínica inferior -->
           <div class="evol-update-panel">
@@ -1064,6 +1064,26 @@ let updTtoItems = [];
 let _tabActivo = 'evol';
 let _tabDirty = false;
 let _colEditando = null; // null = solo la última (nueva), número = índice a editar
+// Per-tab dirty state
+const _dirty = {lab:false, ant:false, est:false, evol:false};
+// Snapshot of lab data at last save (to detect real changes)
+let _labSnapshot = null;
+
+function marcarDirty(tab) { _dirty[tab] = true; _tabDirty = tab==='lab'||tab==='ant'||tab==='est'; }
+function limpiarDirty(tab) { _dirty[tab] = false; if(!_dirty.lab&&!_dirty.ant&&!_dirty.est) _tabDirty = false; }
+
+// Show dirty guard modal — returns a Promise resolving to 'guardar'|'descartar'|'cancelar'
+function mostrarGuardModal(msg) {
+  return new Promise(resolve => {
+    const modal = document.getElementById('modalDirtyGuard');
+    document.getElementById('modalDirtyMsg').textContent = msg;
+    modal.style.display = 'flex';
+    const cleanup = (result) => { modal.style.display='none'; resolve(result); };
+    document.getElementById('modalDirtyGuardar').onclick = () => cleanup('guardar');
+    document.getElementById('modalDirtyDescartar').onclick = () => cleanup('descartar');
+    document.getElementById('modalDirtyCancelar').onclick = () => cleanup('cancelar');
+  });
+}
 let labDatos = { columnas:[], filas:[] };
 let estDatos = { columnas:[], filas:[] };
 let antDatos = { columnas:[], filas:[] };
@@ -1459,7 +1479,8 @@ function actualizarCelda(input) {
   const datos = esLab ? labDatos : ['est_tabla_wrap','evest_wrap'].includes(wrapId) ? estDatos : antDatos;
   if(!datos.filas[fi]) datos.filas[fi] = [];
   datos.filas[fi][ci] = input.value;
-  _tabDirty = true;
+  const _dirtytab = ["evlab_wrap","lab_tabla_wrap"].includes(wrapId)?"lab":["evant_wrap","ant_tabla_wrap"].includes(wrapId)?"ant":"est";
+  marcarDirty(_dirtytab);
   // Update cell color in real time
   const filas = esLab ? LAB_FILAS : esAnt ? ANT_FILAS : EST_FILAS;
   const fila = filas[fi];
@@ -2136,15 +2157,23 @@ function borrarLpa(i) {
   renderLpa(); guardarDatosPac('lab_tabla_wrap');
 }
 
-function switchPacMainTab(tab) {
-  // Ask to save if leaving lab/ant/est without explicit save
-  if(_tabDirty && _tabActivo !== tab && ['lab','ant','est'].includes(_tabActivo)) {
-    const nombres = {lab:'Laboratorio', ant:'Antropometría', est:'Estudios'};
-    if(confirm('¿Guardar los datos de ' + nombres[_tabActivo] + ' antes de continuar?')) {
-      const saveWrap = _tabActivo==='lab'?'lab_tabla_wrap':_tabActivo==='est'?'est_tabla_wrap':'ant_tabla_wrap';
-      guardarDatosPac(saveWrap);
+async function switchPacMainTab(tab) {
+  if(_tabActivo !== tab) {
+    const fromTab = _tabActivo;
+    if(_dirty[fromTab]) {
+      const nombres = {lab:'Laboratorio', ant:'Antropometría', est:'Estudios', evol:'Evolución'};
+      const accion = await mostrarGuardModal(
+        'Tenés cambios sin guardar en ' + nombres[fromTab] + '. ¿Qué querés hacer?'
+      );
+      if(accion === 'cancelar') return; // stay on current tab
+      if(accion === 'guardar') {
+        if(fromTab === 'lab') await guardarDatosPac('lab_tabla_wrap');
+        else if(fromTab === 'ant') await guardarDatosPac('ant_tabla_wrap');
+        else if(fromTab === 'est') await guardarDatosPac('est_tabla_wrap');
+        else if(fromTab === 'evol') { /* evolución se guarda explícitamente */ }
+      }
+      limpiarDirty(fromTab);
     }
-    _tabDirty = false;
   }
   _tabActivo = tab;
   ['evol','lab','ant','est'].forEach(t => {
@@ -2246,25 +2275,30 @@ function activarEdicionLab() {
 }
 
 async function guardarLabYVolver() {
+  if(!_dirty.lab) {
+    // No changes — just navigate
+    _tabActivo = 'lab';
+    switchPacMainTab('evol');
+    return;
+  }
   await guardarDatosPac('lab_tabla_wrap');
   sincronizarRO();
-  _tabDirty = false;
+  limpiarDirty('lab');
   _colEditando = null;
   const label = document.getElementById('lab_modo_label');
   if(label) label.textContent = 'Completando nueva entrada';
-  // Detect and volcar alterados
+  // Detect altered values
   const sexoPac = pacienteActual?.sexo==='Femenino'?'F':'H';
-  const ci = labDatos.columnas.length - 1; // last saved col
-  const hayAlt = LAB_FILAS.some((f,fi) => {
+  const ci = labDatos.columnas.length - 1;
+  const alterados = LAB_FILAS.filter((f,fi) => {
     if(!f.ref) return false;
     const val = (labDatos.filas[fi]||[])[ci]||'';
     const storedU = (labDatos.unidades&&labDatos.unidades[f.key])||(f.unidades||[''])[0];
     return val && f.ref(val, sexoPac, storedU);
   });
-  if(hayAlt) {
-    if(confirm('Hay valores alterados. ¿Agregarlos al cuadro de evolución?')) {
-      volcarAlteradosAlEditor('lab');
-    }
+  if(alterados.length > 0) {
+    // Auto-volcar sin preguntar (según spec)
+    volcarAlteradosAlEditor('lab');
   }
   _tabActivo = 'lab';
   switchPacMainTab('evol');
@@ -2398,6 +2432,7 @@ async function guardarEvolucion() {
     btnGuardar.textContent = '💾 Guardar evolución';
     return;
   }
+  limpiarDirty('evol');
   btnGuardar.textContent = '✅ Guardado';
   setTimeout(() => {
     btnGuardar.disabled = false;
@@ -3077,5 +3112,18 @@ function calcAlcohol(){
     <div id="historial_med_lista"><div class="loading">Cargando...</div></div>
   </div>
 </div>
+
+<div id="modalDirtyGuard" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;align-items:center;justify-content:center">
+  <div style="background:white;border-radius:16px;padding:28px 32px;max-width:380px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,.2)">
+    <div style="font-family:var(--font-display);font-size:16px;font-weight:700;color:var(--text);margin-bottom:8px">Cambios sin guardar</div>
+    <div id="modalDirtyMsg" style="font-size:13px;color:var(--text-soft);margin-bottom:24px;line-height:1.5"></div>
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <button id="modalDirtyGuardar" style="padding:10px;border:none;border-radius:9px;background:var(--teal);color:white;font-size:13px;font-weight:600;cursor:pointer;font-family:var(--font-main)">💾 Guardar y continuar</button>
+      <button id="modalDirtyDescartar" style="padding:10px;border:1.5px solid var(--border);border-radius:9px;background:white;color:var(--text);font-size:13px;cursor:pointer;font-family:var(--font-main)">Descartar cambios</button>
+      <button id="modalDirtyCancelar" style="padding:10px;border:none;border-radius:9px;background:var(--gray);color:var(--text-soft);font-size:13px;cursor:pointer;font-family:var(--font-main)">Cancelar</button>
+    </div>
+  </div>
+</div>
+
 </body>
 </html>
