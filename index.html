@@ -217,7 +217,7 @@
     .btn-volver:hover { border-color:var(--blue); color:var(--blue); }
     .evol-paciente-header { flex:1; display:flex; flex-wrap:wrap; align-items:center; gap:6px; }
     /* Layout principal evolución */
-    .evol-body { display:grid; grid-template-columns:1fr 310px; gap:0; padding:0; align-items:start; min-height:calc(100vh - 200px); }
+    .evol-body { display:grid; grid-template-columns:52px 1fr 300px; gap:0; padding:0; align-items:stretch; min-height:calc(100vh - 200px); width:100%; }
     .evol-main { display:flex; flex-direction:column; gap:0; }
     /* Toolbar editor */
     .evol-toolbar { display:flex; align-items:center; gap:3px; background:white; border:1.5px solid var(--border); border-bottom:none; border-radius:12px 12px 0 0; padding:7px 10px; flex-wrap:wrap; }
@@ -239,7 +239,7 @@
     .evol-update-item select:focus, .evol-update-item input:focus { border-color:var(--blue); background:white; }
     .evol-update-btn { margin-top:12px; display:flex; justify-content:flex-end; }
     /* Sidebar */
-    .evol-sidebar { display:flex; flex-direction:column; gap:12px; position:sticky; top:168px; padding:16px 14px; max-height:calc(100vh - 168px); overflow-y:auto; width:100%; box-sizing:border-box; }
+    .evol-sidebar { display:flex; flex-direction:column; gap:12px; position:sticky; top:168px; padding:14px 12px; max-height:calc(100vh - 168px); overflow-y:auto; box-sizing:border-box; }
     .evol-sidebar-section { background:white; border-radius:14px; border:1px solid var(--border); padding:14px 16px; }
     .evol-sidebar-title { font-family:var(--font-display); font-size:11px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--text-soft); margin-bottom:10px; }
     /* Tabla TA */
@@ -320,8 +320,10 @@
 
 
     /* Columnas evolución */
-    .evol-col-main { padding:16px 20px; }
-    .evol-col-right { background:white; border-left:2px solid var(--border); padding:0; align-self:stretch; }
+    .evol-col-main { padding:16px 20px; min-width:0; overflow:hidden; }
+    .evol-sidebar-left { width:52px; background:white; border-right:1px solid var(--border); display:flex; flex-direction:column; align-items:center; padding:12px 0; gap:16px; position:sticky; top:168px; height:calc(100vh - 168px); }
+    @media(max-width:900px) { .evol-sidebar-left { display:none; } }
+    .evol-col-right { background:white; border-left:2px solid var(--border); padding:0; }
 
 
     /* Tabs principales paciente (Evol/Lab/Antrop/Estudios) */
@@ -345,6 +347,7 @@
 
     @media(max-width:768px) {
       .evol-body { grid-template-columns:1fr; }
+      .evol-sidebar-left { display:none; }
       .evol-update-grid { grid-template-columns:1fr; }
       .evol-col-left, .evol-col-right { display:none; }
     }
@@ -573,7 +576,8 @@
       </div>
 
         <div class="evol-body">
-          <div class="evol-col-main" style="padding:16px 18px">
+          <div class="evol-sidebar-left" id="evol_sidebar_left"><!-- sidebar izquierda --></div>
+          <div class="evol-col-main">
           <div class="evol-main">
 
 
@@ -1205,7 +1209,7 @@ function renderTablaReadonly(datos, filas, wrapId) {
     }
     const storedU = (datos.unidades&&datos.unidades[f.key]) || (f.unidades||[''])[0];
     h += '<tr>';
-    h += '<td style="padding:4px 10px;border:1px solid var(--border);font-size:12px;font-weight:600;white-space:nowrap;position:sticky;left:0;background:white;z-index:1">'+f.label+'</td>';
+    h += '<td style="padding:4px 10px;border:1px solid var(--border);font-size:12px;font-weight:600;white-space:nowrap;position:sticky;left:0;min-width:180px;background:white;z-index:1">'+f.label+'</td>';
     h += '<td style="padding:4px 6px;border:1px solid var(--border);text-align:center;background:#fafafa;font-size:11px;color:var(--text-soft)">'+storedU+'</td>';
     datos.columnas.forEach((_,ci) => {
       const val = (datos.filas[fi]||[])[ci]||'';
@@ -1339,8 +1343,7 @@ function renderTablaGenerica(datos, filas, wrapId, newColIdx) {
   // For lab: active column = _colEditando if editing, else last (new) column
   const activeCI = isLab ? (_colEditando !== null ? _colEditando : nci) : nci;
 
-  let h = '<div style="overflow-x:auto;width:100%;-webkit-overflow-scrolling:touch"><table style="border-collapse:collapse;font-size:12px;table-layout:fixed;min-width:'+(180+datos.columnas.length*130)+'px;width:100%">';
-
+  let h = '<div style="overflow-x:auto;width:100%"><table style="border-collapse:collapse;font-size:12px;table-layout:auto;width:auto;white-space:nowrap">';
   // ── HEADER
   h += '<thead><tr>';
   h += '<th style="background:var(--blue);color:white;padding:8px 14px;text-align:left;font-size:11px;font-weight:700;white-space:nowrap;position:sticky;left:0;z-index:3;min-width:180px;border-right:2px solid rgba(255,255,255,.3)">Parámetro</th>';
@@ -1349,7 +1352,7 @@ function renderTablaGenerica(datos, filas, wrapId, newColIdx) {
     const isSaved = isLab && ci < nci && _colEditando === null;
     const thBg = isActive ? '#b2ebf2' : (isSaved ? '#1a6fad' : 'var(--blue)');
     const thColor = isActive ? '#006064' : 'white';
-    h += '<th style="background:'+thBg+';color:'+thColor+';padding:4px 6px;text-align:center;width:130px;border-left:1px solid rgba(255,255,255,.25);font-weight:600">';
+    h += '<th style="background:'+thBg+';color:'+thColor+';padding:4px 6px;text-align:center;width:140px;min-width:140px;border-left:1px solid rgba(255,255,255,.25);font-weight:600">';
     h += '<input type="date" value="'+c+'" data-ci="'+ci+'" data-wrap="'+wrapId+'" onchange="actualizarFechaCol(this)"';
     const dateReadonly = (isLab && ci !== activeCI) ? ' readonly' : '';
     h += dateReadonly+' style="background:transparent;border:1px solid '+(isActive?'#006064':'rgba(255,255,255,.5)')+';color:'+thColor+';border-radius:5px;font-size:10px;padding:2px 4px;width:108px;color-scheme:'+(isActive?'light':'dark')+(dateReadonly?' cursor:default':'')+'"/>';
@@ -1372,7 +1375,7 @@ function renderTablaGenerica(datos, filas, wrapId, newColIdx) {
     const labelColor = isCalc ? 'var(--teal)' : 'var(--text)';
 
     h += '<tr>';
-    h += '<td style="padding:6px 14px;border:1px solid var(--border);border-right:2px solid var(--border);font-size:12px;font-weight:'+(isCalc?'500':'600')+';white-space:nowrap;position:sticky;left:0;background:'+labelBg+';z-index:1;color:'+labelColor+'">';
+    h += '<td style="padding:6px 14px;border:1px solid var(--border);border-right:2px solid var(--border);font-size:12px;font-weight:'+(isCalc?'500':'600')+';white-space:nowrap;position:sticky;left:0;min-width:180px;width:180px;background:'+labelBg+';z-index:1;color:'+labelColor+'">';
     h += f.label + (isCalc?' <span style="font-size:9px;color:var(--teal)">●calc</span>':'');
     h += '</td>';
 
@@ -1386,7 +1389,7 @@ function renderTablaGenerica(datos, filas, wrapId, newColIdx) {
       const valColor = esAlerta ? 'var(--red)' : 'var(--text)';
       const valFw = esAlerta ? '700' : '400';
 
-      h += '<td style="padding:3px 4px;border:1px solid var(--border);background:'+cellBg+';text-align:center;vertical-align:middle;width:130px">';
+      h += '<td style="padding:3px 4px;border:1px solid var(--border);background:'+cellBg+';text-align:center;vertical-align:middle;width:140px;min-width:140px">';
 
       if(isCalc) {
         h += '<div style="font-size:12px;font-weight:'+valFw+';color:'+valColor+';padding:3px 2px">'+val+'</div>';
