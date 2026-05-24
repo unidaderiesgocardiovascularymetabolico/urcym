@@ -217,7 +217,7 @@
     .btn-volver:hover { border-color:var(--blue); color:var(--blue); }
     .evol-paciente-header { flex:1; display:flex; flex-wrap:wrap; align-items:center; gap:6px; }
     /* Layout principal evolución */
-    .evol-body { display:grid; grid-template-columns:1fr 320px; gap:0; padding:0; align-items:start; min-height:calc(100vh - 200px); }
+    .evol-body { display:grid; grid-template-columns:1fr 310px; gap:0; padding:0; align-items:start; min-height:calc(100vh - 200px); }
     .evol-main { display:flex; flex-direction:column; gap:0; }
     /* Toolbar editor */
     .evol-toolbar { display:flex; align-items:center; gap:3px; background:white; border:1.5px solid var(--border); border-bottom:none; border-radius:12px 12px 0 0; padding:7px 10px; flex-wrap:wrap; }
@@ -321,7 +321,7 @@
 
     /* Columnas evolución */
     .evol-col-main { padding:16px 20px; }
-    .evol-col-right { background:white; border-left:1px solid var(--border); padding:0; align-self:stretch; min-height:100%; }
+    .evol-col-right { background:white; border-left:2px solid var(--border); padding:0; align-self:stretch; }
 
 
     /* Tabs principales paciente (Evol/Lab/Antrop/Estudios) */
@@ -572,8 +572,8 @@
         <button class="btn-edit-header" onclick="abrirModalClinica()" title="Editar datos clínicos">✏️ Editar</button>
       </div>
 
-        <div class="evol-body" style="grid-template-columns:1fr 320px">
-          <div class="evol-col-main" style="padding:16px 20px">
+        <div class="evol-body">
+          <div class="evol-col-main" style="padding:16px 18px">
           <div class="evol-main">
 
 
@@ -800,9 +800,8 @@
         </div>
 
         <!-- Tabla principal -->
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;gap:8px;flex-wrap:wrap">
-          <button onclick="volcarAlteradosAlEditor('lab')" style="padding:6px 14px;border:1.5px solid var(--red);border-radius:8px;background:#fff0f0;color:var(--red);font-size:12px;cursor:pointer;font-family:var(--font-main);font-weight:600">↓ Volcar alterados a evolución</button>
-          <button onclick="guardarLabYVolver()" style="padding:6px 18px;border:none;border-radius:8px;background:var(--teal);color:white;font-size:12px;cursor:pointer;font-family:var(--font-main);font-weight:600">💾 Guardar y volver a Evolución</button>
+        <div style="display:flex;align-items:center;justify-content:flex-end;margin-bottom:8px">
+          <button onclick="guardarLabYVolver()" style="padding:8px 22px;border:none;border-radius:9px;background:var(--teal);color:white;font-size:13px;cursor:pointer;font-family:var(--font-main);font-weight:600;box-shadow:0 2px 8px rgba(77,188,190,.25)">💾 Guardar e ir a Evolución</button>
         </div>
         <div id="evlab_wrap" style="overflow-x:auto;margin-top:4px"></div>
       </div>
@@ -1450,10 +1449,11 @@ function actualizarCelda(input) {
 }
 
 async function guardarDatosPac(wrapId) {
-  if(!pacHistoriaDni) return;
-  const tipo = wrapId==='lab_tabla_wrap'?'lab':wrapId==='est_tabla_wrap'?'est':'ant';
+  const dni = pacHistoriaDni || pacienteActual?.dni;
+  if(!dni) return;
+  const tipo = ['lab_tabla_wrap','evlab_wrap'].includes(wrapId)?'lab':['est_tabla_wrap','evest_wrap'].includes(wrapId)?'est':'ant';
   const datos = tipo==='lab'?labDatos:tipo==='est'?estDatos:antDatos;
-  await sb.from('paciente_tablas').upsert({dni_paciente:pacHistoriaDni, tipo, datos:JSON.stringify(datos)},{onConflict:'dni_paciente,tipo'});
+  await sb.from('paciente_tablas').upsert({dni_paciente:dni, tipo, datos:JSON.stringify(datos)},{onConflict:'dni_paciente,tipo'});
 }
 
 function agregarColumna(fechaId, datos, filas, wrapId) {
@@ -1584,11 +1584,13 @@ async function verLabReadonly(dni) {
   document.getElementById('labro_nombre').textContent = p.apellido+', '+p.nombre;
   const cont = document.getElementById('labro_wrap');
   cont.innerHTML = '<div class="loading">Cargando...</div>';
-  // Load data
   const tmpLab = {columnas:[],filas:[],unidades:{},extraFilas:[]};
   const { data } = await sb.from('paciente_tablas').select('*').eq('dni_paciente', dni).eq('tipo','lab').single();
   if(data) { try { Object.assign(tmpLab, JSON.parse(data.datos)); } catch(e){} }
-  // Temporarily set pacienteActual for sex-based refs
+  if(!tmpLab.columnas.length) {
+    cont.innerHTML = '<p style="color:var(--text-soft);padding:20px">No hay laboratorio cargado para este paciente.</p>';
+    return;
+  }
   const prevPac = pacienteActual;
   pacienteActual = p;
   renderTablaReadonly(tmpLab, LAB_FILAS, 'labro_wrap');
@@ -2629,12 +2631,9 @@ async function cargarDatosTablasEvol(dni) {
       else if(row.tipo==='ant') antDatos = d;
     } catch(e){}
   });
-  // Sort columns chronologically
   if(labDatos.columnas) labDatos.columnas.sort();
   if(estDatos.columnas) estDatos.columnas.sort();
   if(antDatos.columnas) antDatos.columnas.sort();
-  // Render — tabs will render on open, but pre-render so data is ready
-  // Don't force-render here as wraps may not be visible yet
 }
 
 async function abrirHistoriaPaciente(dni) {
