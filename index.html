@@ -2290,7 +2290,9 @@ async function switchPacMainTab(tab) {
     if(!labDatos.filas) labDatos.filas = [];
     if(!labDatos.unidades) labDatos.unidades = {};
     if(!labDatos.extraFilas) labDatos.extraFilas = [];
+    // Agregar columna de hoy si no existe (siempre editable al final)
     if(!labDatos.columnas.includes(hoy)) { labDatos.columnas.push(hoy); labDatos.columnas.sort(); }
+    _colEditando = null; // siempre mostrar columna de hoy como nueva carga
     renderTablaGenerica(labDatos, LAB_FILAS, 'evlab_wrap', labDatos.columnas.indexOf(hoy));
     renderLpa();
   }
@@ -2377,19 +2379,12 @@ function activarEdicionLab() {
 }
 
 async function guardarLabYVolver() {
-  if(!_dirty.lab) {
-    // No changes — just navigate
-    _tabActivo = 'lab';
-    switchPacMainTab('evol');
-    return;
-  }
+  // Siempre guardar el laboratorio al salir de la pestaña
   await guardarDatosPac('lab_tabla_wrap');
   sincronizarRO();
   limpiarDirty('lab');
   _colEditando = null;
-  const label = document.getElementById('lab_modo_label');
-  if(label) label.textContent = 'Completando nueva entrada';
-  // Detect altered values
+  // Detectar alterados y volcar al editor
   const sexoPac = pacienteActual?.sexo==='Femenino'?'F':'H';
   const ci = labDatos.columnas.length - 1;
   const alterados = LAB_FILAS.filter((f,fi) => {
@@ -2398,11 +2393,7 @@ async function guardarLabYVolver() {
     const storedU = (labDatos.unidades&&labDatos.unidades[f.key])||(f.unidades||[''])[0];
     return val && f.ref(val, sexoPac, storedU);
   });
-  if(alterados.length > 0) {
-    // Auto-volcar sin preguntar (según spec)
-    volcarAlteradosAlEditor('lab');
-  }
-  // Guardar borrador del editor (incluye alterados volcados)
+  if(alterados.length > 0) volcarAlteradosAlEditor('lab');
   await guardarBorradorEvol(pacienteActual?.dni);
   _tabActivo = 'lab';
   switchPacMainTab('evol');
