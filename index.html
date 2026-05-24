@@ -1303,76 +1303,86 @@ function renderTablaGenerica(datos, filas, wrapId, newColIdx) {
   const isLab = ['evlab_wrap','lab_tabla_wrap'].includes(wrapId);
   if(isLab) calcLabValues(datos, filas);
   const todosFilas = [...filas, ...datos.extraFilas.map(lbl=>({label:lbl,key:'extra_'+lbl,unidades:[''],defU:0,ref:null}))];
-  // newColIdx: index of the "new" column (highlighted)
-  const nci = newColIdx !== undefined ? newColIdx : datos.columnas.length - 1;
+  const nci = newColIdx !== undefined ? newColIdx : (datos.columnas.length > 0 ? datos.columnas.length - 1 : 0);
   const sexoPac = pacienteActual?.sexo==='Femenino'?'F':'H';
-  let h = '<div style="overflow-x:auto"><table style="border-collapse:collapse;font-size:12px;width:auto">';
-  // Header
+
+  let h = '<div style="overflow-x:auto"><table style="border-collapse:collapse;font-size:12px;width:auto;table-layout:auto">';
+
+  // ── HEADER ROW: Parámetro | fecha1 | fecha2 | ...
   h += '<thead><tr>';
-  h += '<th style="background:var(--blue);color:white;padding:7px 12px;text-align:left;font-size:11px;font-weight:700;white-space:nowrap;position:sticky;left:0;z-index:3;min-width:170px">Parámetro</th>';
-  h += '<th style="background:var(--blue);color:white;padding:7px 8px;text-align:center;font-size:11px;white-space:nowrap;min-width:80px">Unidad</th>';
+  h += '<th style="background:var(--blue);color:white;padding:8px 14px;text-align:left;font-size:11px;font-weight:700;white-space:nowrap;position:sticky;left:0;z-index:3;min-width:180px;border-right:2px solid rgba(255,255,255,.3)">Parámetro</th>';
   datos.columnas.forEach((c,ci) => {
     const isNew = ci === nci;
-    const bg = isNew ? '#e0f7fa' : 'var(--blue)';
-    const tc = isNew ? 'var(--blue)' : 'white';
-    h += '<th style="background:'+bg+';color:'+tc+';padding:4px 4px;text-align:center;white-space:nowrap;min-width:80px;border-left:1px solid rgba(255,255,255,.2)">';
+    const thBg = isNew ? '#b2ebf2' : '#1a6fad';
+    const thColor = isNew ? '#006064' : 'white';
+    h += '<th style="background:'+thBg+';color:'+thColor+';padding:4px 6px;text-align:center;min-width:110px;border-left:1px solid rgba(255,255,255,.25);font-weight:600">';
     h += '<input type="date" value="'+c+'" data-ci="'+ci+'" data-wrap="'+wrapId+'" onchange="actualizarFechaCol(this)"';
-    h += ' style="background:transparent;border:1px solid '+(isNew?'var(--blue)':'rgba(255,255,255,.5)')+';color:'+tc+';border-radius:5px;font-size:10px;padding:2px 3px;width:100px;color-scheme:'+(isNew?'light':'dark')+'"/>';
+    h += ' style="background:transparent;border:1px solid '+(isNew?'#006064':'rgba(255,255,255,.5)')+';color:'+thColor+';border-radius:5px;font-size:10px;padding:2px 4px;width:108px;color-scheme:'+(isNew?'light':'dark')+'"/>';
     h += '</th>';
   });
-  h += '</tr></thead><tbody>';
-  // Rows
-  todosFilas.forEach((f,fi) => {
+  h += '</tr></thead>';
+
+  // ── BODY
+  h += '<tbody>';
+  todosFilas.forEach((f, fi) => {
     if(f.cat) {
-      const cols = 2 + datos.columnas.length;
-      h += '<tr><td colspan="'+cols+'" style="background:#dbeafe;color:var(--blue);font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;padding:5px 12px;border:1px solid var(--border)">'+f.label+'</td></tr>';
+      h += '<tr><td colspan="'+(1+datos.columnas.length)+'" style="background:#dbeafe;color:var(--blue);font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;padding:5px 14px;border:1px solid var(--border)">'+f.label+'</td></tr>';
       return;
     }
     const isCalc = !!f.calc;
     const uns = f.unidades || [''];
     const storedU = datos.unidades[f.key] || uns[0];
-    const rowBg = isCalc ? '#f0f7ff' : 'white';
-    h += '<tr style="background:'+rowBg+'">';
-    // Label
-    h += '<td style="padding:4px 10px;border:1px solid var(--border);font-size:12px;font-weight:'+(isCalc?'500':'600')+';white-space:nowrap;position:sticky;left:0;background:'+rowBg+';z-index:1;color:'+(isCalc?'var(--teal)':'var(--text)')+'">'+f.label+(isCalc?' <span style="font-size:9px">●</span>':'')+'</td>';
-    // Unit cell — editable input that also stores the value
-    h += '<td style="padding:2px 4px;border:1px solid var(--border);text-align:center;background:#fafafa">';
-    if(uns.length > 1 && !isCalc) {
-      h += '<select data-key="'+f.key+'" data-wrap="'+wrapId+'" onchange="actualizarUnidad(this)" style="font-size:11px;padding:2px 3px;border:1px solid var(--border);border-radius:5px;background:white;max-width:78px">';
-      uns.forEach(u => { h += '<option value="'+u+'"'+(u===storedU?' selected':'')+'>'+u+'</option>'; });
-      h += '</select>';
-    } else if(!isCalc) {
-      h += '<span style="font-size:11px;color:var(--text-soft)">'+storedU+'</span>';
-    }
+    const labelBg = isCalc ? '#f0f7ff' : 'white';
+    const labelColor = isCalc ? 'var(--teal)' : 'var(--text)';
+
+    h += '<tr>';
+    // ── Label cell (sticky)
+    h += '<td style="padding:6px 14px;border:1px solid var(--border);border-right:2px solid var(--border);font-size:12px;font-weight:'+(isCalc?'500':'600')+';white-space:nowrap;position:sticky;left:0;background:'+labelBg+';z-index:1;color:'+labelColor+'">';
+    h += f.label;
+    if(isCalc) h += ' <span style="font-size:9px;color:var(--teal)">●calc</span>';
     h += '</td>';
-    // Value cells
+
+    // ── Value cells
     datos.columnas.forEach((_,ci) => {
       const val = (datos.filas[fi]||[])[ci]||'';
       const isNew = ci === nci;
       const esAlerta = val && f.ref && f.ref(val, sexoPac, storedU);
-      const bg = esAlerta ? '#fff0f0' : (isNew ? '#f0fffe' : '');
-      const color = esAlerta ? 'var(--red)' : 'var(--text)';
-      const fw = esAlerta ? '700' : '400';
-      h += '<td style="padding:1px 3px;border:1px solid var(--border);background:'+bg+';min-width:76px">';
+      const cellBg = esAlerta ? '#fff0f0' : (isNew ? '#f0fffe' : 'white');
+      const valColor = esAlerta ? 'var(--red)' : 'var(--text)';
+      const valFw = esAlerta ? '700' : '400';
+
+      h += '<td style="padding:3px 4px;border:1px solid var(--border);background:'+cellBg+';text-align:center;vertical-align:middle;min-width:110px">';
+
       if(isCalc) {
-        h += '<div style="text-align:center;font-size:12px;font-weight:'+fw+';color:'+color+';padding:4px;white-space:nowrap">'+val+'</div>';
+        // Calculated: show value + unit label
+        h += '<div style="font-size:12px;font-weight:'+valFw+';color:'+valColor+';padding:3px 2px">'+val+'</div>';
+        if(val && storedU) h += '<div style="font-size:10px;color:var(--text-soft);margin-top:1px">'+storedU+'</div>';
       } else {
+        // Editable: value input + unit selector/display below
         h += '<input type="text" value="'+val+'" data-fi="'+fi+'" data-ci="'+ci+'" data-wrap="'+wrapId+'" oninput="actualizarCelda(this)"';
-        h += ' style="width:72px;border:none;background:transparent;font-size:12px;text-align:center;font-family:var(--font-main);outline:none;color:'+color+';font-weight:'+fw+'"/>';
+        h += ' style="display:block;width:90%;margin:0 auto 2px;border:none;border-bottom:1px solid '+(esAlerta?'var(--red)':isNew?'var(--teal)':'var(--border)')+';background:transparent;font-size:13px;text-align:center;font-family:var(--font-main);outline:none;color:'+valColor+';font-weight:'+valFw+';padding:2px 0"/>';
+        // Unit: selector if multiple options, otherwise editable text
+        if(uns.length > 1) {
+          h += '<select data-key="'+f.key+'" data-wrap="'+wrapId+'" onchange="actualizarUnidad(this)" style="display:block;width:96%;margin:0 auto;font-size:10px;padding:1px 2px;border:1px solid var(--border);border-radius:4px;background:'+(isNew?'#e0f7fa':'#f8f9fc')+';color:var(--text-soft);text-align:center">';
+          uns.forEach(u => { h += '<option value="'+u+'"'+(u===storedU?' selected':'')+'>'+u+'</option>'; });
+          h += '</select>';
+        } else {
+          h += '<div style="font-size:10px;color:var(--text-soft);text-align:center">'+storedU+'</div>';
+        }
       }
       h += '</td>';
     });
     h += '</tr>';
   });
-  // Add extra row button
-  h += '<tr><td colspan="'+(2+datos.columnas.length)+'" style="padding:6px 10px;border:1px solid var(--border);background:#f8f9fc">';
-  h += '<input type="text" id="new_row_input_'+wrapId+'" placeholder="Agregar parámetro..." style="padding:4px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:12px;font-family:var(--font-main);width:200px;margin-right:8px"/>';
-  h += '<button onclick="agregarFilaExtra(\''+wrapId+'\')" style="padding:4px 10px;border:1.5px solid var(--blue);border-radius:6px;background:var(--blue-light);color:var(--blue);font-size:11px;cursor:pointer;font-family:var(--font-main)">+ Agregar</button>';
+
+  // ── Add row
+  h += '<tr><td colspan="'+(1+datos.columnas.length)+'" style="padding:6px 12px;border:1px solid var(--border);background:#f8f9fc">';
+  h += '<input type="text" id="new_row_input_'+wrapId+'" placeholder="Agregar parámetro..." style="padding:4px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:12px;font-family:var(--font-main);width:220px;margin-right:8px"/>';
+  h += '<button onclick="agregarFilaExtra(\''+wrapId+'\')" style="padding:4px 12px;border:1.5px solid var(--blue);border-radius:6px;background:var(--blue-light);color:var(--blue);font-size:11px;cursor:pointer;font-family:var(--font-main)">+ Agregar fila</button>';
   h += '</td></tr>';
   h += '</tbody></table></div>';
   wrap.innerHTML = h;
 }
-
 
 function agregarFilaExtra(wrapId) {
   const input = document.getElementById('new_row_input_'+wrapId);
