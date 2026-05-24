@@ -800,10 +800,14 @@
         </div>
 
         <!-- Tabla principal -->
-        <div style="display:flex;align-items:center;justify-content:flex-end;margin-bottom:8px">
-          <button onclick="guardarLabYVolver()" style="padding:8px 22px;border:none;border-radius:9px;background:var(--teal);color:white;font-size:13px;cursor:pointer;font-family:var(--font-main);font-weight:600;box-shadow:0 2px 8px rgba(77,188,190,.25)">💾 Guardar e ir a Evolución</button>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;gap:8px;flex-wrap:wrap">
+          <div style="display:flex;align-items:center;gap:8px">
+            <span id="lab_modo_label" style="font-size:12px;color:var(--text-soft);font-style:italic">Completando nueva entrada</span>
+            <button id="btn_editar_lab" onclick="activarEdicionLab()" style="padding:6px 14px;border:1.5px solid var(--blue);border-radius:8px;background:var(--blue-light);color:var(--blue);font-size:12px;cursor:pointer;font-family:var(--font-main)">✏️ Editar laboratorio</button>
+          </div>
+          <button onclick="guardarLabYVolver()" style="padding:8px 22px;border:none;border-radius:9px;background:var(--teal);color:white;font-size:13px;cursor:pointer;font-family:var(--font-main);font-weight:600;box-shadow:0 2px 8px rgba(77,188,190,.25)">💾 Guardar laboratorio</button>
         </div>
-        <div id="evlab_wrap" style="overflow-x:auto;margin-top:4px"></div>
+        <div id="evlab_wrap" style="overflow-x:auto;margin-top:4px;width:100%"></div>
       </div>
 
       <!-- PANEL ANTROPOMETRÍA -->
@@ -1059,6 +1063,7 @@ let evolClinicaSnapshot = null;
 let updTtoItems = [];
 let _tabActivo = 'evol';
 let _tabDirty = false;
+let _colEditando = null; // null = solo la última (nueva), número = índice a editar
 let labDatos = { columnas:[], filas:[] };
 let estDatos = { columnas:[], filas:[] };
 let antDatos = { columnas:[], filas:[] };
@@ -1306,18 +1311,24 @@ function renderTablaGenerica(datos, filas, wrapId, newColIdx) {
   const nci = newColIdx !== undefined ? newColIdx : (datos.columnas.length > 0 ? datos.columnas.length - 1 : 0);
   const sexoPac = pacienteActual?.sexo==='Femenino'?'F':'H';
 
-  let h = '<div style="overflow-x:auto"><table style="border-collapse:collapse;font-size:12px;width:auto;table-layout:auto">';
+  // For lab: active column = _colEditando if editing, else last (new) column
+  const activeCI = isLab ? (_colEditando !== null ? _colEditando : nci) : nci;
 
-  // ── HEADER ROW: Parámetro | fecha1 | fecha2 | ...
+  let h = '<div style="overflow-x:auto;width:100%"><table style="border-collapse:collapse;font-size:12px;width:100%;min-width:max-content;table-layout:auto">';
+
+  // ── HEADER
   h += '<thead><tr>';
   h += '<th style="background:var(--blue);color:white;padding:8px 14px;text-align:left;font-size:11px;font-weight:700;white-space:nowrap;position:sticky;left:0;z-index:3;min-width:180px;border-right:2px solid rgba(255,255,255,.3)">Parámetro</th>';
   datos.columnas.forEach((c,ci) => {
-    const isNew = ci === nci;
-    const thBg = isNew ? '#b2ebf2' : '#1a6fad';
-    const thColor = isNew ? '#006064' : 'white';
-    h += '<th style="background:'+thBg+';color:'+thColor+';padding:4px 6px;text-align:center;min-width:110px;border-left:1px solid rgba(255,255,255,.25);font-weight:600">';
+    const isActive = ci === activeCI;
+    const isSaved = isLab && ci < nci && _colEditando === null;
+    const thBg = isActive ? '#b2ebf2' : (isSaved ? '#1a6fad' : 'var(--blue)');
+    const thColor = isActive ? '#006064' : 'white';
+    h += '<th style="background:'+thBg+';color:'+thColor+';padding:4px 6px;text-align:center;min-width:120px;border-left:1px solid rgba(255,255,255,.25);font-weight:600">';
     h += '<input type="date" value="'+c+'" data-ci="'+ci+'" data-wrap="'+wrapId+'" onchange="actualizarFechaCol(this)"';
-    h += ' style="background:transparent;border:1px solid '+(isNew?'#006064':'rgba(255,255,255,.5)')+';color:'+thColor+';border-radius:5px;font-size:10px;padding:2px 4px;width:108px;color-scheme:'+(isNew?'light':'dark')+'"/>';
+    const dateReadonly = (isLab && ci !== activeCI) ? ' readonly' : '';
+    h += dateReadonly+' style="background:transparent;border:1px solid '+(isActive?'#006064':'rgba(255,255,255,.5)')+';color:'+thColor+';border-radius:5px;font-size:10px;padding:2px 4px;width:108px;color-scheme:'+(isActive?'light':'dark')+(dateReadonly?' cursor:default':'')+'"/>';
+    if(isSaved) h += '<div style="font-size:9px;opacity:.7;margin-top:2px">🔒 guardado</div>';
     h += '</th>';
   });
   h += '</tr></thead>';
@@ -1336,34 +1347,35 @@ function renderTablaGenerica(datos, filas, wrapId, newColIdx) {
     const labelColor = isCalc ? 'var(--teal)' : 'var(--text)';
 
     h += '<tr>';
-    // ── Label cell (sticky)
     h += '<td style="padding:6px 14px;border:1px solid var(--border);border-right:2px solid var(--border);font-size:12px;font-weight:'+(isCalc?'500':'600')+';white-space:nowrap;position:sticky;left:0;background:'+labelBg+';z-index:1;color:'+labelColor+'">';
-    h += f.label;
-    if(isCalc) h += ' <span style="font-size:9px;color:var(--teal)">●calc</span>';
+    h += f.label + (isCalc?' <span style="font-size:9px;color:var(--teal)">●calc</span>':'');
     h += '</td>';
 
-    // ── Value cells
     datos.columnas.forEach((_,ci) => {
       const val = (datos.filas[fi]||[])[ci]||'';
-      const isNew = ci === nci;
+      const isActive = ci === activeCI;
+      const isEditable = !isCalc && isActive;
+      const isLocked = isLab && ci !== activeCI;
       const esAlerta = val && f.ref && f.ref(val, sexoPac, storedU);
-      const cellBg = esAlerta ? '#fff0f0' : (isNew ? '#f0fffe' : 'white');
+      const cellBg = esAlerta ? '#fff0f0' : (isActive ? '#f0fffe' : (isLocked ? '#fafafa' : 'white'));
       const valColor = esAlerta ? 'var(--red)' : 'var(--text)';
       const valFw = esAlerta ? '700' : '400';
 
-      h += '<td style="padding:3px 4px;border:1px solid var(--border);background:'+cellBg+';text-align:center;vertical-align:middle;min-width:110px">';
+      h += '<td style="padding:3px 4px;border:1px solid var(--border);background:'+cellBg+';text-align:center;vertical-align:middle;min-width:120px">';
 
       if(isCalc) {
-        // Calculated: show value + unit label
         h += '<div style="font-size:12px;font-weight:'+valFw+';color:'+valColor+';padding:3px 2px">'+val+'</div>';
         if(val && storedU) h += '<div style="font-size:10px;color:var(--text-soft);margin-top:1px">'+storedU+'</div>';
+      } else if(isLocked) {
+        // Saved column: read only display
+        h += '<div style="font-size:13px;font-weight:'+valFw+';color:'+valColor+';padding:4px 2px">'+val+'</div>';
+        if(storedU) h += '<div style="font-size:10px;color:var(--text-soft)">'+storedU+'</div>';
       } else {
-        // Editable: value input + unit selector/display below
+        // Editable cell
         h += '<input type="text" value="'+val+'" data-fi="'+fi+'" data-ci="'+ci+'" data-wrap="'+wrapId+'" oninput="actualizarCelda(this)"';
-        h += ' style="display:block;width:90%;margin:0 auto 2px;border:none;border-bottom:1px solid '+(esAlerta?'var(--red)':isNew?'var(--teal)':'var(--border)')+';background:transparent;font-size:13px;text-align:center;font-family:var(--font-main);outline:none;color:'+valColor+';font-weight:'+valFw+';padding:2px 0"/>';
-        // Unit: selector if multiple options, otherwise editable text
+        h += ' style="display:block;width:90%;margin:0 auto 2px;border:none;border-bottom:1px solid '+(esAlerta?'var(--red)':isActive?'var(--teal)':'var(--border)')+';background:transparent;font-size:13px;text-align:center;font-family:var(--font-main);outline:none;color:'+valColor+';font-weight:'+valFw+';padding:2px 0"/>';
         if(uns.length > 1) {
-          h += '<select data-key="'+f.key+'" data-wrap="'+wrapId+'" onchange="actualizarUnidad(this)" style="display:block;width:96%;margin:0 auto;font-size:10px;padding:1px 2px;border:1px solid var(--border);border-radius:4px;background:'+(isNew?'#e0f7fa':'#f8f9fc')+';color:var(--text-soft);text-align:center">';
+          h += '<select data-key="'+f.key+'" data-wrap="'+wrapId+'" onchange="actualizarUnidad(this)" style="display:block;width:96%;margin:0 auto;font-size:10px;padding:1px 2px;border:1px solid var(--border);border-radius:4px;background:#e0f7fa;color:var(--text-soft)">';
           uns.forEach(u => { h += '<option value="'+u+'"'+(u===storedU?' selected':'')+'>'+u+'</option>'; });
           h += '</select>';
         } else {
@@ -1375,11 +1387,13 @@ function renderTablaGenerica(datos, filas, wrapId, newColIdx) {
     h += '</tr>';
   });
 
-  // ── Add row
-  h += '<tr><td colspan="'+(1+datos.columnas.length)+'" style="padding:6px 12px;border:1px solid var(--border);background:#f8f9fc">';
-  h += '<input type="text" id="new_row_input_'+wrapId+'" placeholder="Agregar parámetro..." style="padding:4px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:12px;font-family:var(--font-main);width:220px;margin-right:8px"/>';
-  h += '<button onclick="agregarFilaExtra(\''+wrapId+'\')" style="padding:4px 12px;border:1.5px solid var(--blue);border-radius:6px;background:var(--blue-light);color:var(--blue);font-size:11px;cursor:pointer;font-family:var(--font-main)">+ Agregar fila</button>';
-  h += '</td></tr>';
+  // Add row
+  if(!isLab || _colEditando !== null || activeCI === nci) {
+    h += '<tr><td colspan="'+(1+datos.columnas.length)+'" style="padding:6px 12px;border:1px solid var(--border);background:#f8f9fc">';
+    h += '<input type="text" id="new_row_input_'+wrapId+'" placeholder="Agregar parámetro..." style="padding:4px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:12px;font-family:var(--font-main);width:220px;margin-right:8px"/>';
+    h += '<button onclick="agregarFilaExtra(\''+wrapId+'\')" style="padding:4px 12px;border:1.5px solid var(--blue);border-radius:6px;background:var(--blue-light);color:var(--blue);font-size:11px;cursor:pointer;font-family:var(--font-main)">+ Agregar fila</button>';
+    h += '</td></tr>';
+  }
   h += '</tbody></table></div>';
   wrap.innerHTML = h;
 }
@@ -2211,11 +2225,48 @@ function volcarAlteradosAlEditor(tipo) {
   }
 }
 
+
+function activarEdicionLab() {
+  // Show column picker to select which saved column to edit
+  const n = labDatos.columnas.length;
+  if(n <= 1) { alert('No hay columnas guardadas previas para editar.'); return; }
+  const opts = labDatos.columnas.slice(0,-1).map((c,i) =>
+    new Date(c+'T12:00:00').toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'}) + ' → índice '+i
+  ).join('\n');
+  const input = prompt('¿Qué columna querés editar?\n\n' + labDatos.columnas.slice(0,-1).map((c,i) =>
+    (i+1)+'. '+new Date(c+'T12:00:00').toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'})
+  ).join('\n') + '\n\nIngresá el número:');
+  if(!input) return;
+  const idx = parseInt(input) - 1;
+  if(isNaN(idx) || idx < 0 || idx >= n-1) { alert('Número inválido.'); return; }
+  _colEditando = idx;
+  const label = document.getElementById('lab_modo_label');
+  if(label) label.innerHTML = '<span style="color:var(--blue);font-weight:600">✏️ Editando: '+new Date(labDatos.columnas[idx]+'T12:00:00').toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'})+'</span>';
+  renderTablaGenerica(labDatos, LAB_FILAS, 'evlab_wrap', labDatos.columnas.length-1);
+}
+
 async function guardarLabYVolver() {
   await guardarDatosPac('lab_tabla_wrap');
   sincronizarRO();
-  // Volcar automáticamente los alterados al editor
-  volcarAlteradosAlEditor('lab');
+  _tabDirty = false;
+  _colEditando = null;
+  const label = document.getElementById('lab_modo_label');
+  if(label) label.textContent = 'Completando nueva entrada';
+  // Detect and volcar alterados
+  const sexoPac = pacienteActual?.sexo==='Femenino'?'F':'H';
+  const ci = labDatos.columnas.length - 1; // last saved col
+  const hayAlt = LAB_FILAS.some((f,fi) => {
+    if(!f.ref) return false;
+    const val = (labDatos.filas[fi]||[])[ci]||'';
+    const storedU = (labDatos.unidades&&labDatos.unidades[f.key])||(f.unidades||[''])[0];
+    return val && f.ref(val, sexoPac, storedU);
+  });
+  if(hayAlt) {
+    if(confirm('Hay valores alterados. ¿Agregarlos al cuadro de evolución?')) {
+      volcarAlteradosAlEditor('lab');
+    }
+  }
+  _tabActivo = 'lab';
   switchPacMainTab('evol');
 }
 
