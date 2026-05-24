@@ -609,21 +609,28 @@
             <div class="evol-update-grid">
               <div class="evol-update-item" style="grid-column:1/-1">
                 <label>Cambio de tratamiento</label>
-                <div style="display:grid;grid-template-columns:130px 1fr 90px 120px 28px;gap:6px;align-items:center;margin-bottom:6px">
-                  <select id="upd_tto_accion" style="padding:6px 8px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;font-family:var(--font-main);background:white">
+                <div style="display:grid;grid-template-columns:130px 1fr 90px 120px;gap:6px;align-items:center;margin-bottom:6px">
+                  <select id="upd_tto_accion" onchange="actualizarModoPanelTto()" style="padding:6px 8px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;font-family:var(--font-main);background:white">
                     <option value="se agrega">Se agrega</option>
                     <option value="se modifica">Se modifica</option>
                     <option value="se suspende">Se suspende</option>
-                    <option value="se mantiene">Se mantiene</option>
                   </select>
-                  <select id="upd_tto_grupo" onchange="actualizarFarmacosUpd()" style="padding:6px 8px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;font-family:var(--font-main);background:white">
-                    <option value="">Grupo</option>
-                  </select>
-                  <select id="upd_tto_farmaco" style="padding:6px 8px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;font-family:var(--font-main);background:white">
-                    <option value="">Fármaco</option>
-                  </select>
-                  <input type="text" id="upd_tto_dosis" placeholder="Dosis" style="padding:6px 8px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;font-family:var(--font-main)"/>
-                  <input type="text" id="upd_tto_frecuencia" placeholder="Frec." style="padding:6px 8px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;font-family:var(--font-main)"/>
+                  <!-- Modo AGREGA: grupo + fármaco -->
+                  <div id="upd_modo_agrega" style="display:contents">
+                    <select id="upd_tto_grupo" onchange="actualizarFarmacosUpd()" style="padding:6px 8px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;font-family:var(--font-main);background:white">
+                      <option value="">Grupo</option>
+                    </select>
+                    <select id="upd_tto_farmaco" style="padding:6px 8px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;font-family:var(--font-main);background:white">
+                      <option value="">Fármaco</option>
+                    </select>
+                    <input type="text" id="upd_tto_dosis" placeholder="Dosis" style="padding:6px 8px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;font-family:var(--font-main)"/>
+                  </div>
+                  <!-- Modo MODIFICA/SUSPENDE: medicación actual -->
+                  <div id="upd_modo_medactual" style="display:none;grid-column:2/-1">
+                    <select id="upd_tto_medactual" style="width:100%;padding:6px 8px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;font-family:var(--font-main);background:white">
+                      <option value="">Seleccioná la medicación actual...</option>
+                    </select>
+                  </div>
                 </div>
                 <div id="upd_tto_lista" style="display:flex;flex-wrap:wrap;gap:4px;min-height:20px"></div>
                 <button type="button" onclick="agregarTtoUpd()" style="margin-top:6px;padding:5px 12px;border:1.5px solid var(--blue);border-radius:8px;background:var(--blue-light);color:var(--blue);font-size:11px;cursor:pointer;font-family:var(--font-main)">+ Agregar</button>
@@ -1724,19 +1731,53 @@ function actualizarFarmacosUpd() {
   sel.innerHTML = '<option value="">Fármaco</option>'+(FARMACOS_MED[grupo]||[]).map(f=>'<option value="'+f+'">'+f+'</option>').join('');
 }
 
+
+function actualizarModoPanelTto() {
+  const accion = document.getElementById('upd_tto_accion').value;
+  const modoAgrega = document.getElementById('upd_modo_agrega');
+  const modoMed = document.getElementById('upd_modo_medactual');
+  const esAgrega = accion === 'se agrega';
+  // Toggle visibility via inline style on children
+  ['upd_tto_grupo','upd_tto_farmaco','upd_tto_dosis'].forEach(id => {
+    const el = document.getElementById(id);
+    if(el) el.style.display = esAgrega ? '' : 'none';
+  });
+  if(modoMed) modoMed.style.display = esAgrega ? 'none' : 'grid-column:2/-1';
+  if(!esAgrega) {
+    // Poblar con medicación actual del paciente
+    const sel = document.getElementById('upd_tto_medactual');
+    if(sel && evolClinicaSnapshot && evolClinicaSnapshot.medicacion) {
+      sel.innerHTML = '<option value="">Seleccioná la medicación actual...</option>' +
+        evolClinicaSnapshot.medicacion.map(m =>
+          '<option value="'+m.farmaco+'|'+m.dosis+'|'+m.grupo+'">'+m.farmaco+' '+m.dosis+'</option>'
+        ).join('');
+    }
+    if(modoMed) modoMed.style.display = 'block';
+  } else {
+    if(modoMed) modoMed.style.display = 'none';
+  }
+}
+
 function agregarTtoUpd() {
   const accion = document.getElementById('upd_tto_accion').value;
-  const grupo = document.getElementById('upd_tto_grupo').value;
-  const farmaco = document.getElementById('upd_tto_farmaco').value || grupo;
-  const dosis = document.getElementById('upd_tto_dosis').value.trim();
-  const frec = document.getElementById('upd_tto_frecuencia').value.trim();
-  if(!farmaco) return;
-  const texto = accion + ' ' + farmaco + (dosis ? ' ' + dosis : '') + (frec ? ' ' + frec : '');
+  let farmaco, dosis, grupo, frec = '';
+  if(accion === 'se agrega') {
+    grupo = document.getElementById('upd_tto_grupo').value;
+    farmaco = document.getElementById('upd_tto_farmaco').value || grupo;
+    dosis = document.getElementById('upd_tto_dosis').value.trim();
+    if(!farmaco) return;
+    document.getElementById('upd_tto_farmaco').value = '';
+    document.getElementById('upd_tto_dosis').value = '';
+  } else {
+    const sel = document.getElementById('upd_tto_medactual');
+    const parts = (sel.value||'').split('|');
+    farmaco = parts[0]; dosis = parts[1]||''; grupo = parts[2]||'Otro';
+    if(!farmaco) return;
+    sel.value = '';
+  }
+  const texto = accion + ' ' + farmaco + (dosis ? ' ' + dosis : '');
   updTtoItems.push({ accion, grupo, farmaco, dosis, frecuencia: frec, texto });
   renderTtoUpd();
-  document.getElementById('upd_tto_farmaco').value = '';
-  document.getElementById('upd_tto_dosis').value = '';
-  document.getElementById('upd_tto_frecuencia').value = '';
 }
 
 function renderTtoUpd() {
@@ -1926,27 +1967,84 @@ let estDatos = { columnas:[], filas:[] };
 let antDatos = { columnas:[], filas:[] };
 let pacHistoriaDni = null;
 
+// key: label, ref: function(val,sexo)->bool alerta, refTxt: string referencia
 const LAB_FILAS = [
   {cat:true, label:'HEMOGRAMA'},
-  {label:'Hb'},{label:'Rto plaquetas'},
+  {label:'Hb', key:'Hb',
+    ref:(v,s)=>parseFloat(v)<(s==='F'?12:13), refTxt:'<12(M) / <13(H) g/dL'},
+  {label:'Rto plaquetas', key:'Rto_plaquetas',
+    ref:(v)=>parseFloat(v)<150000||parseFloat(v)>400000, refTxt:'150-400 mil/µL'},
   {cat:true, label:'BIOQUÍMICA'},
-  {label:'Glucemia'},{label:'Creatinina'},{label:'Ácido Úrico'},
-  {label:'TGO'},{label:'TGP'},{label:'BT/FAL'},
+  {label:'Glucemia', key:'Glucemia',
+    ref:(v)=>parseFloat(v)<60||parseFloat(v)>100, refTxt:'60-100 mg/dL'},
+  {label:'Creatinina', key:'Creatinina',
+    ref:(v,s)=>parseFloat(v)>(s==='F'?1.0:1.2), refTxt:'>1.0(M) / >1.2(H) mg/dL'},
+  {label:'Ácido Úrico', key:'AcidoUrico',
+    ref:(v,s)=>parseFloat(v)>(s==='F'?6.0:7.0), refTxt:'>6.0(M) / >7.0(H) mg/dL'},
+  {label:'TGO', key:'TGO',
+    ref:(v)=>parseFloat(v)>40, refTxt:'>40 U/L'},
+  {label:'TGP', key:'TGP',
+    ref:(v)=>parseFloat(v)>40, refTxt:'>40 U/L'},
+  {label:'BT/FAL', key:'BTFAL', ref:null},
   {cat:true, label:'PERFIL LIPÍDICO'},
-  {label:'CT'},{label:'HDL'},{label:'TG'},{label:'LDL'},{label:'no HDL'},{label:'ApoB'},
+  {label:'CT', key:'CT',
+    ref:(v)=>parseFloat(v)>200, refTxt:'>200 mg/dL'},
+  {label:'HDL', key:'HDL',
+    ref:(v,s)=>parseFloat(v)<(s==='F'?50:40), refTxt:'<40(H) / <50(M) mg/dL'},
+  {label:'TG', key:'TG',
+    ref:(v)=>parseFloat(v)>150, refTxt:'>150 mg/dL'},
+  {label:'LDL', key:'LDL',
+    ref:(v)=>parseFloat(v)>100, refTxt:'>100 mg/dL'},
+  {label:'no HDL', key:'noHDL',
+    ref:(v)=>parseFloat(v)>130, refTxt:'>130 mg/dL'},
+  {label:'ApoB', key:'ApoB',
+    ref:(v)=>parseFloat(v)>90, refTxt:'>90 mg/dL'},
   {cat:true, label:'OTROS'},
-  {label:'Hba1c'},{label:'RAC'},{label:'PRCus'},{label:'Renina'},{label:'Aldosterona'},
-  {label:'PRA/PAC'},{label:'Sodio'},{label:'Potasio'},{label:'D3'},{label:'TSH'},
-  {label:'ERS'},{label:'Albúmina'},{label:'Lpa(a)'}
+  {label:'HbA1c', key:'HbA1c',
+    ref:(v)=>parseFloat(v)>5.7, refTxt:'>5.7%'},
+  {label:'RAC', key:'RAC',
+    ref:(v)=>parseFloat(v)>30, refTxt:'>30 mg/g'},
+  {label:'PRCus', key:'PRCus',
+    ref:(v)=>parseFloat(v)>3, refTxt:'>3 mg/L'},
+  {label:'Renina', key:'Renina', ref:null},
+  {label:'Aldosterona', key:'Aldosterona', ref:null},
+  {label:'PRA/PAC', key:'PRAPAC', ref:null},
+  {label:'Sodio', key:'Sodio',
+    ref:(v)=>parseFloat(v)<135||parseFloat(v)>145, refTxt:'135-145 mEq/L'},
+  {label:'Potasio', key:'Potasio',
+    ref:(v)=>parseFloat(v)<3.5||parseFloat(v)>5.0, refTxt:'3.5-5.0 mEq/L'},
+  {label:'D3', key:'D3',
+    ref:(v)=>parseFloat(v)<30, refTxt:'<30 ng/mL'},
+  {label:'TSH', key:'TSH',
+    ref:(v)=>parseFloat(v)<0.4||parseFloat(v)>4.0, refTxt:'0.4-4.0 mUI/L'},
+  {label:'ERS', key:'ERS', ref:null},
+  {label:'Albúmina', key:'Albumina',
+    ref:(v)=>parseFloat(v)<3.5, refTxt:'<3.5 g/dL'},
+  {label:'Lpa(a)', key:'Lpaa',
+    ref:(v)=>parseFloat(v)>30, refTxt:'>30 mg/dL'}
 ];
 
 const ANT_FILAS = [
   {cat:true, label:'MEDICIONES'},
-  {label:'Peso (kg)'},{label:'Altura (cm'},
+  {label:'Peso (kg)', key:'Peso', ref:null},
+  {label:'Altura (cm)', key:'Altura', ref:null},
   {cat:true, label:'COMPOSICIÓN CORPORAL'},
-  {label:'IMC'},{label:'% grasa'},{label:'% músculo'},{label:'Grasa visceral'},
+  {label:'IMC', key:'IMC',
+    ref:(v)=>parseFloat(v)>25, refTxt:'>25 kg/m²'},
+  {label:'% grasa', key:'PctGrasa',
+    ref:(v,s)=>parseFloat(v)>(s==='F'?33:25), refTxt:'>25%(H) / >33%(M)'},
+  {label:'% músculo', key:'PctMusculo', ref:null},
+  {label:'Grasa visceral', key:'GrasaVisceral',
+    ref:(v)=>parseFloat(v)>12, refTxt:'>12 (riesgo elevado)'},
   {cat:true, label:'MEDIDAS'},
-  {label:'Perímetro de cintura'},{label:'Fuera de presión'},{label:'Cintura/Estatura'},{label:'Cintura/Cadera'},{label:'Cadera'},{label:'Cuello'}
+  {label:'Cintura (cm)', key:'Cintura', ref:null},
+  {label:'Fuera de presión (cm)', key:'FueraPres', ref:null},
+  {label:'Cintura/Estatura', key:'CintEst',
+    ref:(v)=>parseFloat(v)>0.50, refTxt:'>0.50'},
+  {label:'Cintura/Cadera', key:'CintCad',
+    ref:(v,s)=>parseFloat(v)>(s==='F'?0.85:0.90), refTxt:'>0.90(H) / >0.85(M)'},
+  {label:'Cadera (cm)', key:'Cadera', ref:null},
+  {label:'Cuello (cm)', key:'Cuello', ref:null}
 ];
 
 
@@ -1973,7 +2071,10 @@ function renderTablaReadonly(datos, filas, wrapId) {
       h += '<div class="lab-row"><div class="lab-label">'+f.label+'</div><div class="lab-vals">';
       datos.columnas.forEach((_,ci) => {
         const val = (datos.filas[fi]||[])[ci]||'';
-        h += '<div class="lab-val-col"><div class="lab-val-cell" style="text-align:center;font-size:12px;padding:4px 6px;border:1px solid var(--border)">'+val+'</div></div>';
+        const sexoPac = pacienteActual?.sexo==='Femenino'?'F':'H';
+        const esAlerta = val && f.ref && f.ref(val, sexoPac);
+        const cellStyle = esAlerta ? 'background:#fff0f0;color:var(--red);font-weight:600;' : '';
+        h += '<div class="lab-val-col"><div class="lab-val-cell" style="'+cellStyle+'text-align:center;font-size:12px;padding:4px 6px;border:1px solid var(--border)">'+val+'</div></div>';
       });
       h += '</div></div>';
     }
@@ -2027,7 +2128,10 @@ function renderTablaGenerica(datos, filas, wrapId) {
       html += '<div class="lab-row"><div class="lab-label">'+f.label+'</div><div class="lab-vals">';
       datos.columnas.forEach((_,ci) => {
         const val = (datos.filas[fi]||[])[ci]||'';
-        html += '<div class="lab-val-col"><div class="lab-val-cell"><input type="text" value="'+val+'" data-fi="'+fi+'" data-ci="'+ci+'" data-wrap="'+wrapId+'" oninput="actualizarCelda(this)" /></div></div>';
+        const sexoPac = pacienteActual?.sexo==='Femenino'?'F':'H';
+        const esAlerta = val && f.ref && f.ref(val, sexoPac);
+        const cellStyle = esAlerta ? 'background:#fff0f0;color:var(--red);font-weight:600' : '';
+        html += '<div class="lab-val-col"><div class="lab-val-cell" style="'+cellStyle+'"><input type="text" value="'+val+'" data-fi="'+fi+'" data-ci="'+ci+'" data-wrap="'+wrapId+'" oninput="actualizarCelda(this)" style="'+cellStyle+';width:100%;border:none;background:transparent;font-size:12px;text-align:center;font-family:var(--font-main);outline:none" /></div></div>';
       });
       html += '</div></div>';
     }
