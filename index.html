@@ -596,16 +596,8 @@
             <button onclick="formatCmd('bold')" title="Negrita"><b>N</b></button>
             <button onclick="formatCmd('underline')" title="Subrayado"><u>S</u></button>
             <button onclick="formatCmd('foreColor','#8B0000')" title="Color Bordó" style="color:#8B0000;font-weight:700">A</button>
-            <button onclick="formatCmd('foreColor','#1a2535')" title="Color Normal" style="font-size:11px">A</button>
             <div class="evol-toolbar-sep"></div>
-            <button onclick="formatCmd('justifyLeft')" title="Izquierda" style="font-size:11px">⬅</button>
-            <button onclick="formatCmd('justifyCenter')" title="Centrar" style="font-size:11px">↔</button>
-            <button onclick="formatCmd('justifyRight')" title="Derecha" style="font-size:11px">➡</button>
-            <div class="evol-toolbar-sep"></div>
-            <button onclick="formatCmd('insertUnorderedList')" title="Lista">•</button>
-            <button onclick="formatCmd('insertOrderedList')" title="Lista num." style="font-size:11px">1.</button>
-            <div class="evol-toolbar-sep"></div>
-            <button onclick="formatCmd('removeFormat')" title="Quitar formato" style="font-size:10px;width:auto;padding:0 6px">✕fmt</button>
+            <button onclick="formatCmd('insertOrderedList')" title="Lista numerada" style="font-size:11px;width:auto;padding:0 6px">1. Lista</button>
           </div>
 
           <!-- Editor principal -->
@@ -665,7 +657,16 @@
           <!-- INDICACIONES -->
           <div class="evol-indicaciones">
             <div class="evol-ind-title">Indicaciones para el paciente</div>
-            <textarea id="evol_indicaciones" class="evol-ind-editor" placeholder="Escribí las indicaciones para el paciente...&#10;• Medicación&#10;• Dieta&#10;• Actividad física&#10;• Próximo control"></textarea>
+            <div class="evol-toolbar" style="border-radius:10px 10px 0 0">
+              <button onclick="formatIndCmd('bold')" title="Negrita"><b>N</b></button>
+              <button onclick="formatIndCmd('underline')" title="Subrayado"><u>S</u></button>
+              <button onclick="formatIndCmd('foreColor','#8B0000')" title="Color Bordó" style="color:#8B0000;font-weight:700">A</button>
+              <div class="evol-toolbar-sep"></div>
+              <button onclick="formatIndCmd('insertOrderedList')" title="Lista numerada" style="font-size:11px;width:auto;padding:0 6px">1. Lista</button>
+            </div>
+            <div id="evol_indicaciones_editor" class="evol-editor" contenteditable="true" spellcheck="true"
+              placeholder="Escribí las indicaciones para el paciente..."
+              style="border-radius:0 0 10px 10px;min-height:120px"></div>
             <div class="evol-ind-actions">
               <button class="btn btn-secondary" onclick="volcarIndicacionesAlEditor()" style="width:auto;margin:0;padding:7px 16px;font-size:12px">↑ Volcar a evolución</button>
               <button class="btn btn-teal" onclick="generarPDFIndicacionesEvol()" style="width:auto;margin:0;padding:7px 16px;font-size:12px">⬇ PDF</button>
@@ -1550,7 +1551,7 @@ function abrirEvolucion(dni) {
     const el = document.getElementById(id); if(el) el.value='';
   });
   ['upd_tto'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
-  const indEl=document.getElementById('evol_indicaciones');if(indEl)indEl.value='';
+  const indEl=document.getElementById('evol_indicaciones_editor');if(indEl)indEl.innerHTML='';
   updTtoItems = []; renderTtoUpd();
   initGruposUpd();
   ['upd_actividad','upd_alimentacion'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
@@ -1647,7 +1648,7 @@ async function guardarEvolucion() {
     tap_fc: document.getElementById('evol_tap_fc').value||null,
     fecha_hora: new Date().toISOString(),
     clinica_snapshot: evolClinicaSnapshot ? JSON.stringify(evolClinicaSnapshot) : null,
-    indicaciones: document.getElementById('evol_indicaciones').value||null
+    indicaciones: (document.getElementById('evol_indicaciones_editor')||{}).innerText||null
   });
   if(error) {
     alert('Error al guardar: ' + error.message);
@@ -1868,10 +1869,11 @@ async function abrirHistorialMed() {
 
 // ===== INDICACIONES EN EVOLUCIÓN =====
 function volcarIndicacionesAlEditor() {
-  const txt = document.getElementById('evol_indicaciones').value.trim();
-  if(!txt) return;
+  const indEl = document.getElementById('evol_indicaciones_editor');
+  const txt = indEl ? indEl.innerHTML.trim() : '';
+  if(!txt || txt === '<br>') return;
   const editor = document.getElementById('evol_editor');
-  const lines = txt.split('\n').map(l=>l.trim()).filter(Boolean).map(l=>'• '+l).join('<br>');
+  const lines = txt;
   const bloque = '<div class="bloque-indicaciones" style="font-family:Arial,sans-serif;font-size:10pt;color:#333;border:1px solid #d5e8d4;padding:8px 10px;border-radius:6px;background:#f8fff7;margin-bottom:10px;line-height:1.8"><strong>Indicaciones:</strong><br>'+lines+'</div>';
   const prev = editor.querySelector('.bloque-indicaciones'); if(prev) prev.remove();
   const tmp = document.createElement('div'); tmp.innerHTML = bloque;
@@ -1880,7 +1882,8 @@ function volcarIndicacionesAlEditor() {
 
 function generarPDFIndicacionesEvol() {
   const p = pacienteActual; if(!p) return;
-  const txt = document.getElementById('evol_indicaciones').value.trim();
+  const indEl3 = document.getElementById('evol_indicaciones_editor');
+  const txt = indEl3 ? indEl3.innerText.trim() : '';
   if(!txt) { alert('No hay indicaciones para generar.'); return; }
   const u = users[selectedUser];
   const hoy = new Date().toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'});
@@ -1907,7 +1910,8 @@ function generarPDFIndicacionesEvol() {
 
 function enviarMailIndicacionesEvol() {
   const p = pacienteActual; if(!p) return;
-  const txt = document.getElementById('evol_indicaciones').value.trim();
+  const indEl2 = document.getElementById('evol_indicaciones_editor');
+  const txt = indEl2 ? indEl2.innerText.trim() : '';
   if(!txt || !p.email) { alert(!txt?'Sin indicaciones.':'El paciente no tiene email registrado.'); return; }
   const hoy = new Date().toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'});
   const u = users[selectedUser];
