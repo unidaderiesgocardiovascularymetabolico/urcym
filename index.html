@@ -1609,7 +1609,7 @@ async function guardarBorradorEvol(dni) {
 
 async function restaurarBorradorEvol(dni) {
   if(!dni) return;
-  const { data } = await sb.from('paciente_tablas').select('datos').eq('dni_paciente', dni).eq('tipo','evol_borrador').single();
+  const { data } = await sb.from('paciente_tablas').select('datos').eq('dni_paciente', dni).eq('tipo','evol_borrador').maybeSingle();
   if(!data) return;
   try {
     const { html } = JSON.parse(data.datos);
@@ -1747,7 +1747,7 @@ async function verLabReadonly(dni) {
   const cont = document.getElementById('labro_wrap');
   cont.innerHTML = '<div class="loading">Cargando...</div>';
   const tmpLab = {columnas:[],filas:[],unidades:{},extraFilas:[]};
-  const { data } = await sb.from('paciente_tablas').select('*').eq('dni_paciente', dni).eq('tipo','lab').single();
+  const { data } = await sb.from('paciente_tablas').select('*').eq('dni_paciente', dni).eq('tipo','lab').maybeSingle();
   if(data) { try { Object.assign(tmpLab, JSON.parse(data.datos)); } catch(e){} }
   if(!tmpLab.columnas.length) {
     cont.innerHTML = '<p style="color:var(--text-soft);padding:20px">No hay laboratorio cargado para este paciente.</p>';
@@ -2087,7 +2087,7 @@ function generarTextoClinico(c, meds) {
 // ===== SNAPSHOT CLÍNICO =====
 async function cargarSnapshotInicial(dni) {
   const [cr, mr] = await Promise.all([
-    sb.from('paciente_clinica').select('*').eq('dni_paciente', dni).single(),
+    sb.from('paciente_clinica').select('*').eq('dni_paciente', dni).maybeSingle(),
     sb.from('medicacion').select('*').eq('dni_paciente', dni).eq('activo', true).order('grupo')
   ]);
   if(cr.data) {
@@ -2149,7 +2149,7 @@ async function guardarClinica() {
 // ===== NUEVA actualizarEncabezadoVariable CON 3 COLORES =====
 async function actualizarEncabezadoVariable(dni) {
   const [cr,mr] = await Promise.all([
-    sb.from('paciente_clinica').select('*').eq('dni_paciente',dni).single(),
+    sb.from('paciente_clinica').select('*').eq('dni_paciente',dni).maybeSingle(),
     sb.from('medicacion').select('*').eq('dni_paciente',dni).eq('activo',true).order('grupo')
   ]);
   const c=cr.data; const meds=mr.data||[];
@@ -2186,7 +2186,7 @@ async function cargarMedicacion(dni) {
 }
 
 async function cargarDatosClinica(dni) {
-  const { data } = await sb.from('paciente_clinica').select('*').eq('dni_paciente',dni).single();
+  const { data } = await sb.from('paciente_clinica').select('*').eq('dni_paciente',dni).maybeSingle();
   if(!data){agregarFilaMed();return;}
   ['hta','hta2','dis','erc','obe','sob','masld','dbt2','dbt1','dbt_otro','predbt','hiperu','atero_subcl','eap','iam','acv','fa','sahos','epoc','icc','hvi','albuminuria','rp_dbt','neu_dbt','ms','pe','rciu','ppt','sop','dbtg','htag','ms_gineco','menopausia'].forEach(d=>{const el=document.getElementById('dx_'+d);if(el)el.checked=!!data['dx_'+d];});
   ['hta','dbt','obe','dis','iam','acv','erc','ms'].forEach(d=>{const el=document.getElementById('fam_'+d);if(el)el.checked=!!data['fam_'+d];});
@@ -2723,7 +2723,7 @@ async function volcarActualizacion() {
     // 3. Actualizar encabezado variable y snapshot
     await actualizarEncabezadoVariable(dni);
     const [cr, mr] = await Promise.all([
-      sb.from('paciente_clinica').select('*').eq('dni_paciente', dni).single(),
+      sb.from('paciente_clinica').select('*').eq('dni_paciente', dni).maybeSingle(),
       sb.from('medicacion').select('*').eq('dni_paciente', dni).eq('activo', true)
     ]);
     if(cr.data) evolClinicaSnapshot = { clinica: cr.data, medicacion: mr.data || [] };
