@@ -321,7 +321,7 @@
 
     /* Columnas evolución */
     .evol-col-main { padding:16px 20px; }
-    .evol-col-right { background:white; border-left:1px solid var(--border); padding:0; }
+    .evol-col-right { background:white; border-left:1px solid var(--border); padding:0; align-self:stretch; min-height:100%; }
 
 
     /* Tabs principales paciente (Evol/Lab/Antrop/Estudios) */
@@ -1162,33 +1162,36 @@ function renderTablaReadonly(datos, filas, wrapId) {
   const wrap = document.getElementById(wrapId);
   if(!wrap) return;
   if(!datos || !datos.columnas || !datos.columnas.length) {
-    wrap.innerHTML = '<p style="color:var(--text-soft);font-size:13px;padding:12px 0">Sin datos registrados.</p>';
+    wrap.innerHTML = '<p style="color:var(--text-soft);font-size:13px;padding:12px 0">Sin datos registrados aún.</p>';
     return;
   }
-  let h = '<div class="lab-grid">';
-  h += '<div class="lab-row"><div class="lab-label" style="background:var(--blue);color:white;font-weight:700">Parámetro</div><div class="lab-vals">';
+  const sexoPac = pacienteActual?.sexo==='Femenino'?'F':'H';
+  const allFilas = [...filas, ...(datos.extraFilas||[]).map(lbl=>({label:lbl,key:'extra_'+lbl,unidades:[''],defU:0,ref:null}))];
+  let h = '<div style="overflow-x:auto"><table style="border-collapse:collapse;font-size:12px;width:auto">';
+  h += '<thead><tr>';
+  h += '<th style="background:var(--blue);color:white;padding:6px 12px;text-align:left;font-size:11px;font-weight:700;white-space:nowrap;position:sticky;left:0;z-index:2;min-width:170px">Parámetro</th>';
+  h += '<th style="background:var(--blue);color:white;padding:6px 8px;text-align:center;font-size:11px;min-width:70px">Unidad</th>';
   datos.columnas.forEach(c => {
-    h += '<div class="lab-val-col"><div class="lab-val-header">'+new Date(c+'T12:00:00').toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'})+'</div></div>';
+    h += '<th style="background:var(--blue);color:white;padding:6px 8px;text-align:center;font-size:11px;min-width:80px">'+new Date(c+'T12:00:00').toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'})+'</th>';
   });
-  h += '</div></div>';
-  filas.forEach((f,fi) => {
+  h += '</tr></thead><tbody>';
+  allFilas.forEach((f,fi) => {
     if(f.cat) {
-      h += '<div class="lab-row"><div class="lab-label cat">'+f.label+'</div><div class="lab-vals">';
-      datos.columnas.forEach(() => { h += '<div class="lab-val-col"><div style="border:1px solid var(--border);background:#e8f3fc;height:27px"></div></div>'; });
-      h += '</div></div>';
-    } else {
-      h += '<div class="lab-row"><div class="lab-label">'+f.label+'</div><div class="lab-vals">';
-      datos.columnas.forEach((_,ci) => {
-        const val = (datos.filas[fi]||[])[ci]||'';
-        const sexoPac = pacienteActual?.sexo==='Femenino'?'F':'H';
-        const esAlerta = val && f.ref && f.ref(val, sexoPac);
-        const cellStyle = esAlerta ? 'background:#fff0f0;color:var(--red);font-weight:600;' : '';
-        h += '<div class="lab-val-col"><div class="lab-val-cell" style="'+cellStyle+'text-align:center;font-size:12px;padding:4px 6px;border:1px solid var(--border)">'+val+'</div></div>';
-      });
-      h += '</div></div>';
+      h += '<tr><td colspan="'+(2+datos.columnas.length)+'" style="background:#dbeafe;color:var(--blue);font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;padding:5px 12px;border:1px solid var(--border)">'+f.label+'</td></tr>';
+      return;
     }
+    const storedU = (datos.unidades&&datos.unidades[f.key]) || (f.unidades||[''])[0];
+    h += '<tr>';
+    h += '<td style="padding:4px 10px;border:1px solid var(--border);font-size:12px;font-weight:600;white-space:nowrap;position:sticky;left:0;background:white;z-index:1">'+f.label+'</td>';
+    h += '<td style="padding:4px 6px;border:1px solid var(--border);text-align:center;background:#fafafa;font-size:11px;color:var(--text-soft)">'+storedU+'</td>';
+    datos.columnas.forEach((_,ci) => {
+      const val = (datos.filas[fi]||[])[ci]||'';
+      const esAlerta = val && f.ref && f.ref(val, sexoPac, storedU);
+      h += '<td style="padding:4px 8px;border:1px solid var(--border);text-align:center;font-size:12px;'+(esAlerta?'background:#fff0f0;color:var(--red);font-weight:700;':'')+'">'+val+'</td>';
+    });
+    h += '</tr>';
   });
-  h += '</div>';
+  h += '</tbody></table></div>';
   wrap.innerHTML = h;
 }
 
@@ -1366,13 +1369,13 @@ function agregarFilaExtra(wrapId) {
 function abrirTabConNuevaColumna(tab, wrapId, filas, datos) {
   if(!datos.columnas) datos.columnas = [];
   if(!datos.filas) datos.filas = [];
+  if(!datos.extraFilas) datos.extraFilas = [];
   const hoy = new Date().toISOString().split('T')[0];
-  let newColIdx;
   if(!datos.columnas.includes(hoy)) {
     datos.columnas.push(hoy);
     datos.columnas.sort();
   }
-  newColIdx = datos.columnas.indexOf(hoy);
+  const newColIdx = datos.columnas.indexOf(hoy);
   renderTablaGenerica(datos, filas, wrapId, newColIdx);
 }
 
@@ -1572,6 +1575,25 @@ function calcularEdad() {
 }
 
 // ===== PACIENTES =====
+
+async function verLabReadonly(dni) {
+  const p = pacientesData.find(x=>x.dni===dni);
+  if(!p) return;
+  document.getElementById('modalLabRO').classList.add('open');
+  document.getElementById('labro_nombre').textContent = p.apellido+', '+p.nombre;
+  const cont = document.getElementById('labro_wrap');
+  cont.innerHTML = '<div class="loading">Cargando...</div>';
+  // Load data
+  const tmpLab = {columnas:[],filas:[],unidades:{},extraFilas:[]};
+  const { data } = await sb.from('paciente_tablas').select('*').eq('dni_paciente', dni).eq('tipo','lab').single();
+  if(data) { try { Object.assign(tmpLab, JSON.parse(data.datos)); } catch(e){} }
+  // Temporarily set pacienteActual for sex-based refs
+  const prevPac = pacienteActual;
+  pacienteActual = p;
+  renderTablaReadonly(tmpLab, LAB_FILAS, 'labro_wrap');
+  pacienteActual = prevPac;
+}
+
 async function cargarPacientes() {
   const { data, error } = await sb.from('pacientes').select('*').order('fecha_registro', {ascending:false});
   if(error) { console.error(error); return; }
@@ -2019,7 +2041,7 @@ async function cargarDatosClinica(dni) {
   await cargarMedicacion(dni);
 }
 
-['modalPaciente','modalReceta','modalIndicaciones','modalHistorialDx','modalHistorialMed'].forEach(id=>{
+['modalPaciente','modalReceta','modalIndicaciones','modalHistorialDx','modalHistorialMed','modalLabRO'].forEach(id=>{
   document.getElementById(id).addEventListener('click',function(e){
     if(e.target===this) cerrarModal(id);
   });
@@ -2064,38 +2086,46 @@ function borrarLpa(i) {
   renderLpa(); guardarDatosPac('lab_tabla_wrap');
 }
 
+let _tabActivo = 'evol';
+
 function switchPacMainTab(tab) {
+  // Ask to save if leaving lab/ant/est without explicit save
+  if(_tabActivo !== tab && ['lab','ant','est'].includes(_tabActivo)) {
+    const nombres = {lab:'Laboratorio', ant:'Antropometría', est:'Estudios'};
+    if(confirm('¿Guardar los datos de ' + nombres[_tabActivo] + ' antes de continuar?')) {
+      const saveWrap = _tabActivo==='lab'?'lab_tabla_wrap':_tabActivo==='est'?'est_tabla_wrap':'ant_tabla_wrap';
+      guardarDatosPac(saveWrap);
+    }
+  }
+  _tabActivo = tab;
   ['evol','lab','ant','est'].forEach(t => {
     const panel = document.getElementById('pmain-'+t);
     const btn = document.getElementById('ptab-'+t);
     if(panel) panel.style.display = t===tab ? 'block' : 'none';
     if(btn) btn.classList.toggle('active', t===tab);
   });
+  const hoy = new Date().toISOString().split('T')[0];
   if(tab==='lab') {
-    // Asegurarse que haya al menos una columna (hoy) para mostrar filas vacías
-    if(!labDatos.columnas || !labDatos.columnas.length) {
-      labDatos.columnas = [new Date().toISOString().split('T')[0]];
-      if(!labDatos.filas) labDatos.filas = [];
-    }
+    if(!labDatos.columnas) labDatos.columnas = [];
+    if(!labDatos.filas) labDatos.filas = [];
     if(!labDatos.unidades) labDatos.unidades = {};
-    renderTablaGenerica(labDatos, LAB_FILAS, 'evlab_wrap');
+    if(!labDatos.columnas.includes(hoy)) { labDatos.columnas.push(hoy); labDatos.columnas.sort(); }
+    renderTablaGenerica(labDatos, LAB_FILAS, 'evlab_wrap', labDatos.columnas.indexOf(hoy));
     renderLpa();
   }
   if(tab==='ant') {
-    if(!antDatos.columnas || !antDatos.columnas.length) {
-      antDatos.columnas = [new Date().toISOString().split('T')[0]];
-      if(!antDatos.filas) antDatos.filas = [];
-    }
+    if(!antDatos.columnas) antDatos.columnas = [];
+    if(!antDatos.filas) antDatos.filas = [];
     if(!antDatos.unidades) antDatos.unidades = {};
-    renderTablaGenerica(antDatos, ANT_FILAS, 'evant_wrap');
+    if(!antDatos.columnas.includes(hoy)) { antDatos.columnas.push(hoy); antDatos.columnas.sort(); }
+    renderTablaGenerica(antDatos, ANT_FILAS, 'evant_wrap', antDatos.columnas.indexOf(hoy));
   }
   if(tab==='est') {
-    if(!estDatos.columnas || !estDatos.columnas.length) {
-      estDatos.columnas = [new Date().toISOString().split('T')[0]];
-      if(!estDatos.filas) estDatos.filas = [];
-    }
+    if(!estDatos.columnas) estDatos.columnas = [];
+    if(!estDatos.filas) estDatos.filas = [];
     if(!estDatos.unidades) estDatos.unidades = {};
-    renderTablaGenerica(estDatos, EST_FILAS, 'evest_wrap');
+    if(!estDatos.columnas.includes(hoy)) { estDatos.columnas.push(hoy); estDatos.columnas.sort(); }
+    renderTablaGenerica(estDatos, EST_FILAS, 'evest_wrap', estDatos.columnas.indexOf(hoy));
   }
 }
 
@@ -2918,6 +2948,19 @@ function calcAlcohol(){
       <button onclick="cerrarModal('modalPrevias')" style="background:none;border:none;font-size:22px;cursor:pointer;color:var(--text-soft)">✕</button>
     </div>
     <div id="previas_lista"></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modalLabRO">
+  <div class="modal" style="max-width:900px;max-height:88vh;overflow-y:auto">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <div>
+        <div class="modal-title" style="margin:0">Laboratorio</div>
+        <div id="labro_nombre" style="font-size:13px;color:var(--text-soft);margin-top:2px"></div>
+      </div>
+      <button onclick="cerrarModal('modalLabRO')" style="background:none;border:none;font-size:22px;cursor:pointer;color:var(--text-soft)">✕</button>
+    </div>
+    <div id="labro_wrap"></div>
   </div>
 </div>
 
