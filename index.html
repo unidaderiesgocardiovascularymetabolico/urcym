@@ -2067,57 +2067,65 @@ let antDatos = { columnas:[], filas:[] };
 let pacHistoriaDni = null;
 
 // key: label, ref: function(val,sexo)->bool alerta, refTxt: string referencia
+// Tipos de fila: cat=categoría, calc=calculado, normal=editable
+// unidades: array de opciones, defU: índice por defecto
 const LAB_FILAS = [
   {cat:true, label:'HEMOGRAMA'},
-  {label:'Hb', key:'Hb',
-    ref:(v,s)=>parseFloat(v)<(s==='F'?12:13), refTxt:'<12(M) / <13(H) g/dL'},
-  {label:'Rto plaquetas', key:'Rto_plaquetas',
-    ref:(v)=>parseFloat(v)<150000||parseFloat(v)>400000, refTxt:'150-400 mil/µL'},
+  {label:'Hb', key:'Hb', unidades:['g/dL'], defU:0,
+    ref:(v,s)=>parseFloat(v)<(s==='F'?12:13), refTxt:'<12(M)/<13(H) g/dL'},
+  {label:'Rto plaquetas', key:'Rto_plaquetas', unidades:['mil/µL'], defU:0,
+    ref:(v)=>parseFloat(v)<150||parseFloat(v)>400, refTxt:'150-400 mil/µL'},
   {cat:true, label:'BIOQUÍMICA'},
-  {label:'Glucemia', key:'Glucemia',
-    ref:(v)=>parseFloat(v)<60||parseFloat(v)>100, refTxt:'60-100 mg/dL'},
-  {label:'Creatinina', key:'Creatinina',
-    ref:(v,s)=>parseFloat(v)>(s==='F'?1.0:1.2), refTxt:'>1.0(M) / >1.2(H) mg/dL'},
-  {label:'Ácido Úrico', key:'AcidoUrico',
-    ref:(v,s)=>parseFloat(v)>(s==='F'?6.0:7.0), refTxt:'>6.0(M) / >7.0(H) mg/dL'},
-  {label:'TGO', key:'TGO',
+  {label:'Glucemia', key:'Glucemia', unidades:['mg/dL','mmol/L'], defU:0,
+    ref:(v,s,u)=>u==='mmol/L'?parseFloat(v)<3.3||parseFloat(v)>5.6:parseFloat(v)<60||parseFloat(v)>100, refTxt:'60-100 mg/dL'},
+  {label:'Creatinina', key:'Creatinina', unidades:['mg/dL','µmol/L'], defU:0,
+    ref:(v,s,u)=>{const n=parseFloat(v);return u==='µmol/L'?(s==='F'?n>88:n>106):(s==='F'?n>1.0:n>1.2)}, refTxt:'>1.0(M)/>1.2(H) mg/dL'},
+  {label:'Ácido Úrico', key:'AcidoUrico', unidades:['mg/dL'], defU:0,
+    ref:(v,s)=>parseFloat(v)>(s==='F'?6.0:7.0), refTxt:'>6(M)/>7(H) mg/dL'},
+  {label:'TGO (AST)', key:'TGO', unidades:['U/L'], defU:0,
     ref:(v)=>parseFloat(v)>40, refTxt:'>40 U/L'},
-  {label:'TGP', key:'TGP',
+  {label:'TGP (ALT)', key:'TGP', unidades:['U/L'], defU:0,
     ref:(v)=>parseFloat(v)>40, refTxt:'>40 U/L'},
-  {label:'BT/FAL', key:'BTFAL', ref:null},
+  {label:'BT', key:'BT', unidades:['mg/dL'], defU:0, ref:null},
+  {label:'FAL', key:'FAL', unidades:['U/L'], defU:0, ref:null},
   {cat:true, label:'PERFIL LIPÍDICO'},
-  {label:'CT', key:'CT',
-    ref:(v)=>parseFloat(v)>200, refTxt:'>200 mg/dL'},
-  {label:'HDL', key:'HDL',
-    ref:(v,s)=>parseFloat(v)<(s==='F'?50:40), refTxt:'<40(H) / <50(M) mg/dL'},
-  {label:'TG', key:'TG',
-    ref:(v)=>parseFloat(v)>150, refTxt:'>150 mg/dL'},
-  {label:'LDL', key:'LDL',
+  {label:'CT', key:'CT', unidades:['mg/dL','mmol/L'], defU:0,
+    ref:(v,s,u)=>u==='mmol/L'?parseFloat(v)>5.18:parseFloat(v)>200, refTxt:'>200 mg/dL'},
+  {label:'HDL', key:'HDL', unidades:['mg/dL','mmol/L'], defU:0,
+    ref:(v,s,u)=>{const n=parseFloat(v),f=s==='F';return u==='mmol/L'?(f?n<1.29:n<1.03):(f?n<50:n<40)}, refTxt:'<40(H)/<50(M) mg/dL'},
+  {label:'TG', key:'TG', unidades:['mg/dL','mmol/L'], defU:0,
+    ref:(v,s,u)=>u==='mmol/L'?parseFloat(v)>1.69:parseFloat(v)>150, refTxt:'>150 mg/dL'},
+  {label:'LDL (Martin-Hopkins)', key:'LDL_MH', unidades:['mg/dL'], defU:0, calc:'ldl_mh',
     ref:(v)=>parseFloat(v)>100, refTxt:'>100 mg/dL'},
-  {label:'no HDL', key:'noHDL',
+  {label:'LDL (Sampson)', key:'LDL_S', unidades:['mg/dL'], defU:0, calc:'ldl_s',
+    ref:(v)=>parseFloat(v)>100, refTxt:'>100 mg/dL'},
+  {label:'no HDL', key:'noHDL', unidades:['mg/dL'], defU:0,
     ref:(v)=>parseFloat(v)>130, refTxt:'>130 mg/dL'},
-  {label:'ApoB', key:'ApoB',
+  {label:'ApoB', key:'ApoB', unidades:['mg/dL'], defU:0,
     ref:(v)=>parseFloat(v)>90, refTxt:'>90 mg/dL'},
   {cat:true, label:'OTROS'},
-  {label:'HbA1c', key:'HbA1c',
-    ref:(v)=>parseFloat(v)>5.7, refTxt:'>5.7%'},
-  {label:'RAC', key:'RAC',
-    ref:(v)=>parseFloat(v)>30, refTxt:'>30 mg/g'},
-  {label:'PRCus', key:'PRCus',
+  {label:'HbA1c', key:'HbA1c', unidades:['%','mmol/mol'], defU:0,
+    ref:(v,s,u)=>u==='mmol/mol'?parseFloat(v)>39:parseFloat(v)>5.7, refTxt:'>5.7%'},
+  {label:'Albúmina urinaria', key:'AlbUr', unidades:['mg/24h','mg/L'], defU:0, ref:null},
+  {label:'Creatinina urinaria', key:'CrUr', unidades:['g/24h','mg/dL'], defU:0, ref:null},
+  {label:'RAC', key:'RAC', unidades:['mg/g','mg/mmol'], defU:0, calc:'rac',
+    ref:(v,s,u)=>u==='mg/mmol'?parseFloat(v)>3.4:parseFloat(v)>30, refTxt:'>30 mg/g'},
+  {label:'PRCus', key:'PRCus', unidades:['mg/L'], defU:0,
     ref:(v)=>parseFloat(v)>3, refTxt:'>3 mg/L'},
-  {label:'Renina', key:'Renina', ref:null},
-  {label:'Aldosterona', key:'Aldosterona', ref:null},
-  {label:'PRA/PAC', key:'PRAPAC', ref:null},
-  {label:'Sodio', key:'Sodio',
+  {label:'Renina', key:'Renina', unidades:['ng/mL/h','µUI/mL'], defU:0, ref:null},
+  {label:'Aldosterona', key:'Aldosterona', unidades:['pg/mL','ng/dL'], defU:0, ref:null},
+  {label:'RAR (Aldo/Renina)', key:'RAR', unidades:['pg/mL / ng/mL/h'], defU:0, calc:'rar',
+    ref:(v)=>parseFloat(v)>30, refTxt:'>30 (posible hiperaldo)'},
+  {label:'Sodio', key:'Sodio', unidades:['mEq/L'], defU:0,
     ref:(v)=>parseFloat(v)<135||parseFloat(v)>145, refTxt:'135-145 mEq/L'},
-  {label:'Potasio', key:'Potasio',
+  {label:'Potasio', key:'Potasio', unidades:['mEq/L'], defU:0,
     ref:(v)=>parseFloat(v)<3.5||parseFloat(v)>5.0, refTxt:'3.5-5.0 mEq/L'},
-  {label:'D3', key:'D3',
-    ref:(v)=>parseFloat(v)<30, refTxt:'<30 ng/mL'},
-  {label:'TSH', key:'TSH',
+  {label:'D3', key:'D3', unidades:['ng/mL','nmol/L'], defU:0,
+    ref:(v,s,u)=>u==='nmol/L'?parseFloat(v)<75:parseFloat(v)<30, refTxt:'<30 ng/mL'},
+  {label:'TSH', key:'TSH', unidades:['mUI/L'], defU:0,
     ref:(v)=>parseFloat(v)<0.4||parseFloat(v)>4.0, refTxt:'0.4-4.0 mUI/L'},
-  {label:'ERS', key:'ERS', ref:null},
-  {label:'Albúmina', key:'Albumina',
+  {label:'ERS', key:'ERS', unidades:['mm/h'], defU:0, ref:null},
+  {label:'Albúmina sérica', key:'Albumina', unidades:['g/dL'], defU:0,
     ref:(v)=>parseFloat(v)<3.5, refTxt:'<3.5 g/dL'},
 ];
 
@@ -2204,38 +2212,150 @@ function switchPacTab(tab, btn) {
   btn.classList.add('active');
 }
 
+function calcLabValues(datos, filas) {
+  // Calculate LDL Martin-Hopkins, LDL Sampson, RAC, RAR for each column
+  if(!datos.filas) datos.filas = [];
+  const get = (key, ci) => {
+    const fi = filas.findIndex(f=>f.key===key);
+    return fi>=0 ? parseFloat((datos.filas[fi]||[])[ci]||'') || null : null;
+  };
+  const getU = (key) => datos.unidades && datos.unidades[key] ? datos.unidades[key] : null;
+  datos.columnas.forEach((_,ci) => {
+    const ct=get('CT',ci), hdl=get('HDL',ci), tg=get('TG',ci);
+    const vldl = tg ? tg/5 : null;
+    // LDL Martin-Hopkins (factor adjustment table, simplified)
+    if(ct&&hdl&&tg&&tg<=399) {
+      const nonHdl = ct-hdl;
+      // Factor from Martin-Hopkins table (simplified linear approximation)
+      let factor = 5.0;
+      if(tg<100) factor = tg<50?6.5:tg<75?6.0:5.6;
+      else if(tg<150) factor = 5.4;
+      else if(tg<200) factor = 4.9;
+      else if(tg<250) factor = 4.3;
+      else if(tg<300) factor = 4.0;
+      else if(tg<400) factor = 3.7;
+      const ldl_mh = ct - hdl - (tg/factor);
+      const fi = filas.findIndex(f=>f.key==='LDL_MH');
+      if(fi>=0) { if(!datos.filas[fi]) datos.filas[fi]=[]; datos.filas[fi][ci]=Math.round(ldl_mh*10)/10+''; }
+    }
+    // LDL Sampson
+    if(ct&&hdl&&tg) {
+      const ldl_s = ct - hdl - (0.19*tg) - 10.1;
+      const fi = filas.findIndex(f=>f.key==='LDL_S');
+      if(fi>=0) { if(!datos.filas[fi]) datos.filas[fi]=[]; datos.filas[fi][ci]=Math.round(ldl_s*10)/10+''; }
+    }
+    // RAC = Albúmina urinaria / Creatinina urinaria
+    const albUr=get('AlbUr',ci), crUr=get('CrUr',ci);
+    if(albUr&&crUr) {
+      const uAlb = getU('AlbUr')||'mg/24h', uCr = getU('CrUr')||'g/24h';
+      let racVal;
+      if(uAlb==='mg/24h' && uCr==='g/24h') racVal = albUr / (crUr*1000) * 1000;
+      else if(uAlb==='mg/L' && uCr==='mg/dL') racVal = albUr / crUr * 10;
+      else racVal = albUr / crUr;
+      const fi = filas.findIndex(f=>f.key==='RAC');
+      if(fi>=0) { if(!datos.filas[fi]) datos.filas[fi]=[]; datos.filas[fi][ci]=Math.round(racVal*10)/10+''; }
+    }
+    // RAR = Aldosterona / Renina
+    const aldo=get('Aldosterona',ci), renina=get('Renina',ci);
+    if(aldo&&renina) {
+      const rar = aldo/renina;
+      const fi = filas.findIndex(f=>f.key==='RAR');
+      if(fi>=0) { if(!datos.filas[fi]) datos.filas[fi]=[]; datos.filas[fi][ci]=Math.round(rar*10)/10+''; }
+    }
+  });
+}
+
 function renderTablaGenerica(datos, filas, wrapId) {
   const wrap = document.getElementById(wrapId);
   if(!wrap) return;
   if(!datos.filas) datos.filas = [];
+  if(!datos.unidades) datos.unidades = {};
+  const isLab = wrapId === 'evlab_wrap' || wrapId === 'lab_tabla_wrap';
+  if(isLab) calcLabValues(datos, filas);
   if(!datos.columnas.length) { wrap.innerHTML='<p style="color:var(--text-soft);font-size:13px;padding:12px 0">Agregá una fecha para comenzar.</p>'; return; }
-  let html = '<div class="lab-grid">';
-  // Header fechas
-  html += '<div class="lab-row"><div class="lab-label" style="background:var(--blue);color:white;font-weight:700">Parámetro</div><div class="lab-vals">';
+  const sexoPac = pacienteActual?.sexo==='Femenino'?'F':'H';
+  let h = '<div style="overflow-x:auto"><table style="border-collapse:collapse;min-width:100%;font-size:12px">';
+  // Header row
+  h += '<thead><tr><th style="background:var(--blue);color:white;padding:7px 12px;text-align:left;font-size:11px;font-weight:700;white-space:nowrap;min-width:180px;position:sticky;left:0;z-index:2">Parámetro</th>';
+  h += '<th style="background:var(--blue);color:white;padding:7px 10px;text-align:center;font-size:11px;white-space:nowrap;min-width:70px">Unidad</th>';
   datos.columnas.forEach((c,ci) => {
-    html += '<div class="lab-val-col"><div class="lab-val-header">'+new Date(c+'T12:00:00').toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'})+'</div></div>';
+    const fStr = new Date(c+'T12:00:00').toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'});
+    h += '<th style="background:var(--blue);color:white;padding:4px 6px;text-align:center;min-width:90px">';
+    h += '<input type="date" value="'+c+'" data-ci="'+ci+'" data-wrap="'+wrapId+'" onchange="actualizarFechaCol(this)"';
+    h += ' style="background:transparent;border:1px solid rgba(255,255,255,.4);color:white;border-radius:5px;font-size:10px;padding:2px 4px;width:110px;color-scheme:dark"/>';
+    h += '</th>';
   });
-  html += '</div></div>';
-  // Filas
+  h += '</tr></thead><tbody>';
+  // Data rows
   filas.forEach((f,fi) => {
     if(f.cat) {
-      html += '<div class="lab-row"><div class="lab-label cat">'+f.label+'</div><div class="lab-vals">';
-      datos.columnas.forEach((_,ci) => { html += '<div class="lab-val-col"><div style="border:1px solid var(--border);background:#e8f3fc;height:27px"></div></div>'; });
-      html += '</div></div>';
-    } else {
-      html += '<div class="lab-row"><div class="lab-label">'+f.label+'</div><div class="lab-vals">';
-      datos.columnas.forEach((_,ci) => {
-        const val = (datos.filas[fi]||[])[ci]||'';
-        const sexoPac = pacienteActual?.sexo==='Femenino'?'F':'H';
-        const esAlerta = val && f.ref && f.ref(val, sexoPac);
-        const cellStyle = esAlerta ? 'background:#fff0f0;color:var(--red);font-weight:600' : '';
-        html += '<div class="lab-val-col"><div class="lab-val-cell" style="'+cellStyle+'"><input type="text" value="'+val+'" data-fi="'+fi+'" data-ci="'+ci+'" data-wrap="'+wrapId+'" oninput="actualizarCelda(this)" style="'+cellStyle+';width:100%;border:none;background:transparent;font-size:12px;text-align:center;font-family:var(--font-main);outline:none" /></div></div>';
-      });
-      html += '</div></div>';
+      const cols = 2 + datos.columnas.length;
+      h += '<tr><td colspan="'+cols+'" style="background:#dbeafe;color:var(--blue);font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;padding:5px 12px;border:1px solid var(--border)">'+f.label+'</td></tr>';
+      return;
     }
+    const isCalc = !!f.calc;
+    const uns = f.unidades || ['—'];
+    const storedU = datos.unidades[f.key] || uns[0];
+    const rowBg = isCalc ? '#f8f9fc' : 'white';
+    h += '<tr style="background:'+rowBg+'">';
+    // Label cell
+    h += '<td style="padding:5px 10px;border:1px solid var(--border);font-size:12px;font-weight:600;white-space:nowrap;position:sticky;left:0;background:'+rowBg+';z-index:1">';
+    h += f.label;
+    if(isCalc) h += ' <span style="font-size:9px;color:var(--teal);font-weight:400">● calc</span>';
+    h += '</td>';
+    // Unit cell
+    h += '<td style="padding:3px 6px;border:1px solid var(--border);text-align:center">';
+    if(uns.length > 1 && !isCalc) {
+      h += '<select data-key="'+f.key+'" data-wrap="'+wrapId+'" onchange="actualizarUnidad(this)" style="font-size:11px;padding:2px 4px;border:1px solid var(--border);border-radius:5px;background:white">';
+      uns.forEach(u => { h += '<option value="'+u+'"'+(u===storedU?' selected':'')+'>'+u+'</option>'; });
+      h += '</select>';
+    } else {
+      h += '<span style="font-size:11px;color:var(--text-soft)">'+storedU+'</span>';
+    }
+    h += '</td>';
+    // Value cells
+    datos.columnas.forEach((_,ci) => {
+      const val = (datos.filas[fi]||[])[ci]||'';      const esAlerta = val && f.ref && f.ref(val, sexoPac, storedU);
+      const bg = esAlerta ? '#fff0f0' : '';      const color = esAlerta ? 'var(--red)' : 'var(--text)';      const fw = esAlerta ? '700' : '400';      h += '<td style="padding:2px 4px;border:1px solid var(--border);background:'+bg+'">';
+      if(isCalc) {
+        h += '<div style="text-align:center;font-size:12px;font-weight:'+fw+';color:'+color+';padding:4px">'+val+'</div>';
+      } else {
+        h += '<input type="text" value="'+val+'" data-fi="'+fi+'" data-ci="'+ci+'" data-wrap="'+wrapId+'"';
+        h += ' oninput="actualizarCelda(this)"';
+        h += ' style="width:100%;border:none;background:transparent;font-size:12px;text-align:center;font-family:var(--font-main);outline:none;color:'+color+';font-weight:'+fw+'"/>';
+      }
+      h += '</td>';
+    });
+    h += '</tr>';
   });
-  html += '</div>';
-  wrap.innerHTML = html;
+  h += '</tbody></table></div>';
+  wrap.innerHTML = h;
+}
+
+
+function actualizarFechaCol(input) {
+  const ci = parseInt(input.dataset.ci);
+  const wrapId = input.dataset.wrap;
+  const datos = ['evlab_wrap','lab_tabla_wrap'].includes(wrapId) ? labDatos :
+                ['evest_wrap','est_tabla_wrap'].includes(wrapId) ? estDatos : antDatos;
+  datos.columnas[ci] = input.value;
+  datos.columnas.sort();
+  const saveWrap = ['evlab_wrap','lab_tabla_wrap'].includes(wrapId)?'lab_tabla_wrap':'ant_tabla_wrap';
+  guardarDatosPac(saveWrap);
+  renderTablaGenerica(datos, ['evlab_wrap','lab_tabla_wrap'].includes(wrapId)?LAB_FILAS:['evest_wrap','est_tabla_wrap'].includes(wrapId)?EST_FILAS:ANT_FILAS, wrapId);
+}
+
+function actualizarUnidad(sel) {
+  const key = sel.dataset.key;
+  const wrapId = sel.dataset.wrap;
+  const datos = ['evlab_wrap','lab_tabla_wrap'].includes(wrapId) ? labDatos :
+                ['evest_wrap','est_tabla_wrap'].includes(wrapId) ? estDatos : antDatos;
+  if(!datos.unidades) datos.unidades = {};
+  datos.unidades[key] = sel.value;
+  const filas = ['evlab_wrap','lab_tabla_wrap'].includes(wrapId)?LAB_FILAS:['evest_wrap','est_tabla_wrap'].includes(wrapId)?EST_FILAS:ANT_FILAS;
+  const saveWrap = ['evlab_wrap','lab_tabla_wrap'].includes(wrapId)?'lab_tabla_wrap':'ant_tabla_wrap';
+  guardarDatosPac(saveWrap);
+  renderTablaGenerica(datos, filas, wrapId);
 }
 
 function actualizarCelda(input) {
@@ -2261,6 +2381,23 @@ function actualizarCelda(input) {
   }
   const saveWrap = ['evlab_wrap','lab_tabla_wrap'].includes(wrapId)?'lab_tabla_wrap':
                    ['evest_wrap','est_tabla_wrap'].includes(wrapId)?'est_tabla_wrap':'ant_tabla_wrap';
+  // Recalculate derived values for lab
+  if(esLab) {
+    calcLabValues(labDatos, LAB_FILAS);
+    // Update calc cells in DOM without full re-render
+    const calcKeys = ['LDL_MH','LDL_S','RAC','RAR'];
+    calcKeys.forEach(key => {
+      const calcFi = LAB_FILAS.findIndex(f=>f.key===key);
+      if(calcFi<0) return;
+      const calcVal = (labDatos.filas[calcFi]||[])[ci]||'';
+      // Find all calc cells for this fi
+      const wrap2 = document.getElementById(wrapId);
+      if(wrap2) {
+        const cells = wrap2.querySelectorAll('[data-fi="'+calcFi+'"][data-ci="'+ci+'"]');
+        cells.forEach(cell => { if(cell.tagName==='INPUT') cell.value=calcVal; else cell.textContent=calcVal; });
+      }
+    });
+  }
   guardarDatosPac(saveWrap);
   sincronizarRO();
 }
