@@ -1058,22 +1058,23 @@ let pacienteActual = null;
 let evolClinicaSnapshot = null;
 let updTtoItems = [];
 let _tabActivo = 'evol';
+let _tabDirty = false;
 let labDatos = { columnas:[], filas:[] };
 let estDatos = { columnas:[], filas:[] };
 let antDatos = { columnas:[], filas:[] };
 let pacHistoriaDni = null;
 
 const LAB_FILAS = [
-  {cat:true, label:'HEMOGRAMA'},
   {label:'Hb', key:'Hb', unidades:['g/dL'], defU:0,
     ref:(v,s)=>parseFloat(v)<(s==='F'?12:13), refTxt:'<12(M)/<13(H) g/dL'},
   {label:'Rto plaquetas', key:'Rto_plaquetas', unidades:['mil/µL'], defU:0,
     ref:(v)=>parseFloat(v)<150||parseFloat(v)>400, refTxt:'150-400 mil/µL'},
-  {cat:true, label:'BIOQUÍMICA'},
   {label:'Glucemia', key:'Glucemia', unidades:['mg/dL','mmol/L'], defU:0,
     ref:(v,s,u)=>u==='mmol/L'?parseFloat(v)<3.3||parseFloat(v)>5.6:parseFloat(v)<60||parseFloat(v)>100, refTxt:'60-100 mg/dL'},
   {label:'Creatinina', key:'Creatinina', unidades:['mg/dL','µmol/L'], defU:0,
     ref:(v,s,u)=>{const n=parseFloat(v);return u==='µmol/L'?(s==='F'?n>88:n>106):(s==='F'?n>1.0:n>1.2)}, refTxt:'>1.0(M)/>1.2(H) mg/dL'},
+  {label:'MDRD (eGFR)', key:'MDRD', unidades:['mL/min/1.73m²'], defU:0, calc:'mdrd',
+    ref:(v)=>parseFloat(v)<60, refTxt:'<60 mL/min/1.73m²'},
   {label:'Ácido Úrico', key:'AcidoUrico', unidades:['mg/dL'], defU:0,
     ref:(v,s)=>parseFloat(v)>(s==='F'?6.0:7.0), refTxt:'>6(M)/>7(H) mg/dL'},
   {label:'TGO (AST)', key:'TGO', unidades:['U/L'], defU:0,
@@ -1082,7 +1083,6 @@ const LAB_FILAS = [
     ref:(v)=>parseFloat(v)>40, refTxt:'>40 U/L'},
   {label:'BT', key:'BT', unidades:['mg/dL'], defU:0, ref:null},
   {label:'FAL', key:'FAL', unidades:['U/L'], defU:0, ref:null},
-  {cat:true, label:'PERFIL LIPÍDICO'},
   {label:'CT', key:'CT', unidades:['mg/dL','mmol/L'], defU:0,
     ref:(v,s,u)=>u==='mmol/L'?parseFloat(v)>5.18:parseFloat(v)>200, refTxt:'>200 mg/dL'},
   {label:'HDL', key:'HDL', unidades:['mg/dL','mmol/L'], defU:0,
@@ -1097,7 +1097,6 @@ const LAB_FILAS = [
     ref:(v)=>parseFloat(v)>130, refTxt:'>130 mg/dL'},
   {label:'ApoB', key:'ApoB', unidades:['mg/dL'], defU:0,
     ref:(v)=>parseFloat(v)>90, refTxt:'>90 mg/dL'},
-  {cat:true, label:'OTROS'},
   {label:'HbA1c', key:'HbA1c', unidades:['%','mmol/mol'], defU:0,
     ref:(v,s,u)=>u==='mmol/mol'?parseFloat(v)>39:parseFloat(v)>5.7, refTxt:'>5.7%'},
   {label:'Albúmina urinaria', key:'AlbUr', unidades:['mg/24h','mg/L'], defU:0, ref:null},
@@ -1108,7 +1107,7 @@ const LAB_FILAS = [
     ref:(v)=>parseFloat(v)>3, refTxt:'>3 mg/L'},
   {label:'Renina', key:'Renina', unidades:['ng/mL/h','µUI/mL'], defU:0, ref:null},
   {label:'Aldosterona', key:'Aldosterona', unidades:['pg/mL','ng/dL'], defU:0, ref:null},
-  {label:'RAR (Aldo/Renina)', key:'RAR', unidades:['pg/mL / ng/mL/h'], defU:0, calc:'rar',
+  {label:'RAR (Aldo/Renina)', key:'RAR', unidades:['ratio'], defU:0, calc:'rar',
     ref:(v)=>parseFloat(v)>30, refTxt:'>30 (posible hiperaldo)'},
   {label:'Sodio', key:'Sodio', unidades:['mEq/L'], defU:0,
     ref:(v)=>parseFloat(v)<135||parseFloat(v)>145, refTxt:'135-145 mEq/L'},
@@ -1123,28 +1122,27 @@ const LAB_FILAS = [
     ref:(v)=>parseFloat(v)<3.5, refTxt:'<3.5 g/dL'},
 ];
 
+
 const ANT_FILAS = [
-  {cat:true, label:'MEDICIONES'},
-  {label:'Peso (kg)', key:'Peso', ref:null},
-  {label:'Altura (cm)', key:'Altura', ref:null},
-  {cat:true, label:'COMPOSICIÓN CORPORAL'},
-  {label:'IMC', key:'IMC',
+  {label:'Peso (kg)', key:'Peso', unidades:['kg'], defU:0, ref:null},
+  {label:'Altura (cm)', key:'Altura', unidades:['cm'], defU:0, ref:null},
+  {label:'IMC', key:'IMC', unidades:['kg/m²'], defU:0,
     ref:(v)=>parseFloat(v)>25, refTxt:'>25 kg/m²'},
-  {label:'% grasa', key:'PctGrasa',
+  {label:'% grasa', key:'PctGrasa', unidades:['%'], defU:0,
     ref:(v,s)=>parseFloat(v)>(s==='F'?33:25), refTxt:'>25%(H) / >33%(M)'},
-  {label:'% músculo', key:'PctMusculo', ref:null},
-  {label:'Grasa visceral', key:'GrasaVisceral',
+  {label:'% músculo', key:'PctMusculo', unidades:['%'], defU:0, ref:null},
+  {label:'Grasa visceral', key:'GrasaVisceral', unidades:[''], defU:0,
     ref:(v)=>parseFloat(v)>12, refTxt:'>12 (riesgo elevado)'},
-  {cat:true, label:'MEDIDAS'},
-  {label:'Cintura (cm)', key:'Cintura', ref:null},
-  {label:'Fuera de presión (cm)', key:'FueraPres', ref:null},
-  {label:'Cintura/Estatura', key:'CintEst',
+  {label:'Cintura (cm)', key:'Cintura', unidades:['cm'], defU:0, ref:null},
+  {label:'Fuera de presión (cm)', key:'FueraPres', unidades:['cm'], defU:0, ref:null},
+  {label:'Cintura/Estatura', key:'CintEst', unidades:['ratio'], defU:0,
     ref:(v)=>parseFloat(v)>0.50, refTxt:'>0.50'},
-  {label:'Cintura/Cadera', key:'CintCad',
+  {label:'Cintura/Cadera', key:'CintCad', unidades:['ratio'], defU:0,
     ref:(v,s)=>parseFloat(v)>(s==='F'?0.85:0.90), refTxt:'>0.90(H) / >0.85(M)'},
-  {label:'Cadera (cm)', key:'Cadera', ref:null},
-  {label:'Cuello (cm)', key:'Cuello', ref:null}
+  {label:'Cadera (cm)', key:'Cadera', unidades:['cm'], defU:0, ref:null},
+  {label:'Cuello (cm)', key:'Cuello', unidades:['cm'], defU:0, ref:null},
 ];
+
 
 const EST_FILAS = [
   {cat:true,label:'ECG'},{label:'Ritmo'},{label:'Intervalo PR'},{label:'QRS'},{label:'QTc'},{label:'HVI'},
@@ -1220,55 +1218,79 @@ function switchPacTab(tab, btn) {
 }
 
 function calcLabValues(datos, filas) {
-  // Calculate LDL Martin-Hopkins, LDL Sampson, RAC, RAR for each column
   if(!datos.filas) datos.filas = [];
+  if(!datos.unidades) datos.unidades = {};
+  // Helper: get numeric value for a key at column ci
   const get = (key, ci) => {
     const fi = filas.findIndex(f=>f.key===key);
-    return fi>=0 ? parseFloat((datos.filas[fi]||[])[ci]||'') || null : null;
+    if(fi<0) return null;
+    const v = (datos.filas[fi]||[])[ci]||'';
+    const n = parseFloat(v);
+    return isNaN(n) ? null : n;
   };
-  const getU = (key) => datos.unidades && datos.unidades[key] ? datos.unidades[key] : null;
+  // Helper: get unit for key (global per-parameter, applies to all cols)
+  const getU = (key) => (datos.unidades&&datos.unidades[key]) || null;
+  // Helper: set calc result
+  const set = (key, ci, val) => {
+    const fi = filas.findIndex(f=>f.key===key);
+    if(fi<0) return;
+    if(!datos.filas[fi]) datos.filas[fi]=[];
+    datos.filas[fi][ci] = val!=null ? (Math.round(val*10)/10)+'': '';
+  };
+
   datos.columnas.forEach((_,ci) => {
-    const ct=get('CT',ci), hdl=get('HDL',ci), tg=get('TG',ci);
-    const vldl = tg ? tg/5 : null;
-    // LDL Martin-Hopkins (factor adjustment table, simplified)
+    // Convert values to mg/dL if needed
+    let ct = get('CT',ci), hdl = get('HDL',ci), tg = get('TG',ci);
+    const ctU = getU('CT')||'mg/dL', hdlU = getU('HDL')||'mg/dL', tgU = getU('TG')||'mg/dL';
+    if(ctU==='mmol/L' && ct) ct = ct*38.67;
+    if(hdlU==='mmol/L' && hdl) hdl = hdl*38.67;
+    if(tgU==='mmol/L' && tg) tg = tg*88.57;
+
+    // LDL Martin-Hopkins
     if(ct&&hdl&&tg&&tg<=399) {
-      const nonHdl = ct-hdl;
-      // Factor from Martin-Hopkins table (simplified linear approximation)
-      let factor = 5.0;
-      if(tg<100) factor = tg<50?6.5:tg<75?6.0:5.6;
-      else if(tg<150) factor = 5.4;
-      else if(tg<200) factor = 4.9;
-      else if(tg<250) factor = 4.3;
-      else if(tg<300) factor = 4.0;
-      else if(tg<400) factor = 3.7;
-      const ldl_mh = ct - hdl - (tg/factor);
-      const fi = filas.findIndex(f=>f.key==='LDL_MH');
-      if(fi>=0) { if(!datos.filas[fi]) datos.filas[fi]=[]; datos.filas[fi][ci]=Math.round(ldl_mh*10)/10+''; }
-    }
-    // LDL Sampson
+      let factor;
+      if(tg<50) factor=6.5; else if(tg<75) factor=6.0; else if(tg<100) factor=5.6;
+      else if(tg<150) factor=5.4; else if(tg<200) factor=4.9;
+      else if(tg<250) factor=4.3; else if(tg<300) factor=4.0; else factor=3.7;
+      set('LDL_MH', ci, ct - hdl - (tg/factor));
+    } else { set('LDL_MH', ci, null); }
+
+    // LDL Sampson: LDL = CT/0.948 - HDL/0.971 - (TG/8.56 + TG*nonHDL/2140 - TG²/16100) - 9.44
     if(ct&&hdl&&tg) {
-      const ldl_s = ct - hdl - (0.19*tg) - 10.1;
-      const fi = filas.findIndex(f=>f.key==='LDL_S');
-      if(fi>=0) { if(!datos.filas[fi]) datos.filas[fi]=[]; datos.filas[fi][ci]=Math.round(ldl_s*10)/10+''; }
-    }
+      const nonHdl = ct - hdl;
+      const ldl_s = ct/0.948 - hdl/0.971 - (tg/8.56 + tg*nonHdl/2140 - (tg*tg)/16100) - 9.44;
+      set('LDL_S', ci, ldl_s);
+    } else { set('LDL_S', ci, null); }
+
     // RAC = Albúmina urinaria / Creatinina urinaria
     const albUr=get('AlbUr',ci), crUr=get('CrUr',ci);
     if(albUr&&crUr) {
       const uAlb = getU('AlbUr')||'mg/24h', uCr = getU('CrUr')||'g/24h';
       let racVal;
-      if(uAlb==='mg/24h' && uCr==='g/24h') racVal = albUr / (crUr*1000) * 1000;
-      else if(uAlb==='mg/L' && uCr==='mg/dL') racVal = albUr / crUr * 10;
-      else racVal = albUr / crUr;
-      const fi = filas.findIndex(f=>f.key==='RAC');
-      if(fi>=0) { if(!datos.filas[fi]) datos.filas[fi]=[]; datos.filas[fi][ci]=Math.round(racVal*10)/10+''; }
-    }
-    // RAR = Aldosterona / Renina
+      // Standardize to mg/g
+      if(uAlb==='mg/24h' && uCr==='g/24h') racVal = albUr/crUr;
+      else if(uAlb==='mg/L' && uCr==='mg/dL') racVal = albUr/crUr*10;
+      else racVal = albUr/crUr;
+      set('RAC', ci, racVal);
+    } else { set('RAC', ci, null); }
+
+    // RAR = Aldosterona (pg/mL) / Renina (ng/mL/h)
     const aldo=get('Aldosterona',ci), renina=get('Renina',ci);
     if(aldo&&renina) {
-      const rar = aldo/renina;
-      const fi = filas.findIndex(f=>f.key==='RAR');
-      if(fi>=0) { if(!datos.filas[fi]) datos.filas[fi]=[]; datos.filas[fi][ci]=Math.round(rar*10)/10+''; }
-    }
+      set('RAR', ci, aldo/renina);
+    } else { set('RAR', ci, null); }
+
+    // MDRD = 175 × Cr^(-1.154) × Age^(-0.203) × (0.742 if F) × (1.212 if African)
+    let creat = get('Creatinina',ci);
+    const crU = getU('Creatinina')||'mg/dL';
+    if(crU==='µmol/L' && creat) creat = creat/88.4;
+    const edad = pacienteActual ? (new Date().getFullYear() - new Date(pacienteActual.fecha_nacimiento||pacienteActual.fnac||0).getFullYear()) : null;
+    const sexo = pacienteActual?.sexo==='Femenino'?'F':'M';
+    if(creat&&creat>0&&edad&&edad>0) {
+      let mdrd = 175 * Math.pow(creat,-1.154) * Math.pow(edad,-0.203);
+      if(sexo==='F') mdrd *= 0.742;
+      set('MDRD', ci, mdrd);
+    } else { set('MDRD', ci, null); }
   });
 }
 
@@ -1413,6 +1435,7 @@ function actualizarCelda(input) {
   const datos = esLab ? labDatos : ['est_tabla_wrap','evest_wrap'].includes(wrapId) ? estDatos : antDatos;
   if(!datos.filas[fi]) datos.filas[fi] = [];
   datos.filas[fi][ci] = input.value;
+  _tabDirty = true;
   // Update cell color in real time
   const filas = esLab ? LAB_FILAS : esAnt ? ANT_FILAS : EST_FILAS;
   const fila = filas[fi];
@@ -2091,12 +2114,13 @@ function borrarLpa(i) {
 
 function switchPacMainTab(tab) {
   // Ask to save if leaving lab/ant/est without explicit save
-  if(_tabActivo !== tab && ['lab','ant','est'].includes(_tabActivo)) {
+  if(_tabDirty && _tabActivo !== tab && ['lab','ant','est'].includes(_tabActivo)) {
     const nombres = {lab:'Laboratorio', ant:'Antropometría', est:'Estudios'};
     if(confirm('¿Guardar los datos de ' + nombres[_tabActivo] + ' antes de continuar?')) {
       const saveWrap = _tabActivo==='lab'?'lab_tabla_wrap':_tabActivo==='est'?'est_tabla_wrap':'ant_tabla_wrap';
       guardarDatosPac(saveWrap);
     }
+    _tabDirty = false;
   }
   _tabActivo = tab;
   ['evol','lab','ant','est'].forEach(t => {
