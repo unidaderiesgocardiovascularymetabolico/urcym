@@ -338,8 +338,16 @@
       flex-direction: column;
       align-items: center;
       padding: 12px 0;
-      gap: 16px;
+      gap: 4px;
     }
+    .evol-sidebar-left-icon {
+      width: 38px; height: 38px; border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 17px; cursor: pointer; transition: all .2s;
+      color: var(--text-soft); border: 1.5px solid transparent;
+    }
+    .evol-sidebar-left-icon:hover { background: var(--gray); border-color: var(--border); }
+    .evol-sidebar-left-icon.active { background: var(--blue-light); border-color: var(--blue); }
     @media(max-width:900px) {
       .evol-sidebar-left { display:none; }
       .evol-body { grid-template-columns:1fr 280px; }
@@ -370,10 +378,12 @@
       #upd_tto_accion, #upd_tto_grupo, #upd_tto_farmaco, #upd_tto_dosis, #upd_tto_frecuencia { width:100%; }
     }
 
+    @media(max-width:900px) {
+      .evol-col-right { display:none; }
+    }
     @media(max-width:768px) {
       /* handled in sidebar-left media query */
       .evol-update-grid { grid-template-columns:1fr; }
-      .evol-col-left, .evol-col-right { display:none; }
     }
     @media(max-width:600px) {
       .card { padding:28px 18px; }
@@ -600,7 +610,12 @@
       </div>
 
         <div class="evol-body">
-          <div class="evol-sidebar-left" id="evol_sidebar_left"><!-- sidebar izquierda --></div>
+          <div class="evol-sidebar-left" id="evol_sidebar_left">
+            <div class="evol-sidebar-left-icon active" title="Evolución" onclick="switchPacMainTab('evol');setActiveSidebarLeft(this)" data-tab="evol">📝</div>
+            <div class="evol-sidebar-left-icon" title="Laboratorio" onclick="switchPacMainTab('lab');setActiveSidebarLeft(this)" data-tab="lab">🧪</div>
+            <div class="evol-sidebar-left-icon" title="Antropometría" onclick="switchPacMainTab('ant');setActiveSidebarLeft(this)" data-tab="ant">📐</div>
+            <div class="evol-sidebar-left-icon" title="Estudios" onclick="switchPacMainTab('est');setActiveSidebarLeft(this)" data-tab="est">📋</div>
+          </div>
           <div class="evol-col-main">
           <div class="evol-main">
 
@@ -835,7 +850,7 @@
           </div>
           <button onclick="guardarLabYVolver()" style="padding:8px 22px;border:none;border-radius:9px;background:var(--teal);color:white;font-size:13px;cursor:pointer;font-family:var(--font-main);font-weight:600;box-shadow:0 2px 8px rgba(77,188,190,.25)">💾 Guardar laboratorio</button>
         </div>
-        <div id="evlab_wrap" style="overflow-x:auto;margin-top:4px;max-width:100%;"></div>
+        <div style="width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;margin-top:4px"><div id="evlab_wrap" style="min-width:max-content"></div></div>
       </div>
 
       <!-- PANEL ANTROPOMETRÍA -->
@@ -1367,20 +1382,25 @@ function renderTablaGenerica(datos, filas, wrapId, newColIdx) {
   // For lab: active column = _colEditando if editing, else last (new) column
   const activeCI = isLab ? (_colEditando !== null ? _colEditando : nci) : nci;
 
-  let h = '<table style="border-collapse:collapse;font-size:12px;table-layout:auto;white-space:nowrap;width:100%">';
+  let h = '<table style="border-collapse:collapse;font-size:12px;table-layout:fixed;white-space:nowrap;width:auto">';
   // ── HEADER
   h += '<thead><tr>';
-  h += '<th style="background:var(--blue);color:white;padding:8px 14px;text-align:left;font-size:11px;font-weight:700;white-space:nowrap;position:sticky;left:0;z-index:3;min-width:180px;border-right:2px solid rgba(255,255,255,.3)">Parámetro</th>';
+  h += '<th style="background:var(--blue);color:white;padding:8px 14px;text-align:left;font-size:11px;font-weight:700;white-space:nowrap;position:sticky;left:0;z-index:3;min-width:180px;width:180px;border-right:2px solid rgba(255,255,255,.3)">Parámetro</th>';
   datos.columnas.forEach((c,ci) => {
     const isActive = ci === activeCI;
     const isSaved = isLab && ci < nci && _colEditando === null;
-    const thBg = isActive ? '#b2ebf2' : (isSaved ? '#1a6fad' : 'var(--blue)');
-    const thColor = isActive ? '#006064' : 'white';
-    h += '<th style="background:'+thBg+';color:'+thColor+';padding:4px 6px;text-align:center;width:140px;min-width:140px;border-left:1px solid rgba(255,255,255,.25);font-weight:600">';
-    h += '<input type="date" value="'+c+'" data-ci="'+ci+'" data-wrap="'+wrapId+'" onchange="actualizarFechaCol(this)"';
-    const dateReadonly = (isLab && ci !== activeCI) ? ' readonly' : '';
-    h += dateReadonly+' style="background:transparent;border:1px solid '+(isActive?'#006064':'rgba(255,255,255,.5)')+';color:'+thColor+';border-radius:5px;font-size:10px;padding:2px 4px;width:108px;color-scheme:'+(isActive?'light':'dark')+(dateReadonly?' cursor:default':'')+'"/>';
-    if(isSaved) h += '<div style="font-size:9px;opacity:.7;margin-top:2px">🔒 guardado</div>';
+    const thBg = isActive ? '#0d7fc4' : (isSaved ? '#1a6fad' : 'var(--blue)');
+    const thColor = 'white';
+    const fechaLabel = new Date(c+'T12:00:00').toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'});
+    h += '<th style="background:'+thBg+';color:'+thColor+';padding:4px 6px;text-align:center;width:160px;min-width:160px;border-left:1px solid rgba(255,255,255,.25);font-weight:600">';
+    if(isActive) {
+      h += '<div style="font-size:11px;font-weight:700;margin-bottom:2px">✏️ Nueva carga</div>';
+      h += '<input type="date" value="'+c+'" data-ci="'+ci+'" data-wrap="'+wrapId+'" onchange="actualizarFechaCol(this)"';
+      h += ' style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.5);color:white;border-radius:5px;font-size:10px;padding:2px 4px;width:108px;color-scheme:dark"/>';
+    } else {
+      h += '<div style="font-size:12px;font-weight:700">'+fechaLabel+'</div>';
+      if(isSaved) h += '<div style="font-size:9px;opacity:.75;margin-top:2px">🔒 guardado</div>';
+    }
     h += '</th>';
   });
   h += '</tr></thead>';
@@ -2187,6 +2207,11 @@ function borrarLpa(i) {
   renderLpa(); guardarDatosPac('lab_tabla_wrap');
 }
 
+function setActiveSidebarLeft(el) {
+  document.querySelectorAll('.evol-sidebar-left-icon').forEach(i=>i.classList.remove('active'));
+  if(el) el.classList.add('active');
+}
+
 async function switchPacMainTab(tab) {
   if(_tabActivo !== tab) {
     const fromTab = _tabActivo;
@@ -2212,6 +2237,9 @@ async function switchPacMainTab(tab) {
     if(panel) panel.style.display = t===tab ? 'block' : 'none';
     if(btn) btn.classList.toggle('active', t===tab);
   });
+  // Sync sidebar left icons
+  const sideIcon = document.querySelector('.evol-sidebar-left-icon[data-tab="'+tab+'"]');
+  setActiveSidebarLeft(sideIcon);
   const hoy = new Date().toISOString().split('T')[0];
   if(tab==='lab') {
     if(!labDatos.columnas) labDatos.columnas = [];
