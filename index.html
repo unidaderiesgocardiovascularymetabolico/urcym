@@ -1233,6 +1233,8 @@ function renderTablaReadonly(datos, filas, wrapId) {
   }
   const sexoPac = pacienteActual?.sexo==='Femenino'?'F':'H';
   const allFilas = [...filas, ...(datos.extraFilas||[]).map(lbl=>({label:lbl,key:'extra_'+lbl,unidades:[''],defU:0,ref:null}))];
+  // Recalcular valores derivados (LDL, RAC, etc.) antes de renderizar
+  if(wrapId === 'rolab_wrap' || wrapId === 'labro_wrap') calcLabValues(datos, filas);
   let h = '<table style="border-collapse:collapse;font-size:12px;table-layout:auto;white-space:nowrap;width:auto;min-width:100%">';
   h += '<thead><tr>';
   h += '<th style="background:var(--blue);color:white;padding:6px 12px;text-align:left;font-size:11px;font-weight:700;white-space:nowrap;position:sticky;left:0;z-index:2;min-width:170px">Parámetro</th>';
@@ -1572,6 +1574,27 @@ async function guardarDatosPac(wrapId) {
   const tipo = ['lab_tabla_wrap','evlab_wrap'].includes(wrapId)?'lab':['est_tabla_wrap','evest_wrap'].includes(wrapId)?'est':'ant';
   const datos = tipo==='lab'?labDatos:tipo==='est'?estDatos:antDatos;
   await sb.from('paciente_tablas').upsert({dni_paciente:dni, tipo, datos:JSON.stringify(datos)},{onConflict:'dni_paciente,tipo'});
+}
+
+async function guardarBorradorEvol(dni) {
+  if(!dni) return;
+  const editor = document.getElementById('evol_editor');
+  const html = editor ? editor.innerHTML : '';
+  await sb.from('paciente_tablas').upsert(
+    {dni_paciente: dni, tipo: 'evol_borrador', datos: JSON.stringify({html})},
+    {onConflict: 'dni_paciente,tipo'}
+  );
+}
+
+async function restaurarBorradorEvol(dni) {
+  if(!dni) return;
+  const { data } = await sb.from('paciente_tablas').select('datos').eq('dni_paciente', dni).eq('tipo','evol_borrador').single();
+  if(!data) return;
+  try {
+    const { html } = JSON.parse(data.datos);
+    const editor = document.getElementById('evol_editor');
+    if(editor && html) editor.innerHTML = html;
+  } catch(e) {}
 }
 
 function agregarColumna(fechaId, datos, filas, wrapId) {
@@ -2358,6 +2381,8 @@ async function guardarLabYVolver() {
     // Auto-volcar sin preguntar (según spec)
     volcarAlteradosAlEditor('lab');
   }
+  // Guardar borrador del editor (incluye alterados volcados)
+  await guardarBorradorEvol(pacienteActual?.dni);
   _tabActivo = 'lab';
   switchPacMainTab('evol');
 }
@@ -2370,7 +2395,7 @@ async function guardarAntYVolver() {
 }
 
 // ===== EVOLUCION =====
-function abrirEvolucion(dni) {
+async function abrirEvolucion(dni) {
   const p = pacientesData.find(x=>x.dni===dni);
   if(!p) return;
   pacienteActual = p;
@@ -2395,8 +2420,10 @@ function abrirEvolucion(dni) {
   switchPacMainTab('evol');
   actualizarEncabezadoVariable(p.dni);
   cargarSnapshotInicial(p.dni);
-  // Cargar datos lab/est/ant y renderizar en tabs de evolución
-  cargarDatosTablasEvol(p.dni);
+  // Cargar datos lab/est/ant ANTES de renderizar tabs (await para que estén disponibles)
+  await cargarDatosTablasEvol(p.dni);
+  // Restaurar borrador del editor si existe (laboratorio volcado previo)
+  await restaurarBorradorEvol(p.dni);
   showPage('evolucion');
 }
 
@@ -2491,6 +2518,8 @@ async function guardarEvolucion() {
     return;
   }
   limpiarDirty('evol');
+  // Limpiar borrador del editor al guardar evolución real
+  await sb.from('paciente_tablas').delete().eq('dni_paciente', p.dni).eq('tipo','evol_borrador');
   btnGuardar.textContent = '✅ Guardado';
   setTimeout(() => {
     btnGuardar.disabled = false;
