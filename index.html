@@ -1503,7 +1503,7 @@ function agregarFilaExtra(wrapId) {
   if(!datos.extraFilas.includes(lbl)) datos.extraFilas.push(lbl);
   const filas = ['evlab_wrap','lab_tabla_wrap'].includes(wrapId)?LAB_FILAS:['evest_wrap','est_tabla_wrap'].includes(wrapId)?EST_FILAS:ANT_FILAS;
   const saveWrap = ['evlab_wrap','lab_tabla_wrap'].includes(wrapId)?'lab_tabla_wrap':['evest_wrap','est_tabla_wrap'].includes(wrapId)?'est_tabla_wrap':'ant_tabla_wrap';
-  guardarDatosPac(saveWrap);
+  guardarDatosPac(saveWrap, true);
   renderTablaGenerica(datos, filas, wrapId);
 }
 
@@ -1528,7 +1528,7 @@ function actualizarFechaCol(input) {
   datos.columnas[ci] = input.value;
   datos.columnas.sort();
   const saveWrap = ['evlab_wrap','lab_tabla_wrap'].includes(wrapId)?'lab_tabla_wrap':'ant_tabla_wrap';
-  guardarDatosPac(saveWrap);
+  guardarDatosPac(saveWrap, true);
   renderTablaGenerica(datos, ['evlab_wrap','lab_tabla_wrap'].includes(wrapId)?LAB_FILAS:['evest_wrap','est_tabla_wrap'].includes(wrapId)?EST_FILAS:ANT_FILAS, wrapId);
 }
 
@@ -1541,7 +1541,7 @@ function actualizarUnidad(sel) {
   datos.unidades[key] = sel.value;
   const filas = ['evlab_wrap','lab_tabla_wrap'].includes(wrapId)?LAB_FILAS:['evest_wrap','est_tabla_wrap'].includes(wrapId)?EST_FILAS:ANT_FILAS;
   const saveWrap = ['evlab_wrap','lab_tabla_wrap'].includes(wrapId)?'lab_tabla_wrap':'ant_tabla_wrap';
-  guardarDatosPac(saveWrap);
+  guardarDatosPac(saveWrap, true);
   renderTablaGenerica(datos, filas, wrapId);
 }
 
@@ -1585,15 +1585,39 @@ function actualizarCelda(input) {
       }
     }, 0);
   }
-  guardarDatosPac(saveWrap);
+  guardarDatosPac(saveWrap, true);
   sincronizarRO();
 }
 
-async function guardarDatosPac(wrapId) {
+async function guardarDatosPac(wrapId, forceKeep) {
   const dni = pacHistoriaDni || pacienteActual?.dni;
   if(!dni) return;
   const tipo = ['lab_tabla_wrap','evlab_wrap'].includes(wrapId)?'lab':['est_tabla_wrap','evest_wrap'].includes(wrapId)?'est':'ant';
   const datos = tipo==='lab'?labDatos:tipo==='est'?estDatos:antDatos;
+  // Si no forceKeep: quitar la columna de hoy si está completamente vacía (evita columnas fantasma)
+  if(!forceKeep) {
+    const hoy = new Date().toISOString().split('T')[0];
+    const hoyIdx = datos.columnas ? datos.columnas.indexOf(hoy) : -1;
+    if(hoyIdx >= 0) {
+      // Verificar si la columna de hoy tiene algún valor real
+      const tieneValores = (datos.filas||[]).some(fila => {
+        const val = (fila||[])[hoyIdx];
+        return val && val.toString().trim() !== '';
+      });
+      if(!tieneValores) {
+        // Eliminar la columna vacía antes de guardar
+        const datosCopy = JSON.parse(JSON.stringify(datos));
+        datosCopy.columnas.splice(hoyIdx, 1);
+        datosCopy.filas = (datosCopy.filas||[]).map(fila => {
+          const f = [...(fila||[])];
+          f.splice(hoyIdx, 1);
+          return f;
+        });
+        await sb.from('paciente_tablas').upsert({dni_paciente:dni, tipo, datos:JSON.stringify(datosCopy)},{onConflict:'dni_paciente,tipo'});
+        return;
+      }
+    }
+  }
   await sb.from('paciente_tablas').upsert({dni_paciente:dni, tipo, datos:JSON.stringify(datos)},{onConflict:'dni_paciente,tipo'});
 }
 
@@ -1626,7 +1650,7 @@ function agregarColumna(fechaId, datos, filas, wrapId) {
     datos.columnas.sort(); // cronológico
   }
   renderTablaGenerica(datos, filas, wrapId);
-  guardarDatosPac(wrapId);
+  guardarDatosPac(wrapId, true);
 }
 function agregarColumnaLab() { agregarColumna('lab_fecha_nueva', labDatos, LAB_FILAS, 'lab_tabla_wrap'); }
 function agregarColumnaEst() { 
@@ -2236,18 +2260,18 @@ function agregarLpa() {
   if(!labDatos.lpa) labDatos.lpa = [];
   if(labDatos.lpa.length >= 2) return;
   labDatos.lpa.push({ valor:'', unidad:'mg/dL', fecha: new Date().toISOString().split('T')[0] });
-  renderLpa(); guardarDatosPac('lab_tabla_wrap');
+  renderLpa(); guardarDatosPac('lab_tabla_wrap', true);
 }
 function guardarLpa(i, campo, val) {
   if(!labDatos.lpa) labDatos.lpa = [];
   if(!labDatos.lpa[i]) labDatos.lpa[i] = {};
   labDatos.lpa[i][campo] = val;
-  guardarDatosPac('lab_tabla_wrap');
+  guardarDatosPac('lab_tabla_wrap', true);
 }
 function borrarLpa(i) {
   if(!labDatos.lpa) return;
   labDatos.lpa.splice(i,1);
-  renderLpa(); guardarDatosPac('lab_tabla_wrap');
+  renderLpa(); guardarDatosPac('lab_tabla_wrap', true);
 }
 
 function setActiveSidebarLeft(el) {
@@ -2280,7 +2304,7 @@ async function switchPacMainTab(tab) {
     if(!labDatos.filas) labDatos.filas = [];
     if(!labDatos.unidades) labDatos.unidades = {};
     if(!labDatos.extraFilas) labDatos.extraFilas = [];
-    // Agregar columna de hoy si no existe (siempre editable al final)
+    // Agregar columna de hoy SOLO si no existe ya (evita columnas fantasma)
     if(!labDatos.columnas.includes(hoy)) { labDatos.columnas.push(hoy); labDatos.columnas.sort(); }
     _colEditando = null; // siempre mostrar columna de hoy como nueva carga
     renderTablaGenerica(labDatos, LAB_FILAS, 'evlab_wrap', labDatos.columnas.indexOf(hoy));
@@ -2291,6 +2315,7 @@ async function switchPacMainTab(tab) {
     if(!antDatos.filas) antDatos.filas = [];
     if(!antDatos.unidades) antDatos.unidades = {};
     if(!antDatos.extraFilas) antDatos.extraFilas = [];
+    // Agregar columna de hoy SOLO si no existe ya
     if(!antDatos.columnas.includes(hoy)) { antDatos.columnas.push(hoy); antDatos.columnas.sort(); }
     renderTablaGenerica(antDatos, ANT_FILAS, 'evant_wrap', antDatos.columnas.indexOf(hoy));
   }
@@ -2299,6 +2324,7 @@ async function switchPacMainTab(tab) {
     if(!estDatos.filas) estDatos.filas = [];
     if(!estDatos.unidades) estDatos.unidades = {};
     if(!estDatos.extraFilas) estDatos.extraFilas = [];
+    // Agregar columna de hoy SOLO si no existe ya
     if(!estDatos.columnas.includes(hoy)) { estDatos.columnas.push(hoy); estDatos.columnas.sort(); }
     renderTablaGenerica(estDatos, EST_FILAS, 'evest_wrap', estDatos.columnas.indexOf(hoy));
   }
@@ -2369,8 +2395,8 @@ function activarEdicionLab() {
 }
 
 async function guardarLabYVolver() {
-  // Siempre guardar el laboratorio al salir de la pestaña
-  await guardarDatosPac('lab_tabla_wrap');
+  // Guardar con forceKeep=true: el médico eligió guardar explícitamente
+  await guardarDatosPac('lab_tabla_wrap', true);
   sincronizarRO();
   limpiarDirty('lab');
   _colEditando = null;
@@ -2390,7 +2416,7 @@ async function guardarLabYVolver() {
 }
 
 async function guardarAntYVolver() {
-  await guardarDatosPac('ant_tabla_wrap');
+  await guardarDatosPac('ant_tabla_wrap', true);
   sincronizarRO();
   volcarAlteradosAlEditor('ant');
   switchPacMainTab('evol');
@@ -2490,7 +2516,7 @@ async function volverDesdeEvolucion() {
     }
     // descartar: guardar igual lab/ant/est para no perder datos de tablas
   }
-  // Guardar tablas aunque se descarte la evolución
+  // Guardar tablas aunque se descarte la evolución (solo si tienen datos)
   if(labDatos.columnas && labDatos.columnas.length) await guardarDatosPac('lab_tabla_wrap');
   if(antDatos.columnas && antDatos.columnas.length) await guardarDatosPac('ant_tabla_wrap');
   if(estDatos.columnas && estDatos.columnas.length) await guardarDatosPac('est_tabla_wrap');
@@ -2540,7 +2566,7 @@ async function guardarEvolucion() {
   limpiarDirty('evol');
   // Auto-guardar laboratorio si tiene datos cargados
   if(labDatos.columnas && labDatos.columnas.length) {
-    await guardarDatosPac('lab_tabla_wrap');
+    await guardarDatosPac('lab_tabla_wrap', true);
   }
   // Limpiar borrador del editor al guardar evolución real
   await sb.from('paciente_tablas').delete().eq('dni_paciente', p.dni).eq('tipo','evol_borrador');
@@ -2850,6 +2876,8 @@ function enviarMailIndicacionesEvol() {
 
 
 async function cargarDatosTablasEvol(dni) {
+  // Cargar datos históricos sin agregar columna de hoy.
+  // La columna de hoy se agrega en switchPacMainTab cuando el médico abre la pestaña.
   pacHistoriaDni = dni;
   labDatos = {columnas:[],filas:[],unidades:{},extraFilas:[]}; 
   estDatos = {columnas:[],filas:[],unidades:{},extraFilas:[]}; 
@@ -2862,6 +2890,7 @@ async function cargarDatosTablasEvol(dni) {
       if(!d.unidades) d.unidades = {};
       if(!d.columnas) d.columnas = [];
       if(!d.filas) d.filas = [];
+      // NO agregar columna de hoy aquí — eso lo hace switchPacMainTab
       if(row.tipo==='lab') labDatos = d;
       else if(row.tipo==='est') estDatos = d;
       else if(row.tipo==='ant') antDatos = d;
