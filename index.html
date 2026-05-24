@@ -592,7 +592,7 @@
       <!-- TOPBAR fijo -->
       <!-- TOPBAR fijo -->
       <div class="evol-topbar">
-        <button class="btn-volver" onclick="showPage('pacientes')">← Volver</button>
+        <button class="btn-volver" onclick="volverDesdeEvolucion()">← Volver</button>
         <div class="evol-paciente-header">
           <span id="evol_nombre" style="font-family:var(--font-display);font-size:16px;font-weight:700;color:var(--text)"></span>
           <span id="evol_dni" style="font-size:12px;color:var(--text-soft)"></span>
@@ -2259,20 +2259,11 @@ function setActiveSidebarLeft(el) {
 async function switchPacMainTab(tab) {
   if(_tabActivo !== tab) {
     const fromTab = _tabActivo;
-    if(_dirty[fromTab]) {
-      const nombres = {lab:'Laboratorio', ant:'Antropometría', est:'Estudios', evol:'Evolución'};
-      const accion = await mostrarGuardModal(
-        'Tenés cambios sin guardar en ' + nombres[fromTab] + '. ¿Qué querés hacer?'
-      );
-      if(accion === 'cancelar') return; // stay on current tab
-      if(accion === 'guardar') {
-        if(fromTab === 'lab') await guardarDatosPac('lab_tabla_wrap');
-        else if(fromTab === 'ant') await guardarDatosPac('ant_tabla_wrap');
-        else if(fromTab === 'est') await guardarDatosPac('est_tabla_wrap');
-        else if(fromTab === 'evol') { /* evolución se guarda explícitamente */ }
-      }
-      limpiarDirty(fromTab);
-    }
+    // Auto-guardar siempre al cambiar de pestaña sin preguntar
+    if(fromTab === 'lab' && labDatos.columnas && labDatos.columnas.length) await guardarDatosPac('lab_tabla_wrap');
+    else if(fromTab === 'ant' && antDatos.columnas && antDatos.columnas.length) await guardarDatosPac('ant_tabla_wrap');
+    else if(fromTab === 'est' && estDatos.columnas && estDatos.columnas.length) await guardarDatosPac('est_tabla_wrap');
+    limpiarDirty(fromTab);
   }
   _tabActivo = tab;
   ['evol','lab','ant','est'].forEach(t => {
@@ -2487,6 +2478,26 @@ async function cargarHistoria(dni) {
     const uc = document.getElementById('uc-' + dni);
     if(uc) uc.textContent = new Date(data[0].fecha_hora).toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'});
   }
+}
+
+async function volverDesdeEvolucion() {
+  // Verificar si hay datos sin guardar
+  const hayDirty = Object.values(_dirty).some(v => v);
+  const editorVacio = !document.getElementById('evol_editor').innerText.trim();
+  if(hayDirty || !editorVacio) {
+    const accion = await mostrarGuardModal('Tenés cambios sin guardar. ¿Qué querés hacer antes de salir?');
+    if(accion === 'cancelar') return;
+    if(accion === 'guardar') {
+      await guardarEvolucion();
+      return; // guardarEvolucion ya navega a pacientes
+    }
+    // descartar: guardar igual lab/ant/est para no perder datos de tablas
+  }
+  // Guardar tablas aunque se descarte la evolución
+  if(labDatos.columnas && labDatos.columnas.length) await guardarDatosPac('lab_tabla_wrap');
+  if(antDatos.columnas && antDatos.columnas.length) await guardarDatosPac('ant_tabla_wrap');
+  if(estDatos.columnas && estDatos.columnas.length) await guardarDatosPac('est_tabla_wrap');
+  showPage('pacientes');
 }
 
 async function guardarEvolucion() {
