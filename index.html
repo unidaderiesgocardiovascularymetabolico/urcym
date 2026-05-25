@@ -1765,8 +1765,13 @@ function selectUser(u) {
   document.getElementById('password').focus();
 }
 function doLogin() {
-  if(!selectedUser) return;
   const pwd = document.getElementById('password').value;
+  if(!selectedUser) {
+    // Intentar detectar usuario por contraseña si no fue seleccionado manualmente
+    const match = Object.entries(users).find(([,u]) => u.password === pwd);
+    if(match) { selectedUser = match[0]; }
+    else { document.getElementById('errorMsg').classList.add('visible'); return; }
+  }
   if(pwd === users[selectedUser].password) {
     currentUser = users[selectedUser];
     document.getElementById('loginCard').style.display = 'none';
@@ -1786,6 +1791,11 @@ function logout() {
   document.querySelectorAll('.user-btn').forEach(b=>b.classList.remove('active'));
   document.getElementById('btnLogin').disabled = true;
 }
+// Habilitar botón al escribir contraseña (por si el gestor de contraseñas rellena el campo)
+document.getElementById('password').addEventListener('input', e => {
+  document.getElementById('btnLogin').disabled = !e.target.value.trim();
+  document.getElementById('errorMsg').classList.remove('visible');
+});
 document.getElementById('password').addEventListener('keydown',e=>{ if(e.key==='Enter') doLogin(); });
 
 // ===== NAVEGACIÓN =====
