@@ -602,20 +602,34 @@
       </div>
       <div id="hc_lista" style="padding:20px 0">
         <!-- Filtros -->
-        <div id="hc_filtros" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:16px;padding:12px 16px;background:white;border-radius:12px;border:1px solid var(--border)">
-          <div style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--text-soft);white-space:nowrap">Filtrar:</div>
-          <select id="hc_filtro_prof" onchange="filtrarHistoria()" style="padding:6px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;font-family:var(--font-main);background:white;color:var(--text)">
-            <option value="">Todos los profesionales</option>
-            <option value="barbara">Dra. Bárbara Guerrero</option>
-            <option value="omar">Dr. Omar Bertani</option>
-          </select>
-          <input type="date" id="hc_filtro_desde" onchange="filtrarHistoria()" style="padding:6px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;font-family:var(--font-main)" title="Desde"/>
-          <input type="date" id="hc_filtro_hasta" onchange="filtrarHistoria()" style="padding:6px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;font-family:var(--font-main)" title="Hasta"/>
-          <div style="position:relative;flex:1;min-width:160px">
-            <input type="text" id="hc_filtro_kw" oninput="filtrarHistoria()" placeholder="🔍 Palabra clave..." style="width:100%;padding:6px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;font-family:var(--font-main)"/>
+        <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;margin-bottom:20px;padding:14px 16px;background:white;border-radius:12px;border:1px solid var(--border)">
+          <div style="display:flex;flex-direction:column;gap:4px">
+            <label style="font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--text-soft)">Profesional</label>
+            <select id="hc_filtro_prof" onchange="filtrarHistoria()" style="padding:6px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;font-family:var(--font-main);background:white;color:var(--text);min-width:190px">
+              <option value="">Todos</option>
+              <option value="barbara">Dra. Bárbara Guerrero</option>
+              <option value="omar">Dr. Omar Bertani</option>
+            </select>
           </div>
-          <button onclick="limpiarFiltrosHistoria()" style="padding:6px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;font-family:var(--font-main);background:white;cursor:pointer;color:var(--text-soft)">✕ Limpiar</button>
-          <span id="hc_filtro_count" style="font-size:11px;color:var(--text-soft)"></span>
+          <div style="display:flex;flex-direction:column;gap:4px">
+            <label style="font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--text-soft)">Fecha</label>
+            <div style="display:flex;align-items:center;gap:6px">
+              <input type="date" id="hc_filtro_desde" onchange="filtrarHistoria()" style="padding:6px 8px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;font-family:var(--font-main)" title="Desde"/>
+              <span style="font-size:11px;color:var(--text-soft)">→</span>
+              <input type="date" id="hc_filtro_hasta" onchange="filtrarHistoria()" style="padding:6px 8px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;font-family:var(--font-main)" title="Hasta"/>
+            </div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:4px;flex:1;min-width:160px">
+            <label style="font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--text-soft)">Palabra clave</label>
+            <input type="text" id="hc_filtro_kw" oninput="filtrarHistoria()" placeholder="Buscar en el texto..." style="width:100%;padding:6px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;font-family:var(--font-main);box-sizing:border-box"/>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:4px;align-items:flex-start">
+            <label style="font-size:10px;color:transparent">x</label>
+            <div style="display:flex;align-items:center;gap:10px">
+              <button onclick="limpiarFiltrosHistoria()" style="padding:6px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;font-family:var(--font-main);background:white;cursor:pointer;color:var(--text-soft)">✕ Limpiar</button>
+              <span id="hc_filtro_count" style="font-size:11px;color:var(--text-soft);white-space:nowrap"></span>
+            </div>
+          </div>
         </div>
         <div id="hc_evoluciones"></div>
       </div>
@@ -2703,13 +2717,11 @@ let _historialData = []; // cache para filtrado en memoria
 async function cargarHistoria(dni) {
   const cont = document.getElementById('hc_evoluciones');
   if(cont) cont.innerHTML = '<div class="loading">Cargando historia clínica...</div>';
-  // Resetear filtros
   ['hc_filtro_prof','hc_filtro_desde','hc_filtro_hasta','hc_filtro_kw'].forEach(id => {
     const el = document.getElementById(id); if(el) el.value = '';
   });
   const countEl = document.getElementById('hc_filtro_count');
   if(countEl) countEl.textContent = '';
-
   const { data, error } = await sb.from('evoluciones').select('*').eq('dni_paciente', dni).order('fecha_hora', {ascending:false});
   if(error || !data || !data.length) {
     if(cont) cont.innerHTML = '<div class="empty-state"><div>📋</div><p>No hay evoluciones registradas para este paciente.</p></div>';
@@ -2717,15 +2729,14 @@ async function cargarHistoria(dni) {
     return;
   }
   _historialData = data;
-  renderHistoria(_historialData);
-  // Actualizar ultima consulta en tabla pacientes
+  renderHistoria(_historialData, false);
   if(data[0]) {
     const uc = document.getElementById('uc-' + dni);
     if(uc) uc.textContent = new Date(data[0].fecha_hora).toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'});
   }
 }
 
-function renderHistoria(data) {
+function renderHistoria(data, mostrarContador) {
   const cont = document.getElementById('hc_evoluciones');
   if(!cont) return;
   const countEl = document.getElementById('hc_filtro_count');
@@ -2734,7 +2745,7 @@ function renderHistoria(data) {
     if(countEl) countEl.textContent = '0 resultados';
     return;
   }
-  if(countEl) countEl.textContent = data.length + ' evolución' + (data.length!==1?'es':'');
+  if(countEl) countEl.textContent = mostrarContador ? data.length + ' resultado' + (data.length!==1?'s':'') : '';
   cont.innerHTML = data.map(e => {
     const fh = new Date(e.fecha_hora);
     const fechaStr = fh.toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'});
@@ -2754,37 +2765,38 @@ function renderHistoria(data) {
 }
 
 function filtrarHistoria() {
-  const prof = (document.getElementById('hc_filtro_prof')?.value || '').toLowerCase();
+  const prof = document.getElementById('hc_filtro_prof')?.value || '';
   const desde = document.getElementById('hc_filtro_desde')?.value || '';
   const hasta = document.getElementById('hc_filtro_hasta')?.value || '';
   const kw = (document.getElementById('hc_filtro_kw')?.value || '').toLowerCase().trim();
-
+  const hayFiltro = prof || desde || hasta || kw;
+  if(!hayFiltro) { renderHistoria(_historialData, false); return; }
   const filtrados = _historialData.filter(e => {
-    // Filtro profesional
     if(prof) {
       const med = (e.medico||'').toLowerCase();
-      if(!med.includes(prof === 'barbara' ? 'bárbara' : 'bertani') &&
-         !med.includes(prof === 'barbara' ? 'barbara' : 'omar')) return false;
+      const esBarbara = med.includes('\u00e1rbara') || med.includes('barbara');
+      const esOmar = med.includes('bertani') || med.includes('omar');
+      if(prof === 'barbara' && !esBarbara) return false;
+      if(prof === 'omar' && !esOmar) return false;
     }
-    // Filtro fecha desde
-    if(desde && e.fecha_hora < desde) return false;
-    // Filtro fecha hasta (incluir todo el día)
+    if(desde && e.fecha_hora.slice(0,10) < desde) return false;
     if(hasta && e.fecha_hora.slice(0,10) > hasta) return false;
-    // Filtro palabra clave (busca en el contenido HTML convertido a texto)
     if(kw) {
       const texto = (e.contenido_html || '').replace(/<[^>]+>/g,' ').toLowerCase();
       if(!texto.includes(kw)) return false;
     }
     return true;
   });
-  renderHistoria(filtrados);
+  renderHistoria(filtrados, true);
 }
 
 function limpiarFiltrosHistoria() {
   ['hc_filtro_prof','hc_filtro_desde','hc_filtro_hasta','hc_filtro_kw'].forEach(id => {
     const el = document.getElementById(id); if(el) el.value = '';
   });
-  renderHistoria(_historialData);
+  const countEl = document.getElementById('hc_filtro_count');
+  if(countEl) countEl.textContent = '';
+  renderHistoria(_historialData, false);
 }
 
 async function volverDesdeEvolucion() {
