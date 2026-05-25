@@ -3765,16 +3765,12 @@ function abrirHistorialModal(perfil) {
     return;
   }
 
-  // Construir columnas deduplicadas por fecha: para fechas repetidas, quedarse con la última
-  const fechaMap = new Map(); // fecha -> último índice en datos.columnas
-  datos.columnas.forEach((c,ci) => { fechaMap.set(c, ci); });
-  // Ordenar cronológicamente y excluir la última columna SOLO si es nueva vacía
-  const colsDedup = [...fechaMap.entries()].sort((a,b)=>a[0].localeCompare(b[0]));
-  // Verificar si la última columna (cronológicamente) tiene datos
-  const lastEntry = colsDedup[colsDedup.length-1];
-  const lastCi = lastEntry ? lastEntry[1] : -1;
-  const ultimaTieneDatos = lastCi>=0 && datos.filas && datos.filas.some(f=>(f||[])[lastCi]?.toString().trim());
-  const colsH = (ultimaTieneDatos ? colsDedup : colsDedup.slice(0,-1)).map(([fecha, ci])=>({fecha, ci}));
+  // Todas las columnas — excluir solo la última si es nueva y está completamente vacía
+  const lastCi = datos.columnas.length - 1;
+  const ultimaTieneDatos = datos.filas && datos.filas.some(f=>(f||[])[lastCi]?.toString().trim());
+  const colsH = datos.columnas
+    .map((fecha, ci) => ({fecha, ci}))
+    .filter(({ci}) => ci < lastCi || ultimaTieneDatos);
 
   if(!colsH.length) {
     subtitulo.textContent = 'Sin registros guardados aún';
@@ -3783,10 +3779,21 @@ function abrirHistorialModal(perfil) {
     return;
   }
 
-  const fechasLabel = colsH.map(({fecha}) => new Date(fecha+'T12:00:00').toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'}));
-  subtitulo.textContent = colsH.length + ' fecha' + (colsH.length!==1?'s':'') + ' · ' + pacienteActual?.apellido + ', ' + pacienteActual?.nombre;
+  // Etiquetas de fecha — agregar número si hay fechas repetidas
+  const fechaCount = {};
+  datos.columnas.forEach(f => { fechaCount[f] = (fechaCount[f]||0)+1; });
+  const fechaSeq = {};
+  const fechasLabel = colsH.map(({fecha, ci}) => {
+    const d = new Date(fecha+'T12:00:00').toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'2-digit'});
+    if(fechaCount[fecha] > 1) {
+      fechaSeq[fecha] = (fechaSeq[fecha]||0)+1;
+      return d + ' #'+fechaSeq[fecha];
+    }
+    return d;
+  });
+  subtitulo.textContent = colsH.length + ' carga' + (colsH.length!==1?'s':'') + ' · ' + pacienteActual?.apellido + ', ' + pacienteActual?.nombre;
 
-  // Filas con datos — usar índice real de cada columna deduplicada
+  // Vals: usar ci directo (índice real en datos.filas)
   const filasDelPerfil = cfg.keys.map(key => {
     const fi = LAB_FILAS.findIndex(f=>f.key===key);
     if(fi<0) return null;
@@ -3797,12 +3804,12 @@ function abrirHistorialModal(perfil) {
     return { fila, vals, storedU };
   }).filter(Boolean);
 
-  // Filtrar columnas que tengan al menos un valor en alguna fila del perfil
+  // Filtrar columnas con al menos un valor del perfil
   const colsConDatos = colsH.filter((_,i) =>
     filasDelPerfil.some(({vals}) => vals[i]?.trim())
   );
   const colsConDatosIdx = colsConDatos.map(col => colsH.indexOf(col));
-  const fechasLabelFiltradas = colsConDatos.map(({fecha}) => new Date(fecha+'T12:00:00').toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'}));
+  const fechasLabelFiltradas = colsConDatosIdx.map(i => fechasLabel[i]);
   const filasFiltradas = filasDelPerfil.map(row => ({
     ...row,
     vals: colsConDatosIdx.map(i => row.vals[i]||''),
