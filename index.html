@@ -955,6 +955,15 @@
             <button onclick="guardarLabYVolver()" style="padding:8px 22px;border:none;border-radius:9px;background:var(--teal);color:white;font-size:13px;cursor:pointer;font-family:var(--font-main);font-weight:600;box-shadow:0 2px 8px rgba(77,188,190,.25)">💾 Guardar laboratorio</button>
           </div>
         </div>
+        <!-- Filtro por parámetro — solo lectura, no modifica estado -->
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+          <input type="text" id="lab_filtro_param" placeholder="🔍 Filtrar por parámetro..." oninput="filtrarTablaLab(this.value)"
+            style="padding:6px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;font-family:var(--font-main);width:240px;outline:none"/>
+          <button onclick="limpiarFiltroLab()" id="lab_filtro_clear" style="display:none;padding:5px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;font-family:var(--font-main);background:white;cursor:pointer;color:var(--text-soft)">✕</button>
+          <span id="lab_filtro_info" style="font-size:11px;color:var(--text-soft)"></span>
+        </div>
+        <!-- Contenedor: la tabla original se oculta cuando hay filtro activo, se muestra la vista filtrada -->
+        <div id="evlab_filtrado_wrap" style="display:none;width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;margin-top:4px;margin-bottom:8px"></div>
         <div style="width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;margin-top:4px"><div id="evlab_wrap" style="min-width:max-content"></div></div>
 
         <!-- Panel Historial por perfil -->
@@ -3605,6 +3614,100 @@ function calcAlcohol(){
   const el=document.getElementById('hab_alcohol_result'); if(!el) return;
   const lim=pacienteActual?.sexo==='Femenino'?98:196;
   el.innerHTML='<span class="'+(gr>lim?'alcohol-mal':'alcohol-ok')+'">'+gr+' g/semana '+(gr>lim?'⚠️ Supera el límite recomendado':'✓ Dentro del límite')+'</span>';
+}
+
+
+// ===== FILTRO POR PARÁMETRO EN LABORATORIO (solo lectura) =====
+function filtrarTablaLab(query) {
+  const filtradoWrap = document.getElementById('evlab_filtrado_wrap');
+  const originalWrap = document.getElementById('evlab_wrap');
+  const clearBtn = document.getElementById('lab_filtro_clear');
+  const infoEl = document.getElementById('lab_filtro_info');
+  const q = (query || '').toLowerCase().trim();
+
+  if(!q) {
+    // Sin filtro: mostrar tabla original, ocultar filtrada
+    filtradoWrap.style.display = 'none';
+    filtradoWrap.innerHTML = '';
+    originalWrap.parentElement.style.display = '';
+    clearBtn.style.display = 'none';
+    infoEl.textContent = '';
+    return;
+  }
+
+  // Ocultar tabla original, mostrar filtrada
+  originalWrap.parentElement.style.display = 'none';
+  filtradoWrap.style.display = 'block';
+  clearBtn.style.display = '';
+
+  const datos = labDatos;
+  if(!datos.columnas || !datos.columnas.length) {
+    filtradoWrap.innerHTML = '<p style="color:var(--text-soft);font-size:13px;padding:8px">Sin datos cargados.</p>';
+    infoEl.textContent = '';
+    return;
+  }
+
+  const sexoPac = pacienteActual?.sexo==='Femenino'?'F':'H';
+  const allFilas = [...LAB_FILAS, ...(datos.extraFilas||[]).map(lbl=>({label:lbl,key:'extra_'+lbl,unidades:[''],defU:0,ref:null}))];
+
+  // Filtrar filas cuya etiqueta contiene el query
+  const filasFiltradas = allFilas.map((f,fi)=>({f,fi})).filter(({f}) =>
+    !f.cat && f.label.toLowerCase().includes(q)
+  );
+
+  if(!filasFiltradas.length) {
+    filtradoWrap.innerHTML = '<p style="color:var(--text-soft);font-size:13px;padding:8px">No se encontraron parámetros que coincidan con "'+query+'".</p>';
+    infoEl.textContent = '0 resultados';
+    return;
+  }
+
+  // Solo mostrar columnas que tienen al menos un valor en las filas filtradas
+  // (todas las columnas históricas + la activa)
+  const colsConDatos = datos.columnas.map((_,ci) => ci).filter(ci =>
+    filasFiltradas.some(({fi}) => (datos.filas[fi]||[])[ci]?.toString().trim())
+  );
+  // Si no hay ninguna con datos, mostrar todas las columnas de todas formas
+  const colsAMostrar = colsConDatos.length ? colsConDatos : datos.columnas.map((_,ci)=>ci);
+
+  infoEl.textContent = filasFiltradas.length + ' parámetro' + (filasFiltradas.length!==1?'s':'');
+
+  // Renderizar tabla de solo lectura
+  let h = '<div style="background:#f0fffe;border:1.5px solid var(--teal);border-radius:10px;padding:12px 16px;margin-bottom:6px">';
+  h += '<div style="font-size:11px;color:var(--teal);font-weight:700;margin-bottom:10px">👁 Vista filtrada — solo lectura</div>';
+  h += '<table style="border-collapse:collapse;font-size:12px;white-space:nowrap;width:auto;min-width:100%">';
+  h += '<thead><tr>';
+  h += '<th style="background:var(--blue);color:white;padding:7px 14px;text-align:left;position:sticky;left:0;z-index:2;min-width:200px;border-right:2px solid rgba(255,255,255,.3)">Parámetro</th>';
+  h += '<th style="background:var(--blue);color:white;padding:7px 8px;text-align:center;min-width:64px;border-right:1px solid rgba(255,255,255,.2)">Unidad</th>';
+  colsAMostrar.forEach(ci => {
+    const c = datos.columnas[ci];
+    const isLast = ci === datos.columnas.length - 1;
+    const fechaLabel = new Date(c+'T12:00:00').toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'});
+    const bgTh = isLast ? '#1a9e6e' : '#1a6fad';
+    h += '<th style="background:'+bgTh+';color:white;padding:7px 12px;text-align:center;min-width:90px;border-left:1px solid rgba(255,255,255,.2)">'+fechaLabel+(isLast?'<div style="font-size:9px;opacity:.8;margin-top:1px">✏️ nueva carga</div>':'')+'</th>';
+  });
+  h += '</tr></thead><tbody>';
+
+  filasFiltradas.forEach(({f,fi}) => {
+    const storedU = (datos.unidades&&datos.unidades[f.key]) || (f.unidades||[''])[0];
+    const isCalc = !!f.calc;
+    h += '<tr>';
+    h += '<td style="padding:5px 14px;border:1px solid var(--border);font-weight:'+(isCalc?'500':'600')+';position:sticky;left:0;background:'+(isCalc?'#f0f7ff':'white')+';z-index:1;color:'+(isCalc?'var(--teal)':'var(--text)')+'">'+f.label+(isCalc?' <span style="font-size:9px;color:var(--teal)">●</span>':'')+'</td>';
+    h += '<td style="padding:5px 8px;border:1px solid var(--border);text-align:center;background:#fafafa;font-size:11px;color:var(--text-soft)">'+storedU+'</td>';
+    colsAMostrar.forEach(ci => {
+      const val = (datos.filas[fi]||[])[ci]||'';
+      const esAlerta = val && f.ref && f.ref(val, sexoPac, storedU);
+      h += '<td style="padding:5px 12px;border:1px solid var(--border);text-align:center;font-size:13px;'+(esAlerta?'background:#fff0f0;color:var(--red);font-weight:700':val?'color:var(--text)':'background:#fffbea;color:#ccc')+'"'+(esAlerta&&f.refTxt?' title="Ref: '+f.refTxt+'"':'')+'>'+( val||'—')+'</td>';
+    });
+    h += '</tr>';
+  });
+  h += '</tbody></table></div>';
+  filtradoWrap.innerHTML = h;
+}
+
+function limpiarFiltroLab() {
+  const input = document.getElementById('lab_filtro_param');
+  if(input) input.value = '';
+  filtrarTablaLab('');
 }
 
 // ===== HISTORIAL POR PERFIL =====
