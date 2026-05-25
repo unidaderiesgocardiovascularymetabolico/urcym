@@ -682,13 +682,13 @@
             <div class="evol-update-grid">
               <div class="evol-update-item" style="grid-column:1/-1">
                 <label>Cambio de tratamiento</label>
-                <div style="display:grid;grid-template-columns:130px 1fr 90px 120px;gap:6px;align-items:center;margin-bottom:6px">
+                <div style="display:grid;grid-template-columns:120px 1fr 80px 1fr 110px;gap:6px;align-items:center;margin-bottom:6px">
                   <select id="upd_tto_accion" onchange="actualizarModoPanelTto()" style="padding:6px 8px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;font-family:var(--font-main);background:white">
                     <option value="se agrega">Se agrega</option>
                     <option value="se modifica">Se modifica</option>
                     <option value="se suspende">Se suspende</option>
                   </select>
-                  <!-- Modo AGREGA: grupo + fármaco -->
+                  <!-- Modo AGREGA: grupo + fármaco + dosis + frecuencia -->
                   <div id="upd_modo_agrega" style="display:contents">
                     <select id="upd_tto_grupo" onchange="actualizarFarmacosUpd()" style="padding:6px 8px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;font-family:var(--font-main);background:white">
                       <option value="">Grupo</option>
@@ -697,6 +697,14 @@
                       <option value="">Fármaco</option>
                     </select>
                     <input type="text" id="upd_tto_dosis" placeholder="Dosis" style="padding:6px 8px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;font-family:var(--font-main)"/>
+                    <select id="upd_tto_frecuencia" style="padding:6px 8px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;font-family:var(--font-main);background:white">
+                      <option value="">Frecuencia</option>
+                      <option value="cada 4 h">cada 4 h</option>
+                      <option value="cada 6 h">cada 6 h</option>
+                      <option value="cada 8 h">cada 8 h</option>
+                      <option value="cada 12 h">cada 12 h</option>
+                      <option value="cada 24 h">cada 24 h</option>
+                    </select>
                   </div>
                   <!-- Modo MODIFICA/SUSPENDE: medicación actual -->
                   <div id="upd_modo_medactual" style="display:none;grid-column:2/-1">
@@ -2751,7 +2759,7 @@ function actualizarModoPanelTto() {
   const modoMed = document.getElementById('upd_modo_medactual');
   const esAgrega = accion === 'se agrega';
   // Toggle visibility via inline style on children
-  ['upd_tto_grupo','upd_tto_farmaco','upd_tto_dosis'].forEach(id => {
+  ['upd_tto_grupo','upd_tto_farmaco','upd_tto_dosis','upd_tto_frecuencia'].forEach(id => {
     const el = document.getElementById(id);
     if(el) el.style.display = esAgrega ? '' : 'none';
   });
@@ -2778,9 +2786,11 @@ function agregarTtoUpd() {
     grupo = document.getElementById('upd_tto_grupo').value;
     farmaco = document.getElementById('upd_tto_farmaco').value || grupo;
     dosis = document.getElementById('upd_tto_dosis').value.trim();
+    frec = document.getElementById('upd_tto_frecuencia').value;
     if(!farmaco) return;
     document.getElementById('upd_tto_farmaco').value = '';
     document.getElementById('upd_tto_dosis').value = '';
+    document.getElementById('upd_tto_frecuencia').value = '';
   } else {
     const sel = document.getElementById('upd_tto_medactual');
     const parts = (sel.value||'').split('|');
@@ -2788,7 +2798,7 @@ function agregarTtoUpd() {
     if(!farmaco) return;
     sel.value = '';
   }
-  const texto = accion + ' ' + farmaco + (dosis ? ' ' + dosis : '');
+  const texto = accion + ' ' + farmaco + (dosis ? ' ' + dosis : '') + (frec ? ' ' + frec : '');
   updTtoItems.push({ accion, grupo, farmaco, dosis, frecuencia: frec, texto });
   renderTtoUpd();
 }
@@ -3154,7 +3164,7 @@ function agregarFilaMed(data) {
     '<select class="med-grupo" onchange="actualizarFarmacos(this)" style="padding:5px 4px;border:1.5px solid var(--border);border-radius:8px;font-size:11px;width:100%">'+GRUPOS_MED.map(g=>'<option value="'+g+'"'+(data&&data.grupo===g?' selected':'')+'>'+g+'</option>').join('')+'</select>'+
     '<select class="med-farmaco" style="padding:5px 4px;border:1.5px solid var(--border);border-radius:8px;font-size:11px;width:100%"><option value="">Seleccionar</option></select>'+
     '<input type="text" class="med-dosis" placeholder="Dosis" value="'+(data?data.dosis||'':'')+'" style="padding:5px 6px;border:1.5px solid var(--border);border-radius:8px;font-size:11px;width:100%"/>'+
-    '<input type="text" class="med-frecuencia" placeholder="Frecuencia" value="'+(data?data.frecuencia||'':'')+'" style="padding:5px 6px;border:1.5px solid var(--border);border-radius:8px;font-size:11px;width:100%"/>'+
+    '<select class="med-frecuencia" style="padding:5px 4px;border:1.5px solid var(--border);border-radius:8px;font-size:11px;width:100%;font-family:var(--font-main)"><option value="">Frecuencia</option>'+(()=>{const ff=['cada 4 h','cada 6 h','cada 8 h','cada 12 h','cada 24 h'];return ff.map(f=>'<option value="'+f+'"'+(data&&data.frecuencia===f?' selected':'')+'>'+f+'</option>').join('');})()+'</select>'+
     '<button onclick="this.parentElement.remove()" style="background:var(--red-light);color:var(--red);border:none;border-radius:6px;width:26px;height:26px;cursor:pointer;font-size:16px;line-height:1">×</button>';
   cont.appendChild(div);
   poblarFarmacos(div.querySelector('.med-grupo').value, div.querySelector('.med-farmaco'), data?data.farmaco:'');
