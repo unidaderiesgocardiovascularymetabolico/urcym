@@ -1280,23 +1280,23 @@ const LAB_FILAS = [
 
 
 const ANT_FILAS = [
-  {label:'Peso (kg)', key:'Peso', unidades:['kg'], defU:0, ref:null},
-  {label:'Altura (cm)', key:'Altura', unidades:['cm'], defU:0, ref:null},
-  {label:'IMC', key:'IMC', unidades:['kg/m²'], defU:0,
+  {label:'Peso (kg)',       key:'Peso',        unidades:['kg'],    defU:0, ref:null},
+  {label:'Altura (cm)',     key:'Altura',      unidades:['cm'],    defU:0, ref:null},
+  {label:'IMC',             key:'IMC',         unidades:['kg/m²'], defU:0, calc:true,
     ref:(v)=>parseFloat(v)>25, refTxt:'>25 kg/m²'},
-  {label:'% grasa', key:'PctGrasa', unidades:['%'], defU:0,
-    ref:(v,s)=>parseFloat(v)>(s==='F'?33:25), refTxt:'>25%(H) / >33%(M)'},
-  {label:'% músculo', key:'PctMusculo', unidades:['%'], defU:0, ref:null},
-  {label:'Grasa visceral', key:'GrasaVisceral', unidades:[''], defU:0,
-    ref:(v)=>parseFloat(v)>12, refTxt:'>12 (riesgo elevado)'},
-  {label:'Cintura (cm)', key:'Cintura', unidades:['cm'], defU:0, ref:null},
-  {label:'Fuera de presión (cm)', key:'FueraPres', unidades:['cm'], defU:0, ref:null},
-  {label:'Cintura/Estatura', key:'CintEst', unidades:['ratio'], defU:0,
+  {label:'Cintura (cm)',    key:'Cintura',     unidades:['cm'],    defU:0, ref:null},
+  {label:'Cadera (cm)',     key:'Cadera',      unidades:['cm'],    defU:0, ref:null},
+  {label:'Cuello (cm)',     key:'Cuello',      unidades:['cm'],    defU:0, ref:null},
+  {label:'Cintura/Estatura',key:'CintEst',     unidades:['ratio'], defU:0, calc:true,
     ref:(v)=>parseFloat(v)>0.50, refTxt:'>0.50'},
-  {label:'Cintura/Cadera', key:'CintCad', unidades:['ratio'], defU:0,
+  {label:'Cintura/Cadera',  key:'CintCad',     unidades:['ratio'], defU:0, calc:true,
     ref:(v,s)=>parseFloat(v)>(s==='F'?0.85:0.90), refTxt:'>0.90(H) / >0.85(M)'},
-  {label:'Cadera (cm)', key:'Cadera', unidades:['cm'], defU:0, ref:null},
-  {label:'Cuello (cm)', key:'Cuello', unidades:['cm'], defU:0, ref:null},
+  {label:'% grasa',         key:'PctGrasa',    unidades:['%'],     defU:0,
+    ref:(v,s)=>parseFloat(v)>(s==='F'?33:25), refTxt:'>25%(H) / >33%(M)'},
+  {label:'% músculo',       key:'PctMusculo',  unidades:['%'],     defU:0, ref:null},
+  {label:'Grasa visceral',  key:'GrasaVisceral',unidades:[''],     defU:0,
+    ref:(v)=>parseFloat(v)>12, refTxt:'>12 (riesgo elevado)'},
+  {label:'Fuera de presión (cm)', key:'FueraPres', unidades:['cm'], defU:0, ref:null},
 ];
 
 
@@ -1322,6 +1322,7 @@ function renderTablaReadonly(datos, filas, wrapId) {
   const sexoPac = pacienteActual?.sexo==='Femenino'?'F':'H';
   const allFilas = [...filas, ...(datos.extraFilas||[]).map(lbl=>({label:lbl,key:'extra_'+lbl,unidades:[''],defU:0,ref:null}))];
   if(wrapId === 'rolab_wrap' || wrapId === 'labro_wrap') calcLabValues(datos, filas);
+  if(wrapId === 'roant_wrap') calcAntValues(datos, filas);
 
   // Solo mostrar filas que tienen al menos un valor
   const tieneValor = (fi) => datos.columnas.some((_,ci) => {
@@ -1499,6 +1500,36 @@ function calcLabValues(datos, filas) {
   });
 }
 
+function calcAntValues(datos, filas) {
+  if(!datos.filas) datos.filas = [];
+  const get = (key, ci) => {
+    const fi = filas.findIndex(f=>f.key===key);
+    if(fi<0) return null;
+    const v = (datos.filas[fi]||[])[ci]||'';
+    const n = parseFloat(v);
+    return isNaN(n) ? null : n;
+  };
+  const set = (key, ci, val) => {
+    const fi = filas.findIndex(f=>f.key===key);
+    if(fi<0) return;
+    if(!datos.filas[fi]) datos.filas[fi]=[];
+    datos.filas[fi][ci] = val!=null ? (Math.round(val*100)/100)+'' : '';
+  };
+  datos.columnas.forEach((_,ci) => {
+    const peso = get('Peso',ci), altura = get('Altura',ci);
+    const cintura = get('Cintura',ci), cadera = get('Cadera',ci);
+    // IMC = peso(kg) / (altura(m))²
+    if(peso && altura) set('IMC', ci, peso / Math.pow(altura/100, 2));
+    else set('IMC', ci, null);
+    // Cintura/Estatura
+    if(cintura && altura) set('CintEst', ci, Math.round(cintura/altura*100)/100);
+    else set('CintEst', ci, null);
+    // Cintura/Cadera
+    if(cintura && cadera) set('CintCad', ci, Math.round(cintura/cadera*100)/100);
+    else set('CintCad', ci, null);
+  });
+}
+
 function renderTablaGenerica(datos, filas, wrapId, newColIdx) {
   const wrap = document.getElementById(wrapId);
   if(!wrap) return;
@@ -1506,7 +1537,9 @@ function renderTablaGenerica(datos, filas, wrapId, newColIdx) {
   if(!datos.unidades) datos.unidades = {};
   if(!datos.extraFilas) datos.extraFilas = [];
   const isLab = ['evlab_wrap','lab_tabla_wrap'].includes(wrapId);
+  const isAnt = ['evant_wrap','ant_tabla_wrap'].includes(wrapId);
   if(isLab) calcLabValues(datos, filas);
+  if(isAnt) calcAntValues(datos, filas);
   const todosFilas = [...filas, ...datos.extraFilas.map(lbl=>({label:lbl,key:'extra_'+lbl,unidades:[''],defU:0,ref:null}))];
   const nci = newColIdx !== undefined ? newColIdx : (datos.columnas.length > 0 ? datos.columnas.length - 1 : 0);
   const sexoPac = pacienteActual?.sexo==='Femenino'?'F':'H';
@@ -1547,7 +1580,9 @@ function renderTablaGenerica(datos, filas, wrapId, newColIdx) {
     const isCalc = !!f.calc;
     const uns = f.unidades || [''];
     const storedU = datos.unidades[f.key] || uns[0];
-    const labelBg = isCalc ? '#f0f7ff' : 'white';
+    // Fila sin ningún dato en ninguna columna → amarillo
+    const sinDatos = !isCalc && !datos.columnas.some((_,ci) => { const v=(datos.filas[fi]||[])[ci]||''; return v.trim()!==''; });
+    const labelBg = sinDatos ? '#fffbea' : (isCalc ? '#f0f7ff' : 'white');
     const labelColor = isCalc ? 'var(--teal)' : 'var(--text)';
 
     h += '<tr>';
@@ -1561,7 +1596,7 @@ function renderTablaGenerica(datos, filas, wrapId, newColIdx) {
       const isEditable = !isCalc && isActive;
       const isLocked = isLab && ci !== activeCI;
       const esAlerta = val && f.ref && f.ref(val, sexoPac, storedU);
-      const cellBg = esAlerta ? '#fff0f0' : (isActive ? '#f0fffe' : (isLocked ? '#fafafa' : 'white'));
+      const cellBg = esAlerta ? '#fff0f0' : sinDatos ? '#fffbea' : (isActive ? '#f0fffe' : (isLocked ? '#fafafa' : 'white'));
       const valColor = esAlerta ? 'var(--red)' : 'var(--text)';
       const valFw = esAlerta ? '700' : '400';
 
