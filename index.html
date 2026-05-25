@@ -539,18 +539,21 @@
     <div class="page" id="page-historia">
       <div class="evol-topbar">
         <button class="btn-volver" onclick="showPage('pacientes')">← Volver</button>
-        <div style="flex:1;font-family:var(--font-display);font-size:16px;font-weight:700" id="hpac_nombre"></div>
-        <span style="font-size:11px;color:var(--text-soft);font-style:italic">Solo lectura — editá desde la evolución</span>
+        <div id="hpac_header" style="flex:1;display:flex;flex-wrap:wrap;align-items:center;gap:10px">
+          <span style="font-family:var(--font-display);font-size:16px;font-weight:700" id="hpac_nombre"></span>
+          <span style="font-size:12px;color:var(--text-soft)" id="hpac_info"></span>
+        </div>
+        <span style="font-size:11px;color:var(--text-soft);font-style:italic;background:var(--gray);padding:4px 10px;border-radius:20px">👁 Solo lectura</span>
       </div>
       <div style="padding:20px 24px">
-        <div class="pac-tabs">
+        <div class="pac-tabs" style="margin-bottom:20px">
           <button class="pac-tab active" onclick="switchPacTab('rolab',this)">🧪 Laboratorio</button>
           <button class="pac-tab" onclick="switchPacTab('roest',this)">📋 Estudios</button>
           <button class="pac-tab" onclick="switchPacTab('roant',this)">📐 Antropometría</button>
         </div>
-        <div id="pac-tab-rolab"><div id="rolab_wrap" style="overflow-x:auto"></div></div>
-        <div id="pac-tab-roest" style="display:none"><div id="roest_wrap" style="overflow-x:auto"></div></div>
-        <div id="pac-tab-roant" style="display:none"><div id="roant_wrap" style="overflow-x:auto"></div></div>
+        <div id="pac-tab-rolab" style="overflow-x:auto"><div id="rolab_wrap"></div></div>
+        <div id="pac-tab-roest" style="display:none;overflow-x:auto"><div id="roest_wrap"></div></div>
+        <div id="pac-tab-roant" style="display:none;overflow-x:auto"><div id="roant_wrap"></div></div>
       </div>
     </div>
 
@@ -1249,9 +1252,83 @@ function renderTablaReadonly(datos, filas, wrapId) {
   const wrap = document.getElementById(wrapId);
   if(!wrap) return;
   if(!datos || !datos.columnas || !datos.columnas.length) {
-    wrap.innerHTML = '<p style="color:var(--text-soft);font-size:13px;padding:12px 0">Sin datos registrados aún.</p>';
+    wrap.innerHTML = '<div style="text-align:center;padding:48px 20px;color:var(--text-soft)"><div style="font-size:36px;margin-bottom:12px">📋</div><p style="font-size:14px">Sin datos registrados aún.</p></div>';
     return;
   }
+  const sexoPac = pacienteActual?.sexo==='Femenino'?'F':'H';
+  const allFilas = [...filas, ...(datos.extraFilas||[]).map(lbl=>({label:lbl,key:'extra_'+lbl,unidades:[''],defU:0,ref:null}))];
+  if(wrapId === 'rolab_wrap' || wrapId === 'labro_wrap') calcLabValues(datos, filas);
+
+  // Solo mostrar filas que tienen al menos un valor
+  const tieneValor = (fi) => datos.columnas.some((_,ci) => {
+    const v = (datos.filas[fi]||[])[ci];
+    return v && v.toString().trim() !== '';
+  });
+  const filasVisibles = [];
+  let catPendiente = null;
+  allFilas.forEach((f, fi) => {
+    if(f.cat) { catPendiente = {f, fi}; return; }
+    if(tieneValor(fi)) {
+      if(catPendiente) { filasVisibles.push({...catPendiente, esCat:true}); catPendiente = null; }
+      filasVisibles.push({f, fi, esCat:false});
+    }
+  });
+
+  if(!filasVisibles.length) {
+    wrap.innerHTML = '<div style="text-align:center;padding:48px 20px;color:var(--text-soft)"><div style="font-size:36px;margin-bottom:12px">📋</div><p style="font-size:14px">Sin valores cargados aún.</p></div>';
+    return;
+  }
+
+  // Contar alertas
+  let nAlertas = 0;
+  filasVisibles.forEach(({f, fi, esCat}) => {
+    if(esCat) return;
+    const storedU = (datos.unidades&&datos.unidades[f.key]) || (f.unidades||[''])[0];
+    datos.columnas.forEach((_,ci) => {
+      const val = (datos.filas[fi]||[])[ci]||'';
+      if(val && f.ref && f.ref(val, sexoPac, storedU)) nAlertas++;
+    });
+  });
+
+  let h = '<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">';
+  h += '<span style="font-size:12px;color:var(--text-soft)">'+datos.columnas.length+' fecha'+(datos.columnas.length>1?'s':'')+' &middot; '+filasVisibles.filter(x=>!x.esCat).length+' parámetros</span>';
+  if(nAlertas>0) h += '<span style="background:var(--red-light);color:var(--red);font-size:11px;font-weight:700;padding:2px 10px;border-radius:20px">⚠️ '+nAlertas+' valor'+(nAlertas>1?'es':'')+' alterado'+(nAlertas>1?'s':'')+'</span>';
+  h += '</div>';
+
+  h += '<div style="overflow-x:auto"><table style="border-collapse:collapse;font-size:12px;white-space:nowrap;width:auto;min-width:100%">';
+  h += '<thead><tr>';
+  h += '<th style="background:var(--blue);color:white;padding:8px 14px;text-align:left;font-size:11px;font-weight:700;position:sticky;left:0;z-index:2;min-width:180px;border-right:2px solid rgba(255,255,255,.3)">Parámetro</th>';
+  h += '<th style="background:var(--blue);color:white;padding:8px 8px;text-align:center;font-size:11px;min-width:64px;border-right:1px solid rgba(255,255,255,.2)">Unidad</th>';
+  datos.columnas.forEach(c => {
+    h += '<th style="background:var(--blue);color:white;padding:8px 12px;text-align:center;font-size:11px;font-weight:600;min-width:90px;border-left:1px solid rgba(255,255,255,.2)">'+new Date(c+'T12:00:00').toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'})+'</th>';
+  });
+  h += '</tr></thead><tbody>';
+
+  filasVisibles.forEach(({f, fi, esCat}) => {
+    if(esCat) {
+      h += '<tr><td colspan="'+(2+datos.columnas.length)+'" style="background:#dbeafe;color:var(--blue);font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;padding:5px 14px;border:1px solid var(--border)">'+f.label+'</td></tr>';
+      return;
+    }
+    const storedU = (datos.unidades&&datos.unidades[f.key]) || (f.unidades||[''])[0];
+    const isCalc = !!f.calc;
+    const rowAlert = datos.columnas.some((_,ci) => {
+      const v = (datos.filas[fi]||[])[ci]||'';
+      return v && f.ref && f.ref(v, sexoPac, storedU);
+    });
+    h += '<tr>';
+    h += '<td style="padding:5px 14px;border:1px solid var(--border);font-size:12px;font-weight:'+(isCalc?'500':'600')+';position:sticky;left:0;background:'+(rowAlert?'#fff0f0':(isCalc?'#f0f8ff':'white'))+';z-index:1;color:'+(isCalc?'var(--teal)':'var(--text)')+'">'+f.label+(isCalc?' <span style=\'font-size:9px;color:var(--teal)\'>●</span>':'')+'</td>';
+    h += '<td style="padding:5px 8px;border:1px solid var(--border);text-align:center;background:#fafafa;font-size:11px;color:var(--text-soft)">'+storedU+'</td>';
+    datos.columnas.forEach((_,ci) => {
+      const val = (datos.filas[fi]||[])[ci]||'';
+      const esAlerta = val && f.ref && f.ref(val, sexoPac, storedU);
+      h += '<td style="padding:5px 12px;border:1px solid var(--border);text-align:center;font-size:13px;'+(esAlerta?'background:#fff0f0;color:var(--red);font-weight:700':'color:'+(val?'var(--text)':'#ccc'))+'">'+(val||'—')+'</td>';
+    });
+    h += '</tr>';
+  });
+  h += '</tbody></table></div>';
+  wrap.innerHTML = h;
+}
+
   const sexoPac = pacienteActual?.sexo==='Femenino'?'F':'H';
   const allFilas = [...filas, ...(datos.extraFilas||[]).map(lbl=>({label:lbl,key:'extra_'+lbl,unidades:[''],defU:0,ref:null}))];
   // Recalcular valores derivados (LDL, RAC, etc.) antes de renderizar
@@ -2894,7 +2971,29 @@ async function cargarDatosTablasEvol(dni) {
 async function abrirHistoriaPaciente(dni) {
   const p = pacientesData.find(x=>x.dni===dni);
   if(!p) return;
+  // Header del paciente
   document.getElementById('hpac_nombre').textContent = p.apellido+', '+p.nombre;
+  const edad = edadDesde(p.fecha_nacimiento);
+  const info = [
+    'DNI: '+p.dni,
+    edad+' años',
+    p.obra_social || 'Sin OS'
+  ].join(' · ');
+  const infoEl = document.getElementById('hpac_info');
+  if(infoEl) infoEl.textContent = info;
+  // Reset pestaña activa a Laboratorio
+  document.querySelectorAll('#page-historia .pac-tab').forEach((b,i)=>{
+    b.classList.toggle('active', i===0);
+  });
+  document.getElementById('pac-tab-rolab').style.display = 'block';
+  document.getElementById('pac-tab-roest').style.display = 'none';
+  document.getElementById('pac-tab-roant').style.display = 'none';
+  // Loading state
+  ['rolab_wrap','roest_wrap','roant_wrap'].forEach(id=>{
+    const el = document.getElementById(id);
+    if(el) el.innerHTML = '<div class="loading">Cargando...</div>';
+  });
+  showPage('historia');
   // Cargar datos sin inyectar columna de hoy (solo lectura)
   const tmpLab = {columnas:[],filas:[],unidades:{},extraFilas:[]};
   const tmpEst = {columnas:[],filas:[],unidades:{},extraFilas:[]};
@@ -2910,14 +3009,12 @@ async function abrirHistoriaPaciente(dni) {
       else if(row.tipo==='ant') Object.assign(tmpAnt, d);
     } catch(e){}
   });
-  // Guardar paciente actual temporalmente para que ref() funcione
   const prevPac = pacienteActual;
   pacienteActual = p;
   renderTablaReadonly(tmpLab, LAB_FILAS, 'rolab_wrap');
   renderTablaReadonly(tmpEst, EST_FILAS, 'roest_wrap');
   renderTablaReadonly(tmpAnt, ANT_FILAS, 'roant_wrap');
   pacienteActual = prevPac;
-  showPage('historia');
 }
 
 
