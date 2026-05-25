@@ -1610,16 +1610,9 @@ function renderTablaGenerica(datos, filas, wrapId, newColIdx) {
   const nci = newColIdx !== undefined ? newColIdx : (datos.columnas.length > 0 ? datos.columnas.length - 1 : 0);
   const sexoPac = pacienteActual?.sexo==='Femenino'?'F':'H';
 
-  const tipo = isLab ? 'lab' : isAnt ? 'ant' : 'est';
-  // La columna activa (editable) es la última que NO esté en _savedCols
-  // Si todas están guardadas, se agregará una nueva al renderizar (lo manejan las funciones guardar)
-  const savedSet = _savedCols[tipo] || new Set();
-  // Recalcular nci considerando _savedCols: la activa es la última columna no guardada
-  let activeColIdx = nci;
-  for(let i = datos.columnas.length - 1; i >= 0; i--) {
-    if(!savedSet.has(datos.columnas[i])) { activeColIdx = i; break; }
-  }
-  const activeCI = isLab ? (_colEditando !== null ? _colEditando : activeColIdx) : activeColIdx;
+  // Columna nueva = siempre la ÚLTIMA (más a la derecha). Todas las anteriores son históricas (locked).
+  // La columna nueva tiene key '_nueva' o es la última si newColIdx apunta a ella.
+  const activeCI = isLab ? (_colEditando !== null ? _colEditando : nci) : nci;
 
   let h = '<table style="border-collapse:collapse;font-size:12px;table-layout:fixed;white-space:nowrap;width:auto">';
   // ── HEADER
@@ -1627,8 +1620,8 @@ function renderTablaGenerica(datos, filas, wrapId, newColIdx) {
   h += '<th style="background:var(--blue);color:white;padding:8px 14px;text-align:left;font-size:11px;font-weight:700;white-space:nowrap;position:sticky;left:0;z-index:3;min-width:180px;width:180px;border-right:2px solid rgba(255,255,255,.3)">Parámetro</th>';
   datos.columnas.forEach((c,ci) => {
     const isActive = ci === activeCI;
-    const isSaved = hasHistory && (ci < activeColIdx || savedSet.has(c));
-    const thBg = isActive ? '#0d7fc4' : (isSaved ? '#1a6fad' : 'var(--blue)');
+    const isSaved = hasHistory && ci < nci;
+    const thBg = isActive ? '#1a9e6e' : (isSaved ? '#1a6fad' : 'var(--blue)');
     const thColor = 'white';
     const fechaLabel = new Date(c+'T12:00:00').toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'});
     h += '<th style="background:'+thBg+';color:'+thColor+';padding:4px 6px;text-align:center;width:160px;min-width:160px;border-left:1px solid rgba(255,255,255,.25);font-weight:600">';
@@ -1677,8 +1670,8 @@ function renderTablaGenerica(datos, filas, wrapId, newColIdx) {
         if(sexoPac==='H' && t.includes('(H)')) return t.split('/').filter(p=>p.includes('(H)')).join('').trim().replace('(H)','').trim() || t;
         return t;
       })() : '';
-      // Fondo: alerta > vacío > activo (sin color especial, solo borde teal) > guardado > normal
-      const cellBg = esAlerta ? '#fff0f0' : celdaVacia ? '#fffbea' : (isLocked ? '#fafafa' : 'white');
+      // Fondo de celda: alerta > vacío en col nueva (verde) > vacío en col histórica (amarillo) > guardado (gris) > blanco
+      const cellBg = esAlerta ? '#fff0f0' : (celdaVacia && isActive) ? '#e8faf2' : (celdaVacia && !isActive) ? '#fffbea' : (isLocked ? '#fafafa' : 'white');
       const valColor = esAlerta ? 'var(--red)' : 'var(--text)';
       const valFw = esAlerta ? '700' : '400';
 
@@ -1692,7 +1685,7 @@ function renderTablaGenerica(datos, filas, wrapId, newColIdx) {
         if(storedU) h += '<div style="font-size:10px;color:var(--text-soft)">'+storedU+'</div>';
       } else {
         h += '<input type="text" value="'+val+'" data-fi="'+fi+'" data-ci="'+ci+'" data-wrap="'+wrapId+'" oninput="actualizarCelda(this)"';
-        h += ' style="display:block;width:90%;margin:0 auto 2px;border:none;border-bottom:1.5px solid '+(esAlerta?'var(--red)':isActive?'var(--teal)':'var(--border)')+';background:transparent;font-size:13px;text-align:center;font-family:var(--font-main);outline:none;color:'+valColor+';font-weight:'+valFw+';padding:2px 0"/>';
+        h += ' style="display:block;width:90%;margin:0 auto 2px;border:none;border-bottom:1.5px solid '+(esAlerta?'var(--red)':isActive?'#1a9e6e':'var(--border)')+';background:transparent;font-size:13px;text-align:center;font-family:var(--font-main);outline:none;color:'+valColor+';font-weight:'+valFw+';padding:2px 0"/>';
         if(uns.length > 1) {
           h += '<select data-key="'+f.key+'" data-wrap="'+wrapId+'" onchange="actualizarUnidad(this)" style="display:block;width:96%;margin:0 auto;font-size:10px;padding:1px 2px;border:1px solid var(--border);border-radius:4px;background:#e0f7fa;color:var(--text-soft)">';
           uns.forEach(u => { h += '<option value="'+u+'"'+(u===storedU?' selected':'')+'>'+u+'</option>'; });
@@ -2667,15 +2660,24 @@ async function switchPacMainTab(tab) {
   const sideIcon = document.querySelector('.evol-sidebar-left-icon[data-tab="'+tab+'"]');
   setActiveSidebarLeft(sideIcon);
   const hoy = fechaHoy();
+  // Helper: agrega columna nueva solo si la última tiene datos (evita duplicar vacíos)
+  const agregarSiNecesario = (datos) => {
+    if(!datos.columnas) datos.columnas = [];
+    const ultimaCI = datos.columnas.length - 1;
+    const ultimaTieneData = ultimaCI >= 0 && datos.filas && datos.filas.some(f => (f||[])[ultimaCI] && (f||[])[ultimaCI].toString().trim() !== '');
+    if(datos.columnas.length === 0 || ultimaTieneData) {
+      datos.columnas.push(hoy);
+    }
+    return datos.columnas.length - 1;
+  };
   if(tab==='lab') {
     if(!labDatos.columnas) labDatos.columnas = [];
     if(!labDatos.filas) labDatos.filas = [];
     if(!labDatos.unidades) labDatos.unidades = {};
     if(!labDatos.extraFilas) labDatos.extraFilas = [];
-    // Agregar columna de hoy si no existe — representa la carga actual
-    if(!labDatos.columnas.includes(hoy)) { labDatos.columnas.push(hoy); labDatos.columnas.sort(); }
     _colEditando = null;
-    renderTablaGenerica(labDatos, LAB_FILAS, 'evlab_wrap', labDatos.columnas.indexOf(hoy));
+    const newIdx = agregarSiNecesario(labDatos);
+    renderTablaGenerica(labDatos, LAB_FILAS, 'evlab_wrap', newIdx);
     renderLpa();
   }
   if(tab==='ant') {
@@ -2683,16 +2685,16 @@ async function switchPacMainTab(tab) {
     if(!antDatos.filas) antDatos.filas = [];
     if(!antDatos.unidades) antDatos.unidades = {};
     if(!antDatos.extraFilas) antDatos.extraFilas = [];
-    if(!antDatos.columnas.includes(hoy)) { antDatos.columnas.push(hoy); antDatos.columnas.sort(); }
-    renderTablaGenerica(antDatos, ANT_FILAS, 'evant_wrap', antDatos.columnas.indexOf(hoy));
+    const newIdx = agregarSiNecesario(antDatos);
+    renderTablaGenerica(antDatos, ANT_FILAS, 'evant_wrap', newIdx);
   }
   if(tab==='est') {
     if(!estDatos.columnas) estDatos.columnas = [];
     if(!estDatos.filas) estDatos.filas = [];
     if(!estDatos.unidades) estDatos.unidades = {};
     if(!estDatos.extraFilas) estDatos.extraFilas = [];
-    if(!estDatos.columnas.includes(hoy)) { estDatos.columnas.push(hoy); estDatos.columnas.sort(); }
-    renderTablaGenerica(estDatos, EST_FILAS, 'evest_wrap', estDatos.columnas.indexOf(hoy));
+    const newIdx = agregarSiNecesario(estDatos);
+    renderTablaGenerica(estDatos, EST_FILAS, 'evest_wrap', newIdx);
   }
 }
 
@@ -2760,20 +2762,33 @@ function activarEdicionLab() {
   renderTablaGenerica(labDatos, LAB_FILAS, 'evlab_wrap', labDatos.columnas.length-1);
 }
 
+// Helper: agregar nueva columna vacía al final de datos (para mostrar después de guardar)
+function agregarColumnaNueva(datos) {
+  const hoy = fechaHoy();
+  // Siempre agregar nueva columna al final — puede repetir fecha si se guarda varias veces el mismo día
+  datos.columnas.push(hoy);
+  // Agregar fila vacía para la nueva columna (no tocar filas existentes)
+  const newCi = datos.columnas.length - 1;
+  // Las filas ya están, solo asegurarse de que la nueva columna quede vacía
+  if(datos.filas) datos.filas.forEach(f => { if(f) f[newCi] = ''; });
+}
+
+function feedbackGuardado(selector) {
+  const btn = document.querySelector(selector);
+  if(!btn) return;
+  const orig = btn.textContent;
+  btn.textContent = '✅ Guardado';
+  btn.disabled = true;
+  setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 2000);
+}
+
 async function guardarLabYVolver() {
+  // 1. Guardar datos actuales (sin la nueva columna vacía)
   await guardarDatosPac('lab_tabla_wrap');
   sincronizarRO();
   limpiarDirty('lab');
   _colEditando = null;
-  // Marcar columna actual como guardada → queda bloqueada
-  const hoy = fechaHoy();
-  _savedCols.lab.add(hoy);
-  // Agregar nueva columna vacía para la próxima carga (misma fecha de hoy — se editará en la misma sesión)
-  // Como ya está en _savedCols, la "nueva" será la misma fecha pero desbloqueada tras recargar
-  // En la práctica: la columna hoy queda locked y se agrega una nueva copia de hoy que es editable
-  // Pero columnas duplicadas no tienen sentido — la solución: simplemente re-renderizar mostrando
-  // la columna guardada como locked y sin columna nueva hasta que el médico abra de nuevo la evolución.
-  // Al volver a evolucionar, cargarDatosTablasEvol recarga desde Supabase y switchPacMainTab agrega hoy.
+  // 2. Volcar alterados al editor
   const sexoPac = pacienteActual?.sexo==='Femenino'?'F':'H';
   const ci = labDatos.columnas.length - 1;
   const alterados = LAB_FILAS.filter((f,fi) => {
@@ -2784,32 +2799,20 @@ async function guardarLabYVolver() {
   });
   if(alterados.length > 0) volcarAlteradosAlEditor('lab');
   await guardarBorradorEvol(pacienteActual?.dni);
-  renderTablaGenerica(labDatos, LAB_FILAS, 'evlab_wrap', labDatos.columnas.indexOf(hoy));
+  // 3. Agregar nueva columna vacía al final y re-renderizar
+  agregarColumnaNueva(labDatos);
+  renderTablaGenerica(labDatos, LAB_FILAS, 'evlab_wrap', labDatos.columnas.length - 1);
   renderLpa();
-  const btn = document.querySelector('button[onclick="guardarLabYVolver()"]');
-  if(btn) {
-    const orig = btn.textContent;
-    btn.textContent = '✅ Guardado';
-    btn.disabled = true;
-    setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 2000);
-  }
+  feedbackGuardado('button[onclick="guardarLabYVolver()"]');
 }
 
 async function guardarEstYVolver() {
   await guardarDatosPac('est_tabla_wrap');
   sincronizarRO();
   limpiarDirty('est');
-  const hoy = fechaHoy();
-  _savedCols.est.add(hoy);
-  if(!estDatos.columnas.includes(hoy)) { estDatos.columnas.push(hoy); estDatos.columnas.sort(); }
-  renderTablaGenerica(estDatos, EST_FILAS, 'evest_wrap', estDatos.columnas.indexOf(hoy));
-  const btn = document.querySelector('button[onclick="guardarEstYVolver()"]');
-  if(btn) {
-    const orig = btn.textContent;
-    btn.textContent = '✅ Guardado';
-    btn.disabled = true;
-    setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 2000);
-  }
+  agregarColumnaNueva(estDatos);
+  renderTablaGenerica(estDatos, EST_FILAS, 'evest_wrap', estDatos.columnas.length - 1);
+  feedbackGuardado('button[onclick="guardarEstYVolver()"]');
 }
 
 async function guardarAntYVolver() {
@@ -2817,17 +2820,9 @@ async function guardarAntYVolver() {
   sincronizarRO();
   limpiarDirty('ant');
   volcarAlteradosAlEditor('ant');
-  const hoy = fechaHoy();
-  _savedCols.ant.add(hoy);
-  if(!antDatos.columnas.includes(hoy)) { antDatos.columnas.push(hoy); antDatos.columnas.sort(); }
-  renderTablaGenerica(antDatos, ANT_FILAS, 'evant_wrap', antDatos.columnas.indexOf(hoy));
-  const btn = document.querySelector('button[onclick="guardarAntYVolver()"]');
-  if(btn) {
-    const orig = btn.textContent;
-    btn.textContent = '✅ Guardado';
-    btn.disabled = true;
-    setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 2000);
-  }
+  agregarColumnaNueva(antDatos);
+  renderTablaGenerica(antDatos, ANT_FILAS, 'evant_wrap', antDatos.columnas.length - 1);
+  feedbackGuardado('button[onclick="guardarAntYVolver()"]');
 }
 
 // ===== EVOLUCION =====
