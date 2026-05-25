@@ -1152,6 +1152,11 @@ const _dirty = {lab:false, ant:false, est:false, evol:false};
 let _labSnapshot = null;
 
 function marcarDirty(tab) { _dirty[tab] = true; _tabDirty = tab==='lab'||tab==='ant'||tab==='est'; }
+// Fecha local (evita el bug de UTC en Argentina: a las 21hs del 25/05, toISOString() da 26/05)
+function fechaHoy() {
+  const d = new Date();
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
 function limpiarDirty(tab) { _dirty[tab] = false; if(!_dirty.lab&&!_dirty.ant&&!_dirty.est) _tabDirty = false; }
 
 // Show dirty guard modal — returns a Promise resolving to 'guardar'|'descartar'|'cancelar'
@@ -1603,7 +1608,7 @@ function abrirTabConNuevaColumna(tab, wrapId, filas, datos) {
   if(!datos.columnas) datos.columnas = [];
   if(!datos.filas) datos.filas = [];
   if(!datos.extraFilas) datos.extraFilas = [];
-  const hoy = new Date().toISOString().split('T')[0];
+  const hoy = fechaHoy();
   if(!datos.columnas.includes(hoy)) {
     datos.columnas.push(hoy);
     datos.columnas.sort();
@@ -1683,24 +1688,19 @@ function actualizarCelda(input) {
 
 async function guardarDatosPac(wrapId) {
   const dni = pacHistoriaDni || pacienteActual?.dni;
-  if(!dni) { console.warn('guardarDatosPac: sin DNI'); return; }
+  if(!dni) return;
   const tipo = ['lab_tabla_wrap','evlab_wrap'].includes(wrapId)?'lab':['est_tabla_wrap','evest_wrap'].includes(wrapId)?'est':'ant';
   const datos = tipo==='lab'?labDatos:tipo==='est'?estDatos:antDatos;
-  console.log('[guardar]', tipo, 'columnas:', datos.columnas, 'dni:', dni);
   const { error } = await sb.from('paciente_tablas').upsert(
     {dni_paciente:dni, tipo, datos:JSON.stringify(datos)},
     {onConflict:'dni_paciente,tipo'}
   );
   if(error) {
-    console.error('[guardarDatosPac ERROR]', error);
-    // Mostrar error visible al médico
     const msg = document.createElement('div');
     msg.style.cssText = 'position:fixed;bottom:20px;right:20px;background:#e25247;color:white;padding:10px 16px;border-radius:10px;z-index:9999;font-size:13px;font-family:var(--font-main)';
     msg.textContent = '⚠️ Error al guardar: ' + (error.message || JSON.stringify(error));
     document.body.appendChild(msg);
     setTimeout(()=>msg.remove(), 5000);
-  } else {
-    console.log('[guardar OK]', tipo);
   }
 }
 
@@ -1985,7 +1985,7 @@ function abrirDocumento(tipo, dni) {
   const p = pacientesData.find(x=>x.dni===dni);
   if(!p) return;
   pacienteActual = p;
-  const hoy = new Date().toISOString().split('T')[0];
+  const hoy = fechaHoy();
   if(tipo==='receta') {
     document.getElementById('rec_paciente').value = p.apellido + ', ' + p.nombre;
     document.getElementById('rec_dni').value = p.dni;
@@ -2262,7 +2262,7 @@ async function guardarClinica() {
   const meds = [];
   for(const fila of document.querySelectorAll('#med_filas > div')) {
     const farmaco=fila.querySelector('.med-farmaco').value; if(!farmaco) continue;
-    const medData={dni_paciente:dni,grupo:fila.querySelector('.med-grupo').value,farmaco,dosis:fila.querySelector('.med-dosis').value,frecuencia:fila.querySelector('.med-frecuencia').value,activo:true,fecha_inicio:new Date().toISOString().split('T')[0]};
+    const medData={dni_paciente:dni,grupo:fila.querySelector('.med-grupo').value,farmaco,dosis:fila.querySelector('.med-dosis').value,frecuencia:fila.querySelector('.med-frecuencia').value,activo:true,fecha_inicio:fechaHoy()};
     const mid=fila.dataset.medId;
     if(mid) await sb.from('medicacion').update(medData).eq('id',mid);
     else await sb.from('medicacion').insert(medData);
@@ -2373,7 +2373,7 @@ function renderLpa() {
 function agregarLpa() {
   if(!labDatos.lpa) labDatos.lpa = [];
   if(labDatos.lpa.length >= 2) return;
-  labDatos.lpa.push({ valor:'', unidad:'mg/dL', fecha: new Date().toISOString().split('T')[0] });
+  labDatos.lpa.push({ valor:'', unidad:'mg/dL', fecha: fechaHoy() });
   renderLpa(); guardarDatosPac('lab_tabla_wrap');
 }
 function guardarLpa(i, campo, val) {
@@ -2412,16 +2412,14 @@ async function switchPacMainTab(tab) {
   // Sync sidebar left icons
   const sideIcon = document.querySelector('.evol-sidebar-left-icon[data-tab="'+tab+'"]');
   setActiveSidebarLeft(sideIcon);
-  const hoy = new Date().toISOString().split('T')[0];
+  const hoy = fechaHoy();
   if(tab==='lab') {
     if(!labDatos.columnas) labDatos.columnas = [];
     if(!labDatos.filas) labDatos.filas = [];
     if(!labDatos.unidades) labDatos.unidades = {};
     if(!labDatos.extraFilas) labDatos.extraFilas = [];
-    console.log('[switchTab lab] labDatos.columnas antes:', [...labDatos.columnas], 'hoy:', hoy);
     // Agregar columna de hoy si no existe — representa la carga actual
     if(!labDatos.columnas.includes(hoy)) { labDatos.columnas.push(hoy); labDatos.columnas.sort(); }
-    console.log('[switchTab lab] labDatos.columnas después:', [...labDatos.columnas]);
     _colEditando = null;
     renderTablaGenerica(labDatos, LAB_FILAS, 'evlab_wrap', labDatos.columnas.indexOf(hoy));
     renderLpa();
@@ -2509,13 +2507,12 @@ function activarEdicionLab() {
 }
 
 async function guardarLabYVolver() {
-  // Guardar laboratorio — el médico eligió guardar explícitamente
-  console.log('[guardarLab] columnas:', labDatos.columnas, 'filas con datos:', labDatos.filas?.filter(f=>f&&f.some(v=>v)).length);
+  // Guardar laboratorio explícitamente
   await guardarDatosPac('lab_tabla_wrap');
   sincronizarRO();
   limpiarDirty('lab');
   _colEditando = null;
-  // Detectar alterados y volcar al editor
+  // Volcar alterados al editor en segundo plano
   const sexoPac = pacienteActual?.sexo==='Femenino'?'F':'H';
   const ci = labDatos.columnas.length - 1;
   const alterados = LAB_FILAS.filter((f,fi) => {
@@ -2526,8 +2523,21 @@ async function guardarLabYVolver() {
   });
   if(alterados.length > 0) volcarAlteradosAlEditor('lab');
   await guardarBorradorEvol(pacienteActual?.dni);
-  _tabActivo = 'lab';
-  switchPacMainTab('evol');
+  // Quedarse en Lab: re-renderizar para que la columna guardada aparezca como histórica
+  // y preparar una nueva columna de hoy vacía para la próxima carga
+  const hoy = fechaHoy();
+  // Si la columna de hoy ya fue guardada, en la próxima sesión aparecerá como histórica.
+  // Acá simplemente re-renderizamos mostrando el índice de hoy como "activo" (permite seguir editando)
+  renderTablaGenerica(labDatos, LAB_FILAS, 'evlab_wrap', labDatos.columnas.indexOf(hoy));
+  renderLpa();
+  // Feedback visual breve
+  const btn = document.querySelector('button[onclick="guardarLabYVolver()"]');
+  if(btn) {
+    const orig = btn.textContent;
+    btn.textContent = '✅ Guardado';
+    btn.disabled = true;
+    setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 2000);
+  }
 }
 
 async function guardarAntYVolver() {
@@ -2618,22 +2628,25 @@ async function cargarHistoria(dni) {
 }
 
 async function volverDesdeEvolucion() {
-  // Verificar si hay datos sin guardar
-  const hayDirty = Object.values(_dirty).some(v => v);
-  const editorVacio = !document.getElementById('evol_editor').innerText.trim();
-  if(hayDirty || !editorVacio) {
-    const accion = await mostrarGuardModal('Tenés cambios sin guardar. ¿Qué querés hacer antes de salir?');
+  const hayDirtyTablas = _dirty.lab || _dirty.ant || _dirty.est;
+  const editorConTexto = !!document.getElementById('evol_editor').innerText.trim();
+  const hayDirtyEvol = _dirty.evol || editorConTexto;
+
+  if(hayDirtyTablas || hayDirtyEvol) {
+    let msg = 'Tenés cambios sin guardar. ¿Qué querés hacer antes de salir?';
+    if(hayDirtyTablas && !hayDirtyEvol) msg = 'Hay datos de tablas sin guardar. ¿Qué querés hacer?';
+    if(!hayDirtyTablas && hayDirtyEvol) msg = 'La evolución no fue guardada. ¿Qué querés hacer?';
+    const accion = await mostrarGuardModal(msg);
     if(accion === 'cancelar') return;
     if(accion === 'guardar') {
       await guardarEvolucion();
-      return; // guardarEvolucion ya navega a pacientes
+      return;
     }
-    // descartar: guardar igual lab/ant/est para no perder datos de tablas
+    // Descartar: guardar de todas formas las tablas con cambios para no perder datos
+    if(_dirty.lab && labDatos.columnas && labDatos.columnas.length) await guardarDatosPac('lab_tabla_wrap');
+    if(_dirty.ant && antDatos.columnas && antDatos.columnas.length) await guardarDatosPac('ant_tabla_wrap');
+    if(_dirty.est && estDatos.columnas && estDatos.columnas.length) await guardarDatosPac('est_tabla_wrap');
   }
-  // Guardar tablas solo si tuvieron cambios reales
-  if(_dirty.lab && labDatos.columnas && labDatos.columnas.length) await guardarDatosPac('lab_tabla_wrap');
-  if(_dirty.ant && antDatos.columnas && antDatos.columnas.length) await guardarDatosPac('ant_tabla_wrap');
-  if(_dirty.est && estDatos.columnas && estDatos.columnas.length) await guardarDatosPac('est_tabla_wrap');
   showPage('pacientes');
 }
 
@@ -2853,7 +2866,7 @@ async function volcarActualizacion() {
             dosis: item.dosis || '',
             frecuencia: item.frecuencia || '',
             activo: true,
-            fecha_inicio: new Date().toISOString().split('T')[0]
+            fecha_inicio: fechaHoy()
           });
         }
       }
@@ -2997,7 +3010,6 @@ async function cargarDatosTablasEvol(dni) {
   antDatos = {columnas:[],filas:[],unidades:{},extraFilas:[]};
   const { data, error } = await sb.from('paciente_tablas').select('*').eq('dni_paciente', dni);
   if(error) { console.error('[cargarDatosTablas ERROR]', error); return; }
-  console.log('[cargarDatosTablas] filas encontradas:', data ? data.length : 0, data ? data.map(r=>r.tipo) : []);
   if(data) data.forEach(row => {
     try {
       const d = JSON.parse(row.datos);
@@ -3005,13 +3017,11 @@ async function cargarDatosTablasEvol(dni) {
       if(!d.unidades) d.unidades = {};
       if(!d.columnas) d.columnas = [];
       if(!d.filas) d.filas = [];
-      console.log('[cargarDatosTablas] tipo:', row.tipo, 'columnas:', d.columnas);
       if(row.tipo==='lab') labDatos = d;
       else if(row.tipo==='est') estDatos = d;
       else if(row.tipo==='ant') antDatos = d;
     } catch(e){ console.error('[cargarDatosTablas parse ERROR]', e); }
   });
-  console.log('[cargarDatosTablas] labDatos.columnas:', labDatos.columnas);
 }
 
 async function abrirHistoriaPaciente(dni) {
