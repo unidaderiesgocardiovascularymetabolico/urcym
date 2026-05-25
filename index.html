@@ -1431,6 +1431,11 @@ const LAB_PERFILES = {
   dbt:     { label:'Perfil DBT',       color:'#8b5cf6', keys:['Glucemia','PTOG','HbA1c'] },
 };
 const PALETTE_MODAL = ['#3b82f6','#10b981','#f59e0b','#ef4444','#8b5cf6','#ec4899','#06b6d4','#84cc16'];
+const ANT_PERFIL = {
+  keys:   ['IMC','Cintura','PctGrasa','PctMusculo','GrasaVisceral'],
+  labels: ['IMC','Cintura (cm)','% grasa','% músculo','Grasa visceral'],
+  colors: ['#3b82f6','#f59e0b','#ef4444','#10b981','#8b5cf6'],
+};
 
 const EST_FILAS = [
   // ── ECOCARDIO
@@ -1580,35 +1585,43 @@ function renderTablaReadonly(datos, filas, wrapId) {
   wrap.innerHTML = h;
 }
 
+function insertarColumnaEnOrden(datos, fecha) {
+  // Insertar fecha en orden cronológico y desplazar los datos de filas correctamente
+  const insertIdx = datos.columnas.findIndex(c => c > fecha);
+  const pos = insertIdx === -1 ? datos.columnas.length : insertIdx;
+  datos.columnas.splice(pos, 0, fecha);
+  // Desplazar datos de cada fila para hacer lugar a la nueva columna vacía
+  if(datos.filas) {
+    datos.filas.forEach(fila => {
+      if(!fila) return;
+      // Insertar '' en la posición correcta
+      fila.splice(pos, 0, '');
+    });
+  }
+  return pos;
+}
+
 function agregarColumnaEvLab() {
   const f = document.getElementById('evlab_fecha_nueva').value;
-  if(!f) return;
-  // Insertar en orden cronológico
-  if(!labDatos.columnas.includes(f)) {
-    labDatos.columnas.push(f);
-    labDatos.columnas.sort();
-  }
+  if(!f) { alert('Seleccioná una fecha'); return; }
+  const newIdx = insertarColumnaEnOrden(labDatos, f);
   document.getElementById('evlab_fecha_nueva').value = '';
-  const newIdx = labDatos.columnas.indexOf(f);
-  // Renderizar con la columna agregada como activa/editable (no guardar aún)
   renderTablaGenerica(labDatos, LAB_FILAS, 'evlab_wrap', newIdx);
   sincronizarRO();
 }
 function agregarColumnaEvEst() {
   const f = document.getElementById('evest_fecha_nueva').value;
-  if(!f) return;
-  if(!estDatos.columnas.includes(f)) { estDatos.columnas.push(f); estDatos.columnas.sort(); }
+  if(!f) { alert('Seleccioná una fecha'); return; }
+  const newIdx = insertarColumnaEnOrden(estDatos, f);
   document.getElementById('evest_fecha_nueva').value = '';
-  const newIdx = estDatos.columnas.indexOf(f);
   renderTablaGenerica(estDatos, EST_FILAS, 'evest_wrap', newIdx);
   sincronizarRO();
 }
 function agregarColumnaEvAnt() {
   const f = document.getElementById('evant_fecha_nueva').value;
-  if(!f) return;
-  if(!antDatos.columnas.includes(f)) { antDatos.columnas.push(f); antDatos.columnas.sort(); }
+  if(!f) { alert('Seleccioná una fecha'); return; }
+  const newIdx = insertarColumnaEnOrden(antDatos, f);
   document.getElementById('evant_fecha_nueva').value = '';
-  const newIdx = antDatos.columnas.indexOf(f);
   renderTablaGenerica(antDatos, ANT_FILAS, 'evant_wrap', newIdx);
   sincronizarRO();
 }
@@ -4072,11 +4085,6 @@ document.getElementById('modal_historial_lab').addEventListener('click', functio
 
 
 // ===== HISTORIAL ANTROPOMETRÍA =====
-const ANT_PERFIL = {
-  keys:   ['IMC','Cintura','PctGrasa','PctMusculo','GrasaVisceral'],
-  labels: ['IMC','Cintura (cm)','% grasa','% músculo','Grasa visceral'],
-  colors: ['#3b82f6','#f59e0b','#ef4444','#10b981','#8b5cf6'],
-};
 
 function abrirHistorialAnt() {
   const modal    = document.getElementById('modal_historial_ant');
