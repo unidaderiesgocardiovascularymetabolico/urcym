@@ -421,7 +421,22 @@
       .acciones { gap:4px; }
       .btn-accion { font-size:10px; padding:4px 8px; }
     }
-.btn-historial {
+.scroll-wrap {
+  position: relative;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.scroll-wrap::after {
+  content: '';
+  position: absolute;
+  top: 0; right: 0; bottom: 0;
+  width: 40px;
+  background: linear-gradient(to right, transparent, rgba(255,255,255,.9));
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity .2s;
+}
+.scroll-wrap.has-scroll::after { opacity: 1; }
   padding: 5px 14px;
   border: 1.5px solid var(--border);
   border-radius: 8px;
@@ -1758,7 +1773,7 @@ function renderTablaGenerica(datos, filas, wrapId, newColIdx) {
         h += '<div style="font-size:13px;font-weight:'+valFw+';color:'+valColor+';padding:4px 2px">'+val+'</div>';
         if(storedU) h += '<div style="font-size:10px;color:var(--text-soft)">'+storedU+'</div>';
       } else {
-        h += '<input type="text" value="'+val+'" data-fi="'+fi+'" data-ci="'+ci+'" data-wrap="'+wrapId+'" oninput="actualizarCelda(this)"';
+        h += '<input type="text" value="'+val+'" data-fi="'+fi+'" data-ci="'+ci+'" data-wrap="'+wrapId+'" oninput="actualizarCelda(this)" onfocus="destacarFila(this,true)" onblur="destacarFila(this,false)"';
         h += ' style="display:block;width:90%;margin:0 auto 2px;border:none;border-bottom:1.5px solid '+(esAlerta?'var(--red)':isActive?'#1a9e6e':'var(--border)')+';background:transparent;font-size:13px;text-align:center;font-family:var(--font-main);outline:none;color:'+valColor+';font-weight:'+valFw+';padding:2px 0"/>';
         if(uns.length > 1) {
           h += '<select data-key="'+f.key+'" data-wrap="'+wrapId+'" onchange="actualizarUnidad(this)" style="display:block;width:96%;margin:0 auto;font-size:10px;padding:1px 2px;border:1px solid var(--border);border-radius:4px;background:#e0f7fa;color:var(--text-soft)">';
@@ -1844,6 +1859,37 @@ function actualizarUnidad(sel) {
   const saveWrap = ['evlab_wrap','lab_tabla_wrap'].includes(wrapId)?'lab_tabla_wrap':'ant_tabla_wrap';
   guardarDatosPac(saveWrap);
   renderTablaGenerica(datos, filas, wrapId);
+}
+
+function destacarFila(input, enfocar) {
+  // Resaltar la fila completa al hacer foco en un input
+  const td = input.closest('td');
+  const tr = td ? td.closest('tr') : null;
+  if(!tr) return;
+  const labelTd = tr.querySelector('td:first-child');
+  if(enfocar) {
+    tr.querySelectorAll('td').forEach(c => {
+      if(!c.style.background || c.style.background === 'white' || c.style.background === 'rgb(255, 255, 255)') {
+        c.style.background = '#f0fdf4';
+        c.dataset.prevBg = 'restore';
+      }
+    });
+    if(labelTd) {
+      labelTd.style.background = '#dcfce7';
+      labelTd.style.color = '#16a34a';
+      labelTd.style.fontWeight = '700';
+    }
+  } else {
+    tr.querySelectorAll('td[data-prev-bg]').forEach(c => {
+      c.style.background = '';
+      delete c.dataset.prevBg;
+    });
+    if(labelTd) {
+      labelTd.style.background = '';
+      labelTd.style.color = '';
+      labelTd.style.fontWeight = '';
+    }
+  }
 }
 
 function actualizarCelda(input) {
@@ -3765,12 +3811,9 @@ function abrirHistorialModal(perfil) {
     return;
   }
 
-  // Todas las columnas — excluir solo la última si es nueva y está completamente vacía
-  const lastCi = datos.columnas.length - 1;
-  const ultimaTieneDatos = datos.filas && datos.filas.some(f=>(f||[])[lastCi]?.toString().trim());
-  const colsH = datos.columnas
-    .map((fecha, ci) => ({fecha, ci}))
-    .filter(({ci}) => ci < lastCi || ultimaTieneDatos);
+  // Incluir TODAS las columnas excepto la última si está vacía para ESTE perfil específico
+  // (no globalmente — puede tener datos de otros parámetros)
+  const allColsH = datos.columnas.map((fecha, ci) => ({fecha, ci}));
 
   if(!colsH.length) {
     subtitulo.textContent = 'Sin registros guardados aún';
@@ -3779,11 +3822,11 @@ function abrirHistorialModal(perfil) {
     return;
   }
 
-  // Etiquetas de fecha — agregar número si hay fechas repetidas
+  // Etiquetas con numeración para fechas repetidas
   const fechaCount = {};
-  datos.columnas.forEach(f => { fechaCount[f] = (fechaCount[f]||0)+1; });
+  colsH.forEach(({fecha}) => { fechaCount[fecha] = (fechaCount[fecha]||0)+1; });
   const fechaSeq = {};
-  const fechasLabel = colsH.map(({fecha, ci}) => {
+  const fechasLabelFiltradas = colsH.map(({fecha}) => {
     const d = new Date(fecha+'T12:00:00').toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'2-digit'});
     if(fechaCount[fecha] > 1) {
       fechaSeq[fecha] = (fechaSeq[fecha]||0)+1;
@@ -3793,27 +3836,34 @@ function abrirHistorialModal(perfil) {
   });
   subtitulo.textContent = colsH.length + ' carga' + (colsH.length!==1?'s':'') + ' · ' + pacienteActual?.apellido + ', ' + pacienteActual?.nombre;
 
+  // Vals filtrados por columnas con datos del perfil
+  const colsHIdx = colsH.map(col => allColsH.indexOf(col));
+  const filasFiltradas = filasDelPerfil.map(row => ({
+    ...row,
+    vals: colsHIdx.map(i => row.vals[i]||''),
+  }));
+
   // Vals: usar ci directo (índice real en datos.filas)
   const filasDelPerfil = cfg.keys.map(key => {
     const fi = LAB_FILAS.findIndex(f=>f.key===key);
     if(fi<0) return null;
     const fila = LAB_FILAS[fi];
-    const vals = colsH.map(({ci}) => (datos.filas[fi]||[])[ci]||'');
+    const vals = allColsH.map(({ci}) => (datos.filas[fi]||[])[ci]||'');
     if(!vals.some(v=>v.trim())) return null;
     const storedU = (datos.unidades&&datos.unidades[key]) || fila.unidades[0];
     return { fila, vals, storedU };
   }).filter(Boolean);
 
-  // Filtrar columnas con al menos un valor del perfil
-  const colsConDatos = colsH.filter((_,i) =>
+  // Columnas con al menos un valor de este perfil
+  const colsH = allColsH.filter((_,i) =>
     filasDelPerfil.some(({vals}) => vals[i]?.trim())
   );
-  const colsConDatosIdx = colsConDatos.map(col => colsH.indexOf(col));
-  const fechasLabelFiltradas = colsConDatosIdx.map(i => fechasLabel[i]);
-  const filasFiltradas = filasDelPerfil.map(row => ({
-    ...row,
-    vals: colsConDatosIdx.map(i => row.vals[i]||''),
-  }));
+  if(!colsH.length) {
+    subtitulo.textContent = 'Sin datos cargados aún';
+    contenido.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-soft)"><div style="font-size:40px;margin-bottom:12px">🔍</div><p>Sin datos de '+cfg.label+' cargados aún.</p></div>';
+    modal.style.display = 'flex';
+    return;
+  }
 
   if(!filasFiltradas.length) {
     contenido.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-soft)"><div style="font-size:40px;margin-bottom:12px">🔍</div><p>Sin datos de '+cfg.label+' cargados aún.</p></div>';
@@ -3834,8 +3884,8 @@ function abrirHistorialModal(perfil) {
   });
   html += '</div>';
 
-  // Tabla — solo columnas con datos del perfil
-  html += '<div style="overflow-x:auto;margin-bottom:18px"><table style="border-collapse:collapse;font-size:11px;white-space:nowrap;width:100%">';
+  // Tabla — scroll con indicador de "hay más"
+  html += '<div class="scroll-wrap" id="mhl_scroll_'+perfil+'" style="margin-bottom:18px"><table style="border-collapse:collapse;font-size:11px;white-space:nowrap;width:100%">';
   html += '<thead><tr><th style="background:var(--blue);color:white;padding:5px 10px;text-align:left;position:sticky;left:0;z-index:2;min-width:150px">Parámetro</th>';
   html += '<th style="background:var(--blue);color:white;padding:5px 6px;text-align:center;min-width:50px">Unidad</th>';
   fechasLabelFiltradas.forEach(f=>{ html += '<th style="background:var(--blue);color:white;padding:5px 8px;text-align:center;min-width:80px">'+f+'</th>'; });
@@ -3857,6 +3907,16 @@ function abrirHistorialModal(perfil) {
   if(seriesNum.length) html += '<canvas id="'+chartId+'" style="max-height:220px"></canvas>';
   contenido.innerHTML = html;
   modal.style.display = 'flex';
+
+  // Detectar scroll horizontal para mostrar indicador
+  setTimeout(() => {
+    const sw = document.getElementById('mhl_scroll_'+perfil);
+    if(sw) {
+      const check = () => sw.classList.toggle('has-scroll', sw.scrollWidth > sw.clientWidth + 4);
+      check();
+      sw.addEventListener('scroll', check);
+    }
+  }, 60);
 
   if(seriesNum.length) {
     setTimeout(()=>{
