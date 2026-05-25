@@ -1283,19 +1283,28 @@ const ANT_FILAS = [
   {label:'Peso (kg)',       key:'Peso',        unidades:['kg'],    defU:0, ref:null},
   {label:'Altura (cm)',     key:'Altura',      unidades:['cm'],    defU:0, ref:null},
   {label:'IMC',             key:'IMC',         unidades:['kg/m²'], defU:0, calc:true,
-    ref:(v)=>parseFloat(v)>25, refTxt:'>25 kg/m²'},
-  {label:'Cintura (cm)',    key:'Cintura',     unidades:['cm'],    defU:0, ref:null},
+    ref:(v)=>parseFloat(v)>=25,
+    refTxt:'≥25 kg/m²'},
+  {label:'Cintura (cm)',    key:'Cintura',     unidades:['cm'],    defU:0,
+    ref:(v,s)=>parseFloat(v)>=(s==='F'?88:102),
+    refTxt:'≥102cm (H) / ≥88cm (M)'},
   {label:'Cadera (cm)',     key:'Cadera',      unidades:['cm'],    defU:0, ref:null},
-  {label:'Cuello (cm)',     key:'Cuello',      unidades:['cm'],    defU:0, ref:null},
+  {label:'Cuello (cm)',     key:'Cuello',      unidades:['cm'],    defU:0,
+    ref:(v,s)=>parseFloat(v)>=(s==='F'?34:39),
+    refTxt:'≥39cm (H) / ≥34cm (M)'},
   {label:'Cintura/Estatura',key:'CintEst',     unidades:['ratio'], defU:0, calc:true,
-    ref:(v)=>parseFloat(v)>0.50, refTxt:'>0.50'},
+    ref:(v)=>parseFloat(v)>0.50,
+    refTxt:'>0.50'},
   {label:'Cintura/Cadera',  key:'CintCad',     unidades:['ratio'], defU:0, calc:true,
-    ref:(v,s)=>parseFloat(v)>(s==='F'?0.85:0.90), refTxt:'>0.90(H) / >0.85(M)'},
+    ref:(v,s)=>parseFloat(v)>(s==='F'?0.85:0.90),
+    refTxt:'>0.90 (H) / >0.85 (M)'},
   {label:'% grasa',         key:'PctGrasa',    unidades:['%'],     defU:0,
-    ref:(v,s)=>parseFloat(v)>(s==='F'?33:25), refTxt:'>25%(H) / >33%(M)'},
+    ref:(v,s)=>parseFloat(v)>(s==='F'?33:25),
+    refTxt:'>25% (H) / >33% (M)'},
   {label:'% músculo',       key:'PctMusculo',  unidades:['%'],     defU:0, ref:null},
   {label:'Grasa visceral',  key:'GrasaVisceral',unidades:[''],     defU:0,
-    ref:(v)=>parseFloat(v)>12, refTxt:'>12 (riesgo elevado)'},
+    ref:(v)=>parseFloat(v)>12,
+    refTxt:'>12 (riesgo elevado)'},
   {label:'Fuera de presión (cm)', key:'FueraPres', unidades:['cm'], defU:0, ref:null},
 ];
 
@@ -1386,7 +1395,13 @@ function renderTablaReadonly(datos, filas, wrapId) {
     datos.columnas.forEach((_,ci) => {
       const val = (datos.filas[fi]||[])[ci]||'';
       const esAlerta = val && f.ref && f.ref(val, sexoPac, storedU);
-      h += '<td style="padding:5px 12px;border:1px solid var(--border);text-align:center;font-size:13px;'+(esAlerta?'background:#fff0f0;color:var(--red);font-weight:700':'color:'+(val?'var(--text)':'#ccc'))+'">'+(val||'—')+'</td>';
+      const refTxtSexo = esAlerta && f.refTxt ? (() => {
+        const t = f.refTxt;
+        if(sexoPac==='F' && t.includes('(M)')) return t.split('/').filter(p=>p.includes('(M)')).join('').trim().replace('(M)','').trim() || t;
+        if(sexoPac==='H' && t.includes('(H)')) return t.split('/').filter(p=>p.includes('(H)')).join('').trim().replace('(H)','').trim() || t;
+        return t;
+      })() : '';
+      h += '<td style="padding:5px 12px;border:1px solid var(--border);text-align:center;font-size:13px;'+(esAlerta?'background:#fff0f0;color:var(--red);font-weight:700':'color:'+(val?'var(--text)':'#ccc'))+'"'+(esAlerta&&refTxtSexo?' title="Ref: '+refTxtSexo+'"':'')+'>'+  (val||'—')+'</td>';
     });
     h += '</tr>';
   });
@@ -1596,14 +1611,22 @@ function renderTablaGenerica(datos, filas, wrapId, newColIdx) {
       const isEditable = !isCalc && isActive;
       const isLocked = isLab && ci !== activeCI;
       const esAlerta = val && f.ref && f.ref(val, sexoPac, storedU);
+      // Tooltip con referencia específica al sexo
+      const refTxtSexo = esAlerta && f.refTxt ? (() => {
+        // Mostrar solo el valor relevante al sexo
+        const t = f.refTxt;
+        if(sexoPac==='F' && t.includes('(M)')) return t.split('/').filter(p=>p.includes('(M)')).join('').trim().replace('(M)','').trim() || t;
+        if(sexoPac==='H' && t.includes('(H)')) return t.split('/').filter(p=>p.includes('(H)')).join('').trim().replace('(H)','').trim() || t;
+        return t;
+      })() : '';
       const cellBg = esAlerta ? '#fff0f0' : sinDatos ? '#fffbea' : (isActive ? '#f0fffe' : (isLocked ? '#fafafa' : 'white'));
       const valColor = esAlerta ? 'var(--red)' : 'var(--text)';
       const valFw = esAlerta ? '700' : '400';
 
-      h += '<td style="padding:3px 4px;border:1px solid var(--border);background:'+cellBg+';text-align:center;vertical-align:middle;width:140px;min-width:140px">';
+      h += '<td style="padding:3px 4px;border:1px solid var(--border);background:'+cellBg+';text-align:center;vertical-align:middle;width:140px;min-width:140px"'+(esAlerta&&refTxtSexo?' title="Ref: '+refTxtSexo+'"':'')+'>';
 
       if(isCalc) {
-        h += '<div style="font-size:12px;font-weight:'+valFw+';color:'+valColor+';padding:3px 2px">'+val+'</div>';
+        h += '<div style="font-size:12px;font-weight:'+valFw+';color:'+valColor+';padding:3px 2px"'+(esAlerta&&refTxtSexo?' title="Ref: '+refTxtSexo+'"':'')+'>'+val+'</div>';
         if(val && storedU) h += '<div style="font-size:10px;color:var(--text-soft);margin-top:1px">'+storedU+'</div>';
       } else if(isLocked) {
         // Saved column: read only display
@@ -1717,10 +1740,21 @@ function actualizarCelda(input) {
   // Recalculate derived values for lab and re-render table
   if(esLab) {
     calcLabValues(labDatos, LAB_FILAS);
-    // Full re-render to update calc cells (they are divs, not inputs)
     const nci = labDatos.columnas.length - 1;
     renderTablaGenerica(labDatos, LAB_FILAS, wrapId, nci);
-    // Re-focus the input that was being edited (find it by position)
+    setTimeout(() => {
+      const wrap2 = document.getElementById(wrapId);
+      if(wrap2) {
+        const inp = wrap2.querySelector('input[data-fi="'+fi+'"][data-ci="'+ci+'"]');
+        if(inp) { inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length); }
+      }
+    }, 0);
+  }
+  // Recalculate derived values for ant (IMC, Cintura/Estatura, Cintura/Cadera) in real time
+  if(esAnt) {
+    calcAntValues(antDatos, ANT_FILAS);
+    const nci = antDatos.columnas.length - 1;
+    renderTablaGenerica(antDatos, ANT_FILAS, wrapId, nci);
     setTimeout(() => {
       const wrap2 = document.getElementById(wrapId);
       if(wrap2) {
@@ -2696,8 +2730,19 @@ async function guardarLabYVolver() {
 async function guardarAntYVolver() {
   await guardarDatosPac('ant_tabla_wrap');
   sincronizarRO();
+  limpiarDirty('ant');
   volcarAlteradosAlEditor('ant');
-  switchPacMainTab('evol');
+  // Quedarse en Antropometría — re-renderizar y dar feedback
+  const hoy = fechaHoy();
+  if(!antDatos.columnas.includes(hoy)) { antDatos.columnas.push(hoy); antDatos.columnas.sort(); }
+  renderTablaGenerica(antDatos, ANT_FILAS, 'evant_wrap', antDatos.columnas.indexOf(hoy));
+  const btn = document.querySelector('button[onclick="guardarAntYVolver()"]');
+  if(btn) {
+    const orig = btn.textContent;
+    btn.textContent = '✅ Guardado';
+    btn.disabled = true;
+    setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 2000);
+  }
 }
 
 // ===== EVOLUCION =====
