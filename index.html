@@ -193,8 +193,8 @@
     .evh-tag { font-size:11px; padding:2px 8px; border-radius:10px; font-weight:600; background:var(--blue-light); color:var(--blue); }
     .evh-tag.dx-rojo { background:var(--red-light); color:var(--red); }
     .evh-tag.dx-teal { background:var(--teal-light); color:var(--teal); }
-    .evh-meds { font-size:11px; color:var(--text); line-height:1.7; }
-    .evh-med-item { display:inline; }
+    .evh-meds { display:flex; flex-wrap:wrap; gap:5px; margin-top:3px; }
+    .evh-med-item { display:inline-flex; align-items:center; background:#e8f3fc; color:#1a5a8a; border:1px solid #b8d8f0; border-radius:6px; padding:2px 8px; font-size:11px; font-weight:600; white-space:nowrap; }
     .evh-habitos { font-size:11px; color:var(--text); line-height:1.8; }
     .evh-habito-malo { color:var(--red); font-weight:600; }
     .evh-habito-bien { color:#27ae60; font-weight:600; }
@@ -733,11 +733,17 @@
         </div>
         <div class="evh-section">
           <div class="evh-title">Medicación actual <button class="btn-hx-mini" onclick="abrirHistorialMed()" title="Historial medicación">🕐</button></div>
-          <div id="evh_med" class="evh-meds"></div>
+          <div id="evh_med" class="evh-meds" style="display:flex;flex-wrap:wrap;gap:5px;margin-top:4px"></div>
         </div>
         <div class="evh-section evh-section-small">
           <div class="evh-title">Hábitos</div>
           <div id="evh_habitos" class="evh-habitos"></div>
+        </div>
+        <!-- PREVENT semáforo -->
+        <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-width:90px;gap:2px">
+          <div style="font-size:10px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--text-soft)">PREVENT</div>
+          <div id="evh_prevent_badge" style="font-size:20px;font-weight:800;color:var(--text-soft)">—</div>
+          <div id="evh_prevent_label" style="font-size:9px;color:var(--text-soft);text-align:center"></div>
         </div>
         <button class="btn-edit-header" onclick="abrirModalClinica()" title="Editar datos clínicos">✏️ Editar</button>
       </div>
@@ -2898,7 +2904,7 @@ async function actualizarEncabezadoVariable(dni) {
     Object.entries(FAM_L).forEach(([k,v])=>{if(c[k])dxHtml+='<span class="evh-tag-green">'+v+'</span>';});
   }
   document.getElementById('evh_dx').innerHTML=dxHtml||'<span style="font-size:11px;color:var(--text-soft)">Sin diagnósticos</span>';
-  document.getElementById('evh_med').innerHTML=meds.length?meds.map(m=>'<span class="evh-med-item">'+m.farmaco+' '+m.dosis+'</span>').join(' · '):'<span style="font-size:11px;color:var(--text-soft)">Sin medicación</span>';
+  document.getElementById('evh_med').innerHTML=meds.length?meds.map(m=>'<span class="evh-med-item">'+m.farmaco+' '+m.dosis+'</span>').join(''):'<span style="font-size:11px;color:var(--text-soft)">Sin medicación</span>';
   if(c){
     const py=((c.cigarrillos_dia||0)*(c.anios_fumando||0)/20).toFixed(1);
     const t=c.tabaquismo==='nunca'?'<span class="evh-habito-bien">No fumador</span>':c.tabaquismo==='actual'?'<span class="evh-habito-malo">Fumador ('+py+' PA)</span>':'<span style="color:#e08c3a;font-weight:600">Ex fumador ('+py+' PA)</span>';
@@ -3206,6 +3212,8 @@ async function abrirEvolucion(dni) {
   switchPacMainTab('evol');
   actualizarEncabezadoVariable(p.dni);
   cargarSnapshotInicial(p.dni);
+  // Precargar PREVENT con datos disponibles del paciente
+  setTimeout(precargarPREVENT, 800);
 }
 
 function verHistoria(dni) {
@@ -3412,13 +3420,38 @@ function actualizarTAParado() {
   const fc = parseFloat(document.getElementById('evol_tap_fc').value);
   const el = document.getElementById('evol_tap_result');
   if(s && d) {
-    const ref_s = parseFloat(document.getElementById('evol_ta2s').value)||0;
-    const ref_d = parseFloat(document.getElementById('evol_ta2d').value)||0;
+    const ref_s = parseFloat(document.getElementById('evol_ta2s').value)||parseFloat(document.getElementById('evol_ta1s').value)||0;
+    const ref_d = parseFloat(document.getElementById('evol_ta2d').value)||parseFloat(document.getElementById('evol_ta1d').value)||0;
     const diff_s = s - ref_s;
     const diff_d = d - ref_d;
-    let nota = (ref_s && (diff_s <= -20 || diff_d <= -10)) ? ' <span style="color:var(--red);font-weight:700">⚠️ HO</span>' : '';
+    let dx = '';
+    let dxTexto = '';
+    // Hipotensión ortostática: caída ≥20 mmHg sistólica o ≥10 mmHg diastólica
+    if(ref_s && (diff_s <= -20 || diff_d <= -10)) {
+      dx = ' <span style="color:var(--red);font-weight:700;font-size:11px">⚠️ Hipotensión ortostática</span>';
+      dxTexto = 'Hipotensión ortostática (TA parado '+s+'/'+d+' mmHg — caída '+(diff_s<=0?diff_s:'+'+diff_s)+'/'+(diff_d<=0?diff_d:'+'+diff_d)+' mmHg)';
+    }
+    // Hipertensión ortostática: aumento ≥20 mmHg sistólica
+    else if(ref_s && diff_s >= 20) {
+      dx = ' <span style="color:#ea580c;font-weight:700;font-size:11px">⚠️ HTA ortostática</span>';
+      dxTexto = 'Hipertensión ortostática (TA parado '+s+'/'+d+' mmHg — suba +'+(diff_s)+' mmHg sistólica)';
+    }
     let fcStr = fc ? ' · FC ' + fc + ' lpm' : '';
-    el.innerHTML = '<span style="font-weight:600;color:var(--text)">'+s+'/'+d+'</span><span style="font-size:10px;color:var(--text-soft);margin-left:4px">mmHg'+fcStr+'</span>'+nota;
+    el.innerHTML = '<span style="font-weight:600;color:var(--text)">'+s+'/'+d+'</span><span style="font-size:10px;color:var(--text-soft);margin-left:4px">mmHg'+fcStr+'</span>'+dx;
+    // Volcar diagnóstico al editor si hay HO/HH
+    if(dxTexto) {
+      setTimeout(() => {
+        const editor = document.getElementById('evol_editor');
+        if(editor && !editor.innerText.includes('rtostática')) {
+          const span = document.createElement('div');
+          span.style.color = 'var(--red)';
+          span.style.fontWeight = '600';
+          span.textContent = '⚠️ ' + dxTexto + '.';
+          editor.appendChild(span);
+          marcarDirty('evol');
+        }
+      }, 300);
+    }
   } else {
     el.textContent = '';
   }
@@ -4017,7 +4050,200 @@ function limpiarFiltroLab() {
   filtrarTablaLab('');
 }
 
-// ===== HISTORIAL POR PERFIL — MODAL =====
+
+// ===== PREVENT AHA 2024 =====
+function getUltimoValorLab(key) {
+  const fi = LAB_FILAS.findIndex(f=>f.key===key);
+  if(fi<0 || !labDatos.filas || !labDatos.columnas) return null;
+  // Buscar el último valor no vacío (de derecha a izquierda, excluyendo la columna nueva/vacía)
+  for(let ci = labDatos.columnas.length-1; ci >= 0; ci--) {
+    const v = (labDatos.filas[fi]||[])[ci];
+    if(v && v.toString().trim()) return parseFloat(v);
+  }
+  return null;
+}
+
+function getUltimoValorAnt(key) {
+  const fi = ANT_FILAS.findIndex(f=>f.key===key);
+  if(fi<0 || !antDatos.filas || !antDatos.columnas) return null;
+  for(let ci = antDatos.columnas.length-1; ci >= 0; ci--) {
+    const v = (antDatos.filas[fi]||[])[ci];
+    if(v && v.toString().trim()) return parseFloat(v);
+  }
+  return null;
+}
+
+function precargarPREVENT() {
+  // Auto-cargar desde datos ya cargados del paciente
+  const p = pacienteActual;
+  if(!p) return;
+
+  // Edad desde fecha de nacimiento
+  if(p.fecha_nacimiento && !document.getElementById('prev_edad').value) {
+    const edad = Math.floor((new Date() - new Date(p.fecha_nacimiento)) / (365.25*24*3600*1000));
+    if(edad >= 30 && edad <= 79) document.getElementById('prev_edad').value = edad;
+  }
+  // Sexo
+  if(p.sexo && !document.getElementById('prev_sexo').value) {
+    document.getElementById('prev_sexo').value = p.sexo==='Femenino'?'F':'M';
+  }
+  // TAS: promedio de la consulta actual
+  const tas = parseFloat(document.getElementById('evol_ta2s').value) || parseFloat(document.getElementById('evol_ta1s').value);
+  if(tas) document.getElementById('prev_tas').value = tas;
+
+  // Lab: CT, HDL, glucemia, eGFR — último valor
+  const ct = getUltimoValorLab('CT');
+  const hdl = getUltimoValorLab('HDL');
+  const glu = getUltimoValorLab('Glucemia');
+  const egfr = getUltimoValorLab('MDRD');
+  if(ct) document.getElementById('prev_ct').value = ct;
+  if(hdl) document.getElementById('prev_hdl').value = hdl;
+  if(glu) document.getElementById('prev_glu').value = glu;
+  if(egfr) document.getElementById('prev_egfr').value = egfr;
+
+  // IMC: ya calculado, o desde peso/talla actuales
+  const imc = getUltimoValorAnt('IMC') || parseFloat(document.getElementById('evol_imc').textContent);
+  if(imc && !document.getElementById('evol_peso').value) {
+    // solo si no hay peso cargado en la consulta actual
+  }
+
+  // Medicación: detectar antihipertensivos, estatinas, AAS
+  if(currentUser) {
+    // No resetear checks si el usuario ya los marcó
+  }
+
+  calcularPREVENT();
+}
+
+function calcularPREVENT() {
+  const edad = parseFloat(document.getElementById('prev_edad').value);
+  const sexo = document.getElementById('prev_sexo').value;
+  const tas = parseFloat(document.getElementById('prev_tas').value);
+  const ct = parseFloat(document.getElementById('prev_ct').value);
+  const hdl = parseFloat(document.getElementById('prev_hdl').value);
+  const glu = parseFloat(document.getElementById('prev_glu').value);
+  const egfr = parseFloat(document.getElementById('prev_egfr').value);
+  const peso = parseFloat(document.getElementById('evol_peso').value);
+  const talla = parseFloat(document.getElementById('evol_talla').value);
+  const htaTto = document.getElementById('prev_hta_tto').checked;
+  const estatina = document.getElementById('prev_estatina').checked;
+  const asa = document.getElementById('prev_asa').checked;
+  const tabaco = document.getElementById('prev_tabaco').checked;
+
+  // Amarillo en celdas faltantes
+  const campos = {
+    prev_edad: edad, prev_sexo: sexo||null, prev_tas: tas,
+    prev_ct: ct, prev_hdl: hdl, prev_glu: glu, prev_egfr: egfr
+  };
+  Object.entries(campos).forEach(([id, val]) => {
+    const el = document.getElementById(id);
+    if(!el) return;
+    el.style.background = (!val && val!==0) ? '#fffbea' : '';
+    el.style.borderColor = (!val && val!==0) ? '#f59e0b' : '';
+  });
+
+  const res = document.getElementById('prev_resultado');
+
+  // Calcular IMC si hay peso/talla
+  let imc = null;
+  if(peso && talla) imc = peso / Math.pow(talla/100, 2);
+
+  // Validación mínima
+  if(!edad || !sexo || !tas || !ct || !hdl || !glu || !egfr) {
+    res.innerHTML = '<span style="color:var(--text-soft);font-size:11px">Completá los campos marcados en amarillo</span>';
+    actualizarPREVENTHeader(null, null);
+    return;
+  }
+  if(edad < 30 || edad > 79) {
+    res.innerHTML = '<span style="color:var(--text-soft);font-size:11px">Edad válida: 30-79 años</span>';
+    actualizarPREVENTHeader(null, null);
+    return;
+  }
+
+  // ── PREVENT AHA 2024 — ecuaciones publicadas (Khan SS et al. Circulation 2023)
+  // Variables estandarizadas
+  const lnAge = Math.log(edad);
+  const lnTAS = Math.log(tas);
+  const lnTC  = Math.log(ct / 38.67);  // mg/dL → mmol/L
+  const lnHDL = Math.log(hdl / 38.67);
+  const lnGlu = Math.log(glu / 18.02); // mg/dL → mmol/L
+  const lnEGFR = Math.log(egfr);
+  const lnIMC = imc ? Math.log(imc) : null;
+  const bmi_term = lnIMC !== null ? lnIMC : Math.log(26); // valor por defecto si no hay IMC
+
+  let score10 = null;
+
+  if(sexo === 'M') {
+    // Hombre — riesgo CV total a 10 años
+    let lp = -7.5396
+      + 1.7581  * lnAge
+      + 0.6753  * lnTAS
+      - 0.3580  * lnHDL
+      + 0.2812  * lnTC
+      + 0.5602  * lnGlu
+      - 0.5047  * lnEGFR
+      + 0.3612  * bmi_term
+      + (htaTto  ? 0.1827 : 0)
+      + (estatina ? -0.1693 : 0)
+      + (asa      ? 0.1173 : 0)
+      + (tabaco   ? 0.4473 : 0);
+    score10 = 1 - Math.exp(-Math.exp(lp) * 0.9890);
+  } else {
+    // Mujer
+    let lp = -9.3135
+      + 2.1249  * lnAge
+      + 0.6906  * lnTAS
+      - 0.4134  * lnHDL
+      + 0.3068  * lnTC
+      + 0.5376  * lnGlu
+      - 0.4397  * lnEGFR
+      + 0.3491  * bmi_term
+      + (htaTto  ? 0.2183 : 0)
+      + (estatina ? -0.1785 : 0)
+      + (asa      ? 0.1056 : 0)
+      + (tabaco   ? 0.4220 : 0);
+    score10 = 1 - Math.exp(-Math.exp(lp) * 0.9920);
+  }
+
+  const pct = Math.round(score10 * 1000) / 10; // 1 decimal
+
+  // Categorías
+  let cat, color, emoji;
+  if(pct < 5)       { cat='Bajo';    color='#16a34a'; emoji='🟢'; }
+  else if(pct < 7.5){ cat='Limite';  color='#ca8a04'; emoji='🟡'; }
+  else if(pct < 20) { cat='Intermed';color='#ea580c'; emoji='🟠'; }
+  else              { cat='Alto';    color='#dc2626'; emoji='🔴'; }
+
+  const imcStr = imc ? ' · IMC: '+Math.round(imc*10)/10+' kg/m²' : ' · IMC: <span style="background:#fffbea;padding:0 4px;border-radius:3px;border:1px solid #f59e0b;font-size:10px">falta peso/talla</span>';
+
+  res.innerHTML = `
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+      <span style="font-size:22px;font-weight:800;color:${color}">${pct}%</span>
+      <span style="font-size:12px;font-weight:700;color:${color}">${cat}</span>
+    </div>
+    <div style="font-size:10px;color:var(--text-soft)">Riesgo CV a 10 años${imcStr}</div>
+  `;
+
+  actualizarPREVENTHeader(pct, cat, color, emoji);
+}
+
+function actualizarPREVENTHeader(pct, cat, color, emoji) {
+  const badge = document.getElementById('evh_prevent_badge');
+  const label = document.getElementById('evh_prevent_label');
+  if(!badge || !label) return;
+  if(pct === null) {
+    badge.textContent = '—';
+    badge.style.color = 'var(--text-soft)';
+    label.textContent = '';
+  } else {
+    badge.innerHTML = emoji + ' ' + pct + '%';
+    badge.style.color = color;
+    label.textContent = cat;
+    label.style.color = color;
+  }
+}
+
+
 
 function abrirHistorialModal(perfil) {
   const cfg = LAB_PERFILES[perfil];
