@@ -1000,6 +1000,20 @@
         <div style="width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch"><div id="evlab_wrap" style="min-width:max-content"></div></div>
       </div>
 
+      <!-- MODAL HISTORIAL ANT -->
+      <div id="modal_historial_ant" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:999;align-items:center;justify-content:center;padding:16px">
+        <div style="background:white;border-radius:16px;width:100%;max-width:820px;max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.25);display:flex;flex-direction:column">
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--border);position:sticky;top:0;background:white;z-index:2;border-radius:16px 16px 0 0">
+            <div>
+              <div style="font-family:var(--font-display);font-size:16px;font-weight:700;color:var(--text)">Evolución antropométrica</div>
+              <div id="mha_subtitulo" style="font-size:11px;color:var(--text-soft);margin-top:2px"></div>
+            </div>
+            <button onclick="cerrarHistorialAnt()" style="background:var(--gray);border:none;border-radius:50%;width:32px;height:32px;font-size:18px;cursor:pointer;color:var(--text-soft);display:flex;align-items:center;justify-content:center">✕</button>
+          </div>
+          <div id="mha_contenido" style="padding:20px"></div>
+        </div>
+      </div>
+
       <!-- MODAL HISTORIAL LAB -->
       <div id="modal_historial_lab" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:999;align-items:center;justify-content:center;padding:16px">
         <div style="background:white;border-radius:16px;width:100%;max-width:820px;max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.25);display:flex;flex-direction:column">
@@ -1019,7 +1033,10 @@
       <!-- PANEL ANTROPOMETRÍA -->
       <div id="pmain-ant" style="display:none;padding:16px 28px 20px;width:100%;box-sizing:border-box">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;gap:8px;flex-wrap:wrap">
-          <span style="font-size:12px;color:var(--text-soft);font-style:italic">Antropometría del paciente</span>
+          <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+            <span style="font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--text-soft)">Historial:</span>
+            <button onclick="abrirHistorialAnt()" class="btn-historial" id="hbtn_ant">📐 Ver evolución</button>
+          </div>
           <button onclick="guardarAntYVolver()" style="padding:8px 22px;border:none;border-radius:9px;background:var(--teal);color:white;font-size:13px;cursor:pointer;font-family:var(--font-main);font-weight:600;box-shadow:0 2px 8px rgba(77,188,190,.25)">💾 Guardar antropometría</button>
         </div>
         <div style="width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;margin-top:4px"><div id="evant_wrap" style="min-width:max-content"></div></div>
@@ -1862,32 +1879,42 @@ function actualizarUnidad(sel) {
 }
 
 function destacarFila(input, enfocar) {
-  // Resaltar la fila completa al hacer foco en un input
   const td = input.closest('td');
   const tr = td ? td.closest('tr') : null;
   if(!tr) return;
   const labelTd = tr.querySelector('td:first-child');
   if(enfocar) {
-    tr.querySelectorAll('td').forEach(c => {
-      if(!c.style.background || c.style.background === 'white' || c.style.background === 'rgb(255, 255, 255)') {
+    // Guardar estilos originales antes de modificar
+    if(labelTd && !labelTd.dataset.origBg) {
+      labelTd.dataset.origBg  = labelTd.style.background  || '';
+      labelTd.dataset.origColor = labelTd.style.color      || '';
+      labelTd.dataset.origFw  = labelTd.style.fontWeight   || '';
+    }
+    // Resaltar celdas de datos (no la label)
+    tr.querySelectorAll('td:not(:first-child)').forEach(c => {
+      if(!c.dataset.origBg) c.dataset.origBg = c.style.background || '';
+      if(!c.style.background || c.style.background === 'white' || c.style.background === 'rgb(255, 255, 255)' || c.style.background === '') {
         c.style.background = '#f0fdf4';
-        c.dataset.prevBg = 'restore';
       }
     });
     if(labelTd) {
-      labelTd.style.background = '#dcfce7';
-      labelTd.style.color = '#16a34a';
-      labelTd.style.fontWeight = '700';
+      labelTd.style.background  = '#dcfce7';
+      labelTd.style.color       = '#16a34a';
+      labelTd.style.fontWeight  = '700';
     }
   } else {
-    tr.querySelectorAll('td[data-prev-bg]').forEach(c => {
-      c.style.background = '';
-      delete c.dataset.prevBg;
+    // Restaurar exactamente los valores originales
+    tr.querySelectorAll('td:not(:first-child)').forEach(c => {
+      c.style.background = c.dataset.origBg || '';
+      delete c.dataset.origBg;
     });
     if(labelTd) {
-      labelTd.style.background = '';
-      labelTd.style.color = '';
-      labelTd.style.fontWeight = '';
+      labelTd.style.background  = labelTd.dataset.origBg    || '';
+      labelTd.style.color       = labelTd.dataset.origColor  || '';
+      labelTd.style.fontWeight  = labelTd.dataset.origFw     || '';
+      delete labelTd.dataset.origBg;
+      delete labelTd.dataset.origColor;
+      delete labelTd.dataset.origFw;
     }
   }
 }
@@ -3796,8 +3823,6 @@ function abrirHistorialModal(perfil) {
   const titulo = document.getElementById('mhl_titulo');
   const subtitulo = document.getElementById('mhl_subtitulo');
   const contenido = document.getElementById('mhl_contenido');
-
-  // Datos
   const datos = labDatos;
   const sexoPac = pacienteActual?.sexo==='Femenino'?'F':'H';
   const PALETTE = ['#3b82f6','#10b981','#f59e0b','#ef4444','#8b5cf6','#ec4899','#06b6d4','#84cc16'];
@@ -3807,43 +3832,13 @@ function abrirHistorialModal(perfil) {
   if(!datos.columnas || !datos.columnas.length) {
     subtitulo.textContent = '';
     contenido.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-soft)"><div style="font-size:40px;margin-bottom:12px">📋</div><p>Sin datos cargados aún.</p></div>';
-    modal.style.display = 'flex';
-    return;
+    modal.style.display = 'flex'; return;
   }
 
-  // Incluir TODAS las columnas excepto la última si está vacía para ESTE perfil específico
-  // (no globalmente — puede tener datos de otros parámetros)
+  // Todas las columnas como {fecha, ci}
   const allColsH = datos.columnas.map((fecha, ci) => ({fecha, ci}));
 
-  if(!colsH.length) {
-    subtitulo.textContent = 'Sin registros guardados aún';
-    contenido.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-soft)"><div style="font-size:40px;margin-bottom:12px">📋</div><p>Guardá un laboratorio para ver el historial.</p></div>';
-    modal.style.display = 'flex';
-    return;
-  }
-
-  // Etiquetas con numeración para fechas repetidas
-  const fechaCount = {};
-  colsH.forEach(({fecha}) => { fechaCount[fecha] = (fechaCount[fecha]||0)+1; });
-  const fechaSeq = {};
-  const fechasLabelFiltradas = colsH.map(({fecha}) => {
-    const d = new Date(fecha+'T12:00:00').toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'2-digit'});
-    if(fechaCount[fecha] > 1) {
-      fechaSeq[fecha] = (fechaSeq[fecha]||0)+1;
-      return d + ' #'+fechaSeq[fecha];
-    }
-    return d;
-  });
-  subtitulo.textContent = colsH.length + ' carga' + (colsH.length!==1?'s':'') + ' · ' + pacienteActual?.apellido + ', ' + pacienteActual?.nombre;
-
-  // Vals filtrados por columnas con datos del perfil
-  const colsHIdx = colsH.map(col => allColsH.indexOf(col));
-  const filasFiltradas = filasDelPerfil.map(row => ({
-    ...row,
-    vals: colsHIdx.map(i => row.vals[i]||''),
-  }));
-
-  // Vals: usar ci directo (índice real en datos.filas)
+  // Vals por parámetro del perfil usando índice real ci
   const filasDelPerfil = cfg.keys.map(key => {
     const fi = LAB_FILAS.findIndex(f=>f.key===key);
     if(fi<0) return null;
@@ -3854,23 +3849,38 @@ function abrirHistorialModal(perfil) {
     return { fila, vals, storedU };
   }).filter(Boolean);
 
-  // Columnas con al menos un valor de este perfil
+  // Solo columnas que tienen al menos un valor del perfil
   const colsH = allColsH.filter((_,i) =>
     filasDelPerfil.some(({vals}) => vals[i]?.trim())
   );
+
   if(!colsH.length) {
     subtitulo.textContent = 'Sin datos cargados aún';
-    contenido.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-soft)"><div style="font-size:40px;margin-bottom:12px">🔍</div><p>Sin datos de '+cfg.label+' cargados aún.</p></div>';
-    modal.style.display = 'flex';
-    return;
-  }
-
-  if(!filasFiltradas.length) {
     contenido.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-soft)"><div style="font-size:40px;margin-bottom:12px">🔍</div><p>Sin datos de '+cfg.label+' cargados aún.</p></div>';
     modal.style.display = 'flex'; return;
   }
 
+  // Etiquetas con #N para fechas repetidas
+  const fechaCount = {};
+  colsH.forEach(({fecha}) => { fechaCount[fecha] = (fechaCount[fecha]||0)+1; });
+  const fechaSeq = {};
+  const fechasLabel = colsH.map(({fecha}) => {
+    const d = new Date(fecha+'T12:00:00').toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'2-digit'});
+    if(fechaCount[fecha] > 1) { fechaSeq[fecha] = (fechaSeq[fecha]||0)+1; return d+' #'+fechaSeq[fecha]; }
+    return d;
+  });
+
+  subtitulo.textContent = colsH.length+' carga'+(colsH.length!==1?'s':'')+' · '+pacienteActual?.apellido+', '+pacienteActual?.nombre;
+
+  // Vals re-alineados a colsH
+  const colsHIdx = colsH.map(col => allColsH.indexOf(col));
+  const filasFiltradas = filasDelPerfil.map(row => ({
+    ...row,
+    vals: colsHIdx.map(i => row.vals[i]||''),
+  }));
+
   let html = '';
+
   // Tarjetas último valor
   html += '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:18px">';
   filasFiltradas.forEach(({fila,vals,storedU}) => {
@@ -3884,11 +3894,11 @@ function abrirHistorialModal(perfil) {
   });
   html += '</div>';
 
-  // Tabla — scroll con indicador de "hay más"
+  // Tabla con scroll
   html += '<div class="scroll-wrap" id="mhl_scroll_'+perfil+'" style="margin-bottom:18px"><table style="border-collapse:collapse;font-size:11px;white-space:nowrap;width:100%">';
   html += '<thead><tr><th style="background:var(--blue);color:white;padding:5px 10px;text-align:left;position:sticky;left:0;z-index:2;min-width:150px">Parámetro</th>';
   html += '<th style="background:var(--blue);color:white;padding:5px 6px;text-align:center;min-width:50px">Unidad</th>';
-  fechasLabelFiltradas.forEach(f=>{ html += '<th style="background:var(--blue);color:white;padding:5px 8px;text-align:center;min-width:80px">'+f+'</th>'; });
+  fechasLabel.forEach(f=>{ html += '<th style="background:var(--blue);color:white;padding:5px 8px;text-align:center;min-width:80px">'+f+'</th>'; });
   html += '</tr></thead><tbody>';
   filasFiltradas.forEach(({fila,vals,storedU})=>{
     const isCalc = !!fila.calc;
@@ -3902,22 +3912,20 @@ function abrirHistorialModal(perfil) {
   });
   html += '</tbody></table></div>';
 
+  // Gráfico
   const chartId = 'mhl_chart_'+perfil;
   const seriesNum = filasFiltradas.filter(({vals})=>vals.some(v=>!isNaN(parseFloat(v))));
   if(seriesNum.length) html += '<canvas id="'+chartId+'" style="max-height:220px"></canvas>';
   contenido.innerHTML = html;
   modal.style.display = 'flex';
 
-  // Detectar scroll horizontal para mostrar indicador
-  setTimeout(() => {
+  // Scroll indicator
+  setTimeout(()=>{
     const sw = document.getElementById('mhl_scroll_'+perfil);
-    if(sw) {
-      const check = () => sw.classList.toggle('has-scroll', sw.scrollWidth > sw.clientWidth + 4);
-      check();
-      sw.addEventListener('scroll', check);
-    }
+    if(sw) { const check=()=>sw.classList.toggle('has-scroll',sw.scrollWidth>sw.clientWidth+4); check(); sw.addEventListener('scroll',check); }
   }, 60);
 
+  // Chart
   if(seriesNum.length) {
     setTimeout(()=>{
       const ctx = document.getElementById(chartId);
@@ -3926,7 +3934,7 @@ function abrirHistorialModal(perfil) {
       _chartInstances['modal'] = new Chart(ctx, {
         type:'line',
         data:{
-          labels: fechasLabelFiltradas,
+          labels: fechasLabel,
           datasets: seriesNum.map(({fila,vals},i)=>({
             label: fila.label,
             data: vals.map(v=>v?parseFloat(v):null),
@@ -3949,7 +3957,7 @@ function abrirHistorialModal(perfil) {
           },
         },
       });
-    }, 50);
+    }, 80);
   }
 }
 
@@ -3965,6 +3973,147 @@ document.getElementById('modal_historial_lab').addEventListener('click', functio
 });
 
 
+
+// ===== HISTORIAL ANTROPOMETRÍA =====
+const ANT_PERFIL = {
+  keys:   ['IMC','Cintura','PctGrasa','PctMusculo','GrasaVisceral'],
+  labels: ['IMC','Cintura (cm)','% grasa','% músculo','Grasa visceral'],
+  colors: ['#3b82f6','#f59e0b','#ef4444','#10b981','#8b5cf6'],
+};
+
+function abrirHistorialAnt() {
+  const modal    = document.getElementById('modal_historial_ant');
+  const subtit   = document.getElementById('mha_subtitulo');
+  const contenido= document.getElementById('mha_contenido');
+  const datos    = antDatos;
+  const sexoPac  = pacienteActual?.sexo==='Femenino'?'F':'H';
+
+  if(!datos.columnas || !datos.columnas.length) {
+    subtit.textContent = '';
+    contenido.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-soft)"><div style="font-size:40px;margin-bottom:12px">📐</div><p>Sin datos cargados aún.</p></div>';
+    modal.style.display = 'flex'; return;
+  }
+
+  // Todas las columnas con al menos un valor del perfil
+  const allCols = datos.columnas.map((fecha,ci)=>({fecha,ci}));
+  const perfKeys = ANT_PERFIL.keys;
+  const perfFis  = perfKeys.map(key => ANT_FILAS.findIndex(f=>f.key===key));
+
+  const filasPerf = perfKeys.map((key,ki) => {
+    const fi = perfFis[ki];
+    if(fi<0) return null;
+    const fila = ANT_FILAS[fi];
+    const vals = allCols.map(({ci})=>(datos.filas[fi]||[])[ci]||'');
+    if(!vals.some(v=>v.trim())) return null;
+    return { fila, vals, label: ANT_PERFIL.labels[ki], color: ANT_PERFIL.colors[ki] };
+  }).filter(Boolean);
+
+  const colsH = allCols.filter((_,i) =>
+    filasPerf.some(({vals})=>vals[i]?.trim())
+  );
+  if(!colsH.length || !filasPerf.length) {
+    subtit.textContent = 'Sin datos aún';
+    contenido.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-soft)"><div style="font-size:40px">🔍</div><p>Sin datos antropométricos cargados.</p></div>';
+    modal.style.display = 'flex'; return;
+  }
+
+  const colsHIdx = colsH.map(c=>allCols.indexOf(c));
+  const filasF = filasPerf.map(row=>({...row, vals: colsHIdx.map(i=>row.vals[i]||'')}));
+
+  // Etiquetas
+  const fechaCount = {};
+  colsH.forEach(({fecha})=>{ fechaCount[fecha]=(fechaCount[fecha]||0)+1; });
+  const fechaSeq = {};
+  const fechasLabel = colsH.map(({fecha})=>{
+    const d = new Date(fecha+'T12:00:00').toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'2-digit'});
+    if(fechaCount[fecha]>1){ fechaSeq[fecha]=(fechaSeq[fecha]||0)+1; return d+' #'+fechaSeq[fecha]; }
+    return d;
+  });
+
+  subtit.textContent = colsH.length+' carga'+(colsH.length!==1?'s':'')+' · '+pacienteActual?.apellido+', '+pacienteActual?.nombre;
+
+  // Tarjetas último valor
+  let html = '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:18px">';
+  filasF.forEach(({fila,vals,label,color})=>{
+    const lastVal = [...vals].reverse().find(v=>v.trim())||'';
+    const alerta = lastVal && fila.ref && fila.ref(lastVal,sexoPac);
+    const storedU = (antDatos.unidades&&antDatos.unidades[fila.key])||fila.unidades[0];
+    html += '<div style="background:'+(alerta?'#fff0f0':'#f8fafc')+';border:1.5px solid '+(alerta?'var(--red)':color+'55')+';border-radius:10px;padding:10px 14px;min-width:90px;flex:1">';
+    html += '<div style="font-size:10px;font-weight:700;color:'+color+';text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px">'+label+'</div>';
+    html += '<div style="font-size:20px;font-weight:700;color:'+(alerta?'var(--red)':'var(--text)')+'">'+(lastVal||'—')+'</div>';
+    html += '<div style="font-size:10px;color:var(--text-soft)">'+storedU+(alerta?' ⚠️':'')+'</div></div>';
+  });
+  html += '</div>';
+
+  // Tabla
+  html += '<div class="scroll-wrap" id="mha_scroll" style="margin-bottom:18px"><table style="border-collapse:collapse;font-size:11px;white-space:nowrap;width:100%">';
+  html += '<thead><tr><th style="background:var(--blue);color:white;padding:5px 10px;text-align:left;position:sticky;left:0;z-index:2;min-width:150px">Parámetro</th>';
+  html += '<th style="background:var(--blue);color:white;padding:5px 6px;text-align:center;min-width:50px">Unidad</th>';
+  fechasLabel.forEach(f=>{ html += '<th style="background:var(--blue);color:white;padding:5px 8px;text-align:center;min-width:80px">'+f+'</th>'; });
+  html += '</tr></thead><tbody>';
+  filasF.forEach(({fila,vals,label})=>{
+    const isCalc = !!fila.calc;
+    const storedU = (antDatos.unidades&&antDatos.unidades[fila.key])||fila.unidades[0];
+    html += '<tr><td style="padding:4px 10px;border:1px solid var(--border);font-weight:'+(isCalc?'500':'600')+';position:sticky;left:0;background:'+(isCalc?'#f0f7ff':'white')+';color:'+(isCalc?'var(--teal)':'var(--text)')+'">'+label+'</td>';
+    html += '<td style="padding:4px 6px;border:1px solid var(--border);text-align:center;color:var(--text-soft);background:#fafafa;font-size:10px">'+storedU+'</td>';
+    vals.forEach(v=>{
+      const alerta = v && fila.ref && fila.ref(v,sexoPac);
+      html += '<td style="padding:4px 8px;border:1px solid var(--border);text-align:center;font-weight:'+(alerta?'700':'400')+';color:'+(alerta?'var(--red)':v?'var(--text)':'#ccc')+';background:'+(alerta?'#fff0f0':'white')+'"'+(alerta&&fila.refTxt?' title="'+fila.refTxt+'"':'')+'>'+( v||'—')+'</td>';
+    });
+    html += '</tr>';
+  });
+  html += '</tbody></table></div>';
+
+  // Gráfico — series numéricas
+  const seriesNum = filasF.filter(({vals})=>vals.some(v=>!isNaN(parseFloat(v))));
+  if(seriesNum.length) html += '<canvas id="mha_chart" style="max-height:240px"></canvas>';
+  contenido.innerHTML = html;
+  modal.style.display = 'flex';
+
+  setTimeout(()=>{
+    const sw = document.getElementById('mha_scroll');
+    if(sw){ const chk=()=>sw.classList.toggle('has-scroll',sw.scrollWidth>sw.clientWidth+4); chk(); sw.addEventListener('scroll',chk); }
+    if(!seriesNum.length) return;
+    const ctx = document.getElementById('mha_chart');
+    if(!ctx) return;
+    if(_chartInstances['ant']) { try{_chartInstances['ant'].destroy();}catch(e){} }
+    _chartInstances['ant'] = new Chart(ctx,{
+      type:'line',
+      data:{
+        labels: fechasLabel,
+        datasets: seriesNum.map(({fila,vals,label,color})=>({
+          label, color,
+          data: vals.map(v=>v?parseFloat(v):null),
+          borderColor: color,
+          backgroundColor: color+'22',
+          borderWidth:2.5, pointRadius:5, pointHoverRadius:7,
+          tension:0.35, spanGaps:true, fill:false,
+        })),
+      },
+      options:{
+        responsive:true,
+        interaction:{mode:'index',intersect:false},
+        plugins:{
+          legend:{position:'bottom',labels:{font:{size:11},padding:12,usePointStyle:true}},
+          tooltip:{callbacks:{label:c=>' '+c.dataset.label+': '+c.parsed.y}},
+        },
+        scales:{
+          x:{ticks:{font:{size:10}},grid:{display:false}},
+          y:{ticks:{font:{size:10}},grid:{color:'#f0f0f0'},beginAtZero:false},
+        },
+      },
+    });
+  }, 80);
+}
+
+function cerrarHistorialAnt() {
+  document.getElementById('modal_historial_ant').style.display = 'none';
+  if(_chartInstances['ant']) { try{_chartInstances['ant'].destroy();}catch(e){} delete _chartInstances['ant']; }
+}
+
+document.getElementById('modal_historial_ant').addEventListener('click', function(e){
+  if(e.target===this) cerrarHistorialAnt();
+});
 
 </script>
 
