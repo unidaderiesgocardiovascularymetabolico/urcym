@@ -967,11 +967,17 @@
         </div>
 
         <!-- Filtro por parámetro -->
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap">
           <input type="text" id="lab_filtro_param" placeholder="🔍 Filtrar por parámetro..." oninput="filtrarTablaLab(this.value)"
-            style="padding:6px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;font-family:var(--font-main);width:240px;outline:none"/>
+            style="padding:6px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;font-family:var(--font-main);width:220px;outline:none"/>
           <button onclick="limpiarFiltroLab()" id="lab_filtro_clear" style="display:none;padding:5px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;font-family:var(--font-main);background:white;cursor:pointer;color:var(--text-soft)">✕</button>
           <span id="lab_filtro_info" style="font-size:11px;color:var(--text-soft)"></span>
+          <!-- Agregar columna con fecha anterior -->
+          <div style="margin-left:auto;display:flex;align-items:center;gap:6px">
+            <span style="font-size:11px;color:var(--text-soft)">+ Columna histórica:</span>
+            <input type="date" id="evlab_fecha_nueva" style="padding:5px 8px;border:1.5px solid var(--border);border-radius:7px;font-size:12px;font-family:var(--font-main)"/>
+            <button onclick="agregarColumnaEvLab()" style="padding:5px 14px;border:none;border-radius:7px;background:var(--blue);color:white;font-size:12px;cursor:pointer;font-family:var(--font-main);font-weight:600">Agregar</button>
+          </div>
         </div>
 
         <!-- Tabla -->
@@ -3757,7 +3763,7 @@ function abrirHistorialModal(perfil) {
     return;
   }
 
-  // Columnas históricas (excluir última si está vacía)
+  // Todas las columnas guardadas — excluir solo la última si es la columna nueva vacía (sin ningún dato)
   const lastCi = datos.columnas.length - 1;
   const ultimaTieneDatos = datos.filas && datos.filas.some(f=>(f||[])[lastCi]?.toString().trim());
   const colsH = ultimaTieneDatos ? [...datos.columnas] : datos.columnas.slice(0,-1);
@@ -3770,54 +3776,62 @@ function abrirHistorialModal(perfil) {
   }
 
   const fechasLabel = colsH.map(c => new Date(c+'T12:00:00').toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'}));
-  subtitulo.textContent = colsH.length + ' fecha' + (colsH.length!==1?'s':'') + ' · ' + pacienteActual?.nombre + ' ' + pacienteActual?.apellido;
+  subtitulo.textContent = colsH.length + ' fecha' + (colsH.length!==1?'s':'') + ' · ' + pacienteActual?.apellido + ', ' + pacienteActual?.nombre;
 
-  // Filas con datos
+  // Filas con datos — índices reales en datos.columnas
   const filasDelPerfil = cfg.keys.map(key => {
     const fi = LAB_FILAS.findIndex(f=>f.key===key);
     if(fi<0) return null;
     const fila = LAB_FILAS[fi];
     const colIdxs = colsH.map(c => datos.columnas.indexOf(c));
-    const vals = colIdxs.map(ci => (datos.filas[fi]||[])[ci]||'');
+    const vals = colIdxs.map(ci => ci>=0 ? (datos.filas[fi]||[])[ci]||'' : '');
     if(!vals.some(v=>v.trim())) return null;
     const storedU = (datos.unidades&&datos.unidades[key]) || fila.unidades[0];
     return { fila, vals, storedU };
   }).filter(Boolean);
 
-  if(!filasDelPerfil.length) {
-    contenido.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-soft)"><div style="font-size:40px;margin-bottom:12px">🔍</div><p>Sin datos de ' + cfg.label + ' cargados aún.</p></div>';
-    modal.style.display = 'flex';
-    return;
+  // Filtrar columnas que tengan al menos un valor en alguna fila del perfil
+  const colsConDatos = colsH.filter((_,ci) =>
+    filasDelPerfil.some(({vals}) => vals[ci]?.trim())
+  );
+  const colsConDatosIdx = colsConDatos.map(c => colsH.indexOf(c));
+  const fechasLabelFiltradas = colsConDatos.map(c => new Date(c+'T12:00:00').toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'}));
+  // Re-filtrar vals de cada fila para solo columnas con datos
+  const filasFiltradas = filasDelPerfil.map(row => ({
+    ...row,
+    vals: colsConDatosIdx.map(i => row.vals[i]||''),
+  }));
+
+  if(!filasFiltradas.length) {
+    contenido.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-soft)"><div style="font-size:40px;margin-bottom:12px">🔍</div><p>Sin datos de '+cfg.label+' cargados aún.</p></div>';
+    modal.style.display = 'flex'; return;
   }
 
-  // Build UI
   let html = '';
-
-  // Tarjetas de últimos valores
+  // Tarjetas último valor
   html += '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:18px">';
-  filasDelPerfil.forEach(({fila, vals, storedU}) => {
-    const lastVal = [...vals].reverse().find(v=>v.trim()) || '';
-    const alerta = lastVal && fila.ref && fila.ref(lastVal, sexoPac, storedU);
+  filasFiltradas.forEach(({fila,vals,storedU}) => {
+    const lastVal = [...vals].reverse().find(v=>v.trim())||'';
+    const alerta = lastVal && fila.ref && fila.ref(lastVal,sexoPac,storedU);
     const isCalc = !!fila.calc;
     html += '<div style="background:'+(alerta?'#fff0f0':isCalc?'#f0f7ff':'#f8fafc')+';border:1.5px solid '+(alerta?'var(--red)':isCalc?'#c3e0ff':'var(--border)')+';border-radius:10px;padding:10px 14px;min-width:100px;flex:1">';
     html += '<div style="font-size:10px;font-weight:700;color:'+(alerta?'var(--red)':isCalc?'var(--teal)':'var(--text-soft)')+';text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px">'+fila.label+'</div>';
     html += '<div style="font-size:20px;font-weight:700;color:'+(alerta?'var(--red)':'var(--text)')+'">'+(lastVal||'—')+'</div>';
-    html += '<div style="font-size:10px;color:var(--text-soft);margin-top:2px">'+storedU+(alerta?' ⚠️':'')+'</div>';
-    html += '</div>';
+    html += '<div style="font-size:10px;color:var(--text-soft);margin-top:2px">'+storedU+(alerta?' ⚠️':'')+'</div></div>';
   });
   html += '</div>';
 
-  // Tabla compacta
+  // Tabla — solo columnas con datos del perfil
   html += '<div style="overflow-x:auto;margin-bottom:18px"><table style="border-collapse:collapse;font-size:11px;white-space:nowrap;width:100%">';
   html += '<thead><tr><th style="background:var(--blue);color:white;padding:5px 10px;text-align:left;position:sticky;left:0;z-index:2;min-width:150px">Parámetro</th>';
   html += '<th style="background:var(--blue);color:white;padding:5px 6px;text-align:center;min-width:50px">Unidad</th>';
-  fechasLabel.forEach(f => { html += '<th style="background:var(--blue);color:white;padding:5px 8px;text-align:center;min-width:80px">'+f+'</th>'; });
+  fechasLabelFiltradas.forEach(f=>{ html += '<th style="background:var(--blue);color:white;padding:5px 8px;text-align:center;min-width:80px">'+f+'</th>'; });
   html += '</tr></thead><tbody>';
-  filasDelPerfil.forEach(({fila,vals,storedU}) => {
+  filasFiltradas.forEach(({fila,vals,storedU})=>{
     const isCalc = !!fila.calc;
     html += '<tr><td style="padding:4px 10px;border:1px solid var(--border);font-weight:'+(isCalc?'500':'600')+';position:sticky;left:0;background:'+(isCalc?'#f0f7ff':'white')+';color:'+(isCalc?'var(--teal)':'var(--text)')+'">'+fila.label+'</td>';
     html += '<td style="padding:4px 6px;border:1px solid var(--border);text-align:center;color:var(--text-soft);background:#fafafa;font-size:10px">'+storedU+'</td>';
-    vals.forEach(v => {
+    vals.forEach(v=>{
       const alerta = v && fila.ref && fila.ref(v,sexoPac,storedU);
       html += '<td style="padding:4px 8px;border:1px solid var(--border);text-align:center;font-weight:'+(alerta?'700':'400')+';color:'+(alerta?'var(--red)':v?'var(--text)':'#ccc')+';background:'+(alerta?'#fff0f0':'white')+'"'+(alerta&&fila.refTxt?' title="'+fila.refTxt+'"':'')+'>'+( v||'—')+'</td>';
     });
@@ -3825,43 +3839,40 @@ function abrirHistorialModal(perfil) {
   });
   html += '</tbody></table></div>';
 
-  // Gráfico
   const chartId = 'mhl_chart_'+perfil;
-  const seriesNum = filasDelPerfil.filter(({vals})=>vals.some(v=>!isNaN(parseFloat(v))));
+  const seriesNum = filasFiltradas.filter(({vals})=>vals.some(v=>!isNaN(parseFloat(v))));
   if(seriesNum.length) html += '<canvas id="'+chartId+'" style="max-height:220px"></canvas>';
-
   contenido.innerHTML = html;
   modal.style.display = 'flex';
 
-  // Render chart
   if(seriesNum.length) {
     setTimeout(()=>{
       const ctx = document.getElementById(chartId);
       if(!ctx) return;
       if(_chartInstances['modal']) { try{_chartInstances['modal'].destroy();}catch(e){} }
       _chartInstances['modal'] = new Chart(ctx, {
-        type: 'line',
-        data: {
-          labels: fechasLabel,
+        type:'line',
+        data:{
+          labels: fechasLabelFiltradas,
           datasets: seriesNum.map(({fila,vals},i)=>({
             label: fila.label,
             data: vals.map(v=>v?parseFloat(v):null),
             borderColor: PALETTE[i%PALETTE.length],
             backgroundColor: PALETTE[i%PALETTE.length]+'18',
-            borderWidth: 2.5, pointRadius: 5, pointHoverRadius: 7,
-            tension: 0.35, spanGaps: true, fill: false,
+            borderWidth:2.5, pointRadius:5, pointHoverRadius:7,
+            tension:0.35, spanGaps:true, fill:false,
           })),
         },
-        options: {
-          responsive: true,
-          interaction: { mode:'index', intersect:false },
-          plugins: {
-            legend: { position:'bottom', labels:{ font:{size:11}, padding:12, usePointStyle:true }},
-            tooltip: { callbacks:{ label: c=>' '+c.dataset.label+': '+c.parsed.y }},
+        options:{
+          responsive:true,
+          interaction:{mode:'index',intersect:false},
+          plugins:{
+            legend:{position:'bottom',labels:{font:{size:11},padding:12,usePointStyle:true}},
+            tooltip:{callbacks:{label:c=>' '+c.dataset.label+': '+c.parsed.y}},
           },
-          scales: {
-            x: { ticks:{ font:{size:10} }, grid:{ display:false } },
-            y: { ticks:{ font:{size:10} }, grid:{ color:'#f0f0f0' }, beginAtZero:false },
+          scales:{
+            x:{ticks:{font:{size:10}},grid:{display:false}},
+            y:{ticks:{font:{size:10}},grid:{color:'#f0f0f0'},beginAtZero:false},
           },
         },
       });
