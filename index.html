@@ -1564,7 +1564,20 @@ function renderTablaReadonly(datos, filas, wrapId) {
   wrap.innerHTML = h;
 }
 
-function agregarColumnaEvLab() { agregarColumna('evlab_fecha_nueva', labDatos, LAB_FILAS, 'evlab_wrap'); sincronizarRO(); renderTablaGenerica(labDatos, LAB_FILAS, 'evlab_wrap'); }
+function agregarColumnaEvLab() {
+  const f = document.getElementById('evlab_fecha_nueva').value;
+  if(!f) return;
+  // Insertar en orden cronológico
+  if(!labDatos.columnas.includes(f)) {
+    labDatos.columnas.push(f);
+    labDatos.columnas.sort();
+  }
+  document.getElementById('evlab_fecha_nueva').value = '';
+  const newIdx = labDatos.columnas.indexOf(f);
+  // Renderizar con la columna agregada como activa/editable (no guardar aún)
+  renderTablaGenerica(labDatos, LAB_FILAS, 'evlab_wrap', newIdx);
+  sincronizarRO();
+}
 function agregarColumnaEvEst() { agregarColumna('evest_fecha_nueva', estDatos, EST_FILAS, 'evest_wrap'); sincronizarRO(); renderTablaGenerica(estDatos, EST_FILAS, 'evest_wrap'); }
 function agregarColumnaEvAnt() { agregarColumna('evant_fecha_nueva', antDatos, ANT_FILAS, 'evant_wrap'); sincronizarRO(); renderTablaGenerica(antDatos, ANT_FILAS, 'evant_wrap'); }
 
@@ -1824,6 +1837,13 @@ function renderTablaGenerica(datos, filas, wrapId, newColIdx) {
     h += '</div>';
   }
   wrap.innerHTML = h;
+  // Scroll automático al final: columna nueva siempre visible a la derecha
+  if(hasHistory) {
+    setTimeout(() => {
+      const parent = wrap.closest('[style*="overflow-x"]') || wrap.parentElement;
+      if(parent) parent.scrollLeft = parent.scrollWidth;
+    }, 0);
+  }
 }
 
 function agregarFilaExtra(wrapId) {
@@ -3912,12 +3932,24 @@ function abrirHistorialModal(perfil) {
   });
   html += '</tbody></table></div>';
 
-  // Gráfico
-  const chartId = 'mhl_chart_'+perfil;
+  // Gráfico con selector de series
   const seriesNum = filasFiltradas.filter(({vals})=>vals.some(v=>!isNaN(parseFloat(v))));
-  if(seriesNum.length) html += '<canvas id="'+chartId+'" style="max-height:220px"></canvas>';
+  if(seriesNum.length) {
+    html += '<div id="mhl_chart_selector_'+perfil+'" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">';
+    html += '<button onclick="mhlSetChart(\''+perfil+'\',\'all\')" data-sel="all" class="btn-historial active" style="font-size:11px;padding:4px 10px">Todos</button>';
+    seriesNum.forEach(({fila},i) => {
+      html += '<button onclick="mhlSetChart(\''+perfil+'\','+i+')" data-sel="'+i+'" class="btn-historial" style="font-size:11px;padding:4px 10px">'+fila.label+'</button>';
+    });
+    html += '</div>';
+    html += '<canvas id="mhl_chart_'+perfil+'" style="max-height:220px"></canvas>';
+  }
   contenido.innerHTML = html;
   modal.style.display = 'flex';
+
+  // Guardar series en el modal para el selector
+  modal._seriesNum = seriesNum;
+  modal._fechasLabel = fechasLabel;
+  modal._perfil = perfil;
 
   // Scroll indicator
   setTimeout(()=>{
@@ -3925,40 +3957,62 @@ function abrirHistorialModal(perfil) {
     if(sw) { const check=()=>sw.classList.toggle('has-scroll',sw.scrollWidth>sw.clientWidth+4); check(); sw.addEventListener('scroll',check); }
   }, 60);
 
-  // Chart
-  if(seriesNum.length) {
-    setTimeout(()=>{
-      const ctx = document.getElementById(chartId);
-      if(!ctx) return;
-      if(_chartInstances['modal']) { try{_chartInstances['modal'].destroy();}catch(e){} }
-      _chartInstances['modal'] = new Chart(ctx, {
-        type:'line',
-        data:{
-          labels: fechasLabel,
-          datasets: seriesNum.map(({fila,vals},i)=>({
-            label: fila.label,
-            data: vals.map(v=>v?parseFloat(v):null),
-            borderColor: PALETTE[i%PALETTE.length],
-            backgroundColor: PALETTE[i%PALETTE.length]+'18',
-            borderWidth:2.5, pointRadius:5, pointHoverRadius:7,
-            tension:0.35, spanGaps:true, fill:false,
-          })),
-        },
-        options:{
-          responsive:true,
-          interaction:{mode:'index',intersect:false},
-          plugins:{
-            legend:{position:'bottom',labels:{font:{size:11},padding:12,usePointStyle:true}},
-            tooltip:{callbacks:{label:c=>' '+c.dataset.label+': '+c.parsed.y}},
-          },
-          scales:{
-            x:{ticks:{font:{size:10}},grid:{display:false}},
-            y:{ticks:{font:{size:10}},grid:{color:'#f0f0f0'},beginAtZero:false},
-          },
-        },
-      });
-    }, 80);
-  }
+  // Render chart inicial (todos)
+  if(seriesNum.length) setTimeout(()=> mhlSetChart(perfil,'all'), 80);
+}
+
+// Renderiza el gráfico del modal con selección de serie
+const PALETTE_MODAL = ['#3b82f6','#10b981','#f59e0b','#ef4444','#8b5cf6','#ec4899','#06b6d4','#84cc16'];
+function mhlSetChart(perfil, sel) {
+  const modal = document.getElementById('modal_historial_lab');
+  const seriesNum = modal._seriesNum;
+  const fechasLabel = modal._fechasLabel;
+  if(!seriesNum || !seriesNum.length) return;
+
+  // Actualizar botones activos
+  const selector = document.getElementById('mhl_chart_selector_'+perfil);
+  if(selector) selector.querySelectorAll('button').forEach(b => {
+    b.classList.toggle('active', b.dataset.sel === String(sel));
+  });
+
+  // Seleccionar series
+  const datasets = sel === 'all'
+    ? seriesNum.map(({fila,vals},i)=>({
+        label: fila.label,
+        data: vals.map(v=>v?parseFloat(v):null),
+        borderColor: PALETTE_MODAL[i%PALETTE_MODAL.length],
+        backgroundColor: PALETTE_MODAL[i%PALETTE_MODAL.length]+'18',
+        borderWidth:2.5, pointRadius:5, pointHoverRadius:7,
+        tension:0.35, spanGaps:true, fill:false,
+      }))
+    : [seriesNum[sel]].map(({fila,vals})=>({
+        label: fila.label,
+        data: vals.map(v=>v?parseFloat(v):null),
+        borderColor: PALETTE_MODAL[sel%PALETTE_MODAL.length],
+        backgroundColor: PALETTE_MODAL[sel%PALETTE_MODAL.length]+'18',
+        borderWidth:2.5, pointRadius:5, pointHoverRadius:7,
+        tension:0.35, spanGaps:true, fill:false,
+      }));
+
+  const ctx = document.getElementById('mhl_chart_'+perfil);
+  if(!ctx) return;
+  if(_chartInstances['modal']) { try{_chartInstances['modal'].destroy();}catch(e){} }
+  _chartInstances['modal'] = new Chart(ctx, {
+    type:'line',
+    data:{ labels: fechasLabel, datasets },
+    options:{
+      responsive:true,
+      interaction:{mode:'index',intersect:false},
+      plugins:{
+        legend:{position:'bottom',labels:{font:{size:11},padding:12,usePointStyle:true}},
+        tooltip:{callbacks:{label:c=>' '+c.dataset.label+': '+c.parsed.y}},
+      },
+      scales:{
+        x:{ticks:{font:{size:10}},grid:{display:false}},
+        y:{ticks:{font:{size:10}},grid:{color:'#f0f0f0'},beginAtZero:false},
+      },
+    },
+  });
 }
 
 function cerrarHistorialModal() {
@@ -4064,46 +4118,64 @@ function abrirHistorialAnt() {
   });
   html += '</tbody></table></div>';
 
-  // Gráfico — series numéricas
+  // Gráfico — series numéricas con selector
   const seriesNum = filasF.filter(({vals})=>vals.some(v=>!isNaN(parseFloat(v))));
-  if(seriesNum.length) html += '<canvas id="mha_chart" style="max-height:240px"></canvas>';
+  if(seriesNum.length) {
+    html += '<div id="mha_chart_selector" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">';
+    html += '<button onclick="mhaSetChart(\'all\')" data-sel="all" class="btn-historial active" style="font-size:11px;padding:4px 10px">Todos</button>';
+    seriesNum.forEach(({label},i) => {
+      html += '<button onclick="mhaSetChart('+i+')" data-sel="'+i+'" class="btn-historial" style="font-size:11px;padding:4px 10px">'+label+'</button>';
+    });
+    html += '</div>';
+    html += '<canvas id="mha_chart" style="max-height:240px"></canvas>';
+  }
   contenido.innerHTML = html;
   modal.style.display = 'flex';
+  modal._seriesNum = seriesNum;
+  modal._fechasLabel = fechasLabel;
 
   setTimeout(()=>{
     const sw = document.getElementById('mha_scroll');
     if(sw){ const chk=()=>sw.classList.toggle('has-scroll',sw.scrollWidth>sw.clientWidth+4); chk(); sw.addEventListener('scroll',chk); }
-    if(!seriesNum.length) return;
-    const ctx = document.getElementById('mha_chart');
-    if(!ctx) return;
-    if(_chartInstances['ant']) { try{_chartInstances['ant'].destroy();}catch(e){} }
-    _chartInstances['ant'] = new Chart(ctx,{
-      type:'line',
-      data:{
-        labels: fechasLabel,
-        datasets: seriesNum.map(({fila,vals,label,color})=>({
-          label, color,
-          data: vals.map(v=>v?parseFloat(v):null),
-          borderColor: color,
-          backgroundColor: color+'22',
-          borderWidth:2.5, pointRadius:5, pointHoverRadius:7,
-          tension:0.35, spanGaps:true, fill:false,
-        })),
-      },
-      options:{
-        responsive:true,
-        interaction:{mode:'index',intersect:false},
-        plugins:{
-          legend:{position:'bottom',labels:{font:{size:11},padding:12,usePointStyle:true}},
-          tooltip:{callbacks:{label:c=>' '+c.dataset.label+': '+c.parsed.y}},
-        },
-        scales:{
-          x:{ticks:{font:{size:10}},grid:{display:false}},
-          y:{ticks:{font:{size:10}},grid:{color:'#f0f0f0'},beginAtZero:false},
-        },
-      },
-    });
+    if(seriesNum.length) mhaSetChart('all');
   }, 80);
+}
+
+function mhaSetChart(sel) {
+  const modal = document.getElementById('modal_historial_ant');
+  const seriesNum = modal._seriesNum;
+  const fechasLabel = modal._fechasLabel;
+  if(!seriesNum || !seriesNum.length) return;
+  const sel_ = document.getElementById('mha_chart_selector');
+  if(sel_) sel_.querySelectorAll('button').forEach(b => b.classList.toggle('active', b.dataset.sel === String(sel)));
+  const datasets = sel === 'all'
+    ? seriesNum.map(({fila,vals,label,color},i)=>({
+        label, data: vals.map(v=>v?parseFloat(v):null),
+        borderColor: color, backgroundColor: color+'22',
+        borderWidth:2.5, pointRadius:5, pointHoverRadius:7, tension:0.35, spanGaps:true, fill:false,
+      }))
+    : [seriesNum[sel]].map(({fila,vals,label,color})=>({
+        label, data: vals.map(v=>v?parseFloat(v):null),
+        borderColor: color, backgroundColor: color+'22',
+        borderWidth:2.5, pointRadius:5, pointHoverRadius:7, tension:0.35, spanGaps:true, fill:false,
+      }));
+  const ctx = document.getElementById('mha_chart');
+  if(!ctx) return;
+  if(_chartInstances['ant']) { try{_chartInstances['ant'].destroy();}catch(e){} }
+  _chartInstances['ant'] = new Chart(ctx,{
+    type:'line', data:{ labels: fechasLabel, datasets },
+    options:{
+      responsive:true, interaction:{mode:'index',intersect:false},
+      plugins:{
+        legend:{position:'bottom',labels:{font:{size:11},padding:12,usePointStyle:true}},
+        tooltip:{callbacks:{label:c=>' '+c.dataset.label+': '+c.parsed.y}},
+      },
+      scales:{
+        x:{ticks:{font:{size:10}},grid:{display:false}},
+        y:{ticks:{font:{size:10}},grid:{color:'#f0f0f0'},beginAtZero:false},
+      },
+    },
+  });
 }
 
 function cerrarHistorialAnt() {
