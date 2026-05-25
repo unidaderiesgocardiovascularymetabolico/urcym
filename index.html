@@ -1322,6 +1322,8 @@ const LAB_FILAS = [
     ref:(v)=>parseFloat(v)>90, refTxt:'>90 mg/dL'},
   {label:'HbA1c', key:'HbA1c', unidades:['%','mmol/mol'], defU:0,
     ref:(v,s,u)=>u==='mmol/mol'?parseFloat(v)>39:parseFloat(v)>5.7, refTxt:'>5.7%'},
+  {label:'PTOG (2h)', key:'PTOG', unidades:['mg/dL'], defU:0,
+    ref:(v)=>parseFloat(v)>=140, refTxt:'≥140 mg/dL (alterado)'},
   {label:'Albúmina urinaria', key:'AlbUr', unidades:['mg/24h','mg/L'], defU:0, ref:null},
   {label:'Creatinina urinaria', key:'CrUr', unidades:['g/24h','mg/dL'], defU:0, ref:null},
   {label:'RAC', key:'RAC', unidades:['mg/g','mg/mmol'], defU:0, calc:'rac',
@@ -1376,10 +1378,10 @@ const ANT_FILAS = [
 ];
 
 const LAB_PERFILES = {
-  lipidos: { label:'Perfil lipídico',  color:'#3b82f6', keys:['CT','HDL','TG','LDL_MH','LDL_S','noHDL','ApoB'] },
-  renal:   { label:'Función renal',    color:'#10b981', keys:['Creatinina','MDRD','AlbUr','CrUr','RAC'] },
-  hepato:  { label:'Hepatograma',      color:'#f59e0b', keys:['TGO','TGP','BT','FAL','Albumina'] },
-  dbt:     { label:'Perfil DBT',       color:'#8b5cf6', keys:['Glucemia','HbA1c'] },
+  lipidos: { label:'Perfil lipídico',  color:'#3b82f6', keys:['CT','HDL','TG','LDL_MH','noHDL'] },
+  renal:   { label:'Función renal',    color:'#10b981', keys:['Creatinina','MDRD','RAC'] },
+  hepato:  { label:'Hepatograma',      color:'#f59e0b', keys:['TGO','TGP','Rto_plaquetas','Albumina'] },
+  dbt:     { label:'Perfil DBT',       color:'#8b5cf6', keys:['Glucemia','PTOG','HbA1c'] },
 };
 
 const EST_FILAS = [
@@ -3763,10 +3765,16 @@ function abrirHistorialModal(perfil) {
     return;
   }
 
-  // Todas las columnas guardadas — excluir solo la última si es la columna nueva vacía (sin ningún dato)
-  const lastCi = datos.columnas.length - 1;
-  const ultimaTieneDatos = datos.filas && datos.filas.some(f=>(f||[])[lastCi]?.toString().trim());
-  const colsH = ultimaTieneDatos ? [...datos.columnas] : datos.columnas.slice(0,-1);
+  // Construir columnas deduplicadas por fecha: para fechas repetidas, quedarse con la última
+  const fechaMap = new Map(); // fecha -> último índice en datos.columnas
+  datos.columnas.forEach((c,ci) => { fechaMap.set(c, ci); });
+  // Ordenar cronológicamente y excluir la última columna SOLO si es nueva vacía
+  const colsDedup = [...fechaMap.entries()].sort((a,b)=>a[0].localeCompare(b[0]));
+  // Verificar si la última columna (cronológicamente) tiene datos
+  const lastEntry = colsDedup[colsDedup.length-1];
+  const lastCi = lastEntry ? lastEntry[1] : -1;
+  const ultimaTieneDatos = lastCi>=0 && datos.filas && datos.filas.some(f=>(f||[])[lastCi]?.toString().trim());
+  const colsH = (ultimaTieneDatos ? colsDedup : colsDedup.slice(0,-1)).map(([fecha, ci])=>({fecha, ci}));
 
   if(!colsH.length) {
     subtitulo.textContent = 'Sin registros guardados aún';
@@ -3775,16 +3783,15 @@ function abrirHistorialModal(perfil) {
     return;
   }
 
-  const fechasLabel = colsH.map(c => new Date(c+'T12:00:00').toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'}));
+  const fechasLabel = colsH.map(({fecha}) => new Date(fecha+'T12:00:00').toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'}));
   subtitulo.textContent = colsH.length + ' fecha' + (colsH.length!==1?'s':'') + ' · ' + pacienteActual?.apellido + ', ' + pacienteActual?.nombre;
 
-  // Filas con datos — índices reales en datos.columnas
+  // Filas con datos — usar índice real de cada columna deduplicada
   const filasDelPerfil = cfg.keys.map(key => {
     const fi = LAB_FILAS.findIndex(f=>f.key===key);
     if(fi<0) return null;
     const fila = LAB_FILAS[fi];
-    const colIdxs = colsH.map(c => datos.columnas.indexOf(c));
-    const vals = colIdxs.map(ci => ci>=0 ? (datos.filas[fi]||[])[ci]||'' : '');
+    const vals = colsH.map(({ci}) => (datos.filas[fi]||[])[ci]||'');
     if(!vals.some(v=>v.trim())) return null;
     const storedU = (datos.unidades&&datos.unidades[key]) || fila.unidades[0];
     return { fila, vals, storedU };
@@ -3794,8 +3801,8 @@ function abrirHistorialModal(perfil) {
   const colsConDatos = colsH.filter((_,ci) =>
     filasDelPerfil.some(({vals}) => vals[ci]?.trim())
   );
-  const colsConDatosIdx = colsConDatos.map(c => colsH.indexOf(c));
-  const fechasLabelFiltradas = colsConDatos.map(c => new Date(c+'T12:00:00').toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'}));
+  const colsConDatosIdx = colsConDatos.map((_,i) => colsH.findIndex(c=>c===colsConDatos[i]));
+  const fechasLabelFiltradas = colsConDatos.map(({fecha}) => new Date(fecha+'T12:00:00').toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'}));
   // Re-filtrar vals de cada fila para solo columnas con datos
   const filasFiltradas = filasDelPerfil.map(row => ({
     ...row,
