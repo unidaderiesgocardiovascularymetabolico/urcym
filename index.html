@@ -2,8 +2,18 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>URCyM — Sistema de Historia Clínica</title>
+
+  <!-- PWA -->
+  <link rel="manifest" href="manifest.json"/>
+  <meta name="mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="default"/>
+  <meta name="apple-mobile-web-app-title" content="URCyM"/>
+  <meta name="theme-color" content="#3089ca"/>
+  <link rel="apple-touch-icon" href="logo.svg"/>
+
   <link href="https://fonts.googleapis.com/css2?family=Amiko:wght@400;600;700&family=Encode+Sans:wght@300;400;500;600;700&family=Encode+Sans+Condensed:wght@400;600&display=swap" rel="stylesheet"/>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
@@ -997,7 +1007,11 @@
 
         <!-- Tabla -->
         <div id="evlab_filtrado_wrap" style="display:none;width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;margin-bottom:8px"></div>
-        <div style="width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch"><div id="evlab_wrap" style="min-width:max-content"></div></div>
+        <!-- Scroll superior sincronizado -->
+        <div id="evlab_top_scroll" style="overflow-x:auto;height:12px;margin-bottom:2px" onscroll="document.getElementById('evlab_scroll_body').scrollLeft=this.scrollLeft">
+          <div id="evlab_top_scroll_inner" style="height:1px"></div>
+        </div>
+        <div id="evlab_scroll_body" style="width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch" onscroll="document.getElementById('evlab_top_scroll').scrollLeft=this.scrollLeft"><div id="evlab_wrap" style="min-width:max-content"></div></div>
       </div>
 
       <!-- MODAL HISTORIAL ANT -->
@@ -1415,6 +1429,7 @@ const LAB_PERFILES = {
   hepato:  { label:'Hepatograma',      color:'#f59e0b', keys:['TGO','TGP','Rto_plaquetas','Albumina'] },
   dbt:     { label:'Perfil DBT',       color:'#8b5cf6', keys:['Glucemia','PTOG','HbA1c'] },
 };
+const PALETTE_MODAL = ['#3b82f6','#10b981','#f59e0b','#ef4444','#8b5cf6','#ec4899','#06b6d4','#84cc16'];
 
 const EST_FILAS = [
   // ── ECOCARDIO
@@ -1578,8 +1593,24 @@ function agregarColumnaEvLab() {
   renderTablaGenerica(labDatos, LAB_FILAS, 'evlab_wrap', newIdx);
   sincronizarRO();
 }
-function agregarColumnaEvEst() { agregarColumna('evest_fecha_nueva', estDatos, EST_FILAS, 'evest_wrap'); sincronizarRO(); renderTablaGenerica(estDatos, EST_FILAS, 'evest_wrap'); }
-function agregarColumnaEvAnt() { agregarColumna('evant_fecha_nueva', antDatos, ANT_FILAS, 'evant_wrap'); sincronizarRO(); renderTablaGenerica(antDatos, ANT_FILAS, 'evant_wrap'); }
+function agregarColumnaEvEst() {
+  const f = document.getElementById('evest_fecha_nueva').value;
+  if(!f) return;
+  if(!estDatos.columnas.includes(f)) { estDatos.columnas.push(f); estDatos.columnas.sort(); }
+  document.getElementById('evest_fecha_nueva').value = '';
+  const newIdx = estDatos.columnas.indexOf(f);
+  renderTablaGenerica(estDatos, EST_FILAS, 'evest_wrap', newIdx);
+  sincronizarRO();
+}
+function agregarColumnaEvAnt() {
+  const f = document.getElementById('evant_fecha_nueva').value;
+  if(!f) return;
+  if(!antDatos.columnas.includes(f)) { antDatos.columnas.push(f); antDatos.columnas.sort(); }
+  document.getElementById('evant_fecha_nueva').value = '';
+  const newIdx = antDatos.columnas.indexOf(f);
+  renderTablaGenerica(antDatos, ANT_FILAS, 'evant_wrap', newIdx);
+  sincronizarRO();
+}
 
 function sincronizarRO() {
   renderTablaReadonly(labDatos, LAB_FILAS, 'rolab_wrap');
@@ -1727,10 +1758,8 @@ function renderTablaGenerica(datos, filas, wrapId, newColIdx) {
   if(isAnt) calcAntValues(datos, filas);
   const todosFilas = [...filas, ...datos.extraFilas.map(lbl=>({label:lbl,key:'extra_'+lbl,unidades:[''],defU:0,ref:null}))];
   const nci = newColIdx !== undefined ? newColIdx : (datos.columnas.length > 0 ? datos.columnas.length - 1 : 0);
-  const sexoPac = pacienteActual?.sexo==='Femenino'?'F':'H';
-
-  // Columna nueva = siempre la ÚLTIMA (más a la derecha). Todas las anteriores son históricas (locked).
-  // La columna nueva tiene key '_nueva' o es la última si newColIdx apunta a ella.
+  const lastIdx = datos.columnas.length - 1;
+  // activeCI = columna editable. Para lab usa _colEditando si está activo, sino nci
   const activeCI = isLab ? (_colEditando !== null ? _colEditando : nci) : nci;
 
   let h = '<table style="border-collapse:collapse;font-size:12px;table-layout:fixed;white-space:nowrap;width:auto">';
@@ -1739,7 +1768,7 @@ function renderTablaGenerica(datos, filas, wrapId, newColIdx) {
   h += '<th style="background:var(--blue);color:white;padding:8px 14px;text-align:left;font-size:11px;font-weight:700;white-space:nowrap;position:sticky;left:0;z-index:3;min-width:180px;width:180px;border-right:2px solid rgba(255,255,255,.3)">Parámetro</th>';
   datos.columnas.forEach((c,ci) => {
     const isActive = ci === activeCI;
-    const isSaved = hasHistory && ci < nci;
+    const isSaved = hasHistory && ci !== activeCI;
     const thBg = isActive ? '#1a9e6e' : (isSaved ? '#1a6fad' : 'var(--blue)');
     const thColor = 'white';
     const fechaLabel = new Date(c+'T12:00:00').toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'});
@@ -1840,7 +1869,14 @@ function renderTablaGenerica(datos, filas, wrapId, newColIdx) {
   // Scroll automático al final: columna nueva siempre visible a la derecha
   if(hasHistory) {
     setTimeout(() => {
-      const parent = wrap.closest('[style*="overflow-x"]') || wrap.parentElement;
+      // Sync top scrollbar width
+      const topInner = document.getElementById('evlab_top_scroll_inner');
+      const body = document.getElementById('evlab_scroll_body');
+      if(topInner && body && wrap.scrollWidth) {
+        topInner.style.width = wrap.scrollWidth + 'px';
+      }
+      // Scroll al final para mostrar columna nueva
+      const parent = document.getElementById('evlab_scroll_body') || wrap.closest('[style*="overflow-x"]') || wrap.parentElement;
       if(parent) parent.scrollLeft = parent.scrollWidth;
     }, 0);
   }
@@ -3962,7 +3998,6 @@ function abrirHistorialModal(perfil) {
 }
 
 // Renderiza el gráfico del modal con selección de serie
-const PALETTE_MODAL = ['#3b82f6','#10b981','#f59e0b','#ef4444','#8b5cf6','#ec4899','#06b6d4','#84cc16'];
 function mhlSetChart(perfil, sel) {
   const modal = document.getElementById('modal_historial_lab');
   const seriesNum = modal._seriesNum;
@@ -4186,6 +4221,15 @@ function cerrarHistorialAnt() {
 document.getElementById('modal_historial_ant').addEventListener('click', function(e){
   if(e.target===this) cerrarHistorialAnt();
 });
+
+// ===== PWA SERVICE WORKER =====
+if('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/urcym/sw.js')
+      .then(reg => console.log('SW registrado:', reg.scope))
+      .catch(err => console.warn('SW error:', err));
+  });
+}
 
 </script>
 
