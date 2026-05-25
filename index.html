@@ -174,7 +174,7 @@
     .evol-header-var {
       display:flex; align-items:flex-start; gap:16px; padding:12px 24px;
       background:white; border-bottom:2px solid var(--border);
-      position:sticky; top:calc(56px + 58px); z-index:88; flex-wrap:wrap;
+      position:sticky; top:calc(56px + 58px + 42px); z-index:88; flex-wrap:wrap;
     }
     .evh-section { flex:1; min-width:160px; }
     .evh-section-small { flex:0 0 auto; min-width:120px; }
@@ -391,7 +391,7 @@
     }
 
     /* Tabs principales paciente (Evol/Lab/Antrop/Estudios) */
-    .pac-tab-bar { display:flex; gap:0; border-bottom:2px solid var(--border); background:white; padding:0 20px; position:sticky; top:56px; z-index:89; }
+    .pac-tab-bar { display:flex; gap:0; border-bottom:2px solid var(--border); background:white; padding:0 20px; position:sticky; top:calc(56px + 58px); z-index:89; }
     .pac-tab-main { padding:10px 20px; border:none; background:none; cursor:pointer; font-family:var(--font-main); font-size:13px; font-weight:500; color:var(--text-soft); border-bottom:3px solid transparent; margin-bottom:-2px; transition:all .2s; white-space:nowrap; }
     .pac-tab-main:hover { color:var(--text); background:var(--gray); }
     .pac-tab-main.active { color:var(--blue); border-bottom-color:var(--blue); font-weight:700; }
@@ -437,6 +437,13 @@
   background: var(--teal);
   color: white;
   border-color: var(--teal);
+}
+.lab-hpanel {
+  background: white;
+  border: 1.5px solid var(--border);
+  border-radius: 12px;
+  padding: 16px 20px;
+  margin-bottom: 16px;
 }
   </style>
 </head>
@@ -952,7 +959,6 @@
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;gap:8px;flex-wrap:wrap">
           <span id="lab_modo_label" style="font-size:12px;color:var(--text-soft);font-style:italic">Laboratorio del paciente</span>
           <div style="display:flex;gap:8px;align-items:center">
-            <button onclick="toggleHistorialLab()" id="btn_toggle_historial" style="padding:7px 16px;border:1.5px solid var(--teal);border-radius:9px;background:white;color:var(--teal);font-size:12px;cursor:pointer;font-family:var(--font-main);font-weight:600">📊 Historial</button>
             <button onclick="guardarLabYVolver()" style="padding:8px 22px;border:none;border-radius:9px;background:var(--teal);color:white;font-size:13px;cursor:pointer;font-family:var(--font-main);font-weight:600;box-shadow:0 2px 8px rgba(77,188,190,.25)">💾 Guardar laboratorio</button>
           </div>
         </div>
@@ -968,16 +974,18 @@
         <div style="width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;margin-top:4px"><div id="evlab_wrap" style="min-width:max-content"></div></div>
 
         <!-- Panel Historial por perfil -->
-        <div id="lab_historial_panel" style="margin-top:24px;display:none">
+        <div id="lab_historial_panel" style="margin-top:20px">
           <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap">
             <span style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--text-soft)">Historial:</span>
-            <button onclick="mostrarHistorialLab('lipidos')"   class="btn-historial" id="hbtn_lipidos">Perfil lipídico</button>
-            <button onclick="mostrarHistorialLab('renal')"     class="btn-historial" id="hbtn_renal">Función renal</button>
-            <button onclick="mostrarHistorialLab('hepato')"    class="btn-historial" id="hbtn_hepato">Hepatograma</button>
-            <button onclick="mostrarHistorialLab('dbt')"       class="btn-historial" id="hbtn_dbt">Perfil DBT</button>
-            <button onclick="cerrarHistorialLab()" style="padding:5px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:11px;background:white;cursor:pointer;color:var(--text-soft);font-family:var(--font-main)">✕</button>
+            <button onclick="toggleHistorialPerfil('lipidos')" class="btn-historial" id="hbtn_lipidos">📈 Perfil lipídico</button>
+            <button onclick="toggleHistorialPerfil('renal')"   class="btn-historial" id="hbtn_renal">🫘 Función renal</button>
+            <button onclick="toggleHistorialPerfil('hepato')"  class="btn-historial" id="hbtn_hepato">🔶 Hepatograma</button>
+            <button onclick="toggleHistorialPerfil('dbt')"     class="btn-historial" id="hbtn_dbt">🩸 Perfil DBT</button>
           </div>
-          <div id="lab_historial_contenido"></div>
+          <div id="hpanel_lipidos" class="lab-hpanel" style="display:none"></div>
+          <div id="hpanel_renal"   class="lab-hpanel" style="display:none"></div>
+          <div id="hpanel_hepato"  class="lab-hpanel" style="display:none"></div>
+          <div id="hpanel_dbt"     class="lab-hpanel" style="display:none"></div>
         </div>
       </div>
 
@@ -1355,6 +1363,12 @@ const ANT_FILAS = [
   {label:'Fuera de presión (cm)', key:'FueraPres', unidades:['cm'], defU:0, ref:null},
 ];
 
+const LAB_PERFILES = {
+  lipidos: { label:'Perfil lipídico',  color:'#3b82f6', keys:['CT','HDL','TG','LDL_MH','LDL_S','noHDL','ApoB'] },
+  renal:   { label:'Función renal',    color:'#10b981', keys:['Creatinina','MDRD','AlbUr','CrUr','RAC'] },
+  hepato:  { label:'Hepatograma',      color:'#f59e0b', keys:['TGO','TGP','BT','FAL','Albumina'] },
+  dbt:     { label:'Perfil DBT',       color:'#8b5cf6', keys:['Glucemia','HbA1c'] },
+};
 
 const EST_FILAS = [
   // ── ECOCARDIO
@@ -3714,160 +3728,117 @@ function limpiarFiltroLab() {
 }
 
 // ===== HISTORIAL POR PERFIL =====
-const LAB_PERFILES = {
-  lipidos: {
-    label: 'Perfil lipídico',
-    color: '#3b82f6',
-    keys: ['CT','HDL','TG','LDL_MH','LDL_S','noHDL','ApoB'],
-  },
-  renal: {
-    label: 'Función renal',
-    color: '#10b981',
-    keys: ['Creatinina','MDRD','AlbUr','CrUr','RAC'],
-  },
-  hepato: {
-    label: 'Hepatograma',
-    color: '#f59e0b',
-    keys: ['TGO','TGP','BT','FAL','Albumina'],
-  },
-  dbt: {
-    label: 'Perfil DBT',
-    color: '#8b5cf6',
-    keys: ['Glucemia','HbA1c'],
-  },
-};
 
-function toggleHistorialLab() {
-  const panel = document.getElementById('lab_historial_panel');
-  if(panel.style.display === 'none') {
-    panel.style.display = 'block';
-    // Mostrar lipidos por defecto
-    if(!_historialActivo) mostrarHistorialLab('lipidos');
+// Toggle independiente por perfil — cada botón abre/cierra su propio panel
+function toggleHistorialPerfil(perfil) {
+  const panel = document.getElementById('hpanel_'+perfil);
+  const btn   = document.getElementById('hbtn_'+perfil);
+  if(!panel) return;
+  const abierto = panel.style.display !== 'none';
+  if(abierto) {
+    // Cerrar
+    panel.style.display = 'none';
+    if(btn) btn.classList.remove('active');
+    if(_chartInstances[perfil]) { try{_chartInstances[perfil].destroy();}catch(e){} delete _chartInstances[perfil]; }
   } else {
-    cerrarHistorialLab();
+    // Abrir y renderizar
+    panel.style.display = 'block';
+    if(btn) btn.classList.add('active');
+    renderHistorialPerfil(perfil, panel);
   }
 }
 
-function cerrarHistorialLab() {
-  document.getElementById('lab_historial_panel').style.display = 'none';
-  document.querySelectorAll('.btn-historial').forEach(b=>b.classList.remove('active'));
-  _historialActivo = null;
-  Object.values(_chartInstances).forEach(c=>{ try{c.destroy();}catch(e){} });
-  _chartInstances = {};
-}
-
-function mostrarHistorialLab(perfil) {
-  _historialActivo = perfil;
-  document.querySelectorAll('.btn-historial').forEach(b=>b.classList.remove('active'));
-  const btn = document.getElementById('hbtn_'+perfil);
-  if(btn) btn.classList.add('active');
-
+function renderHistorialPerfil(perfil, panel) {
   const cfg = LAB_PERFILES[perfil];
   if(!cfg) return;
   const datos = labDatos;
+  const sexoPac = pacienteActual?.sexo==='Femenino'?'F':'H';
+  const PALETTE = ['#3b82f6','#10b981','#f59e0b','#ef4444','#8b5cf6','#ec4899','#06b6d4','#84cc16'];
+
   if(!datos.columnas || !datos.columnas.length) {
-    document.getElementById('lab_historial_contenido').innerHTML = '<p style="color:var(--text-soft);font-size:13px;padding:12px">Sin datos cargados aún.</p>';
+    panel.innerHTML = '<p style="color:var(--text-soft);font-size:13px;padding:8px">Sin datos cargados aún.</p>';
     return;
   }
+  // Excluir última columna si está vacía
+  const lastCi = datos.columnas.length - 1;
+  const ultimaTieneDatos = datos.filas && datos.filas.some(f=>(f||[])[lastCi]?.toString().trim());
+  const colsH = ultimaTieneDatos ? datos.columnas : datos.columnas.slice(0,-1);
+  if(!colsH.length) {
+    panel.innerHTML = '<p style="color:var(--text-soft);font-size:13px;padding:8px">Sin datos históricos aún.</p>';
+    return;
+  }
+  const fechasLabel = colsH.map(c => new Date(c+'T12:00:00').toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'2-digit'}));
 
-  const sexoPac = pacienteActual?.sexo==='Femenino'?'F':'H';
-
-  // Filtrar columnas históricas (todas menos la última si está vacía)
-  const colsHistorial = datos.columnas.slice(0, -1).concat(
-    datos.columnas.length > 0 && datos.filas && datos.filas.some(f=>(f||[])[datos.columnas.length-1]?.trim()) ? [datos.columnas[datos.columnas.length-1]] : []
-  );
-  const fechasLabel = colsHistorial.map(c => new Date(c+'T12:00:00').toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'2-digit'}));
-
-  // Obtener filas del perfil
   const filasDelPerfil = cfg.keys.map(key => {
     const fi = LAB_FILAS.findIndex(f=>f.key===key);
     if(fi<0) return null;
     const fila = LAB_FILAS[fi];
-    const vals = colsHistorial.map((_,ci) => (datos.filas[fi]||[])[ci]||'');
-    const tieneAlgunValor = vals.some(v=>v.trim()!=='');
-    if(!tieneAlgunValor) return null;
+    const colIdxs = colsH.map(c => datos.columnas.indexOf(c));
+    const vals = colIdxs.map(ci => (datos.filas[fi]||[])[ci]||'');
+    if(!vals.some(v=>v.trim())) return null;
     const storedU = (datos.unidades&&datos.unidades[key]) || fila.unidades[0];
-    return { fila, fi, vals, storedU };
+    return { fila, vals, storedU };
   }).filter(Boolean);
 
   if(!filasDelPerfil.length) {
-    document.getElementById('lab_historial_contenido').innerHTML = '<p style="color:var(--text-soft);font-size:13px;padding:12px">Sin datos de '+cfg.label+' cargados aún.</p>';
+    panel.innerHTML = '<p style="color:var(--text-soft);font-size:13px;padding:8px">Sin datos de '+cfg.label+' aún.</p>';
     return;
   }
 
-  // Destruir charts previos
-  Object.values(_chartInstances).forEach(c=>{ try{c.destroy();}catch(e){} });
-  _chartInstances = {};
+  let html = '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">';
+  html += '<span style="font-family:var(--font-display);font-size:13px;font-weight:700;color:var(--text)">'+cfg.label+'</span>';
+  html += '<span style="font-size:11px;color:var(--text-soft)">'+colsH.length+' fecha'+(colsH.length!==1?'s':'')+'</span></div>';
 
-  // Colores para cada serie
-  const PALETTE = ['#3b82f6','#10b981','#f59e0b','#ef4444','#8b5cf6','#ec4899','#06b6d4','#84cc16'];
-
-  let html = '<div style="background:white;border:1px solid var(--border);border-radius:12px;padding:16px 20px">';
-  html += '<h3 style="font-family:var(--font-display);font-size:14px;font-weight:700;color:var(--text);margin:0 0 16px">'+cfg.label+'</h3>';
-
-  // Tabla resumen
-  html += '<div style="overflow-x:auto;margin-bottom:20px"><table style="border-collapse:collapse;font-size:12px;white-space:nowrap;width:100%">';
-  html += '<thead><tr>';
-  html += '<th style="background:var(--blue);color:white;padding:6px 12px;text-align:left;position:sticky;left:0;z-index:2;min-width:160px">Parámetro</th>';
-  html += '<th style="background:var(--blue);color:white;padding:6px 8px;text-align:center;min-width:60px">Unidad</th>';
+  html += '<div style="overflow-x:auto;margin-bottom:16px"><table style="border-collapse:collapse;font-size:12px;white-space:nowrap;min-width:100%">';
+  html += '<thead><tr><th style="background:var(--blue);color:white;padding:6px 12px;text-align:left;position:sticky;left:0;z-index:2;min-width:170px">Parámetro</th>';
+  html += '<th style="background:var(--blue);color:white;padding:6px 8px;text-align:center;min-width:56px">Unidad</th>';
   fechasLabel.forEach(f => { html += '<th style="background:var(--blue);color:white;padding:6px 10px;text-align:center;min-width:80px">'+f+'</th>'; });
   html += '</tr></thead><tbody>';
-
-  filasDelPerfil.forEach(({fila, vals, storedU}) => {
+  filasDelPerfil.forEach(({fila,vals,storedU}) => {
     const isCalc = !!fila.calc;
-    html += '<tr>';
-    html += '<td style="padding:5px 12px;border:1px solid var(--border);font-weight:'+(isCalc?'500':'600')+';position:sticky;left:0;background:'+(isCalc?'#f0f7ff':'white')+';color:'+(isCalc?'var(--teal)':'var(--text)')+'">'+fila.label+(isCalc?' <span style="font-size:9px">●</span>':'')+'</td>';
+    html += '<tr><td style="padding:5px 12px;border:1px solid var(--border);font-weight:'+(isCalc?'500':'600')+';position:sticky;left:0;background:'+(isCalc?'#f0f7ff':'white')+';color:'+(isCalc?'var(--teal)':'var(--text)')+'">'+fila.label+(isCalc?' <span style="font-size:9px;color:var(--teal)">●</span>':'')+'</td>';
     html += '<td style="padding:5px 6px;border:1px solid var(--border);text-align:center;color:var(--text-soft);background:#fafafa">'+storedU+'</td>';
     vals.forEach(v => {
-      const alerta = v && fila.ref && fila.ref(v, sexoPac, storedU);
-      html += '<td style="padding:5px 10px;border:1px solid var(--border);text-align:center;'+(alerta?'background:#fff0f0;color:var(--red);font-weight:700':'color:'+(v?'var(--text)':'#ccc'))+'">'+( v||'—')+'</td>';
+      const alerta = v && fila.ref && fila.ref(v,sexoPac,storedU);
+      html += '<td style="padding:5px 10px;border:1px solid var(--border);text-align:center;'+(alerta?'background:#fff0f0;color:var(--red);font-weight:700':v?'color:var(--text)':'color:#ccc')+'"'+(alerta&&fila.refTxt?' title="Ref: '+fila.refTxt+'"':'')+'>'+( v||'—')+'</td>';
     });
     html += '</tr>';
   });
   html += '</tbody></table></div>';
 
-  // Gráfico — solo series con valores numéricos
-  const seriesNumericas = filasDelPerfil.filter(({vals}) => vals.some(v=>!isNaN(parseFloat(v))));
-  if(seriesNumericas.length && colsHistorial.length > 1) {
-    html += '<canvas id="chart_historial_'+perfil+'" style="max-height:280px"></canvas>';
-  }
+  const chartId = 'chart_'+perfil+'_'+Date.now();
+  const seriesNum = filasDelPerfil.filter(({vals})=>vals.some(v=>!isNaN(parseFloat(v))));
+  if(seriesNum.length) html += '<canvas id="'+chartId+'" style="max-height:260px"></canvas>';
+  panel.innerHTML = html;
 
-  html += '</div>';
-  document.getElementById('lab_historial_contenido').innerHTML = html;
-
-  // Renderizar Chart.js
-  if(seriesNumericas.length && colsHistorial.length > 1) {
+  if(seriesNum.length) {
     setTimeout(() => {
-      const ctx = document.getElementById('chart_historial_'+perfil);
+      const ctx = document.getElementById(chartId);
       if(!ctx) return;
+      if(_chartInstances[perfil]) { try{_chartInstances[perfil].destroy();}catch(e){} }
       _chartInstances[perfil] = new Chart(ctx, {
         type: 'line',
         data: {
           labels: fechasLabel,
-          datasets: seriesNumericas.map(({fila, vals}, i) => ({
+          datasets: seriesNum.map(({fila,vals},i) => ({
             label: fila.label,
             data: vals.map(v => v ? parseFloat(v) : null),
-            borderColor: PALETTE[i % PALETTE.length],
-            backgroundColor: PALETTE[i % PALETTE.length]+'22',
-            borderWidth: 2,
-            pointRadius: 4,
-            pointHoverRadius: 6,
-            tension: 0.3,
-            spanGaps: true,
+            borderColor: PALETTE[i%PALETTE.length],
+            backgroundColor: PALETTE[i%PALETTE.length]+'22',
+            borderWidth: 2.5, pointRadius: 5, pointHoverRadius: 7,
+            tension: 0.35, spanGaps: true,
           })),
         },
         options: {
           responsive: true,
-          interaction: { mode: 'index', intersect: false },
+          interaction: { mode:'index', intersect:false },
           plugins: {
-            legend: { position: 'bottom', labels: { font: { size: 11 }, padding: 16 } },
-            tooltip: { callbacks: {
-              label: ctx => ' '+ctx.dataset.label+': '+ctx.parsed.y,
-            }},
+            legend: { position:'bottom', labels:{ font:{size:11}, padding:14, usePointStyle:true } },
+            tooltip: { callbacks:{ label: c => ' '+c.dataset.label+': '+c.parsed.y } },
           },
           scales: {
-            x: { ticks: { font: { size: 11 } }, grid: { display: false } },
-            y: { ticks: { font: { size: 11 } }, grid: { color: '#f0f0f0' } },
+            x: { ticks:{ font:{size:11} }, grid:{ display:false } },
+            y: { ticks:{ font:{size:11} }, grid:{ color:'#f0f0f0' }, beginAtZero:false },
           },
         },
       });
