@@ -938,22 +938,21 @@
       </div>
 
       <!-- PANEL ANTROPOMETRÍA -->
-      <div id="pmain-ant" style="display:none;padding:20px 28px">
+      <div id="pmain-ant" style="display:none;padding:16px 28px 20px;width:100%;box-sizing:border-box">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;gap:8px;flex-wrap:wrap">
-          <button onclick="volcarAlteradosAlEditor('ant')" style="padding:6px 14px;border:1.5px solid var(--red);border-radius:8px;background:#fff0f0;color:var(--red);font-size:12px;cursor:pointer;font-family:var(--font-main);font-weight:600">↓ Volcar alterados a evolución</button>
-          <button onclick="guardarAntYVolver()" style="padding:6px 18px;border:none;border-radius:8px;background:var(--teal);color:white;font-size:12px;cursor:pointer;font-family:var(--font-main);font-weight:600">💾 Guardar y volver a Evolución</button>
+          <span style="font-size:12px;color:var(--text-soft);font-style:italic">Antropometría del paciente</span>
+          <button onclick="guardarAntYVolver()" style="padding:8px 22px;border:none;border-radius:9px;background:var(--teal);color:white;font-size:13px;cursor:pointer;font-family:var(--font-main);font-weight:600;box-shadow:0 2px 8px rgba(77,188,190,.25)">💾 Guardar antropometría</button>
         </div>
-        <div id="evant_wrap" style="overflow-x:auto;margin-top:4px"></div>
+        <div style="width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;margin-top:4px"><div id="evant_wrap" style="min-width:max-content"></div></div>
       </div>
 
       <!-- PANEL ESTUDIOS -->
-      <div id="pmain-est" style="display:none;padding:20px 28px">
-        <div class="lab-add-fecha">
-          <label style="font-size:12px;font-weight:600;color:var(--text-soft)">Fecha:</label>
-          <input type="date" id="evest_fecha_nueva"/>
-          <button class="btn btn-teal" onclick="agregarColumnaEvEst()" style="width:auto;margin:0;padding:6px 14px;font-size:12px">+ Columna</button>
+      <div id="pmain-est" style="display:none;padding:16px 28px 20px;width:100%;box-sizing:border-box">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;gap:8px;flex-wrap:wrap">
+          <span style="font-size:12px;color:var(--text-soft);font-style:italic">Estudios del paciente</span>
+          <button onclick="guardarEstYVolver()" style="padding:8px 22px;border:none;border-radius:9px;background:var(--teal);color:white;font-size:13px;cursor:pointer;font-family:var(--font-main);font-weight:600;box-shadow:0 2px 8px rgba(77,188,190,.25)">💾 Guardar estudios</button>
         </div>
-        <div id="evest_wrap" style="overflow-x:auto;margin-top:12px"></div>
+        <div style="width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;margin-top:4px"><div id="evest_wrap" style="min-width:max-content"></div></div>
       </div>
 
     </div><!-- /page-evolucion -->
@@ -1553,13 +1552,15 @@ function renderTablaGenerica(datos, filas, wrapId, newColIdx) {
   if(!datos.extraFilas) datos.extraFilas = [];
   const isLab = ['evlab_wrap','lab_tabla_wrap'].includes(wrapId);
   const isAnt = ['evant_wrap','ant_tabla_wrap'].includes(wrapId);
+  const isEst = ['evest_wrap','est_tabla_wrap'].includes(wrapId);
+  const hasHistory = isLab || isAnt || isEst; // todas las 3 pestañas bloquean columnas previas
   if(isLab) calcLabValues(datos, filas);
   if(isAnt) calcAntValues(datos, filas);
   const todosFilas = [...filas, ...datos.extraFilas.map(lbl=>({label:lbl,key:'extra_'+lbl,unidades:[''],defU:0,ref:null}))];
   const nci = newColIdx !== undefined ? newColIdx : (datos.columnas.length > 0 ? datos.columnas.length - 1 : 0);
   const sexoPac = pacienteActual?.sexo==='Femenino'?'F':'H';
 
-  // For lab: active column = _colEditando if editing, else last (new) column
+  // Columna activa = última (nueva), columnas previas = solo lectura
   const activeCI = isLab ? (_colEditando !== null ? _colEditando : nci) : nci;
 
   let h = '<table style="border-collapse:collapse;font-size:12px;table-layout:fixed;white-space:nowrap;width:auto">';
@@ -1568,7 +1569,7 @@ function renderTablaGenerica(datos, filas, wrapId, newColIdx) {
   h += '<th style="background:var(--blue);color:white;padding:8px 14px;text-align:left;font-size:11px;font-weight:700;white-space:nowrap;position:sticky;left:0;z-index:3;min-width:180px;width:180px;border-right:2px solid rgba(255,255,255,.3)">Parámetro</th>';
   datos.columnas.forEach((c,ci) => {
     const isActive = ci === activeCI;
-    const isSaved = isLab && ci < nci && _colEditando === null;
+    const isSaved = hasHistory && ci < nci && _colEditando === null;
     const thBg = isActive ? '#0d7fc4' : (isSaved ? '#1a6fad' : 'var(--blue)');
     const thColor = 'white';
     const fechaLabel = new Date(c+'T12:00:00').toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'});
@@ -1609,7 +1610,7 @@ function renderTablaGenerica(datos, filas, wrapId, newColIdx) {
       const val = (datos.filas[fi]||[])[ci]||'';
       const isActive = ci === activeCI;
       const isEditable = !isCalc && isActive;
-      const isLocked = isLab && ci !== activeCI;
+      const isLocked = hasHistory && ci !== activeCI;
       const esAlerta = val && f.ref && f.ref(val, sexoPac, storedU);
       // Tooltip con referencia específica al sexo
       const refTxtSexo = esAlerta && f.refTxt ? (() => {
@@ -1649,7 +1650,7 @@ function renderTablaGenerica(datos, filas, wrapId, newColIdx) {
     h += '</tr>';
   });
 
-  // Add row
+  // Add row footer
   if(!isLab || _colEditando !== null || activeCI === nci) {
     h += '<tr><td colspan="'+(1+datos.columnas.length)+'" style="padding:6px 12px;border:1px solid var(--border);background:#f8f9fc">';
     h += '<input type="text" id="new_row_input_'+wrapId+'" placeholder="Agregar parámetro..." style="padding:4px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:12px;font-family:var(--font-main);width:220px;margin-right:8px"/>';
@@ -1657,6 +1658,16 @@ function renderTablaGenerica(datos, filas, wrapId, newColIdx) {
     h += '</td></tr>';
   }
   h += '</tbody></table>';
+  // Barra "agregar columna" debajo de la tabla — para ant y est (lab ya la tiene en el header)
+  if(isAnt || isEst) {
+    const addFn = isAnt ? 'agregarColumnaEvAnt' : 'agregarColumnaEvEst';
+    const addId = isAnt ? 'evant_fecha_nueva' : 'evest_fecha_nueva';
+    h += '<div style="display:flex;align-items:center;gap:8px;margin-top:12px;padding:8px 12px;background:#f8f9fc;border:1px solid var(--border);border-radius:8px;width:fit-content">';
+    h += '<span style="font-size:12px;color:var(--text-soft);font-weight:600">+ Nueva columna:</span>';
+    h += '<input type="date" id="'+addId+'" style="padding:5px 8px;border:1.5px solid var(--border);border-radius:7px;font-size:12px;font-family:var(--font-main)"/>';
+    h += '<button onclick="'+addFn+'()" style="padding:5px 14px;border:none;border-radius:7px;background:var(--teal);color:white;font-size:12px;cursor:pointer;font-family:var(--font-main);font-weight:600">Agregar</button>';
+    h += '</div>';
+  }
   wrap.innerHTML = h;
 }
 
@@ -2719,6 +2730,22 @@ async function guardarLabYVolver() {
   renderLpa();
   // Feedback visual breve
   const btn = document.querySelector('button[onclick="guardarLabYVolver()"]');
+  if(btn) {
+    const orig = btn.textContent;
+    btn.textContent = '✅ Guardado';
+    btn.disabled = true;
+    setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 2000);
+  }
+}
+
+async function guardarEstYVolver() {
+  await guardarDatosPac('est_tabla_wrap');
+  sincronizarRO();
+  limpiarDirty('est');
+  const hoy = fechaHoy();
+  if(!estDatos.columnas.includes(hoy)) { estDatos.columnas.push(hoy); estDatos.columnas.sort(); }
+  renderTablaGenerica(estDatos, EST_FILAS, 'evest_wrap', estDatos.columnas.indexOf(hoy));
+  const btn = document.querySelector('button[onclick="guardarEstYVolver()"]');
   if(btn) {
     const orig = btn.textContent;
     btn.textContent = '✅ Guardado';
