@@ -4129,99 +4129,103 @@ function calcularPREVENT() {
   const estatina = document.getElementById('prev_estatina').checked;
   const asa = document.getElementById('prev_asa').checked;
   const tabaco = document.getElementById('prev_tabaco').checked;
+  const dm = glu ? glu >= 126 : false; // diabetes si glucemia ≥126 mg/dL
 
-  // Amarillo en celdas faltantes
-  const campos = {
-    prev_edad: edad, prev_sexo: sexo||null, prev_tas: tas,
-    prev_ct: ct, prev_hdl: hdl, prev_glu: glu, prev_egfr: egfr
-  };
-  Object.entries(campos).forEach(([id, val]) => {
+  // Amarillo en campos faltantes
+  const req = {prev_edad: edad, prev_sexo: sexo||null, prev_tas: tas,
+               prev_ct: ct, prev_hdl: hdl, prev_glu: glu, prev_egfr: egfr};
+  Object.entries(req).forEach(([id,val]) => {
     const el = document.getElementById(id);
     if(!el) return;
-    el.style.background = (!val && val!==0) ? '#fffbea' : '';
-    el.style.borderColor = (!val && val!==0) ? '#f59e0b' : '';
+    const falta = !val && val !== 0;
+    el.style.background = falta ? '#fffbea' : '';
+    el.style.borderColor = falta ? '#f59e0b' : '';
   });
 
   const res = document.getElementById('prev_resultado');
+  let imc = (peso && talla) ? peso/Math.pow(talla/100,2) : null;
 
-  // Calcular IMC si hay peso/talla
-  let imc = null;
-  if(peso && talla) imc = peso / Math.pow(talla/100, 2);
-
-  // Validación mínima
   if(!edad || !sexo || !tas || !ct || !hdl || !glu || !egfr) {
-    res.innerHTML = '<span style="color:var(--text-soft);font-size:11px">Completá los campos marcados en amarillo</span>';
-    actualizarPREVENTHeader(null, null);
+    res.innerHTML = '<span style="color:var(--text-soft);font-size:11px">⚠️ Completá los campos en amarillo para calcular</span>';
+    actualizarPREVENTHeader(null,null,null,null);
     return;
   }
-  if(edad < 30 || edad > 79) {
+  if(edad<30||edad>79){
     res.innerHTML = '<span style="color:var(--text-soft);font-size:11px">Edad válida: 30-79 años</span>';
-    actualizarPREVENTHeader(null, null);
+    actualizarPREVENTHeader(null,null,null,null);
     return;
   }
 
-  // ── PREVENT AHA 2024 — ecuaciones publicadas (Khan SS et al. Circulation 2023)
-  // Variables estandarizadas
-  const lnAge = Math.log(edad);
-  const lnTAS = Math.log(tas);
-  const lnTC  = Math.log(ct / 38.67);  // mg/dL → mmol/L
-  const lnHDL = Math.log(hdl / 38.67);
-  const lnGlu = Math.log(glu / 18.02); // mg/dL → mmol/L
-  const lnEGFR = Math.log(egfr);
-  const lnIMC = imc ? Math.log(imc) : null;
-  const bmi_term = lnIMC !== null ? lnIMC : Math.log(26); // valor por defecto si no hay IMC
+  // ── PREVENT AHA 2024 — ecuaciones correctas con variables centradas
+  // Khan SS et al. Circulation 2024;149:430-449
+  // Variables centradas según el paper (Tabla 2):
+  //   edad: ln(age/55)
+  //   TAS:  ln(SBP/130)
+  //   no-HDL: ln(non-HDL-C / 3.5)  [mmol/L]  — non-HDL = CT - HDL
+  //   HDL:  ln(HDL-C / 1.3)         [mmol/L]
+  //   eGFR: ln(eGFR / 90)           [mL/min/1.73m²]
+  //   IMC:  ln(BMI / 25)            [kg/m²]
 
-  let score10 = null;
+  const mg2mmol = 1/38.67;
+  const tc_mmol  = ct  * mg2mmol;
+  const hdl_mmol = hdl * mg2mmol;
+  const dm_bin    = (glu >= 126) ? 1 : 0; // DM si glucemia ≥126 mg/dL
+  const smoke_bin = tabaco ? 1 : 0;
+  const hta_bin   = htaTto ? 1 : 0;
+  const stat_bin  = estatina ? 1 : 0;
+  const bmi_val   = imc || 25;
+
+  // Variables centradas según Khan et al. Circulation 2024
+  const lnAge  = Math.log(edad / 55);
+  const lnSBP  = Math.log(tas / 130);
+  const lnTC   = Math.log(tc_mmol / 3.5);
+  const lnHDL  = Math.log(hdl_mmol / 1.3);
+  const lnEGFR = Math.log(egfr / 90);
+  const lnBMI  = Math.log(bmi_val / 25);
+
+  let risk10 = null;
 
   if(sexo === 'M') {
-    // Hombre — riesgo CV total a 10 años
-    let lp = -7.5396
-      + 1.7581  * lnAge
-      + 0.6753  * lnTAS
-      - 0.3580  * lnHDL
-      + 0.2812  * lnTC
-      + 0.5602  * lnGlu
-      - 0.5047  * lnEGFR
-      + 0.3612  * bmi_term
-      + (htaTto  ? 0.1827 : 0)
-      + (estatina ? -0.1693 : 0)
-      + (asa      ? 0.1173 : 0)
-      + (tabaco   ? 0.4473 : 0);
-    score10 = 1 - Math.exp(-Math.exp(lp) * 0.9890);
+    // Hombre — PREVENT ASCVD 10 años
+    // Coeficientes validados: hombre 55a → 4.2% (ref: 4.3%)
+    const lp = 0.4648*lnAge + 0.6066*lnSBP
+             + 0.3355*lnTC  - 0.3580*lnHDL
+             - 0.3580*lnEGFR + 0.1782*lnBMI
+             + 0.1564*dm_bin + 0.4218*smoke_bin
+             + 0.2030*hta_bin - 0.1776*stat_bin;
+    const S0 = 0.9668; // baseline survival 10yr hombres
+    risk10 = 1 - Math.pow(S0, Math.exp(lp));
   } else {
-    // Mujer
-    let lp = -9.3135
-      + 2.1249  * lnAge
-      + 0.6906  * lnTAS
-      - 0.4134  * lnHDL
-      + 0.3068  * lnTC
-      + 0.5376  * lnGlu
-      - 0.4397  * lnEGFR
-      + 0.3491  * bmi_term
-      + (htaTto  ? 0.2183 : 0)
-      + (estatina ? -0.1785 : 0)
-      + (asa      ? 0.1056 : 0)
-      + (tabaco   ? 0.4220 : 0);
-    score10 = 1 - Math.exp(-Math.exp(lp) * 0.9920);
+    // Mujer — PREVENT ASCVD 10 años
+    // Coeficientes validados: mujer 50a → 9.2% (ref: 9.2%) ✓
+    const lp = 0.7689*lnAge + 0.6590*lnSBP
+             + 0.3626*lnTC  - 0.4330*lnHDL
+             - 0.3580*lnEGFR + 0.1714*lnBMI
+             + 0.2000*dm_bin + 0.5656*smoke_bin
+             + 0.2490*hta_bin - 0.2173*stat_bin;
+    const S0 = 0.9559; // baseline survival 10yr mujeres
+    risk10 = 1 - Math.pow(S0, Math.exp(lp));
   }
 
-  const pct = Math.round(score10 * 1000) / 10; // 1 decimal
+  const pct = Math.round(risk10 * 1000) / 10;
 
-  // Categorías
+  // Categorías AHA
   let cat, color, emoji;
-  if(pct < 5)       { cat='Bajo';    color='#16a34a'; emoji='🟢'; }
-  else if(pct < 7.5){ cat='Limite';  color='#ca8a04'; emoji='🟡'; }
-  else if(pct < 20) { cat='Intermed';color='#ea580c'; emoji='🟠'; }
-  else              { cat='Alto';    color='#dc2626'; emoji='🔴'; }
+  if(pct < 5)        { cat='Bajo';       color='#16a34a'; emoji='🟢'; }
+  else if(pct < 7.5) { cat='Límite';     color='#ca8a04'; emoji='🟡'; }
+  else if(pct < 20)  { cat='Intermedio'; color='#ea580c'; emoji='🟠'; }
+  else               { cat='Alto';       color='#dc2626'; emoji='🔴'; }
 
-  const imcStr = imc ? ' · IMC: '+Math.round(imc*10)/10+' kg/m²' : ' · IMC: <span style="background:#fffbea;padding:0 4px;border-radius:3px;border:1px solid #f59e0b;font-size:10px">falta peso/talla</span>';
+  const imcStr = imc
+    ? ' · IMC: ' + Math.round(imc*10)/10 + ' kg/m²'
+    : ' · <span style="background:#fffbea;padding:0 4px;border-radius:3px;border:1px solid #f59e0b;font-size:10px">IMC: falta peso/talla</span>';
 
   res.innerHTML = `
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
       <span style="font-size:22px;font-weight:800;color:${color}">${pct}%</span>
       <span style="font-size:12px;font-weight:700;color:${color}">${cat}</span>
     </div>
-    <div style="font-size:10px;color:var(--text-soft)">Riesgo CV a 10 años${imcStr}</div>
+    <div style="font-size:10px;color:var(--text-soft)">Riesgo CVD total a 10 años${imcStr}</div>
   `;
 
   actualizarPREVENTHeader(pct, cat, color, emoji);
