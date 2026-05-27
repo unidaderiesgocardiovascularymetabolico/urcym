@@ -2533,8 +2533,12 @@ function renderTabla(data) {
     cont.innerHTML = '<div class="empty-state"><div>👤</div><p>No hay pacientes registrados todavía.<br>Hacé clic en "+ Nuevo paciente" para agregar el primero.</p></div>';
     return;
   }
+  // Poner el último cargado/editado primero
+  const sorted = ultimoDniCargado
+    ? [...data].sort((a,b) => a.dni===ultimoDniCargado ? -1 : b.dni===ultimoDniCargado ? 1 : 0)
+    : data;
   cont.innerHTML = '<table><thead><tr><th>Apellido y nombre</th><th>DNI</th><th>Edad</th><th>Obra Social</th><th>Última evolución</th><th>Acciones</th></tr></thead><tbody>' +
-    data.map((p,i) => {
+    sorted.map((p,i) => {
       const esNuevo = p.dni === ultimoDniCargado;
       return '<tr class="' + (esNuevo?'fila-nuevo':'') + '">' +
         '<td><strong>' + p.apellido + ', ' + p.nombre + '</strong>' + (esNuevo?'&nbsp;<span style="font-size:10px;background:var(--teal);color:white;padding:2px 7px;border-radius:10px;vertical-align:middle">nuevo</span>':'') + '</td>' +
@@ -2553,7 +2557,7 @@ function renderTabla(data) {
       '</tr>';
     }).join('') + '</tbody></table>';
   // Cargar fecha de última evolución para cada paciente de forma asíncrona
-  cargarUltimasEvoluciones(data);
+  cargarUltimasEvoluciones(sorted);
 }
 
 async function cargarUltimasEvoluciones(data) {
@@ -2784,6 +2788,7 @@ async function guardarPaciente() {
       const { lugar_atencion, ...sinLugar } = paciente;
       ({ error } = await sb.from('pacientes').update(sinLugar).eq('dni', dniEdicion));
     }
+    if(!error) ultimoDniCargado = dniEdicion;
   } else {
     ({ error } = await sb.from('pacientes').insert(paciente));
     if(error && error.message && error.message.includes('lugar_atencion')) {
