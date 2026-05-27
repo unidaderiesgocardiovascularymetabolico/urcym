@@ -1159,21 +1159,21 @@
     <div class="modal-title" id="modalTitulo">Nuevo Paciente</div>
     <div class="form-grid">
       <div class="form-group">
-        <label>DNI *</label>
-        <input type="text" id="f_dni" placeholder="Sin puntos" maxlength="10"/>
-      </div>
-      <div class="form-group">
-        <label>Fecha de nacimiento *</label>
-        <input type="date" id="f_fecha" onchange="calcularEdad()"/>
-        <div class="edad-badge" id="edadBadge"></div>
-      </div>
-      <div class="form-group">
         <label>Apellido *</label>
         <input type="text" id="f_apellido" placeholder="Apellido"/>
       </div>
       <div class="form-group">
         <label>Nombre *</label>
         <input type="text" id="f_nombre" placeholder="Nombre"/>
+      </div>
+      <div class="form-group">
+        <label>DNI * <span style="font-weight:400;font-size:11px;color:var(--text-soft)">(sin puntos ni espacios)</span></label>
+        <input type="text" id="f_dni" placeholder="Ej: 30123456" maxlength="10" inputmode="numeric"/>
+      </div>
+      <div class="form-group">
+        <label>Fecha de nacimiento *</label>
+        <input type="date" id="f_fecha" onchange="calcularEdad()"/>
+        <div class="edad-badge" id="edadBadge"></div>
       </div>
       <div class="form-group">
         <label>Sexo</label>
@@ -2751,13 +2751,20 @@ async function editarPaciente(dni) {
 }
 
 async function guardarPaciente() {
-  const dni = document.getElementById('f_dni').value.trim();
+  // Limpiar DNI automáticamente: quitar puntos, espacios, guiones
+  const dniRaw = document.getElementById('f_dni').value.replace(/[\.\s\-]/g,'').trim();
+  document.getElementById('f_dni').value = dniRaw;
+  const dni = dniRaw;
   const apellido = document.getElementById('f_apellido').value.trim();
   const nombre = document.getElementById('f_nombre').value.trim();
   const fecha = document.getElementById('f_fecha').value;
   const errEl = document.getElementById('formError');
   if(!dni||!apellido||!nombre||!fecha) {
     errEl.textContent='Completá los campos obligatorios: DNI, apellido, nombre y fecha de nacimiento.';
+    errEl.style.display='block'; return;
+  }
+  if(!/^\d+$/.test(dni)) {
+    errEl.textContent='El DNI debe contener solo números, sin puntos ni espacios.';
     errEl.style.display='block'; return;
   }
   const paciente = {
@@ -2772,8 +2779,17 @@ async function guardarPaciente() {
   let error;
   if(modoEdicion) {
     ({ error } = await sb.from('pacientes').update(paciente).eq('dni', dniEdicion));
+    // Si falla por columna inexistente (lugar_atencion), reintentar sin ella
+    if(error && error.message && error.message.includes('lugar_atencion')) {
+      const { lugar_atencion, ...sinLugar } = paciente;
+      ({ error } = await sb.from('pacientes').update(sinLugar).eq('dni', dniEdicion));
+    }
   } else {
     ({ error } = await sb.from('pacientes').insert(paciente));
+    if(error && error.message && error.message.includes('lugar_atencion')) {
+      const { lugar_atencion, ...sinLugar } = paciente;
+      ({ error } = await sb.from('pacientes').insert(sinLugar));
+    }
     if(!error) ultimoDniCargado = dni;
   }
   if(error) {
