@@ -2895,10 +2895,8 @@ async function renderPreviasList() {
   cont.innerHTML = data.map(e => {
     const fh = new Date(e.fecha_hora);
     const mClase = medicoAClase(e.medico);
-    const editable = (ahora - fh.getTime()) < 48*60*60*1000;
-    const editBtn = editable
-      ? `<button onclick="editarPrevia(${e.id})" style="margin-left:auto;padding:3px 10px;border:1.5px solid var(--blue);border-radius:7px;background:var(--blue-light);color:var(--blue);font-size:11px;font-weight:600;cursor:pointer;font-family:var(--font-main)">✏️ Editar</button>`
-      : '';
+    const editable = true; // todas las evoluciones son editables
+    const editBtn = `<button onclick="editarPrevia(${e.id})" style="margin-left:auto;padding:3px 10px;border:1.5px solid var(--blue);border-radius:7px;background:var(--blue-light);color:var(--blue);font-size:11px;font-weight:600;cursor:pointer;font-family:var(--font-main)">✏️ Editar</button>`;
     if(_previaEditandoId === e.id) {
       return `<div class="hc-entrada" id="previa_entry_${e.id}">
         <div class="hc-header ${mClase}" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
@@ -3418,11 +3416,12 @@ async function abrirEvolucion(dni) {
   // IMPORTANTE: cargar datos históricos PRIMERO, luego mostrar la página
   _savedCols.lab.clear(); _savedCols.ant.clear(); _savedCols.est.clear();
   await cargarDatosTablasEvol(p.dni);
+  await cargarVacunacion(p.dni);
   await restaurarBorradorEvol(p.dni);
   showPage('evolucion');
   switchPacMainTab('evol');
-  actualizarEncabezadoVariable(p.dni);
-  cargarSnapshotInicial(p.dni);
+  await actualizarEncabezadoVariable(p.dni);
+  await cargarSnapshotInicial(p.dni);
   // Precargar PREVENT con datos disponibles del paciente
   setTimeout(precargarPREVENT, 800);
 }
@@ -4920,68 +4919,44 @@ document.getElementById('modal_historial_ant').addEventListener('click', functio
 });
 
 // ===== VACUNACIÓN — CALENDARIO NACIONAL ARGENTINO =====
-
-// Definición del calendario nacional (por categoría)
-// boosterAnios: años para próximo refuerzo (null = dosis única o no aplica)
+// boosterAnios: años para próximo refuerzo (null = sin refuerzo periódico)
 const CALENDARIO_VAC = [
-  // ── ADULTOS (todas las edades ≥18)
-  { id:'influenza', nombre:'Influenza estacional', frecuencia:'Anual', boosterAnios:1, indicacion:'Todos los adultos', grupo:'adultos',
-    antecedentes:[] },
-  { id:'covid19', nombre:'COVID-19', frecuencia:'Según esquema vigente', boosterAnios:null, indicacion:'Todos los adultos', grupo:'adultos',
-    antecedentes:[] },
-  { id:'neumo23', nombre:'Neumococo 23V (PPSV23)', frecuencia:'1 dosis (refuerzo a los 5 años en riesgo)', boosterAnios:5, indicacion:'>65 años o factores de riesgo', grupo:'adultos',
-    antecedentes:['mayores65','epoc','asma_severo','card_cronica','renal_cronica','hepatica_cronica','diabetes','inmunosupresion','tabaquismo'] },
-  { id:'neumo13', nombre:'Neumococo 13V (PCV13)', frecuencia:'1 dosis', boosterAnios:null, indicacion:'Inmunocomprometidos, enf. crónicas', grupo:'adultos',
-    antecedentes:['inmunosupresion','epoc','card_cronica','renal_cronica'] },
-  { id:'dt_adulto', nombre:'dT (doble adulto — Difteria/Tétanos)', frecuencia:'Cada 10 años', boosterAnios:10, indicacion:'Todos los adultos', grupo:'adultos',
-    antecedentes:[] },
-  { id:'dtpa', nombre:'dTpa (triple acelular — Difteria/Tétanos/Pertussis)', frecuencia:'1 dosis (adultos), cada embarazo', boosterAnios:null, indicacion:'Adultos sin refuerzo, embarazadas ≥20 semanas', grupo:'adultos',
-    antecedentes:['embarazo'] },
-  { id:'hbv', nombre:'Hepatitis B', frecuencia:'3 dosis (0-1-6 meses)', boosterAnios:null, indicacion:'No vacunados o sin serología', grupo:'adultos',
-    antecedentes:[] },
-  { id:'hav', nombre:'Hepatitis A', frecuencia:'2 dosis (0-6 meses)', boosterAnios:null, indicacion:'No vacunados, hepatopatías, HSH', grupo:'adultos',
-    antecedentes:['hepatica_cronica','riesgo_hav'] },
-  { id:'varicela', nombre:'Varicela', frecuencia:'2 dosis (si susceptible)', boosterAnios:null, indicacion:'Sin antecedente de varicela ni vacuna', grupo:'adultos',
-    antecedentes:['susceptible_varicela'] },
-  { id:'herpes_zoster', nombre:'Herpes Zóster (RZV)', frecuencia:'2 dosis (0 y 2-6 meses)', boosterAnios:null, indicacion:'≥50 años', grupo:'mayores50',
-    antecedentes:[] },
-  { id:'fiebre_amarilla', nombre:'Fiebre Amarilla', frecuencia:'1 dosis (de por vida)', boosterAnios:null, indicacion:'Viajeros a zonas endémicas, residentes', grupo:'adultos',
-    antecedentes:['riesgo_fa'] },
-  { id:'meningococo', nombre:'Meningococo conjugado (MenACWY)', frecuencia:'1-2 dosis', boosterAnios:5, indicacion:'Asplenia, inmunocomprometidos, viajeros', grupo:'adultos',
-    antecedentes:['inmunosupresion','asplenia','riesgo_meningococo'] },
-  { id:'hpv', nombre:'HPV (Papilomavirus)', frecuencia:'2-3 dosis', boosterAnios:null, indicacion:'Hasta 26 años (extendido hasta 45 en grupos de riesgo)', grupo:'adultos',
-    antecedentes:['hasta45_hpv'] },
-  // ── EMBARAZO
-  { id:'rubeolatosf', nombre:'Triple viral (MMR) — pre-concepcional', frecuencia:'Pre-concepcional si no vacunada', boosterAnios:null, indicacion:'Mujeres en edad fértil sin vacuna', grupo:'embarazo',
-    antecedentes:['embarazo','susceptible_mmr'] },
-  // ── OCUPACIONAL / RIESGO
-  { id:'rabia', nombre:'Rabia pre-exposición', frecuencia:'Esquema según riesgo', boosterAnios:2, indicacion:'Veterinarios, trabajadores de salud, viajeros', grupo:'riesgo',
-    antecedentes:['riesgo_rabia'] },
-  { id:'fiebre_tifoidea', nombre:'Fiebre Tifoidea', frecuencia:'1 dosis (oral) o inyectable', boosterAnios:3, indicacion:'Viajeros a zonas endémicas', grupo:'riesgo',
-    antecedentes:['riesgo_tifoidea'] },
+  // ── UNIVERSALES (todos los adultos)
+  { id:'influenza', nombre:'Influenza estacional', frecuencia:'Anual', boosterAnios:1, indicacion:'Todos los adultos', grupo:'adultos', antecedentes:[] },
+  { id:'dt_adulto', nombre:'dT — Difteria / Tétanos', frecuencia:'Cada 10 años', boosterAnios:10, indicacion:'Todos los adultos', grupo:'adultos', antecedentes:[] },
+  { id:'hbv', nombre:'Hepatitis B', frecuencia:'3 dosis (0-1-6 meses)', boosterAnios:null, indicacion:'No vacunados o sin serología', grupo:'adultos', antecedentes:[] },
+  { id:'covid19', nombre:'COVID-19', frecuencia:'Según esquema vigente', boosterAnios:null, indicacion:'Todos los adultos', grupo:'adultos', antecedentes:[] },
+
+  // ── DIABETES
+  { id:'neumo23_dbt', nombre:'Neumococo 23V (PPSV23)', frecuencia:'1 dosis; refuerzo a los 5 años', boosterAnios:5, indicacion:'Diabetes — riesgo neumococo', grupo:'adultos', antecedentes:['diabetes'] },
+  { id:'neumo13_dbt', nombre:'Neumococo 13V (PCV13)', frecuencia:'1 dosis', boosterAnios:null, indicacion:'Diabetes — inmunosupresión relativa', grupo:'adultos', antecedentes:['diabetes'] },
+  { id:'hav_dbt', nombre:'Hepatitis A', frecuencia:'2 dosis (0-6 meses)', boosterAnios:null, indicacion:'Diabetes (mayor susceptibilidad)', grupo:'adultos', antecedentes:['diabetes'] },
+  { id:'varicela_dbt', nombre:'Varicela', frecuencia:'2 dosis (si no inmune)', boosterAnios:null, indicacion:'Diabetes sin inmunidad previa', grupo:'adultos', antecedentes:['diabetes'] },
+
+  // ── OBESIDAD
+  { id:'neumo23_obe', nombre:'Neumococo 23V (PPSV23)', frecuencia:'1 dosis; refuerzo a los 5 años', boosterAnios:5, indicacion:'Obesidad — riesgo neumococo', grupo:'adultos', antecedentes:['obesidad'] },
+
+  // ── MAYORES DE 65
+  { id:'neumo23_65', nombre:'Neumococo 23V (PPSV23)', frecuencia:'1 dosis (refuerzo a los 5 años)', boosterAnios:5, indicacion:'≥65 años', grupo:'adultos', antecedentes:['mayores65'] },
+  { id:'neumo13_65', nombre:'Neumococo 13V (PCV13)', frecuencia:'1 dosis', boosterAnios:null, indicacion:'≥65 años', grupo:'adultos', antecedentes:['mayores65'] },
+  { id:'herpes_zoster', nombre:'Herpes Zóster (RZV)', frecuencia:'2 dosis (0 y 2-6 meses)', boosterAnios:null, indicacion:'≥50 años', grupo:'mayores50', antecedentes:[] },
+
+  // ── EMBARAZO (manual)
+  { id:'dtpa', nombre:'dTpa — Difteria/Tétanos/Pertussis', frecuencia:'Cada embarazo ≥20 semanas', boosterAnios:null, indicacion:'Embarazadas ≥20 semanas', grupo:'adultos', antecedentes:['embarazo'] },
+  { id:'influenza_emb', nombre:'Influenza (embarazo)', frecuencia:'Anual, en cualquier trimestre', boosterAnios:1, indicacion:'Embarazadas', grupo:'adultos', antecedentes:['embarazo'] },
 ];
 
-// Antecedentes relevantes que pueden marcar el médico
+// Antecedentes manuales editables por el médico
 const VAC_ANTECEDENTES = [
-  { id:'mayores65', label:'≥ 65 años (auto)' },
-  { id:'mayores50', label:'≥ 50 años (auto)' },
-  { id:'embarazo', label:'Embarazo' },
-  { id:'diabetes', label:'Diabetes' },
+  { id:'diabetes', label:'Diabetes (DBT 1/2/Gestacional)' },
+  { id:'obesidad', label:'Obesidad / Sobrepeso' },
   { id:'epoc', label:'EPOC / Asma severo' },
   { id:'card_cronica', label:'Enfermedad cardíaca crónica' },
   { id:'renal_cronica', label:'Enfermedad renal crónica' },
   { id:'hepatica_cronica', label:'Enfermedad hepática crónica' },
+  { id:'tabaquismo', label:'Tabaquismo activo' },
+  { id:'embarazo', label:'Embarazo' },
   { id:'inmunosupresion', label:'Inmunosupresión / HIV' },
-  { id:'asplenia', label:'Asplenia funcional o anatómica' },
-  { id:'tabaquismo', label:'Tabaquismo' },
-  { id:'susceptible_varicela', label:'Sin varicela ni vacuna previa' },
-  { id:'susceptible_mmr', label:'Sin triple viral (MMR)' },
-  { id:'riesgo_hav', label:'Riesgo Hepatitis A (hepatopatía, HSH, viaje)' },
-  { id:'riesgo_fa', label:'Riesgo Fiebre Amarilla (zona endémica/viaje)' },
-  { id:'riesgo_meningococo', label:'Riesgo meningococo' },
-  { id:'riesgo_rabia', label:'Riesgo rabia (vet, salud, viaje)' },
-  { id:'riesgo_tifoidea', label:'Viaje zona tifoidea' },
-  { id:'hasta45_hpv', label:'HPV hasta 45 años (grupo riesgo)' },
 ];
 
 function calcularEdad(fechaNac) {
@@ -5006,6 +4981,20 @@ function renderVacunacion() {
   else autoAnt.delete('mayores65');
   if(edad !== null && edad >= 50) autoAnt.add('mayores50');
   else autoAnt.delete('mayores50');
+
+  // Auto-detectar desde snapshot clínico
+  if(evolClinicaSnapshot && evolClinicaSnapshot.clinica) {
+    const c = evolClinicaSnapshot.clinica;
+    if(c.dx_dbt1 || c.dx_dbt2 || c.dx_dbt_otro || c.dx_predbt) autoAnt.add('diabetes');
+    if(c.dx_obe || c.dx_sob) autoAnt.add('obesidad');
+    if(c.dx_epoc) autoAnt.add('epoc');
+    if(c.dx_erc) autoAnt.add('renal_cronica');
+    if(c.dx_icc || c.dx_fa || c.dx_iam || c.dx_hvi) autoAnt.add('card_cronica');
+    if(c.dx_masld) autoAnt.add('hepatica_cronica');
+    if(c.tabaquismo === 'actual') autoAnt.add('tabaquismo');
+    // embarazo — se mantiene manual
+  }
+
   vacDatos.antecedentes = [...autoAnt];
 
   // Filtrar vacunas relevantes
@@ -5015,32 +5004,48 @@ function renderVacunacion() {
     return v.antecedentes.some(a => autoAnt.has(a));
   });
 
+  // Build auto-detected labels for display
+  const autoDetectados = [];
+  if(autoAnt.has('mayores65')) autoDetectados.push('≥ 65 años');
+  if(autoAnt.has('mayores50') && !autoAnt.has('mayores65')) autoDetectados.push('≥ 50 años');
+  if(autoAnt.has('diabetes')) autoDetectados.push('Diabetes');
+  if(autoAnt.has('obesidad')) autoDetectados.push('Obesidad');
+  if(autoAnt.has('epoc')) autoDetectados.push('EPOC');
+  if(autoAnt.has('renal_cronica')) autoDetectados.push('ERC');
+  if(autoAnt.has('card_cronica')) autoDetectados.push('Enf. cardíaca');
+  if(autoAnt.has('hepatica_cronica')) autoDetectados.push('Enf. hepática');
+  if(autoAnt.has('tabaquismo')) autoDetectados.push('Tabaquismo');
+
   panel.innerHTML = `
-    <!-- Antecedentes clínicos relevantes -->
+    <!-- Condiciones detectadas + manuales -->
     <div style="background:var(--gray);border-radius:12px;padding:14px 18px;margin-bottom:18px">
-      <div style="font-size:12px;font-weight:700;color:var(--text-soft);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">Factores de riesgo / indicaciones especiales</div>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+        <div style="font-size:12px;font-weight:700;color:var(--text-soft);text-transform:uppercase;letter-spacing:.06em">Condiciones del paciente</div>
+        ${autoDetectados.length ? `<div style="font-size:11px;color:var(--teal);background:var(--teal-light);padding:2px 8px;border-radius:10px;font-weight:600">✅ ${autoDetectados.join(' · ')} — detectados automáticamente</div>` : '<div style="font-size:11px;color:var(--text-soft)">No se detectaron condiciones en los diagnósticos cargados</div>'}
+      </div>
       <div style="display:flex;flex-wrap:wrap;gap:8px">
-        ${VAC_ANTECEDENTES.filter(a => !['mayores65','mayores50'].includes(a.id)).map(a => `
+        ${VAC_ANTECEDENTES.map(a => `
           <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;padding:4px 10px;background:white;border-radius:20px;border:1.5px solid ${autoAnt.has(a.id)?'var(--blue)':'var(--border)'};color:${autoAnt.has(a.id)?'var(--blue)':'var(--text)'}">
             <input type="checkbox" ${autoAnt.has(a.id)?'checked':''} onchange="toggleVacAnt('${a.id}',this.checked)" style="accent-color:var(--blue)">
             ${a.label}
           </label>
         `).join('')}
       </div>
-      ${edad!==null?`<div style="margin-top:8px;font-size:11px;color:var(--text-soft)">Edad detectada: <b>${edad} años</b>${edad>=65?' — Aplica neumococo, zóster':''}${edad>=50&&edad<65?' — Aplica zóster':''}</div>`:''}
+      ${edad!==null?`<div style="margin-top:8px;font-size:11px;color:var(--text-soft)">Edad: <b>${edad} años</b>${edad>=65?' — aplica neumococo 23V y 13V, herpes zóster':''}${edad>=50&&edad<65?' — aplica herpes zóster':''}</div>`:''}
     </div>
 
+    ${vacRelevantes.length===0?`<div style="text-align:center;padding:60px 20px;color:var(--text-soft);background:white;border-radius:12px;border:1px solid var(--border)"><div style="font-size:40px;margin-bottom:12px">💉</div><p style="font-size:14px">No se encontraron vacunas indicadas.<br><span style="font-size:12px">Revisá que los diagnósticos del paciente estén cargados, o marcá condiciones manualmente arriba.</span></p></div>`:`
     <!-- Tabla de vacunas -->
     <div style="border-radius:12px;overflow:hidden;border:1px solid var(--border)">
       <table style="width:100%;border-collapse:collapse;font-size:12px">
         <thead>
           <tr style="background:var(--blue);color:white">
-            <th style="padding:10px 14px;text-align:left;font-weight:700">Vacuna</th>
+            <th style="padding:10px 14px;text-align:left;font-weight:700;min-width:200px">Vacuna</th>
             <th style="padding:10px 14px;text-align:left;font-weight:700">Indicación</th>
             <th style="padding:10px 14px;text-align:left;font-weight:700">Frecuencia</th>
             <th style="padding:10px 10px;text-align:center;font-weight:700;white-space:nowrap">Estado</th>
-            <th style="padding:10px 14px;text-align:left;font-weight:700">Fecha aplicación</th>
-            <th style="padding:10px 14px;text-align:left;font-weight:700;white-space:nowrap">Próximo refuerzo</th>
+            <th style="padding:10px 14px;text-align:left;font-weight:700;min-width:140px">Fecha aplicación</th>
+            <th style="padding:10px 14px;text-align:left;font-weight:700;white-space:nowrap;min-width:140px">Próximo refuerzo</th>
           </tr>
         </thead>
         <tbody>
@@ -5053,7 +5058,6 @@ function renderVacunacion() {
             // Calculate next booster
             let boosterHtml = '<span style="color:var(--text-soft);font-size:11px">—</span>';
             if(est === 'completa' && v.boosterAnios && nota) {
-              // Try to parse date from nota field (format dd/mm/yyyy or mm/yyyy or yyyy)
               const m1 = nota.match(/(\d{2})\/(\d{2})\/(\d{4})/);
               const m2 = nota.match(/(\d{2})\/(\d{4})/);
               const m3 = nota.match(/(\d{4})/);
@@ -5064,28 +5068,23 @@ function renderVacunacion() {
               if(baseDate && !isNaN(baseDate)) {
                 const booster = new Date(baseDate);
                 booster.setFullYear(booster.getFullYear() + v.boosterAnios);
-                const hoy = new Date();
-                const diffMs = booster - hoy;
+                const diffMs = booster - new Date();
                 const diffDias = Math.round(diffMs / 86400000);
                 const boosterStr = booster.toLocaleDateString('es-AR',{month:'2-digit',year:'numeric'});
-                if(diffDias < 0) {
-                  boosterHtml = `<span style="color:var(--red);font-weight:700;font-size:11px">⚠️ Vencido (${boosterStr})</span>`;
-                } else if(diffDias <= 90) {
-                  boosterHtml = `<span style="color:#ca8a04;font-weight:700;font-size:11px">⏰ Próximo: ${boosterStr}</span>`;
-                } else {
-                  boosterHtml = `<span style="color:#16a34a;font-size:11px">✅ ${boosterStr}</span>`;
-                }
+                if(diffDias < 0) boosterHtml = `<span style="color:var(--red);font-weight:700;font-size:11px">⚠️ Vencido (${boosterStr})</span>`;
+                else if(diffDias <= 90) boosterHtml = `<span style="color:#ca8a04;font-weight:700;font-size:11px">⏰ Próximo: ${boosterStr}</span>`;
+                else boosterHtml = `<span style="color:#16a34a;font-size:11px">✅ ${boosterStr}</span>`;
               }
             } else if(v.boosterAnios && est === 'completa') {
-              boosterHtml = `<span style="color:var(--text-soft);font-size:11px">Cargar fecha de aplicación</span>`;
+              boosterHtml = `<span style="color:var(--text-soft);font-size:10px">Cargá la fecha →</span>`;
             } else if(!v.boosterAnios && est === 'completa') {
               boosterHtml = `<span style="color:#16a34a;font-size:11px">Sin refuerzo necesario</span>`;
             }
 
             return `<tr style="background:${bg};border-bottom:1px solid var(--border)">
               <td style="padding:10px 14px;font-weight:600;color:var(--text)">${v.nombre}</td>
-              <td style="padding:10px 14px;color:var(--text-soft)">${v.indicacion}</td>
-              <td style="padding:10px 14px;color:var(--text-soft)">${v.frecuencia}</td>
+              <td style="padding:10px 14px;color:var(--text-soft);font-size:11px">${v.indicacion}</td>
+              <td style="padding:10px 14px;color:var(--text-soft);font-size:11px">${v.frecuencia}</td>
               <td style="padding:10px;text-align:center">
                 <select onchange="setVacEstado('${v.id}',this.value);renderVacunacion()" style="border:1.5px solid ${colorEst};border-radius:6px;padding:3px 6px;font-size:11px;color:${colorEst};background:white;font-family:var(--font-main);font-weight:600;cursor:pointer">
                   <option value="pendiente" ${est==='pendiente'?'selected':''}>⬜ Pendiente</option>
@@ -5094,8 +5093,8 @@ function renderVacunacion() {
                 </select>
               </td>
               <td style="padding:6px 10px">
-                <input type="text" value="${nota}" placeholder="Ej: 02/2024, lote XX"
-                  onchange="setVacNota('${v.id}',this.value);renderVacunacion()"
+                <input type="text" value="${nota}" placeholder="Ej: 03/2024"
+                  onblur="setVacNota('${v.id}',this.value);renderVacunacion()"
                   style="width:100%;border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-size:11px;font-family:var(--font-main);color:var(--text)">
               </td>
               <td style="padding:8px 14px">${boosterHtml}</td>
@@ -5103,9 +5102,7 @@ function renderVacunacion() {
           }).join('')}
         </tbody>
       </table>
-    </div>
-
-    ${vacRelevantes.length===0?`<div style="text-align:center;padding:40px;color:var(--text-soft)">Completá los antecedentes para ver las vacunas indicadas</div>`:''}
+    </div>`}
   `;
 }
 
@@ -5264,51 +5261,58 @@ document.getElementById('modal_evol_historica').addEventListener('click', functi
 
 // ===== MODALES ARRASTRABLES =====
 (function() {
-  function makeDraggable(overlay) {
-    const modal = overlay.querySelector('.modal');
-    if(!modal || modal._draggable) return;
-    modal._draggable = true;
-    let dragging = false, startX, startY, origLeft, origTop;
-    // Find the handle: modal-title or first header element
-    const getHandle = () => modal.querySelector('.modal-title, [style*="font-family:var(--font-display)"]') || modal;
-    modal.addEventListener('mousedown', function(e) {
-      const handle = getHandle();
-      if(!handle) return;
-      // Only drag if clicking within the first 60px or on the title
-      const rect = modal.getBoundingClientRect();
-      const clickY = e.clientY - rect.top;
-      if(clickY > 64) return; // only top bar area is draggable
-      if(e.target.tagName === 'BUTTON' || e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA') return;
-      dragging = true;
-      startX = e.clientX; startY = e.clientY;
-      // Convert from flex-centered to absolute position
-      if(!modal.style.position || modal.style.position === '') {
-        const r = modal.getBoundingClientRect();
-        modal.style.position = 'fixed';
-        modal.style.left = r.left + 'px';
-        modal.style.top = r.top + 'px';
-        modal.style.margin = '0';
-        modal.style.transform = 'none';
-        overlay.style.alignItems = 'flex-start';
-        overlay.style.justifyContent = 'flex-start';
-      }
-      origLeft = parseInt(modal.style.left) || 0;
-      origTop  = parseInt(modal.style.top)  || 0;
-      modal.classList.add('dragging');
-      e.preventDefault();
-    });
-    document.addEventListener('mousemove', function(e) {
-      if(!dragging) return;
-      const dx = e.clientX - startX, dy = e.clientY - startY;
-      modal.style.left = (origLeft + dx) + 'px';
-      modal.style.top  = Math.max(0, origTop + dy) + 'px';
-    });
-    document.addEventListener('mouseup', function() {
-      if(dragging) { dragging = false; modal.classList.remove('dragging'); }
-    });
-  }
+  let dragState = null; // { modal, overlay, startX, startY, origLeft, origTop }
 
-  // Reset modal position when closed
+  document.addEventListener('mousedown', function(e) {
+    // Find if we clicked inside a .modal that's inside an open .modal-overlay
+    const modal = e.target.closest('.modal');
+    if(!modal) return;
+    const overlay = modal.closest('.modal-overlay');
+    if(!overlay || !overlay.classList.contains('open')) return;
+    // Only drag from top 60px strip (header area)
+    const rect = modal.getBoundingClientRect();
+    if(e.clientY - rect.top > 60) return;
+    // Don't drag when clicking interactive elements
+    if(['BUTTON','INPUT','SELECT','TEXTAREA','A'].includes(e.target.tagName)) return;
+
+    // First drag: convert from flex-centered to fixed absolute
+    if(modal.style.position !== 'fixed') {
+      modal.style.position = 'fixed';
+      modal.style.left = rect.left + 'px';
+      modal.style.top = rect.top + 'px';
+      modal.style.margin = '0';
+      modal.style.transform = 'none';
+      modal.style.animation = 'none';
+      overlay.style.alignItems = 'flex-start';
+      overlay.style.justifyContent = 'flex-start';
+      overlay.style.pointerEvents = 'none';
+      modal.style.pointerEvents = 'all';
+    }
+
+    dragState = {
+      modal, overlay,
+      startX: e.clientX, startY: e.clientY,
+      origLeft: parseFloat(modal.style.left) || 0,
+      origTop: parseFloat(modal.style.top) || 0,
+    };
+    modal.style.cursor = 'grabbing';
+    e.preventDefault();
+  });
+
+  document.addEventListener('mousemove', function(e) {
+    if(!dragState) return;
+    const { modal, startX, startY, origLeft, origTop } = dragState;
+    modal.style.left = (origLeft + e.clientX - startX) + 'px';
+    modal.style.top = Math.max(0, origTop + e.clientY - startY) + 'px';
+  });
+
+  document.addEventListener('mouseup', function() {
+    if(!dragState) return;
+    dragState.modal.style.cursor = '';
+    dragState = null;
+  });
+
+  // Reset position when modal closes
   const origCerrar = window.cerrarModal;
   window.cerrarModal = function(id) {
     if(origCerrar) origCerrar(id);
@@ -5316,27 +5320,31 @@ document.getElementById('modal_evol_historica').addEventListener('click', functi
     if(!overlay) return;
     const modal = overlay.querySelector('.modal');
     if(modal) {
-      modal.style.position = '';
-      modal.style.left = '';
-      modal.style.top = '';
-      modal.style.margin = '';
-      modal.style.transform = '';
+      modal.style.cssText = modal.style.cssText
+        .replace(/position:[^;]+;?/g,'')
+        .replace(/left:[^;]+;?/g,'')
+        .replace(/top:[^;]+;?/g,'')
+        .replace(/margin:[^;]+;?/g,'')
+        .replace(/transform:[^;]+;?/g,'')
+        .replace(/animation:[^;]+;?/g,'')
+        .replace(/pointer-events:[^;]+;?/g,'');
       overlay.style.alignItems = '';
       overlay.style.justifyContent = '';
+      overlay.style.pointerEvents = '';
     }
   };
 
-  // Attach to all modals on open
-  document.addEventListener('click', function(e) {
-    setTimeout(() => {
-      document.querySelectorAll('.modal-overlay.open').forEach(makeDraggable);
-    }, 50);
+  // Cursor hint: show grab cursor on top 60px of modal header
+  document.addEventListener('mousemove', function(e) {
+    if(dragState) return;
+    const modal = e.target.closest('.modal');
+    if(!modal) return;
+    const overlay = modal.closest('.modal-overlay');
+    if(!overlay || !overlay.classList.contains('open')) return;
+    if(['BUTTON','INPUT','SELECT','TEXTAREA','A'].includes(e.target.tagName)) return;
+    const rect = modal.getBoundingClientRect();
+    modal.style.cursor = (e.clientY - rect.top <= 60) ? 'grab' : '';
   });
-  // Also attach on mutation
-  const obs = new MutationObserver(() => {
-    document.querySelectorAll('.modal-overlay.open').forEach(makeDraggable);
-  });
-  obs.observe(document.body, { attributes: true, subtree: true, attributeFilter: ['class', 'style'] });
 })();
 
 // Activar cuando sw.js esté subido al repositorio
