@@ -1223,6 +1223,10 @@
         <label>Número de afiliado</label>
         <input type="text" id="f_afiliado" placeholder="Nº afiliado"/>
       </div>
+      <div class="form-group">
+        <label>Ocupación</label>
+        <input type="text" id="f_ocupacion" placeholder="Profesión u ocupación"/>
+      </div>
       <div class="form-group full">
         <label>Profesional/es a cargo</label>
         <div style="display:flex;gap:20px;margin-top:6px;flex-wrap:wrap">
@@ -1356,7 +1360,7 @@
       <div style="font-weight:700;font-size:6.5pt;color:#333;text-align:left;margin-bottom:3px;letter-spacing:0.03em">UNIDAD DE RIESGO CARDIOVASCULAR Y METABÓLICO</div>
       <div style="display:flex;justify-content:flex-start;gap:18px;font-size:6pt;color:#555;align-items:center">
         <span>✉ contactourcym@gmail.com</span>
-        <span>📞 02246 59 1128</span>
+        <span>📞 02246 588469</span>
         <span>📍 2 N 1553 - Santa Teresita</span>
       </div>
     </div>
@@ -2633,10 +2637,10 @@ async function cargarEncabezadoHC(dni) {
   document.getElementById('hc_evh_med').innerHTML = meds.length ? meds.map(m=>'<span class="evh-med-item">'+m.farmaco+' '+m.dosis+'</span>').join(' · ') : '<span style="font-size:11px;color:var(--text-soft)">Sin medicación</span>';
   if(c) {
     const py = ((c.cigarrillos_dia||0)*(c.anios_fumando||0)/20).toFixed(1);
-    const t = c.tabaquismo==='nunca'?'<span class="evh-habito-bien">No fumador</span>':c.tabaquismo==='actual'?'<span class="evh-habito-malo">Fumador ('+py+' PA)</span>':'<span style="color:#e08c3a;font-weight:600">Ex fumador ('+py+' PA)</span>';
+    const t = c.tabaquismo==='nunca'?'<span class="evh-habito-bien">No fumador</span>':c.tabaquismo==='actual'?'<span class="evh-habito-malo">Fumador ('+py+' PA)</span>':c.tabaquismo==='social'?'<span style="color:#e08c3a;font-weight:600">Fumador social</span>':'<span style="color:#e08c3a;font-weight:600">Ex fumador ('+py+' PA)</span>';
     const gr = Math.round((c.alcohol_cerveza||0)*13+(c.alcohol_vino||0)*14+(c.alcohol_fernet||0)*22+(c.alcohol_blanca||0)*14+(c.alcohol_whisky||0)*14);
     const lim = pacienteActual?.sexo==='Femenino'?98:196;
-    const a = !c.alcohol?'<span class="evh-habito-bien">No alcohol</span>':'<span class="'+(gr>lim?'evh-habito-malo':'evh-habito-bien')+'">Alcohol '+gr+'g/sem</span>';
+    const a = c.alcohol_social?'<span style="color:#e08c3a;font-weight:600">Alcohol social</span>':!c.alcohol?'<span class="evh-habito-bien">No alcohol</span>':'<span class="'+(gr>lim?'evh-habito-malo':'evh-habito-bien')+'">Alcohol '+gr+'g/sem</span>';
     const act = c.actividad_fisica==='sedentarismo'?'<span class="evh-habito-malo">Sedentario</span>':'<span class="evh-habito-bien">'+c.actividad_fisica+'</span>';
     document.getElementById('hc_evh_habitos').innerHTML = t+'<br>'+a+'<br>'+act;
   } else {
@@ -2732,7 +2736,7 @@ function abrirModalNuevo() {
   modoEdicion = false; dniEdicion = null;
   document.getElementById('modalTitulo').textContent = 'Nuevo Paciente';
   document.getElementById('f_dni').disabled = false;
-  ['f_dni','f_apellido','f_nombre','f_email','f_telefono','f_afiliado'].forEach(id=>document.getElementById(id).value='');
+  ['f_dni','f_apellido','f_nombre','f_email','f_telefono','f_afiliado','f_ocupacion'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('f_fecha').value='';
   document.getElementById('f_sexo').value='';
   document.getElementById('f_lugar_atencion').value='';
@@ -2762,6 +2766,7 @@ async function editarPaciente(dni) {
   document.getElementById('f_obra_social').value = p.obra_social||'';
   document.getElementById('f_obra_social_input').value = p.obra_social||'';
   document.getElementById('f_afiliado').value = p.numero_afiliado||'';
+  document.getElementById('f_ocupacion').value = p.ocupacion||'';
   calcularEdad();
   const { data } = await sb.from('paciente_profesionales').select('*').eq('dni_paciente', dni);
   const profs = (data||[]).map(x=>x.profesional);
@@ -2796,6 +2801,7 @@ async function guardarPaciente() {
     email: document.getElementById('f_email').value.trim()||null,
     obra_social: document.getElementById('f_obra_social').value||null,
     numero_afiliado: document.getElementById('f_afiliado').value.trim()||null,
+    ocupacion: document.getElementById('f_ocupacion').value.trim()||null,
   };
   let error;
   if(modoEdicion) {
@@ -2889,9 +2895,25 @@ function generarTextoClinico(c, meds) {
   const DX_NAMES = {acv:'ACV',albuminuria:'Albuminuria',atero_subcl:'Atero Subcl.',dbt1:'DBT 1',dbt2:'DBT 2',dbt_otro:'DBT Otro',dis:'Dislipemia',eap:'EAP',epoc:'EPOC',erc:'ERC',fa:'FA',hiperu:'HiperU',hta:'HTA',hta2:'HTA 2',hvi:'HVI',iam:'IAM',icc:'ICC',masld:'MASLD',ms:'S. Metabólico',neu_dbt:'Neu DBT',obe:'Obesidad',predbt:'PreDBT',rp_dbt:'RP DBT',sahos:'SAHOS',sob:'Sobrepeso'};
   const GINECO_NAMES = {pe:'Preeclampsia',rciu:'RCIU',ppt:'Parto Pretérmino',sop:'SOP',dbtg:'DBT Gestacional',htag:'HTA Gestacional',ms_gineco:'S. Metabólico Gineco',menopausia:'Menopausia'};
   const FAM_NAMES = {hta:'HTA',dbt:'DBT',obe:'Obesidad',dis:'Dislipemia',iam:'IAM',acv:'ACV',erc:'ERC',ms:'S. Metabólico'};
-  const dxList = Object.keys(DX_NAMES).filter(d=>c['dx_'+d]).map(d=>DX_NAMES[d]);
+  const dxList = Object.keys(DX_NAMES).filter(d=>c['dx_'+d]).map(d=>{
+    let txt = DX_NAMES[d];
+    if(d==='acv'&&c.dx_acv_fecha){const diff=Math.floor((Date.now()-new Date(c.dx_acv_fecha).getTime())/86400000);const y=Math.floor(diff/365);const m=Math.floor((diff%365)/30);txt+=' (hace '+(y>0?y+' año'+(y>1?'s':'')+(m>0?' y '+m+' mes'+(m>1?'es':''):''):m>0?m+' mes'+(m>1?'es':''):diff+' días')+')';}
+    if(d==='iam'&&c.dx_iam_fecha){const diff=Math.floor((Date.now()-new Date(c.dx_iam_fecha).getTime())/86400000);const y=Math.floor(diff/365);const m=Math.floor((diff%365)/30);txt+=' (hace '+(y>0?y+' año'+(y>1?'s':'')+(m>0?' y '+m+' mes'+(m>1?'es':''):''):m>0?m+' mes'+(m>1?'es':''):diff+' días')+')';}
+    if(d==='hta'&&c.dx_hta_fecha){const diff=Math.floor((Date.now()-new Date(c.dx_hta_fecha).getTime())/86400000);const y=Math.floor(diff/365);txt+=' (hace '+(y>0?y+' año'+(y>1?'s':''):Math.floor(diff/30)+' meses')+')';}
+    if(d==='obe'&&c.dx_obe_fecha){const diff=Math.floor((Date.now()-new Date(c.dx_obe_fecha).getTime())/86400000);const y=Math.floor(diff/365);txt+=' (hace '+(y>0?y+' año'+(y>1?'s':''):Math.floor(diff/30)+' meses')+')';}
+    if(d==='menopausia'&&c.dx_menopausia_edad)txt+=' (edad diagnóstico: '+c.dx_menopausia_edad+' años)';
+    return txt;
+  });
   if(dxList.length) lines.push('ANTECEDENTES: '+dxList.join(' · '));
+  // Notas de dx
+  if(c.dx_acv&&c.dx_acv_nota) lines.push('ACV: '+c.dx_acv_nota);
+  if(c.dx_iam&&c.dx_iam_nota) lines.push('IAM: '+c.dx_iam_nota);
+  if(c.dx_hta&&c.dx_hta_nota) lines.push('HTA: '+c.dx_hta_nota);
+  if(c.dx_obe&&c.dx_obe_nota) lines.push('Obesidad: '+c.dx_obe_nota);
+  if(c.dx_menopausia&&c.dx_menopausia_nota) lines.push('Menopausia: '+c.dx_menopausia_nota);
   const ginList = Object.keys(GINECO_NAMES).filter(d=>c['dx_'+d]).map(d=>GINECO_NAMES[d]);
+  const gpac = [c.gpac_g,c.gpac_p,c.gpac_a,c.gpac_c].filter(v=>v!=null&&v!=='');
+  if(gpac.length===4) ginList.push('G'+c.gpac_g+'P'+c.gpac_p+'A'+c.gpac_a+'C'+c.gpac_c);
   if(ginList.length) lines.push('ANT. GINECOLÓGICOS: '+ginList.join(' · '));
   const famList = Object.keys(FAM_NAMES).filter(d=>c['fam_'+d]).map(d=>FAM_NAMES[d]);
   if(famList.length) lines.push('ANT. FAMILIARES: '+famList.join(' · '));
@@ -2899,8 +2921,10 @@ function generarTextoClinico(c, meds) {
   const habParts = [];
   if(c.tabaquismo==='nunca') habParts.push('No fumador');
   else if(c.tabaquismo==='actual') habParts.push('Fumador ('+((c.cigarrillos_dia||0)*(c.anios_fumando||0)/20).toFixed(1)+' PA)');
+  else if(c.tabaquismo==='social') habParts.push('Fumador social');
   else if(c.tabaquismo==='ex') habParts.push('Ex fumador ('+((c.cigarrillos_dia||0)*(c.anios_fumando||0)/20).toFixed(1)+' PA)');
-  if(!c.alcohol) habParts.push('No alcohol');
+  if(c.alcohol_social) habParts.push('Alcohol social');
+  else if(!c.alcohol) habParts.push('No alcohol');
   else { const gr=Math.round((c.alcohol_cerveza||0)*13+(c.alcohol_vino||0)*14+(c.alcohol_fernet||0)*22+(c.alcohol_blanca||0)*14+(c.alcohol_whisky||0)*14); habParts.push('Alcohol: '+gr+'g/sem'); }
   if(c.actividad_fisica) habParts.push('Act. física: '+c.actividad_fisica);
   if(c.alimentacion) habParts.push('Alimentación: '+c.alimentacion);
@@ -2933,8 +2957,24 @@ async function guardarClinica() {
     tabaquismo:document.getElementById('hab_tabaquismo').value,
     cigarrillos_dia:document.getElementById('hab_cig_dia').value||null,
     anios_fumando:document.getElementById('hab_anios').value||null,
-    gestas:document.getElementById('hab_gestas')?.value||null,
-    alcohol:document.getElementById('hab_alcohol').value==='si',
+    gpac_g:document.getElementById('gpac_g')?.value||null,
+    gpac_p:document.getElementById('gpac_p')?.value||null,
+    gpac_a:document.getElementById('gpac_a')?.value||null,
+    gpac_c:document.getElementById('gpac_c')?.value||null,
+    dx_acv_subtipos:{isq:document.getElementById('dx_acv_isq')?.checked||false,hem:document.getElementById('dx_acv_hem')?.checked||false,ait:document.getElementById('dx_acv_ait')?.checked||false},
+    dx_acv_fecha:document.getElementById('dx_acv_fecha')?.value||null,
+    dx_acv_nota:document.getElementById('dx_acv_nota')?.value||null,
+    dx_iam_subtipos:{stemi:document.getElementById('dx_iam_stemi')?.checked||false,nstemi:document.getElementById('dx_iam_nstemi')?.checked||false,angiop:document.getElementById('dx_iam_angiop')?.checked||false,by:document.getElementById('dx_iam_by')?.checked||false},
+    dx_iam_fecha:document.getElementById('dx_iam_fecha')?.value||null,
+    dx_iam_nota:document.getElementById('dx_iam_nota')?.value||null,
+    dx_hta_fecha:document.getElementById('dx_hta_fecha')?.value||null,
+    dx_hta_nota:document.getElementById('dx_hta_nota')?.value||null,
+    dx_obe_fecha:document.getElementById('dx_obe_fecha')?.value||null,
+    dx_obe_nota:document.getElementById('dx_obe_nota')?.value||null,
+    dx_menopausia_edad:document.getElementById('dx_menopausia_edad')?.value||null,
+    dx_menopausia_nota:document.getElementById('dx_menopausia_nota')?.value||null,
+    alcohol:['si','social'].includes(document.getElementById('hab_alcohol').value),
+    alcohol_social:document.getElementById('hab_alcohol').value==='social',
     alcohol_cerveza:parseFloat(document.getElementById('alc_cerveza').value)||0,
     alcohol_vino:parseFloat(document.getElementById('alc_vino').value)||0,
     alcohol_fernet:parseFloat(document.getElementById('alc_fernet').value)||0,
@@ -3015,14 +3055,28 @@ async function cargarDatosClinica(dni) {
   if(!data){agregarFilaMed();return;}
   ['hta','hta2','dis','erc','obe','sob','masld','dbt2','dbt1','dbt_otro','predbt','hiperu','atero_subcl','eap','iam','acv','fa','sahos','epoc','icc','hvi','albuminuria','rp_dbt','neu_dbt','ms','pe','rciu','ppt','sop','dbtg','htag','ms_gineco','menopausia'].forEach(d=>{const el=document.getElementById('dx_'+d);if(el)el.checked=!!data['dx_'+d];});
   ['hta','dbt','obe','dis','iam','acv','erc','ms'].forEach(d=>{const el=document.getElementById('fam_'+d);if(el)el.checked=!!data['fam_'+d];});
-  if(data.gestas&&document.getElementById('hab_gestas'))document.getElementById('hab_gestas').value=data.gestas;
+  // GPAC
+  ['g','p','a','c'].forEach(f=>{const el=document.getElementById('gpac_'+f);if(el&&data['gpac_'+f])el.value=data['gpac_'+f];});
+  // Extra dx
+  ['acv','iam','hta','obe','menopausia'].forEach(dx=>{
+    toggleDxExtra(dx);
+    const fecha=document.getElementById('dx_'+dx+'_fecha');if(fecha&&data['dx_'+dx+'_fecha'])fecha.value=data['dx_'+dx+'_fecha'];
+    const nota=document.getElementById('dx_'+dx+'_nota');if(nota&&data['dx_'+dx+'_nota'])nota.value=data['dx_'+dx+'_nota'];
+    if(dx==='acv'&&data.dx_acv_subtipos){['isq','hem','ait'].forEach(s=>{const el=document.getElementById('dx_acv_'+s);if(el)el.checked=data.dx_acv_subtipos[s]||false;});}
+    if(dx==='iam'&&data.dx_iam_subtipos){['stemi','nstemi','angiop','by'].forEach(s=>{const el=document.getElementById('dx_iam_'+s);if(el)el.checked=data.dx_iam_subtipos[s]||false;});}
+    if(dx==='menopausia'){const edad=document.getElementById('dx_menopausia_edad');if(edad&&data.dx_menopausia_edad)edad.value=data.dx_menopausia_edad;}
+    calcDxTiempo(dx);
+  });
   const tab=document.getElementById('hab_tabaquismo');
   if(tab){tab.value=data.tabaquismo||'nunca';actualizarTabaquismo();}
   const cig=document.getElementById('hab_cig_dia');if(cig&&data.cigarrillos_dia)cig.value=data.cigarrillos_dia;
   const ani=document.getElementById('hab_anios');if(ani&&data.anios_fumando)ani.value=data.anios_fumando;
   calcPackYear();
   const alc=document.getElementById('hab_alcohol');
-  if(alc){alc.value=data.alcohol?'si':'no';actualizarAlcohol();}
+  if(alc){
+    alc.value=data.alcohol_social?'social':(data.alcohol?'si':'no');
+    actualizarAlcohol();
+  }
   ['cerveza','vino','fernet','blanca','whisky'].forEach(b=>{const el=document.getElementById('alc_'+b);if(el&&data['alcohol_'+b])el.value=data['alcohol_'+b];});
   calcAlcohol();
   if(data.actividad_fisica)document.getElementById('hab_actividad').value=data.actividad_fisica;
@@ -4020,6 +4074,21 @@ function poblarFarmacos(grupo, el, selected) {
 
 // guardarClinica v2 removida (duplicado)
 // actualizarEncabezadoVariable v2 removida
+function toggleDxExtra(dx) {
+  const checked = document.getElementById('dx_'+dx)?.checked;
+  const box = document.getElementById('dx_extra_'+dx);
+  if(box) box.style.display = checked ? 'block' : 'none';
+}
+function calcDxTiempo(dx) {
+  const el = document.getElementById('dx_'+dx+'_fecha');
+  const out = document.getElementById('dx_'+dx+'_tiempo');
+  if(!el||!out) return;
+  const f = el.value; if(!f){out.textContent='';return;}
+  const diff = Date.now()-new Date(f).getTime();
+  const days = Math.floor(diff/86400000);
+  const years = Math.floor(days/365); const months = Math.floor((days%365)/30);
+  out.textContent = years>0 ? 'Hace '+years+' año'+(years>1?'s':'')+(months>0?' y '+months+' mes'+(months>1?'es':''):'') : months>0 ? 'Hace '+months+' mes'+(months>1?'es':'') : 'Hace '+days+' día'+(days!==1?'s':'');
+}
 function actualizarTabaquismo(){
   const val=document.getElementById('hab_tabaquismo').value;
   document.getElementById('hab_tab_detalle').style.display=val==='nunca'?'none':'block';
@@ -4033,7 +4102,8 @@ function calcPackYear(){
   if(el) el.textContent=(cig||ani)?'Pack-year: '+((cig*ani)/20).toFixed(1):'';
 }
 function actualizarAlcohol(){
-  document.getElementById('hab_alcohol_detalle').style.display=document.getElementById('hab_alcohol').value==='si'?'block':'none';
+  const v = document.getElementById('hab_alcohol').value;
+  document.getElementById('hab_alcohol_detalle').style.display=(v==='si')?'block':'none';
   calcAlcohol();
 }
 function calcAlcohol(){
@@ -5162,7 +5232,7 @@ document.getElementById('modal_evol_historica').addEventListener('click', functi
     <!-- TAB CARDIO -->
     <div id="tab_cardio" class="ctab-content">
       <div class="dx-grid3">
-        <label class="dx-item"><input type="checkbox" id="dx_acv"> ACV</label>
+        <label class="dx-item"><input type="checkbox" id="dx_acv" onchange="toggleDxExtra('acv')"> ACV</label>
         <label class="dx-item"><input type="checkbox" id="dx_albuminuria"> Albuminuria</label>
         <label class="dx-item"><input type="checkbox" id="dx_atero_subcl"> Atero Subcl.</label>
         <label class="dx-item"><input type="checkbox" id="dx_dbt1"> DBT 1</label>
@@ -5174,19 +5244,66 @@ document.getElementById('modal_evol_historica').addEventListener('click', functi
         <label class="dx-item"><input type="checkbox" id="dx_erc"> ERC</label>
         <label class="dx-item"><input type="checkbox" id="dx_fa"> FA</label>
         <label class="dx-item"><input type="checkbox" id="dx_hiperu"> HiperU</label>
-        <label class="dx-item"><input type="checkbox" id="dx_hta"> HTA</label>
+        <label class="dx-item"><input type="checkbox" id="dx_hta" onchange="toggleDxExtra('hta')"> HTA</label>
         <label class="dx-item"><input type="checkbox" id="dx_hta2"> HTA 2</label>
         <label class="dx-item"><input type="checkbox" id="dx_hvi"> HVI</label>
-        <label class="dx-item"><input type="checkbox" id="dx_iam"> IAM</label>
+        <label class="dx-item"><input type="checkbox" id="dx_iam" onchange="toggleDxExtra('iam')"> IAM</label>
         <label class="dx-item"><input type="checkbox" id="dx_icc"> ICC</label>
         <label class="dx-item"><input type="checkbox" id="dx_masld"> MASLD</label>
         <label class="dx-item"><input type="checkbox" id="dx_ms"> S. Metabólico</label>
         <label class="dx-item"><input type="checkbox" id="dx_neu_dbt"> Neu DBT</label>
-        <label class="dx-item"><input type="checkbox" id="dx_obe"> Obesidad</label>
+        <label class="dx-item"><input type="checkbox" id="dx_obe" onchange="toggleDxExtra('obe')"> Obesidad</label>
         <label class="dx-item"><input type="checkbox" id="dx_predbt"> PreDBT</label>
         <label class="dx-item"><input type="checkbox" id="dx_rp_dbt"> RP DBT</label>
         <label class="dx-item"><input type="checkbox" id="dx_sahos"> SAHOS</label>
         <label class="dx-item"><input type="checkbox" id="dx_sob"> Sobrepeso</label>
+      </div>
+      <!-- Extras: ACV -->
+      <div id="dx_extra_acv" style="display:none;background:#f0f4fa;border-radius:10px;padding:10px 14px;margin-top:10px;font-size:12px">
+        <div style="font-weight:600;color:var(--blue);margin-bottom:6px">ACV — detalles</div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+          <label>Eventos:<br><div style="display:flex;gap:6px;margin-top:4px">
+            <label><input type="checkbox" id="dx_acv_isq"> Isquémico</label>
+            <label><input type="checkbox" id="dx_acv_hem"> Hemorrágico</label>
+            <label><input type="checkbox" id="dx_acv_ait"> AIT</label>
+          </div></label>
+          <label>Fecha del evento:<br><input type="date" id="dx_acv_fecha" style="margin-top:4px;padding:4px 8px;border:1.5px solid var(--border);border-radius:8px;font-size:12px" oninput="calcDxTiempo('acv')"></label>
+          <span id="dx_acv_tiempo" style="color:var(--blue);font-weight:600"></span>
+        </div>
+        <div style="margin-top:8px"><label>Nota (se vuelca a HC):<br><textarea id="dx_acv_nota" rows="2" style="width:100%;margin-top:4px;padding:6px 8px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;resize:vertical"></textarea></label></div>
+      </div>
+      <!-- Extras: IAM -->
+      <div id="dx_extra_iam" style="display:none;background:#f0f4fa;border-radius:10px;padding:10px 14px;margin-top:10px;font-size:12px">
+        <div style="font-weight:600;color:var(--blue);margin-bottom:6px">IAM — detalles</div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+          <label>Tipos:<br><div style="display:flex;gap:6px;margin-top:4px;flex-wrap:wrap">
+            <label><input type="checkbox" id="dx_iam_stemi"> STEMI</label>
+            <label><input type="checkbox" id="dx_iam_nstemi"> NSTEMI</label>
+            <label><input type="checkbox" id="dx_iam_angiop"> Angioplastía</label>
+            <label><input type="checkbox" id="dx_iam_by"> By-pass</label>
+          </div></label>
+          <label>Fecha del evento:<br><input type="date" id="dx_iam_fecha" style="margin-top:4px;padding:4px 8px;border:1.5px solid var(--border);border-radius:8px;font-size:12px" oninput="calcDxTiempo('iam')"></label>
+          <span id="dx_iam_tiempo" style="color:var(--blue);font-weight:600"></span>
+        </div>
+        <div style="margin-top:8px"><label>Nota (se vuelca a HC):<br><textarea id="dx_iam_nota" rows="2" style="width:100%;margin-top:4px;padding:6px 8px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;resize:vertical"></textarea></div>
+      </div>
+      <!-- Extras: HTA -->
+      <div id="dx_extra_hta" style="display:none;background:#f0f4fa;border-radius:10px;padding:10px 14px;margin-top:10px;font-size:12px">
+        <div style="font-weight:600;color:var(--blue);margin-bottom:6px">HTA — detalles</div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+          <label>Desde (fecha diagnóstico):<br><input type="date" id="dx_hta_fecha" style="margin-top:4px;padding:4px 8px;border:1.5px solid var(--border);border-radius:8px;font-size:12px" oninput="calcDxTiempo('hta')"></label>
+          <span id="dx_hta_tiempo" style="color:var(--blue);font-weight:600"></span>
+        </div>
+        <div style="margin-top:8px"><label>Nota (se vuelca a HC):<br><textarea id="dx_hta_nota" rows="2" style="width:100%;margin-top:4px;padding:6px 8px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;resize:vertical"></textarea></label></div>
+      </div>
+      <!-- Extras: Obesidad -->
+      <div id="dx_extra_obe" style="display:none;background:#f0f4fa;border-radius:10px;padding:10px 14px;margin-top:10px;font-size:12px">
+        <div style="font-weight:600;color:var(--blue);margin-bottom:6px">Obesidad — detalles</div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+          <label>Desde (fecha diagnóstico):<br><input type="date" id="dx_obe_fecha" style="margin-top:4px;padding:4px 8px;border:1.5px solid var(--border);border-radius:8px;font-size:12px" oninput="calcDxTiempo('obe')"></label>
+          <span id="dx_obe_tiempo" style="color:var(--blue);font-weight:600"></span>
+        </div>
+        <div style="margin-top:8px"><label>Nota (se vuelca a HC):<br><textarea id="dx_obe_nota" rows="2" style="width:100%;margin-top:4px;padding:6px 8px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;resize:vertical"></textarea></label></div>
       </div>
     </div>
 
@@ -5200,10 +5317,28 @@ document.getElementById('modal_evol_historica').addEventListener('click', functi
         <label class="dx-item dx-pink"><input type="checkbox" id="dx_rciu"> RCIU</label>
         <label class="dx-item dx-pink"><input type="checkbox" id="dx_sop"> SOP</label>
         <label class="dx-item dx-pink"><input type="checkbox" id="dx_ms_gineco"> S. Metabólico</label>
-        <label class="dx-item dx-pink"><input type="checkbox" id="dx_menopausia"> Menopausia</label>
+        <label class="dx-item dx-pink"><input type="checkbox" id="dx_menopausia" onchange="toggleDxExtra('menopausia')"> Menopausia</label>
       </div>
-      <div style="margin-top:12px;font-size:12px;color:var(--text-soft)">Gestas: <input type="number" id="hab_gestas" min="0" style="width:60px;padding:4px 8px;border:1.5px solid var(--border);border-radius:8px;font-size:12px"/></div>
+      <!-- Menopausia extra -->
+      <div id="dx_extra_menopausia" style="display:none;background:#fdf0f5;border-radius:10px;padding:10px 14px;margin-top:10px;font-size:12px">
+        <div style="font-weight:600;color:#c2185b;margin-bottom:6px">Menopausia — detalles</div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+          <label>Edad al diagnóstico:<br><input type="number" id="dx_menopausia_edad" min="30" max="65" style="width:70px;margin-top:4px;padding:4px 8px;border:1.5px solid var(--border);border-radius:8px;font-size:12px"> años</label>
+        </div>
+        <div style="margin-top:8px"><label>Nota (se vuelca a HC):<br><textarea id="dx_menopausia_nota" rows="2" style="width:100%;margin-top:4px;padding:6px 8px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;resize:vertical"></textarea></label></div>
+      </div>
+      <!-- Fórmula obstétrica GPAC -->
+      <div style="margin-top:14px;background:#fdf0f5;border-radius:10px;padding:10px 14px;font-size:12px">
+        <div style="font-weight:600;color:#c2185b;margin-bottom:8px">Fórmula obstétrica (GPAC)</div>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;text-align:center">
+          <div><label style="display:block;font-size:11px;color:var(--text-soft);margin-bottom:3px">G — Gestas</label><input type="number" id="gpac_g" min="0" style="width:100%;padding:5px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;text-align:center"></div>
+          <div><label style="display:block;font-size:11px;color:var(--text-soft);margin-bottom:3px">P — Partos</label><input type="number" id="gpac_p" min="0" style="width:100%;padding:5px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;text-align:center"></div>
+          <div><label style="display:block;font-size:11px;color:var(--text-soft);margin-bottom:3px">A — Abortos</label><input type="number" id="gpac_a" min="0" style="width:100%;padding:5px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;text-align:center"></div>
+          <div><label style="display:block;font-size:11px;color:var(--text-soft);margin-bottom:3px">C — Cesáreas</label><input type="number" id="gpac_c" min="0" style="width:100%;padding:5px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;text-align:center"></div>
+        </div>
+      </div>
     </div>
+
 
     <!-- TAB FAMILIARES -->
     <div id="tab_fam" class="ctab-content" style="display:none">
@@ -5228,6 +5363,7 @@ document.getElementById('modal_evol_historica').addEventListener('click', functi
             <label>Estado</label>
             <select id="hab_tabaquismo" onchange="actualizarTabaquismo()">
               <option value="nunca">Nunca fumó</option>
+              <option value="social">Fumador social</option>
               <option value="actual">Fumador actual</option>
               <option value="ex">Ex fumador</option>
             </select>
@@ -5262,6 +5398,7 @@ document.getElementById('modal_evol_historica').addEventListener('click', functi
             <label>Consume</label>
             <select id="hab_alcohol" onchange="actualizarAlcohol()">
               <option value="no">No consume</option>
+              <option value="social">Consumo social</option>
               <option value="si">Sí consume</option>
             </select>
           </div>
