@@ -2501,8 +2501,19 @@ async function verLabReadonly(dni) {
 }
 
 async function cargarPacientes() {
-  const { data, error } = await sb.from('pacientes').select('*').order('id', {ascending:false});
-  if(error) { console.error(error); return; }
+  const cont = document.getElementById('tablePacientes');
+  let data, error;
+  // Intentar ordenar por id desc; si falla, cargar sin orden
+  ({ data, error } = await sb.from('pacientes').select('*').order('id', {ascending:false}));
+  if(error) {
+    console.warn('[cargarPacientes] order by id falló, intentando sin orden:', error.message);
+    ({ data, error } = await sb.from('pacientes').select('*'));
+  }
+  if(error) {
+    console.error('[cargarPacientes] ERROR:', error);
+    cont.innerHTML = '<div style="padding:20px;color:#c00;text-align:center">Error al cargar pacientes: ' + error.message + '</div>';
+    return;
+  }
   pacientesData = data || [];
   renderTabla(pacientesData);
 }
