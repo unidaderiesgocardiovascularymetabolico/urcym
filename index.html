@@ -742,6 +742,10 @@
           <div class="evh-title">Medicación actual <button class="btn-hx-mini" onclick="abrirHistorialMed()" title="Historial medicación">🕐</button></div>
           <div id="evh_med" class="evh-meds" style="display:flex;flex-wrap:wrap;gap:5px;margin-top:4px"></div>
         </div>
+        <div class="evh-section evh-section-small" id="evh_med_extra_section" style="display:none">
+          <div class="evh-title" style="color:#6d3fc0">Otras medicaciones</div>
+          <div id="evh_med_extra" class="evh-meds" style="display:flex;flex-wrap:wrap;gap:5px;margin-top:4px"></div>
+        </div>
         <div class="evh-section evh-section-small">
           <div class="evh-title">Hábitos</div>
           <div id="evh_habitos" class="evh-habitos"></div>
@@ -3024,7 +3028,9 @@ function generarTextoClinico(c, meds) {
   if(ginList.length) lines.push('ANT. GINECOLÓGICOS: '+ginList.join(' · '));
   const famList = Object.keys(FAM_NAMES).filter(d=>c['fam_'+d]).map(d=>FAM_NAMES[d]);
   if(famList.length) lines.push('ANT. FAMILIARES: '+famList.join(' · '));
-  if(meds && meds.length) lines.push('MEDICACIÓN: '+meds.map(m=>m.farmaco+' '+m.dosis+(m.frecuencia?' '+m.frecuencia:'')).join(' · '));
+  if(meds && meds.length) lines.push('MEDICACIÓN CARDIOMETABÓLICA: '+meds.map(m=>m.farmaco+' '+m.dosis+(m.frecuencia?' '+m.frecuencia:'')).join(' · '));
+  const medsExtra2 = evolClinicaSnapshot?.medicacion_extra || [];
+  if(medsExtra2.length) lines.push('OTRAS MEDICACIONES: '+medsExtra2.map(m=>(m.droga||m.farmaco||'')+(m.dosis?' '+m.dosis:'')+(m.frecuencia?' '+m.frecuencia:'')).join(' · '));
   const habParts = [];
   if(c.tabaquismo==='nunca') habParts.push('No fumador');
   else if(c.tabaquismo==='actual') habParts.push('Fumador ('+((c.cigarrillos_dia||0)*(c.anios_fumando||0)/20).toFixed(1)+' PA)');
@@ -3044,12 +3050,13 @@ function generarTextoClinico(c, meds) {
 
 // ===== SNAPSHOT CLÍNICO =====
 async function cargarSnapshotInicial(dni) {
-  const [cr, mr] = await Promise.all([
+  const [cr, mr, er] = await Promise.all([
     sb.from('paciente_clinica').select('*').eq('dni_paciente', dni).maybeSingle(),
-    sb.from('medicacion').select('*').eq('dni_paciente', dni).eq('activo', true).order('grupo')
+    sb.from('medicacion').select('*').eq('dni_paciente', dni).eq('activo', true).order('grupo'),
+    sb.from('medicacion_extra').select('*').eq('dni_paciente', dni).eq('activo', true).order('id').then(r=>r).catch(()=>({data:[]}))
   ]);
   if(cr.data) {
-    evolClinicaSnapshot = { clinica: cr.data, medicacion: mr.data || [] };
+    evolClinicaSnapshot = { clinica: cr.data, medicacion: mr.data || [], medicacion_extra: er.data || [] };
   }
 }
 
@@ -3140,6 +3147,27 @@ async function guardarClinica() {
     else await sb.from('medicacion').insert(medData);
     meds.push(medData);
   }
+  // Guardar medicación no cardiometabólica
+  const medsExtra = [];
+  try {
+    await sb.from('medicacion_extra').update({activo:false}).eq('dni_paciente',dni);
+    for(const fila of document.querySelectorAll('#med_extra_filas > div')) {
+      const droga = fila.querySelector('.med-extra-droga').value.trim(); if(!droga) continue;
+      const extraData = {dni_paciente:dni, droga, dosis:fila.querySelector('.med-extra-dosis').value.trim(), frecuencia:fila.querySelector('.med-extra-frecuencia').value, activo:true};
+      await sb.from('medicacion_extra').insert(extraData);
+      medsExtra.push(extraData);
+    }
+  } catch(e) {
+    // Si la tabla no existe aún, guardar en localStorage como fallback
+    const key = 'med_extra_' + dni;
+    const rows = [];
+    for(const fila of document.querySelectorAll('#med_extra_filas > div')) {
+      const droga = fila.querySelector('.med-extra-droga').value.trim(); if(!droga) continue;
+      rows.push({droga, dosis:fila.querySelector('.med-extra-dosis').value.trim(), frecuencia:fila.querySelector('.med-extra-frecuencia').value});
+      medsExtra.push({droga, dosis:rows[rows.length-1].dosis, frecuencia:rows[rows.length-1].frecuencia});
+    }
+    try { sessionStorage.setItem(key, JSON.stringify(rows)); } catch(_){}
+  }
   // Volcar al editor
   const texto = generarTextoClinico(clinicaData, meds);
   if(texto) {
@@ -3149,7 +3177,7 @@ async function guardarClinica() {
     editor.insertBefore(tmp.firstChild, editor.firstChild);
   }
   // Actualizar snapshot de la evolución en curso
-  evolClinicaSnapshot = { clinica: clinicaData, medicacion: meds };
+  evolClinicaSnapshot = { clinica: clinicaData, medicacion: meds, medicacion_extra: medsExtra };
   cerrarModal('modalClinica');
   renderEncabezadoDesdeSnapshot();
   actualizarEncabezadoVariable(dni);
@@ -3175,6 +3203,18 @@ function renderEncabezadoDesdeSnapshot() {
   if(dxEl)dxEl.innerHTML=dxHtml||'<span style="font-size:11px;color:var(--text-soft)">Sin diagnósticos</span>';
   const medEl=document.getElementById('evh_med');
   if(medEl)medEl.innerHTML=meds.length?meds.map(m=>'<span class="evh-med-item">'+m.farmaco+(m.dosis?' '+m.dosis:'')+(m.frecuencia?' · '+m.frecuencia:'')+'</span>').join(''):'<span style="font-size:11px;color:var(--text-soft)">Sin medicación</span>';
+  // Medicación extra
+  const medsExtra = evolClinicaSnapshot?.medicacion_extra || [];
+  const medExtraEl = document.getElementById('evh_med_extra');
+  const medExtraSection = document.getElementById('evh_med_extra_section');
+  if(medExtraEl && medExtraSection) {
+    if(medsExtra.length) {
+      medExtraEl.innerHTML = medsExtra.map(m=>'<span style="display:inline-flex;align-items:center;background:#f3e8ff;color:#6d3fc0;border:1px solid #d0bfef;border-radius:6px;padding:2px 8px;font-size:11px;font-weight:600;white-space:nowrap">'+(m.droga||m.farmaco||'')+(m.dosis?' '+m.dosis:'')+(m.frecuencia?' · '+m.frecuencia:'')+'</span>').join('');
+      medExtraSection.style.display = '';
+    } else {
+      medExtraSection.style.display = 'none';
+    }
+  }
   if(c){
     const py=((c.cigarrillos_dia||0)*(c.anios_fumando||0)/20).toFixed(1);
     const t=c.tabaquismo==='nunca'?'<span class="evh-habito-bien">No fumador</span>':c.tabaquismo==='actual'?'<span class="evh-habito-malo">Fumador ('+py+' PA)</span>':'<span style="color:#e08c3a;font-weight:600">Ex fumador ('+py+' PA)</span>';
@@ -3189,11 +3229,12 @@ function renderEncabezadoDesdeSnapshot() {
 
 // ===== NUEVA actualizarEncabezadoVariable CON 3 COLORES =====
 async function actualizarEncabezadoVariable(dni) {
-  const [cr,mr] = await Promise.all([
+  const [cr,mr,er] = await Promise.all([
     sb.from('paciente_clinica').select('*').eq('dni_paciente',dni).maybeSingle(),
-    sb.from('medicacion').select('*').eq('dni_paciente',dni).eq('activo',true).order('grupo')
+    sb.from('medicacion').select('*').eq('dni_paciente',dni).eq('activo',true).order('grupo'),
+    sb.from('medicacion_extra').select('*').eq('dni_paciente',dni).eq('activo',true).order('id').then(r=>r).catch(()=>({data:[]}))
   ]);
-  const c=cr.data; const meds=mr.data||[];
+  const c=cr.data; const meds=mr.data||[]; const medsExtra=er.data||[];
   const DX_L={dx_acv:'ACV',dx_albuminuria:'Albuminuria',dx_atero_subcl:'Atero Subcl.',dx_dbt1:'DBT 1',dx_dbt2:'DBT 2',dx_dbt_otro:'DBT Otro',dx_dis:'Dislipemia',dx_eap:'EAP',dx_epoc:'EPOC',dx_erc:'ERC',dx_fa:'FA',dx_hiperu:'HiperU',dx_hta:'HTA',dx_hta2:'HTA 2',dx_hvi:'HVI',dx_iam:'IAM',dx_icc:'ICC',dx_masld:'MASLD',dx_ms:'S. Met.',dx_neu_dbt:'Neu DBT',dx_obe:'Obesidad',dx_predbt:'PreDBT',dx_rp_dbt:'RP DBT',dx_sahos:'SAHOS',dx_sob:'Sobrepeso'};
   const GIN_L={dx_pe:'PE',dx_rciu:'RCIU',dx_ppt:'PPT',dx_sop:'SOP',dx_dbtg:'DBT-G',dx_htag:'HTA-G',dx_ms_gineco:'SM-G',dx_menopausia:'Menop.'};
   const FAM_L={fam_hta:'HTA-F',fam_dbt:'DBT-F',fam_obe:'OBE-F',fam_dis:'DIS-F',fam_iam:'IAM-F',fam_acv:'ACV-F',fam_erc:'ERC-F',fam_ms:'SM-F'};
@@ -3205,6 +3246,9 @@ async function actualizarEncabezadoVariable(dni) {
   }
   document.getElementById('evh_dx').innerHTML=dxHtml||'<span style="font-size:11px;color:var(--text-soft)">Sin diagnósticos</span>';
   document.getElementById('evh_med').innerHTML=meds.length?meds.map(m=>'<span class="evh-med-item">'+m.farmaco+' '+m.dosis+'</span>').join(''):'<span style="font-size:11px;color:var(--text-soft)">Sin medicación</span>';
+  // Medicación no cardiometabólica
+  const _eEl=document.getElementById('evh_med_extra'), _eSec=document.getElementById('evh_med_extra_section');
+  if(_eEl&&_eSec){if(medsExtra.length){_eEl.innerHTML=medsExtra.map(m=>'<span style="display:inline-flex;align-items:center;background:#f3e8ff;color:#6d3fc0;border:1px solid #d0bfef;border-radius:6px;padding:2px 8px;font-size:11px;font-weight:600;white-space:nowrap">'+(m.droga||'')+(m.dosis?' '+m.dosis:'')+(m.frecuencia?' · '+m.frecuencia:'')+'</span>').join('');_eSec.style.display='';}else{_eSec.style.display='none';}}
   if(c){
     const py=((c.cigarrillos_dia||0)*(c.anios_fumando||0)/20).toFixed(1);
     const t=c.tabaquismo==='nunca'?'<span class="evh-habito-bien">No fumador</span>':c.tabaquismo==='actual'?'<span class="evh-habito-malo">Fumador ('+py+' PA)</span>':'<span style="color:#e08c3a;font-weight:600">Ex fumador ('+py+' PA)</span>';
@@ -3254,6 +3298,8 @@ async function cargarDatosClinica(dni) {
   const cardioNoteEl=document.getElementById('cardio_notas_generales');if(cardioNoteEl)cardioNoteEl.value='';
   const ginecoNoteEl=document.getElementById('gineco_notas_generales');if(ginecoNoteEl)ginecoNoteEl.value='';
   document.getElementById('med_filas').innerHTML='';
+  const medExtraReset = document.getElementById('med_extra_filas');
+  if(medExtraReset) medExtraReset.innerHTML = '';
 
   const { data } = await sb.from('paciente_clinica').select('*').eq('dni_paciente',dni).maybeSingle();
   if(!data){agregarFilaMed();return;}
@@ -3284,6 +3330,7 @@ async function cargarDatosClinica(dni) {
   const cardioNotes=document.getElementById('cardio_notas_generales');if(cardioNotes)cardioNotes.value=data.cardio_notas||'';
   const ginecoNotes=document.getElementById('gineco_notas_generales');if(ginecoNotes)ginecoNotes.value=data.gineco_notas||'';
   await cargarMedicacion(dni);
+  await cargarMedExtra(dni);
 }
 
 ['modalPaciente','modalReceta','modalIndicaciones','modalHistorialDx','modalHistorialMed','modalLabRO'].forEach(id=>{
@@ -4273,6 +4320,34 @@ function agregarFilaMed(data) {
   const selDosis = div.querySelector('.med-dosis');
   poblarFarmacos(div.querySelector('.med-grupo').value, selFarm, data?data.farmaco:'');
   if(data && data.farmaco) poblarDosisMedEl(selDosis, data.farmaco, data.dosis||'');
+}
+
+function agregarFilaMedExtra(data) {
+  const cont = document.getElementById('med_extra_filas');
+  const div = document.createElement('div');
+  div.style.cssText = 'display:grid;grid-template-columns:1fr 90px 1fr 28px;gap:6px;margin-bottom:6px;align-items:center';
+  const frecuencias = ['cada 4 h','cada 6 h','cada 8 h','cada 12 h','cada 24 h','semanal','mensual','según necesidad'];
+  div.innerHTML =
+    '<input type="text" class="med-extra-droga" placeholder="Droga / medicamento" value="'+(data&&data.droga?data.droga:'')+'" style="padding:5px 8px;border:1.5px solid #d0bfef;border-radius:8px;font-size:12px;font-family:var(--font-main);width:100%"/>'+
+    '<input type="text" class="med-extra-dosis" placeholder="Dosis" value="'+(data&&data.dosis?data.dosis:'')+'" style="padding:5px 8px;border:1.5px solid #d0bfef;border-radius:8px;font-size:12px;font-family:var(--font-main);width:100%"/>'+
+    '<select class="med-extra-frecuencia" style="padding:5px 4px;border:1.5px solid #d0bfef;border-radius:8px;font-size:11px;width:100%;font-family:var(--font-main)"><option value="">Frecuencia</option>'+frecuencias.map(f=>'<option value="'+f+'"'+(data&&data.frecuencia===f?' selected':'')+'>'+f+'</option>').join('')+'</select>'+
+    '<button onclick="this.parentElement.remove()" style="background:#f3e8ff;color:#6d3fc0;border:none;border-radius:6px;width:26px;height:26px;cursor:pointer;font-size:16px;line-height:1">×</button>';
+  cont.appendChild(div);
+}
+
+async function cargarMedExtra(dni) {
+  const cont = document.getElementById('med_extra_filas');
+  if(!cont) return;
+  cont.innerHTML = '';
+  try {
+    const { data } = await sb.from('medicacion_extra').select('*').eq('dni_paciente', dni).eq('activo', true).order('id');
+    if(data && data.length) { data.forEach(m => agregarFilaMedExtra(m)); return; }
+  } catch(e) {}
+  // Fallback: sessionStorage
+  try {
+    const stored = sessionStorage.getItem('med_extra_' + dni);
+    if(stored) { JSON.parse(stored).forEach(m => agregarFilaMedExtra(m)); }
+  } catch(_) {}
 }
 
 function actualizarFarmacos(el) {
@@ -5767,7 +5842,7 @@ document.getElementById('modal_evol_historica').addEventListener('click', functi
         </div>
       </div>
 
-      <!-- MEDICACION -->
+      <!-- MEDICACION CARDIOMETABOLICA -->
       <div class="clinica-section" style="margin-top:16px">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
           <h4 style="margin:0">Medicación cardiometabólica</h4>
@@ -5777,6 +5852,18 @@ document.getElementById('modal_evol_historica').addEventListener('click', functi
           <div>Grupo</div><div>Fármaco</div><div>Dosis</div><div>Frecuencia</div><div></div>
         </div>
         <div id="med_filas"></div>
+      </div>
+
+      <!-- MEDICACION NO CARDIOMETABOLICA -->
+      <div class="clinica-section" style="margin-top:12px;background:#f3f0fa;border:1.5px solid #d0bfef">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+          <h4 style="margin:0;color:#6d3fc0">💊 Medicación no cardiometabólica</h4>
+          <button onclick="agregarFilaMedExtra()" style="background:#7c5cbf;color:white;border:none;border-radius:8px;padding:5px 12px;font-size:12px;cursor:pointer">+ Agregar</button>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 90px 1fr 28px;gap:6px;margin-bottom:6px;font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#6d3fc0">
+          <div>Droga / Medicamento</div><div>Dosis</div><div>Frecuencia</div><div></div>
+        </div>
+        <div id="med_extra_filas"></div>
       </div>
     </div>
 
