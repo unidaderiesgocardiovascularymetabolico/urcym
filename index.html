@@ -2806,20 +2806,24 @@ async function guardarPaciente() {
     numero_afiliado: document.getElementById('f_afiliado').value.trim()||null,
     ocupacion: document.getElementById('f_ocupacion').value.trim()||null,
   };
+  // Elimina del objeto los campos cuyas columnas no existen aún en la tabla
+  function limpiarCampos(obj, msg) {
+    let result = {...obj};
+    if(msg && msg.includes('lugar_atencion')) { const {lugar_atencion, ...r} = result; result = r; }
+    if(msg && msg.includes('ocupacion'))      { const {ocupacion, ...r}      = result; result = r; }
+    return result;
+  }
   let error;
   if(modoEdicion) {
     ({ error } = await sb.from('pacientes').update(paciente).eq('dni', dniEdicion));
-    // Si falla por columna inexistente (lugar_atencion), reintentar sin ella
-    if(error && error.message && error.message.includes('lugar_atencion')) {
-      const { lugar_atencion, ...sinLugar } = paciente;
-      ({ error } = await sb.from('pacientes').update(sinLugar).eq('dni', dniEdicion));
+    if(error && error.message && (error.message.includes('lugar_atencion') || error.message.includes('ocupacion'))) {
+      ({ error } = await sb.from('pacientes').update(limpiarCampos(paciente, error.message)).eq('dni', dniEdicion));
     }
     if(!error) ultimoDniCargado = dniEdicion;
   } else {
     ({ error } = await sb.from('pacientes').insert(paciente));
-    if(error && error.message && error.message.includes('lugar_atencion')) {
-      const { lugar_atencion, ...sinLugar } = paciente;
-      ({ error } = await sb.from('pacientes').insert(sinLugar));
+    if(error && error.message && (error.message.includes('lugar_atencion') || error.message.includes('ocupacion'))) {
+      ({ error } = await sb.from('pacientes').insert(limpiarCampos(paciente, error.message)));
     }
     if(!error) ultimoDniCargado = dni;
   }
