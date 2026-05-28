@@ -816,6 +816,8 @@
                       <option value="cada 8 h">cada 8 h</option>
                       <option value="cada 12 h">cada 12 h</option>
                       <option value="cada 24 h">cada 24 h</option>
+                      <option value="semanal">semanal</option>
+                      <option value="mensual">mensual</option>
                     </select>
                   </div>
                   <!-- Modo MODIFICA/SUSPENDE: medicación actual -->
@@ -3119,13 +3121,40 @@ async function cargarMedicacion(dni) {
 }
 
 async function cargarDatosClinica(dni) {
+  // Resetear TODOS los campos antes de cargar (para evitar residuos del paciente anterior)
+  const DX_ALL = ['hta','hta2','dis','erc','obe','sob','masld','dbt2','dbt1','dbt_otro','predbt','hiperu','atero_subcl','eap','iam','acv','fa','sahos','epoc','icc','hvi','albuminuria','rp_dbt','neu_dbt','ms','pe','rciu','ppt','sop','dbtg','htag','ms_gineco','menopausia'];
+  const FAM_ALL = ['hta','dbt','obe','dis','iam','acv','erc','ms'];
+  DX_ALL.forEach(d=>{const el=document.getElementById('dx_'+d);if(el)el.checked=false;});
+  FAM_ALL.forEach(d=>{const el=document.getElementById('fam_'+d);if(el)el.checked=false;});
+  ['g','p','a','c'].forEach(f=>{const el=document.getElementById('gpac_'+f);if(el)el.value='';});
+  ['acv','iam','hta','obe','menopausia'].forEach(dx=>{
+    const box=document.getElementById('dx_extra_'+dx);if(box)box.style.display='none';
+    const fecha=document.getElementById('dx_'+dx+'_fecha');if(fecha)fecha.value='';
+    const nota=document.getElementById('dx_'+dx+'_nota');if(nota)nota.value='';
+    const tiempo=document.getElementById('dx_'+dx+'_tiempo');if(tiempo)tiempo.textContent='';
+    if(dx==='acv'){['isq','hem','ait'].forEach(s=>{const el=document.getElementById('dx_acv_'+s);if(el)el.checked=false;});}
+    if(dx==='iam'){['stemi','nstemi','angiop','by'].forEach(s=>{const el=document.getElementById('dx_iam_'+s);if(el)el.checked=false;});}
+    if(dx==='menopausia'){const edad=document.getElementById('dx_menopausia_edad');if(edad)edad.value='';}
+  });
+  const tabEl=document.getElementById('hab_tabaquismo');if(tabEl){tabEl.value='nunca';actualizarTabaquismo();}
+  const cigEl=document.getElementById('hab_cig_dia');if(cigEl)cigEl.value='';
+  const aniEl=document.getElementById('hab_anios');if(aniEl)aniEl.value='';
+  calcPackYear();
+  const alcEl=document.getElementById('hab_alcohol');if(alcEl){alcEl.value='no';actualizarAlcohol();}
+  ['cerveza','vino','fernet','blanca','whisky'].forEach(b=>{const el=document.getElementById('alc_'+b);if(el)el.value='';});
+  calcAlcohol();
+  const actEl=document.getElementById('hab_actividad');if(actEl)actEl.value='sedentarismo';
+  const aliEl=document.getElementById('hab_alimentacion');if(aliEl)aliEl.value='no saludable';
+  const cardioNoteEl=document.getElementById('cardio_notas_generales');if(cardioNoteEl)cardioNoteEl.value='';
+  const ginecoNoteEl=document.getElementById('gineco_notas_generales');if(ginecoNoteEl)ginecoNoteEl.value='';
+  document.getElementById('med_filas').innerHTML='';
+
   const { data } = await sb.from('paciente_clinica').select('*').eq('dni_paciente',dni).maybeSingle();
   if(!data){agregarFilaMed();return;}
-  ['hta','hta2','dis','erc','obe','sob','masld','dbt2','dbt1','dbt_otro','predbt','hiperu','atero_subcl','eap','iam','acv','fa','sahos','epoc','icc','hvi','albuminuria','rp_dbt','neu_dbt','ms','pe','rciu','ppt','sop','dbtg','htag','ms_gineco','menopausia'].forEach(d=>{const el=document.getElementById('dx_'+d);if(el)el.checked=!!data['dx_'+d];});
-  ['hta','dbt','obe','dis','iam','acv','erc','ms'].forEach(d=>{const el=document.getElementById('fam_'+d);if(el)el.checked=!!data['fam_'+d];});
-  // GPAC
-  ['g','p','a','c'].forEach(f=>{const el=document.getElementById('gpac_'+f);if(el&&data['gpac_'+f])el.value=data['gpac_'+f];});
-  // Extra dx
+
+  DX_ALL.forEach(d=>{const el=document.getElementById('dx_'+d);if(el)el.checked=!!data['dx_'+d];});
+  FAM_ALL.forEach(d=>{const el=document.getElementById('fam_'+d);if(el)el.checked=!!data['fam_'+d];});
+  ['g','p','a','c'].forEach(f=>{const el=document.getElementById('gpac_'+f);if(el&&data['gpac_'+f]!=null)el.value=data['gpac_'+f];});
   ['acv','iam','hta','obe','menopausia'].forEach(dx=>{
     toggleDxExtra(dx);
     const fecha=document.getElementById('dx_'+dx+'_fecha');if(fecha&&data['dx_'+dx+'_fecha'])fecha.value=data['dx_'+dx+'_fecha'];
@@ -3141,18 +3170,13 @@ async function cargarDatosClinica(dni) {
   const ani=document.getElementById('hab_anios');if(ani&&data.anios_fumando)ani.value=data.anios_fumando;
   calcPackYear();
   const alc=document.getElementById('hab_alcohol');
-  if(alc){
-    alc.value=data.alcohol_social?'social':(data.alcohol?'si':'no');
-    actualizarAlcohol();
-  }
+  if(alc){alc.value=data.alcohol_social?'social':(data.alcohol?'si':'no');actualizarAlcohol();}
   ['cerveza','vino','fernet','blanca','whisky'].forEach(b=>{const el=document.getElementById('alc_'+b);if(el&&data['alcohol_'+b])el.value=data['alcohol_'+b];});
   calcAlcohol();
-  if(data.actividad_fisica)document.getElementById('hab_actividad').value=data.actividad_fisica;
-  if(data.alimentacion)document.getElementById('hab_alimentacion').value=data.alimentacion;
-  const cardioNotes = document.getElementById('cardio_notas_generales');
-  if(cardioNotes) cardioNotes.value = data.cardio_notas || '';
-  const ginecoNotes = document.getElementById('gineco_notas_generales');
-  if(ginecoNotes) ginecoNotes.value = data.gineco_notas || '';
+  if(data.actividad_fisica){const el=document.getElementById('hab_actividad');if(el)el.value=data.actividad_fisica;}
+  if(data.alimentacion){const el=document.getElementById('hab_alimentacion');if(el)el.value=data.alimentacion;}
+  const cardioNotes=document.getElementById('cardio_notas_generales');if(cardioNotes)cardioNotes.value=data.cardio_notas||'';
+  const ginecoNotes=document.getElementById('gineco_notas_generales');if(ginecoNotes)ginecoNotes.value=data.gineco_notas||'';
   await cargarMedicacion(dni);
 }
 
@@ -3415,6 +3439,12 @@ async function abrirEvolucion(dni) {
   actualizarPromedios();
   actualizarIMC();
   evolClinicaSnapshot = null;
+  // Limpiar encabezado variable hasta que se carguen los datos del nuevo paciente
+  const evhDx=document.getElementById('evh_dx');if(evhDx)evhDx.innerHTML='<span style="font-size:11px;color:var(--text-soft)">Cargando...</span>';
+  const evhMed=document.getElementById('evh_med');if(evhMed)evhMed.innerHTML='';
+  const evhHab=document.getElementById('evh_habitos');if(evhHab)evhHab.innerHTML='';
+  const evhBadge=document.getElementById('evh_prevent_badge');if(evhBadge){evhBadge.textContent='—';evhBadge.style.color='var(--text-soft)';}
+  const evhLabel=document.getElementById('evh_prevent_label');if(evhLabel)evhLabel.textContent='';
   // IMPORTANTE: cargar datos históricos PRIMERO, luego mostrar la página
   _savedCols.lab.clear(); _savedCols.ant.clear(); _savedCols.est.clear();
   await cargarDatosTablasEvol(p.dni);
@@ -4129,7 +4159,7 @@ function agregarFilaMed(data) {
     '<select class="med-grupo" onchange="actualizarFarmacos(this)" style="padding:5px 4px;border:1.5px solid var(--border);border-radius:8px;font-size:11px;width:100%">'+GRUPOS_MED.map(g=>'<option value="'+g+'"'+(data&&data.grupo===g?' selected':'')+'>'+g+'</option>').join('')+'</select>'+
     '<select class="med-farmaco" onchange="actualizarDosisMed(this)" style="padding:5px 4px;border:1.5px solid var(--border);border-radius:8px;font-size:11px;width:100%"><option value="">Seleccionar</option></select>'+
     '<select class="med-dosis" style="padding:5px 4px;border:1.5px solid var(--border);border-radius:8px;font-size:11px;width:100%;font-family:var(--font-main)"><option value="">Dosis</option></select>'+
-    '<select class="med-frecuencia" style="padding:5px 4px;border:1.5px solid var(--border);border-radius:8px;font-size:11px;width:100%;font-family:var(--font-main)"><option value="">Frecuencia</option>'+(()=>{const ff=['cada 4 h','cada 6 h','cada 8 h','cada 12 h','cada 24 h'];return ff.map(f=>'<option value="'+f+'"'+(data&&data.frecuencia===f?' selected':'')+'>'+f+'</option>').join('');})()+'</select>'+
+    '<select class="med-frecuencia" style="padding:5px 4px;border:1.5px solid var(--border);border-radius:8px;font-size:11px;width:100%;font-family:var(--font-main)"><option value="">Frecuencia</option>'+(()=>{const ff=['cada 4 h','cada 6 h','cada 8 h','cada 12 h','cada 24 h','semanal','mensual'];return ff.map(f=>'<option value="'+f+'"'+(data&&data.frecuencia===f?' selected':'')+'>'+f+'</option>').join('');})()+'</select>'+
     '<button onclick="this.parentElement.remove()" style="background:var(--red-light);color:var(--red);border:none;border-radius:6px;width:26px;height:26px;cursor:pointer;font-size:16px;line-height:1">×</button>';
   cont.appendChild(div);
   const selFarm = div.querySelector('.med-farmaco');
