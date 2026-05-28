@@ -3095,7 +3095,21 @@ async function guardarClinica() {
     gineco_notas:document.getElementById('gineco_notas_generales')?.value||null,
     actualizado_en:new Date().toISOString()
   };
-  // Sanitizar datos antes de enviar a Supabase: convertir objetos anidados a JSON string
+  // Descubrir columnas de la tabla la primera vez y cachear
+  if(!window._clinicaCols) {
+    try {
+      const { data: probe } = await sb.from('paciente_clinica').select('*').limit(1);
+      if(probe && probe.length > 0) {
+        window._clinicaCols = new Set(Object.keys(probe[0]));
+      } else {
+        // Tabla vacía: hacer un select de estructura via RPC no disponible.
+        // Usar lista mínima conocida como fallback.
+        window._clinicaCols = null;
+      }
+    } catch(e) { window._clinicaCols = null; }
+  }
+
+  // Serializar objetos anidados a JSON string
   const clinicaDataSafe = {};
   for(const [k,v] of Object.entries(clinicaData)) {
     if(v !== null && typeof v === 'object' && !Array.isArray(v)) {
@@ -3104,16 +3118,17 @@ async function guardarClinica() {
       clinicaDataSafe[k] = v;
     }
   }
-  const { error: clinErr } = await sb.from('paciente_clinica').upsert(clinicaDataSafe, {onConflict:'dni_paciente'});
-  if(clinErr) {
-    // Reintento eliminando campos complejos que pueden no existir en la tabla
-    const camposExtra = ['dx_acv_subtipos','dx_iam_subtipos','dx_acv_fecha','dx_acv_nota','dx_iam_fecha','dx_iam_nota','dx_hta_fecha','dx_hta_nota','dx_obe_fecha','dx_obe_nota','dx_menopausia_edad','dx_menopausia_nota','gpac_g','gpac_p','gpac_a','gpac_c','cardio_notas','gineco_notas','actualizado_en'];
-    const clinicaDataMin = {...clinicaDataSafe};
-    if(clinErr.message && camposExtra.some(c=>clinErr.message.includes(c))) {
-      const campo = camposExtra.find(c=>clinErr.message.includes(c));
-      if(campo) delete clinicaDataMin[campo];
-    }
-    await sb.from('paciente_clinica').upsert(clinicaDataMin, {onConflict:'dni_paciente'});
+
+  // Filtrar solo las columnas conocidas (si pudimos descubrirlas)
+  const payload = window._clinicaCols
+    ? Object.fromEntries(Object.entries(clinicaDataSafe).filter(([k]) => window._clinicaCols.has(k)))
+    : clinicaDataSafe;
+
+  const { error: uErr } = await sb.from('paciente_clinica').upsert(payload, {onConflict:'dni_paciente'});
+  if(uErr) {
+    console.error('[guardarClinica] upsert error:', uErr.message);
+    // Limpiar cache para re-descubrir en el próximo intento
+    window._clinicaCols = null;
   }
   await sb.from('medicacion').update({activo:false}).eq('dni_paciente',dni);
   const meds = [];
