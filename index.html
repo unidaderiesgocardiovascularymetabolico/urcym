@@ -1440,6 +1440,43 @@ const _savedCols = {lab:new Set(), ant:new Set(), est:new Set()};
 // Snapshot of lab data at last save (to detect real changes)
 let _labSnapshot = null;
 
+// ===== VACUNACIÓN — CALENDARIO NACIONAL ARGENTINO =====
+// boosterAnios: años para próximo refuerzo (null = sin refuerzo periódico)
+var CALENDARIO_VAC = [
+  // ── UNIVERSALES (todos los adultos)
+  { id:'influenza', nombre:'Influenza estacional', frecuencia:'Anual', boosterAnios:1, indicacion:'Todos los adultos', grupo:'adultos', antecedentes:[] },
+  { id:'dt_adulto', nombre:'dT — Difteria / Tétanos', frecuencia:'Cada 10 años', boosterAnios:10, indicacion:'Todos los adultos', grupo:'adultos', antecedentes:[] },
+  { id:'hbv', nombre:'Hepatitis B', frecuencia:'3 dosis (0-1-6 meses)', boosterAnios:null, indicacion:'No vacunados o sin serología', grupo:'adultos', antecedentes:[] },
+  { id:'covid19', nombre:'COVID-19', frecuencia:'Según esquema vigente', boosterAnios:null, indicacion:'Todos los adultos', grupo:'adultos', antecedentes:[] },
+  // ── DIABETES
+  { id:'neumo23_dbt', nombre:'Neumococo 23V (PPSV23)', frecuencia:'1 dosis; refuerzo a los 5 años', boosterAnios:5, indicacion:'Diabetes — riesgo neumococo', grupo:'adultos', antecedentes:['diabetes'] },
+  { id:'neumo13_dbt', nombre:'Neumococo 13V (PCV13)', frecuencia:'1 dosis', boosterAnios:null, indicacion:'Diabetes — inmunosupresión relativa', grupo:'adultos', antecedentes:['diabetes'] },
+  { id:'hav_dbt', nombre:'Hepatitis A', frecuencia:'2 dosis (0-6 meses)', boosterAnios:null, indicacion:'Diabetes (mayor susceptibilidad)', grupo:'adultos', antecedentes:['diabetes'] },
+  { id:'varicela_dbt', nombre:'Varicela', frecuencia:'2 dosis (si no inmune)', boosterAnios:null, indicacion:'Diabetes sin inmunidad previa', grupo:'adultos', antecedentes:['diabetes'] },
+  // ── OBESIDAD
+  { id:'neumo23_obe', nombre:'Neumococo 23V (PPSV23)', frecuencia:'1 dosis; refuerzo a los 5 años', boosterAnios:5, indicacion:'Obesidad — riesgo neumococo', grupo:'adultos', antecedentes:['obesidad'] },
+  // ── MAYORES DE 65
+  { id:'neumo23_65', nombre:'Neumococo 23V (PPSV23)', frecuencia:'1 dosis (refuerzo a los 5 años)', boosterAnios:5, indicacion:'≥65 años', grupo:'adultos', antecedentes:['mayores65'] },
+  { id:'neumo13_65', nombre:'Neumococo 13V (PCV13)', frecuencia:'1 dosis', boosterAnios:null, indicacion:'≥65 años', grupo:'adultos', antecedentes:['mayores65'] },
+  { id:'herpes_zoster', nombre:'Herpes Zóster (RZV)', frecuencia:'2 dosis (0 y 2-6 meses)', boosterAnios:null, indicacion:'≥50 años', grupo:'mayores50', antecedentes:[] },
+  // ── EMBARAZO (manual)
+  { id:'dtpa', nombre:'dTpa — Difteria/Tétanos/Pertussis', frecuencia:'Cada embarazo ≥20 semanas', boosterAnios:null, indicacion:'Embarazadas ≥20 semanas', grupo:'adultos', antecedentes:['embarazo'] },
+  { id:'influenza_emb', nombre:'Influenza (embarazo)', frecuencia:'Anual, en cualquier trimestre', boosterAnios:1, indicacion:'Embarazadas', grupo:'adultos', antecedentes:['embarazo'] },
+];
+
+// Antecedentes manuales editables por el médico
+const VAC_ANTECEDENTES = [
+  { id:'diabetes', label:'Diabetes (DBT 1/2/Gestacional)' },
+  { id:'obesidad', label:'Obesidad / Sobrepeso' },
+  { id:'epoc', label:'EPOC / Asma severo' },
+  { id:'card_cronica', label:'Enfermedad cardíaca crónica' },
+  { id:'renal_cronica', label:'Enfermedad renal crónica' },
+  { id:'hepatica_cronica', label:'Enfermedad hepática crónica' },
+  { id:'tabaquismo', label:'Tabaquismo activo' },
+  { id:'embarazo', label:'Embarazo' },
+  { id:'inmunosupresion', label:'Inmunosupresión / HIV' },
+];
+
 function marcarDirty(tab) { _dirty[tab] = true; _tabDirty = tab==='lab'||tab==='ant'||tab==='est'; }
 // Fecha local (evita el bug de UTC en Argentina: a las 21hs del 25/05, toISOString() da 26/05)
 function fechaHoy() {
@@ -5184,47 +5221,6 @@ function cerrarHistorialAnt() {
 document.getElementById('modal_historial_ant').addEventListener('click', function(e){
   if(e.target===this) cerrarHistorialAnt();
 });
-
-// ===== VACUNACIÓN — CALENDARIO NACIONAL ARGENTINO =====
-// boosterAnios: años para próximo refuerzo (null = sin refuerzo periódico)
-var CALENDARIO_VAC = [
-  // ── UNIVERSALES (todos los adultos)
-  { id:'influenza', nombre:'Influenza estacional', frecuencia:'Anual', boosterAnios:1, indicacion:'Todos los adultos', grupo:'adultos', antecedentes:[] },
-  { id:'dt_adulto', nombre:'dT — Difteria / Tétanos', frecuencia:'Cada 10 años', boosterAnios:10, indicacion:'Todos los adultos', grupo:'adultos', antecedentes:[] },
-  { id:'hbv', nombre:'Hepatitis B', frecuencia:'3 dosis (0-1-6 meses)', boosterAnios:null, indicacion:'No vacunados o sin serología', grupo:'adultos', antecedentes:[] },
-  { id:'covid19', nombre:'COVID-19', frecuencia:'Según esquema vigente', boosterAnios:null, indicacion:'Todos los adultos', grupo:'adultos', antecedentes:[] },
-
-  // ── DIABETES
-  { id:'neumo23_dbt', nombre:'Neumococo 23V (PPSV23)', frecuencia:'1 dosis; refuerzo a los 5 años', boosterAnios:5, indicacion:'Diabetes — riesgo neumococo', grupo:'adultos', antecedentes:['diabetes'] },
-  { id:'neumo13_dbt', nombre:'Neumococo 13V (PCV13)', frecuencia:'1 dosis', boosterAnios:null, indicacion:'Diabetes — inmunosupresión relativa', grupo:'adultos', antecedentes:['diabetes'] },
-  { id:'hav_dbt', nombre:'Hepatitis A', frecuencia:'2 dosis (0-6 meses)', boosterAnios:null, indicacion:'Diabetes (mayor susceptibilidad)', grupo:'adultos', antecedentes:['diabetes'] },
-  { id:'varicela_dbt', nombre:'Varicela', frecuencia:'2 dosis (si no inmune)', boosterAnios:null, indicacion:'Diabetes sin inmunidad previa', grupo:'adultos', antecedentes:['diabetes'] },
-
-  // ── OBESIDAD
-  { id:'neumo23_obe', nombre:'Neumococo 23V (PPSV23)', frecuencia:'1 dosis; refuerzo a los 5 años', boosterAnios:5, indicacion:'Obesidad — riesgo neumococo', grupo:'adultos', antecedentes:['obesidad'] },
-
-  // ── MAYORES DE 65
-  { id:'neumo23_65', nombre:'Neumococo 23V (PPSV23)', frecuencia:'1 dosis (refuerzo a los 5 años)', boosterAnios:5, indicacion:'≥65 años', grupo:'adultos', antecedentes:['mayores65'] },
-  { id:'neumo13_65', nombre:'Neumococo 13V (PCV13)', frecuencia:'1 dosis', boosterAnios:null, indicacion:'≥65 años', grupo:'adultos', antecedentes:['mayores65'] },
-  { id:'herpes_zoster', nombre:'Herpes Zóster (RZV)', frecuencia:'2 dosis (0 y 2-6 meses)', boosterAnios:null, indicacion:'≥50 años', grupo:'mayores50', antecedentes:[] },
-
-  // ── EMBARAZO (manual)
-  { id:'dtpa', nombre:'dTpa — Difteria/Tétanos/Pertussis', frecuencia:'Cada embarazo ≥20 semanas', boosterAnios:null, indicacion:'Embarazadas ≥20 semanas', grupo:'adultos', antecedentes:['embarazo'] },
-  { id:'influenza_emb', nombre:'Influenza (embarazo)', frecuencia:'Anual, en cualquier trimestre', boosterAnios:1, indicacion:'Embarazadas', grupo:'adultos', antecedentes:['embarazo'] },
-];
-
-// Antecedentes manuales editables por el médico
-const VAC_ANTECEDENTES = [
-  { id:'diabetes', label:'Diabetes (DBT 1/2/Gestacional)' },
-  { id:'obesidad', label:'Obesidad / Sobrepeso' },
-  { id:'epoc', label:'EPOC / Asma severo' },
-  { id:'card_cronica', label:'Enfermedad cardíaca crónica' },
-  { id:'renal_cronica', label:'Enfermedad renal crónica' },
-  { id:'hepatica_cronica', label:'Enfermedad hepática crónica' },
-  { id:'tabaquismo', label:'Tabaquismo activo' },
-  { id:'embarazo', label:'Embarazo' },
-  { id:'inmunosupresion', label:'Inmunosupresión / HIV' },
-];
 
 function calcularEdad(fechaNac) {
   if(!fechaNac) return null;
