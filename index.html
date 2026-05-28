@@ -3076,9 +3076,40 @@ async function guardarClinica() {
   // Actualizar snapshot de la evolución en curso
   evolClinicaSnapshot = { clinica: clinicaData, medicacion: meds };
   cerrarModal('modalClinica');
-  await actualizarEncabezadoVariable(dni);
+  renderEncabezadoDesdeSnapshot();
+  actualizarEncabezadoVariable(dni);
   // Si estábamos en lab/ant/est, volver a evolución
   switchPacMainTab('evol');
+}
+
+// ===== RENDER ENCABEZADO DESDE SNAPSHOT EN MEMORIA =====
+function renderEncabezadoDesdeSnapshot() {
+  if(!evolClinicaSnapshot) return;
+  const c = evolClinicaSnapshot.clinica;
+  const meds = evolClinicaSnapshot.medicacion || [];
+  const DX_L={dx_acv:'ACV',dx_albuminuria:'Albuminuria',dx_atero_subcl:'Atero Subcl.',dx_dbt1:'DBT 1',dx_dbt2:'DBT 2',dx_dbt_otro:'DBT Otro',dx_dis:'Dislipemia',dx_eap:'EAP',dx_epoc:'EPOC',dx_erc:'ERC',dx_fa:'FA',dx_hiperu:'HiperU',dx_hta:'HTA',dx_hta2:'HTA 2',dx_hvi:'HVI',dx_iam:'IAM',dx_icc:'ICC',dx_masld:'MASLD',dx_ms:'S. Met.',dx_neu_dbt:'Neu DBT',dx_obe:'Obesidad',dx_predbt:'PreDBT',dx_rp_dbt:'RP DBT',dx_sahos:'SAHOS',dx_sob:'Sobrepeso'};
+  const GIN_L={dx_pe:'PE',dx_rciu:'RCIU',dx_ppt:'PPT',dx_sop:'SOP',dx_dbtg:'DBT-G',dx_htag:'HTA-G',dx_ms_gineco:'SM-G',dx_menopausia:'Menop.'};
+  const FAM_L={fam_hta:'HTA-F',fam_dbt:'DBT-F',fam_obe:'OBE-F',fam_dis:'DIS-F',fam_iam:'IAM-F',fam_acv:'ACV-F',fam_erc:'ERC-F',fam_ms:'SM-F'};
+  let dxHtml='';
+  if(c){
+    Object.entries(DX_L).forEach(([k,v])=>{if(c[k])dxHtml+='<span class="evh-tag">'+v+'</span>';});
+    Object.entries(GIN_L).forEach(([k,v])=>{if(c[k])dxHtml+='<span class="evh-tag-pink">'+v+'</span>';});
+    Object.entries(FAM_L).forEach(([k,v])=>{if(c[k])dxHtml+='<span class="evh-tag-green">'+v+'</span>';});
+  }
+  const dxEl=document.getElementById('evh_dx');
+  if(dxEl)dxEl.innerHTML=dxHtml||'<span style="font-size:11px;color:var(--text-soft)">Sin diagnósticos</span>';
+  const medEl=document.getElementById('evh_med');
+  if(medEl)medEl.innerHTML=meds.length?meds.map(m=>'<span class="evh-med-item">'+m.farmaco+(m.dosis?' '+m.dosis:'')+(m.frecuencia?' · '+m.frecuencia:'')+'</span>').join(''):'<span style="font-size:11px;color:var(--text-soft)">Sin medicación</span>';
+  if(c){
+    const py=((c.cigarrillos_dia||0)*(c.anios_fumando||0)/20).toFixed(1);
+    const t=c.tabaquismo==='nunca'?'<span class="evh-habito-bien">No fumador</span>':c.tabaquismo==='actual'?'<span class="evh-habito-malo">Fumador ('+py+' PA)</span>':'<span style="color:#e08c3a;font-weight:600">Ex fumador ('+py+' PA)</span>';
+    const gr=Math.round((c.alcohol_cerveza||0)*13+(c.alcohol_vino||0)*14+(c.alcohol_fernet||0)*22+(c.alcohol_blanca||0)*14+(c.alcohol_whisky||0)*14);
+    const lim=pacienteActual?.sexo==='Femenino'?98:196;
+    const a=!c.alcohol?'<span class="evh-habito-bien">No alcohol</span>':'<span class="'+(gr>lim?'evh-habito-malo':'evh-habito-bien')+'">Alcohol '+gr+'g/sem</span>';
+    const act=c.actividad_fisica==='sedentarismo'?'<span class="evh-habito-malo">Sedentario</span>':'<span class="evh-habito-bien">'+c.actividad_fisica+'</span>';
+    const habEl=document.getElementById('evh_habitos');
+    if(habEl)habEl.innerHTML=t+'<br>'+a+'<br>'+act;
+  }
 }
 
 // ===== NUEVA actualizarEncabezadoVariable CON 3 COLORES =====
@@ -3850,6 +3881,7 @@ async function volcarActualizacion() {
       sb.from('medicacion').select('*').eq('dni_paciente', dni).eq('activo', true)
     ]);
     if(cr.data) evolClinicaSnapshot = { clinica: cr.data, medicacion: mr.data || [] };
+    renderEncabezadoDesdeSnapshot();
   }
 }
 
