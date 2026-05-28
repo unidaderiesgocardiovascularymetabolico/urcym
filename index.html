@@ -1332,10 +1332,10 @@
 
 <!-- PLANTILLA PDF -->
 <div id="docTemplate" style="display:none">
-  <div id="docContent" style="width:148mm;min-height:210mm;font-family:'Amiko',Arial,sans-serif;background:white;position:relative;padding:0;margin:0;box-sizing:border-box">
+  <div id="docContent" style="width:148mm;height:210mm;font-family:'Amiko',Arial,sans-serif;background:white;position:relative;padding:0;margin:0;box-sizing:border-box">
     <link href="https://fonts.googleapis.com/css2?family=Amiko:wght@400;600;700&display=swap" rel="stylesheet">
     <!-- HEADER -->
-    <div style="background:#f0f0f0;padding:8px 10px 8px 12px;border-bottom:2px solid #aaa;display:flex;align-items:flex-start;justify-content:space-between;min-height:28mm">
+    <div style="background:#f0f0f0;padding:8px 10px 8px 12px;border-bottom:2px solid #aaa;display:flex;align-items:center;justify-content:space-between;min-height:28mm">
       <div>
         <div style="font-weight:700;font-size:10.5pt;color:#1a1a1a;margin-bottom:3px" id="doc_medico_nombre"></div>
         <div id="doc_especialidades" style="font-size:7.5pt;color:#555;line-height:1.7"></div>
@@ -2959,10 +2959,10 @@ function generarTextoClinico(c, meds) {
   const FAM_NAMES = {hta:'HTA',dbt:'DBT',obe:'Obesidad',dis:'Dislipemia',iam:'IAM',acv:'ACV',erc:'ERC',ms:'S. Metabólico'};
   const dxList = Object.keys(DX_NAMES).filter(d=>c['dx_'+d]).map(d=>{
     let txt = DX_NAMES[d];
-    if(d==='acv'&&c.dx_acv_fecha){const diff=Math.floor((Date.now()-new Date(c.dx_acv_fecha).getTime())/86400000);const y=Math.floor(diff/365);const m=Math.floor((diff%365)/30);txt+=' (hace '+(y>0?y+' año'+(y>1?'s':'')+(m>0?' y '+m+' mes'+(m>1?'es':''):''):m>0?m+' mes'+(m>1?'es':''):diff+' días')+')';}
-    if(d==='iam'&&c.dx_iam_fecha){const diff=Math.floor((Date.now()-new Date(c.dx_iam_fecha).getTime())/86400000);const y=Math.floor(diff/365);const m=Math.floor((diff%365)/30);txt+=' (hace '+(y>0?y+' año'+(y>1?'s':'')+(m>0?' y '+m+' mes'+(m>1?'es':''):''):m>0?m+' mes'+(m>1?'es':''):diff+' días')+')';}
-    if(d==='hta'&&c.dx_hta_fecha){const diff=Math.floor((Date.now()-new Date(c.dx_hta_fecha).getTime())/86400000);const y=Math.floor(diff/365);txt+=' (hace '+(y>0?y+' año'+(y>1?'s':''):Math.floor(diff/30)+' meses')+')';}
-    if(d==='obe'&&c.dx_obe_fecha){const diff=Math.floor((Date.now()-new Date(c.dx_obe_fecha).getTime())/86400000);const y=Math.floor(diff/365);txt+=' (hace '+(y>0?y+' año'+(y>1?'s':''):Math.floor(diff/30)+' meses')+')';}
+    if(d==='acv'&&c.dx_acv_fecha){const anio=parseInt(c.dx_acv_fecha,10);if(!isNaN(anio)){const años=new Date().getFullYear()-anio;txt+=' (hace '+(años>0?años+' año'+(años!==1?'s':''):'este año')+')';}}
+    if(d==='iam'&&c.dx_iam_fecha){const anio=parseInt(c.dx_iam_fecha,10);if(!isNaN(anio)){const años=new Date().getFullYear()-anio;txt+=' (hace '+(años>0?años+' año'+(años!==1?'s':''):'este año')+')';}}
+    if(d==='hta'&&c.dx_hta_fecha){const anio=parseInt(c.dx_hta_fecha,10);if(!isNaN(anio)){const años=new Date().getFullYear()-anio;txt+=' (hace '+(años>0?años+' año'+(años!==1?'s':''):'este año')+')';}}
+    if(d==='obe'&&c.dx_obe_fecha){const anio=parseInt(c.dx_obe_fecha,10);if(!isNaN(anio)){const años=new Date().getFullYear()-anio;txt+=' (hace '+(años>0?años+' año'+(años!==1?'s':''):'este año')+')';}}
     if(d==='menopausia'&&c.dx_menopausia_edad)txt+=' (edad diagnóstico: '+c.dx_menopausia_edad+' años)';
     return txt;
   });
@@ -3903,22 +3903,34 @@ function generarPDFIndicacionesEvol() {
   const firmaImg = selectedUser==='barbara' ? firmaBarbaraB64 : firmaOmarB64;
   const firmaRatio = selectedUser==='barbara' ? 1.01 : 1.58;
   const firmaH = Math.round(48 * firmaRatio);
-  const lines = txt.split('\n').map(l=>l.trim()).filter(Boolean).map(l=>'<li style="margin-bottom:4px">'+l+'</li>').join('');
-  const content = `<div style="font-family:Arial,sans-serif;font-size:11pt;padding:20px;max-width:700px">
-    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;border-bottom:2px solid #3089ca;padding-bottom:12px">
-      <div><div style="font-size:14pt;font-weight:700;color:#3089ca">${u.name}</div><div style="font-size:10pt;color:#666">${u.mp}</div><div style="font-size:9pt;color:#666">URCyM · 2246 58-8469</div></div>
-      <div style="font-size:10pt;color:#666">${hoy}</div>
-    </div>
-    <div style="margin-bottom:16px"><strong>Paciente:</strong> ${p.apellido}, ${p.nombre} · DNI ${p.dni}</div>
-    <div style="font-size:12pt;font-weight:700;margin-bottom:10px;color:#1a2535">Indicaciones</div>
-    <ul style="margin:0;padding-left:20px;line-height:1.8">${lines}</ul>
-    <div style="margin-top:40px;display:flex;align-items:flex-end;gap:12px">
-      <img src="${firmaImg}" style="height:${firmaH}px;object-fit:contain"/>
-      <div><div style="font-size:10pt;font-weight:600">${u.name}</div><div style="font-size:9pt;color:#666">${u.mp}</div></div>
-    </div>
-  </div>`;
-  const el = document.createElement('div'); el.innerHTML = content; document.body.appendChild(el);
-  html2pdf().set({margin:10,filename:'Indicaciones_'+p.apellido+'_'+hoy.replace(/\//g,'-')+'.pdf',html2canvas:{scale:2},jsPDF:{unit:'mm',format:'a4'}}).from(el).save().then(()=>el.remove());
+  // Relleno el docTemplate (mismo formato que receta)
+  const mnEl = document.getElementById('doc_medico_nombre');
+  const espEl = document.getElementById('doc_especialidades');
+  if(mnEl) mnEl.textContent = '>> ' + u.titulo + '  —  ' + u.mp;
+  if(espEl) espEl.innerHTML = u.especialidades.join('<br>');
+  document.getElementById('doc_paciente_nombre').textContent = 'Paciente: ' + p.apellido + ', ' + p.nombre;
+  document.getElementById('doc_paciente_derecha').textContent = 'DNI: ' + p.dni + '   Fecha: ' + hoy;
+  const osRow = document.getElementById('doc_obra_social_row');
+  osRow.style.display = 'none'; // Sin obra social en indicaciones de evolución
+  document.getElementById('doc_tipo_label').textContent = 'Indicaciones:';
+  document.getElementById('doc_cuerpo').textContent = txt;
+  const firmaEl = document.getElementById('doc_firma_img');
+  firmaEl.src = firmaImg;
+  firmaEl.style.maxWidth = '48mm';
+  firmaEl.style.maxHeight = firmaH + 'mm';
+  const el = document.getElementById('docContent');
+  el.style.display = 'block';
+  document.getElementById('docTemplate').style.display = 'block';
+  const nombre = 'Indicaciones_' + p.apellido + '_' + hoy.replace(/\//g,'-') + '.pdf';
+  const opt = {
+    margin: 0, filename: nombre,
+    image: { type:'jpeg', quality:0.97 },
+    html2canvas: { scale:3, useCORS:true, logging:false, allowTaint:true },
+    jsPDF: { unit:'mm', format:'a5', orientation:'portrait' }
+  };
+  html2pdf().set(opt).from(el).save().then(() => {
+    document.getElementById('docTemplate').style.display = 'none';
+  });
 }
 
 function enviarMailIndicacionesEvol() {
@@ -4155,10 +4167,11 @@ function calcDxTiempo(dx) {
   const out = document.getElementById('dx_'+dx+'_tiempo');
   if(!el||!out) return;
   const f = el.value; if(!f){out.textContent='';return;}
-  const diff = Date.now()-new Date(f).getTime();
-  const days = Math.floor(diff/86400000);
-  const years = Math.floor(days/365); const months = Math.floor((days%365)/30);
-  out.textContent = years>0 ? 'Hace '+years+' año'+(years>1?'s':'')+(months>0?' y '+months+' mes'+(months>1?'es':''):'') : months>0 ? 'Hace '+months+' mes'+(months>1?'es':'') : 'Hace '+days+' día'+(days!==1?'s':'');
+  const anio = parseInt(f, 10);
+  if(isNaN(anio)||anio<1900||anio>2100){out.textContent='';return;}
+  const ahora = new Date();
+  const años = ahora.getFullYear() - anio;
+  out.textContent = años > 0 ? 'Hace '+años+' año'+(años!==1?'s':'') : años === 0 ? 'Este año' : '';
 }
 function actualizarTabaquismo(){
   const val=document.getElementById('hab_tabaquismo').value;
@@ -4920,7 +4933,7 @@ document.getElementById('modal_historial_ant').addEventListener('click', functio
 
 // ===== VACUNACIÓN — CALENDARIO NACIONAL ARGENTINO =====
 // boosterAnios: años para próximo refuerzo (null = sin refuerzo periódico)
-const CALENDARIO_VAC = [
+var CALENDARIO_VAC = [
   // ── UNIVERSALES (todos los adultos)
   { id:'influenza', nombre:'Influenza estacional', frecuencia:'Anual', boosterAnios:1, indicacion:'Todos los adultos', grupo:'adultos', antecedentes:[] },
   { id:'dt_adulto', nombre:'dT — Difteria / Tétanos', frecuencia:'Cada 10 años', boosterAnios:10, indicacion:'Todos los adultos', grupo:'adultos', antecedentes:[] },
@@ -5459,7 +5472,7 @@ document.getElementById('modal_evol_historica').addEventListener('click', functi
             <label><input type="checkbox" id="dx_acv_hem"> Hemorrágico</label>
             <label><input type="checkbox" id="dx_acv_ait"> AIT</label>
           </div></label>
-          <label>Fecha del evento:<br><input type="date" id="dx_acv_fecha" style="margin-top:4px;padding:4px 8px;border:1.5px solid var(--border);border-radius:8px;font-size:12px" oninput="calcDxTiempo('acv')"></label>
+          <label>Año del evento:<br><input type="number" id="dx_acv_fecha" min="1940" max="2030" placeholder="aaaa" style="margin-top:4px;padding:4px 8px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;width:90px" oninput="calcDxTiempo('acv')"></label>
           <span id="dx_acv_tiempo" style="color:var(--blue);font-weight:600"></span>
         </div>
         <div style="margin-top:8px"><label>Nota (se vuelca a HC):<br><textarea id="dx_acv_nota" rows="2" style="width:100%;margin-top:4px;padding:6px 8px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;resize:vertical"></textarea></label></div>
@@ -5474,7 +5487,7 @@ document.getElementById('modal_evol_historica').addEventListener('click', functi
             <label><input type="checkbox" id="dx_iam_angiop"> Angioplastía</label>
             <label><input type="checkbox" id="dx_iam_by"> By-pass</label>
           </div></label>
-          <label>Fecha del evento:<br><input type="date" id="dx_iam_fecha" style="margin-top:4px;padding:4px 8px;border:1.5px solid var(--border);border-radius:8px;font-size:12px" oninput="calcDxTiempo('iam')"></label>
+          <label>Año del evento:<br><input type="number" id="dx_iam_fecha" min="1940" max="2030" placeholder="aaaa" style="margin-top:4px;padding:4px 8px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;width:90px" oninput="calcDxTiempo('iam')"></label>
           <span id="dx_iam_tiempo" style="color:var(--blue);font-weight:600"></span>
         </div>
         <div style="margin-top:8px"><label>Nota (se vuelca a HC):<br><textarea id="dx_iam_nota" rows="2" style="width:100%;margin-top:4px;padding:6px 8px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;resize:vertical"></textarea></div>
@@ -5483,7 +5496,7 @@ document.getElementById('modal_evol_historica').addEventListener('click', functi
       <div id="dx_extra_hta" style="display:none;background:#f0f4fa;border-radius:10px;padding:10px 14px;margin-top:10px;font-size:12px">
         <div style="font-weight:600;color:var(--blue);margin-bottom:6px">HTA — detalles</div>
         <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
-          <label>Desde (fecha diagnóstico):<br><input type="date" id="dx_hta_fecha" style="margin-top:4px;padding:4px 8px;border:1.5px solid var(--border);border-radius:8px;font-size:12px" oninput="calcDxTiempo('hta')"></label>
+          <label>Desde (año diagnóstico):<br><input type="number" id="dx_hta_fecha" min="1940" max="2030" placeholder="aaaa" style="margin-top:4px;padding:4px 8px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;width:90px" oninput="calcDxTiempo('hta')"></label>
           <span id="dx_hta_tiempo" style="color:var(--blue);font-weight:600"></span>
         </div>
         <div style="margin-top:8px"><label>Nota (se vuelca a HC):<br><textarea id="dx_hta_nota" rows="2" style="width:100%;margin-top:4px;padding:6px 8px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;resize:vertical"></textarea></label></div>
@@ -5492,7 +5505,7 @@ document.getElementById('modal_evol_historica').addEventListener('click', functi
       <div id="dx_extra_obe" style="display:none;background:#f0f4fa;border-radius:10px;padding:10px 14px;margin-top:10px;font-size:12px">
         <div style="font-weight:600;color:var(--blue);margin-bottom:6px">Obesidad — detalles</div>
         <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
-          <label>Desde (fecha diagnóstico):<br><input type="date" id="dx_obe_fecha" style="margin-top:4px;padding:4px 8px;border:1.5px solid var(--border);border-radius:8px;font-size:12px" oninput="calcDxTiempo('obe')"></label>
+          <label>Desde (año diagnóstico):<br><input type="number" id="dx_obe_fecha" min="1940" max="2030" placeholder="aaaa" style="margin-top:4px;padding:4px 8px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;width:90px" oninput="calcDxTiempo('obe')"></label>
           <span id="dx_obe_tiempo" style="color:var(--blue);font-weight:600"></span>
         </div>
         <div style="margin-top:8px"><label>Nota (se vuelca a HC):<br><textarea id="dx_obe_nota" rows="2" style="width:100%;margin-top:4px;padding:6px 8px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;resize:vertical"></textarea></label></div>
