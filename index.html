@@ -2526,26 +2526,46 @@ async function verLabReadonly(dni) {
 async function cargarPacientes() {
   const cont = document.getElementById('tablePacientes');
   let data, error;
-  // Intentar ordenar por id desc; si falla, cargar sin orden
-  ({ data, error } = await sb.from('pacientes').select('*').order('id', {ascending:false}));
-  if(error) {
-    console.warn('[cargarPacientes] order by id falló, intentando sin orden:', error.message);
-    ({ data, error } = await sb.from('pacientes').select('*'));
-  }
+  // Cargar pacientes
+  ({ data, error } = await sb.from('pacientes').select('*'));
   if(error) {
     console.error('[cargarPacientes] ERROR:', error);
     cont.innerHTML = '<div style="padding:20px;color:#c00;text-align:center">Error al cargar pacientes: ' + error.message + '</div>';
     return;
   }
   pacientesData = data || [];
-  // Siempre poner el último cargado/editado primero
+
+  // Cargar última evolución de cada paciente y ordenar por fecha desc
+  const dnis = pacientesData.map(p => p.dni);
+  const ultimaEvolMap = {};
+  if(dnis.length) {
+    const { data: evols } = await sb.from('evoluciones')
+      .select('dni_paciente,fecha_hora')
+      .in('dni_paciente', dnis)
+      .order('fecha_hora', {ascending: false});
+    if(evols) {
+      evols.forEach(e => {
+        if(!ultimaEvolMap[e.dni_paciente]) ultimaEvolMap[e.dni_paciente] = e.fecha_hora;
+      });
+    }
+  }
+  // Ordenar: pacientes con evolución primero (desc), luego sin evolución
+  pacientesData.sort((a, b) => {
+    const fa = ultimaEvolMap[a.dni] || null;
+    const fb = ultimaEvolMap[b.dni] || null;
+    if(fa && fb) return new Date(fb) - new Date(fa);
+    if(fa) return -1;
+    if(fb) return 1;
+    return 0;
+  });
+  // El último editado/cargado va primero
   if(ultimoDniCargado) {
     pacientesData = [
       ...pacientesData.filter(p => p.dni === ultimoDniCargado),
       ...pacientesData.filter(p => p.dni !== ultimoDniCargado)
     ];
   }
-  renderTabla(pacientesData);
+  renderTabla(pacientesData, ultimaEvolMap);
 }
 
 function edadDesde(fecha_nac) {
@@ -2556,7 +2576,7 @@ function edadDesde(fecha_nac) {
   return edad;
 }
 
-function renderTabla(data) {
+function renderTabla(data, evolMap) {
   const cont = document.getElementById('tablePacientes');
   if(!data.length) {
     cont.innerHTML = '<div class="empty-state"><div>👤</div><p>No hay pacientes registrados todavía.<br>Hacé clic en "+ Nuevo paciente" para agregar el primero.</p></div>';
@@ -2566,12 +2586,16 @@ function renderTabla(data) {
   cont.innerHTML = '<table><thead><tr><th>Apellido y nombre</th><th>DNI</th><th>Edad</th><th>Obra Social</th><th>Última evolución</th><th>Acciones</th></tr></thead><tbody>' +
     sorted.map((p,i) => {
       const esNuevo = p.dni === ultimoDniCargado;
+      let fechaEvol = '—';
+      if(evolMap && evolMap[p.dni]) {
+        fechaEvol = new Date(evolMap[p.dni]).toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'});
+      }
       return '<tr class="' + (esNuevo?'fila-nuevo':'') + '">' +
         '<td><strong>' + p.apellido + ', ' + p.nombre + '</strong>' + (esNuevo?'&nbsp;<span style="font-size:10px;background:var(--teal);color:white;padding:2px 7px;border-radius:10px;vertical-align:middle">nuevo</span>':'') + '</td>' +
         '<td>' + p.dni + '</td>' +
         '<td>' + edadDesde(p.fecha_nacimiento) + ' años</td>' +
         '<td>' + (p.obra_social?'<span class="badge badge-blue">'+p.obra_social+'</span>':'-') + '</td>' +
-        '<td id="uc-' + p.dni + '" style="font-size:12px;color:var(--text-soft)">cargando...</td>' +
+        '<td id="uc-' + p.dni + '" style="font-size:12px;color:var(--text-soft)">' + (evolMap ? fechaEvol : 'cargando...') + '</td>' +
         '<td><div class="acciones">' +
           '<button class="btn-accion evolucionar" onclick="abrirEvolucion(\'' + p.dni + '\')">✚ Evolucionar</button>' +
           '<button class="btn-accion ver-hc" onclick="abrirHistoriaClinica(\'' + p.dni + '\')">📖 Hist. Clínica</button>' +
@@ -2582,8 +2606,8 @@ function renderTabla(data) {
         '</div></td>' +
       '</tr>';
     }).join('') + '</tbody></table>';
-  // Cargar fecha de última evolución para cada paciente de forma asíncrona
-  cargarUltimasEvoluciones(sorted);
+  // Si no tenemos el mapa todavía (llamada desde filtrarPacientes), cargar async
+  if(!evolMap) cargarUltimasEvoluciones(sorted);
 }
 
 async function cargarUltimasEvoluciones(data) {
@@ -3040,6 +3064,8 @@ function generarTextoClinico(c, meds) {
   if(habParts.length) lines.push('HÁBITOS: '+habParts.join(' · '));
   if(c.nota_cardio) lines.push('NOTA CARDIOMETABÓLICA: '+c.nota_cardio);
   if(c.nota_gineco) lines.push('NOTA GINECOLÓGICA: '+c.nota_gineco);
+  if(c.nota_fam) lines.push('NOTA FAMILIARES: '+c.nota_fam);
+  if(c.nota_med) lines.push('NOTA MEDICACIÓN: '+c.nota_med);
   if(!lines.length) return '';
   return '<div class="bloque-clinico" style="font-family:Arial,sans-serif;font-size:10pt;color:#333;border:1px solid #e0e0e0;padding:8px 10px;border-radius:6px;background:#fafafa;margin-bottom:10px;line-height:1.7">'+lines.join('<br>')+'</div>';
 }
@@ -3095,6 +3121,8 @@ async function guardarClinica() {
     alimentacion:document.getElementById('hab_alimentacion').value,
     nota_cardio:document.getElementById('nota_cardio')?.value||null,
     nota_gineco:document.getElementById('nota_gineco')?.value||null,
+    nota_fam:document.getElementById('nota_fam')?.value||null,
+    nota_med:document.getElementById('nota_med')?.value||null,
     actualizado_en:new Date().toISOString()
   };
   await sb.from('paciente_clinica').upsert(clinicaData);
@@ -3196,6 +3224,8 @@ async function cargarDatosClinica(dni) {
   if(data.alimentacion)document.getElementById('hab_alimentacion').value=data.alimentacion;
   const nc=document.getElementById('nota_cardio');if(nc)nc.value=data.nota_cardio||'';
   const ng=document.getElementById('nota_gineco');if(ng)ng.value=data.nota_gineco||'';
+  const nf=document.getElementById('nota_fam');if(nf)nf.value=data.nota_fam||'';
+  const nm=document.getElementById('nota_med');if(nm)nm.value=data.nota_med||'';
   await cargarMedicacion(dni);
 }
 
@@ -4210,7 +4240,7 @@ function calcDxTiempo(dx) {
 }
 function actualizarTabaquismo(){
   const val=document.getElementById('hab_tabaquismo').value;
-  document.getElementById('hab_tab_detalle').style.display=val==='nunca'?'none':'block';
+  document.getElementById('hab_tab_detalle').style.display=(val==='actual'||val==='ex')?'block':'none';
   const lbl=document.getElementById('hab_anios_label'); if(lbl) lbl.textContent=val==='ex'?'Años que fumó':'Años fumando';
   calcPackYear();
 }
@@ -5471,6 +5501,10 @@ document.getElementById('modal_evol_historica').addEventListener('click', functi
         <label class="dx-item dx-green"><input type="checkbox" id="fam_obe"> Obesidad</label>
         <label class="dx-item dx-green"><input type="checkbox" id="fam_ms"> S. Metabólico</label>
       </div>
+      <div class="clinica-section" style="margin-top:14px">
+        <label style="font-size:12px;font-weight:600;color:#27ae60;text-transform:uppercase;letter-spacing:.05em">Notas (se vuelcan a la evolución)</label>
+        <textarea id="nota_fam" rows="3" placeholder="Observaciones sobre antecedentes familiares..." style="width:100%;margin-top:6px;padding:8px 10px;border:1.5px solid #b2dfdb;border-radius:10px;font-family:var(--font-main);font-size:13px;resize:vertical"></textarea>
+      </div>
     </div>
 
     <!-- TAB MEDICACION Y HABITOS -->
@@ -5555,6 +5589,10 @@ document.getElementById('modal_evol_historica').addEventListener('click', functi
           <div>Grupo</div><div>Fármaco</div><div>Dosis</div><div>Frecuencia</div><div></div>
         </div>
         <div id="med_filas"></div>
+        <div style="margin-top:12px">
+          <label style="font-size:12px;font-weight:600;color:var(--text-soft);text-transform:uppercase;letter-spacing:.05em">Notas de medicación (se vuelcan a la evolución)</label>
+          <textarea id="nota_med" rows="3" placeholder="Observaciones sobre la medicación, adherencia, efectos adversos..." style="width:100%;margin-top:6px;padding:8px 10px;border:1.5px solid var(--border);border-radius:10px;font-family:var(--font-main);font-size:13px;resize:vertical"></textarea>
+        </div>
       </div>
     </div>
 
