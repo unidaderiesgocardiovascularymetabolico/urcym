@@ -144,11 +144,17 @@
     /* MODAL */
     .modal-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,.35); z-index:200; align-items:center; justify-content:center; padding:20px; }
     .modal-overlay.open { display:flex; }
-    .modal { background:white; border-radius:20px; padding:32px; width:100%; max-width:620px; max-height:90vh; overflow-y:auto; animation:fadeUp .3s ease; cursor:default; user-select:none; }
-    .modal-title { font-family:'Outfit',sans-serif; font-size:18px; font-weight:700; margin-bottom:24px; color:var(--text); cursor:grab; }
-    .modal-title:active { cursor:grabbing; }
-    .modal.dragging { animation:none; cursor:move; }
+    .modal { background:white; border-radius:20px; padding:32px; width:100%; max-width:620px; max-height:90vh; overflow-y:auto; animation:fadeUp .3s ease; }
     .modal-title { font-family:'Outfit',sans-serif; font-size:18px; font-weight:700; margin-bottom:24px; color:var(--text); }
+    /* Modal drag */
+    .modal-overlay.draggable-active { align-items:flex-start; justify-content:flex-start; background:rgba(0,0,0,.25); pointer-events:none; }
+    .modal-overlay.draggable-active .modal { pointer-events:all; position:absolute; cursor:default; }
+    .modal-title { cursor:grab; user-select:none; }
+    .modal-title:active { cursor:grabbing; }
+    /* Evolución editable */
+    .hc-entrada.editable-48h .hc-edit-btn { display:inline-flex; }
+    .hc-edit-btn { display:none; align-items:center; gap:4px; background:#e8f3fc; color:#1a5a8a; border:1.5px solid #b8d8f0; border-radius:8px; padding:3px 10px; font-size:11px; cursor:pointer; margin-left:auto; font-weight:600; }
+    .hc-edit-btn:hover { background:#3089ca; color:white; }
     .form-grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
     .form-grid .full { grid-column:1/-1; }
     .form-actions { display:flex; gap:10px; margin-top:24px; }
@@ -302,7 +308,7 @@
     .evol-toolbar button:hover { background:var(--gray); border-color:var(--border); }
     .evol-toolbar-sep { width:1px; height:18px; background:var(--border); margin:0 3px; }
     /* Editor */
-    .evol-editor { background:white; border:1.5px solid var(--border); border-radius:0 0 12px 12px; padding:16px; min-height:320px; font-family:var(--font-main); font-size:14px; line-height:1.8; color:var(--text); outline:none; cursor:text; }
+    .evol-editor { background:white; border:1.5px solid var(--border); border-radius:0 0 12px 12px; padding:16px; min-height:320px; font-family:var(--font-main); font-size:14px; line-height:1.8; color:var(--text); outline:none; }
     .evol-editor:focus { border-color:var(--blue); box-shadow:0 0 0 3px var(--blue-glow); }
     .evol-editor:empty:before { content:attr(placeholder); color:#b0bcc9; pointer-events:none; }
     /* Panel inferior de actualización clínica */
@@ -510,14 +516,12 @@
       </button>
     </div>
     <div id="login_pwd_section" style="display:none;margin-top:6px">
-      <form onsubmit="event.preventDefault();doLogin()">
-        <div class="form-group">
-          <label>Contraseña</label>
-          <input type="password" id="password" placeholder="••••••••" autocomplete="current-password"/>
-          <div class="error-msg" id="errorMsg">Contraseña incorrecta.</div>
-        </div>
-        <button type="submit" class="btn" id="btnLogin" disabled>Ingresar al sistema</button>
-      </form>
+      <div class="form-group">
+        <label>Contraseña</label>
+        <input type="password" id="password" placeholder="••••••••"/>
+        <div class="error-msg" id="errorMsg">Contraseña incorrecta.</div>
+      </div>
+      <button class="btn" id="btnLogin" onclick="doLogin()" disabled>Ingresar al sistema</button>
     </div>
     <div class="card-footer">URCyM © 2026 · Acceso restringido</div>
   </div>
@@ -742,10 +746,6 @@
           <div class="evh-title">Medicación actual <button class="btn-hx-mini" onclick="abrirHistorialMed()" title="Historial medicación">🕐</button></div>
           <div id="evh_med" class="evh-meds" style="display:flex;flex-wrap:wrap;gap:5px;margin-top:4px"></div>
         </div>
-        <div class="evh-section evh-section-small" id="evh_med_extra_section" style="display:none">
-          <div class="evh-title" style="color:#6d3fc0">Otras medicaciones</div>
-          <div id="evh_med_extra" class="evh-meds" style="display:flex;flex-wrap:wrap;gap:5px;margin-top:4px"></div>
-        </div>
         <div class="evh-section evh-section-small">
           <div class="evh-title">Hábitos</div>
           <div id="evh_habitos" class="evh-habitos"></div>
@@ -791,7 +791,7 @@
           </div>
 
           <!-- Editor principal -->
-          <div id="evol_editor" class="evol-editor" contenteditable="true" spellcheck="true" placeholder="Escribí la evolución aquí..." oninput="marcarDirty('evol')" onkeydown="if(event.key==='Enter'){event.stopPropagation();}" onclick="(function(e){const ed=document.getElementById('evol_editor');if(e.target===ed&&ed.childNodes.length){const sel=window.getSelection();if(!sel.rangeCount||sel.getRangeAt(0).collapsed){const range=document.createRange();range.selectNodeContents(ed);range.collapse(false);sel.removeAllRanges();sel.addRange(range);}}})()"></div>
+          <div id="evol_editor" class="evol-editor" contenteditable="true" spellcheck="true" placeholder="Escribí la evolución aquí..." oninput="marcarDirty('evol')" onclick="if(event.target===this){this.focus();moveCursorToEnd(this);}"></div>
 
           <!-- Panel de actualización clínica inferior -->
           <div class="evol-update-panel">
@@ -822,8 +822,6 @@
                       <option value="cada 8 h">cada 8 h</option>
                       <option value="cada 12 h">cada 12 h</option>
                       <option value="cada 24 h">cada 24 h</option>
-                      <option value="semanal">semanal</option>
-                      <option value="mensual">mensual</option>
                     </select>
                   </div>
                   <!-- Modo MODIFICA/SUSPENDE: medicación actual -->
@@ -874,7 +872,6 @@
             </div>
             <div id="evol_indicaciones_editor" class="evol-editor" contenteditable="true" spellcheck="true"
               placeholder="Escribí las indicaciones para el paciente..."
-              onkeydown="if(event.key==='Enter'){event.stopPropagation();}"
               style="border-radius:0 0 10px 10px;min-height:120px"></div>
             <div class="evol-ind-actions">
               <button class="btn btn-secondary" onclick="volcarIndicacionesAlEditor()" style="width:auto;margin:0;padding:7px 16px;font-size:12px">↑ Volcar a evolución</button>
@@ -1143,27 +1140,25 @@
   <div style="background:white;border-radius:16px;width:100%;max-width:380px;padding:28px;box-shadow:0 20px 60px rgba(0,0,0,.25)">
     <div style="font-family:var(--font-display);font-size:16px;font-weight:700;color:var(--text);margin-bottom:6px">🔑 Cambiar contraseña</div>
     <div id="cpwd_usuario" style="font-size:12px;color:var(--text-soft);margin-bottom:20px"></div>
-    <form onsubmit="event.preventDefault();confirmarCambiarPassword()" autocomplete="off">
     <div style="display:flex;flex-direction:column;gap:12px">
       <div>
         <label style="font-size:11px;font-weight:700;color:var(--text-soft);text-transform:uppercase;letter-spacing:.06em">Contraseña actual</label>
-        <input type="password" id="cpwd_actual" placeholder="••••••••" autocomplete="current-password" style="width:100%;margin-top:4px;padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;font-family:var(--font-main)"/>
+        <input type="password" id="cpwd_actual" placeholder="••••••••" style="width:100%;margin-top:4px;padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;font-family:var(--font-main)"/>
       </div>
       <div>
         <label style="font-size:11px;font-weight:700;color:var(--text-soft);text-transform:uppercase;letter-spacing:.06em">Nueva contraseña</label>
-        <input type="password" id="cpwd_nueva" placeholder="••••••••" autocomplete="new-password" style="width:100%;margin-top:4px;padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;font-family:var(--font-main)"/>
+        <input type="password" id="cpwd_nueva" placeholder="••••••••" style="width:100%;margin-top:4px;padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;font-family:var(--font-main)"/>
       </div>
       <div>
         <label style="font-size:11px;font-weight:700;color:var(--text-soft);text-transform:uppercase;letter-spacing:.06em">Confirmar nueva contraseña</label>
-        <input type="password" id="cpwd_confirmar" placeholder="••••••••" autocomplete="new-password" style="width:100%;margin-top:4px;padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;font-family:var(--font-main)"/>
+        <input type="password" id="cpwd_confirmar" placeholder="••••••••" style="width:100%;margin-top:4px;padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;font-family:var(--font-main)"/>
       </div>
       <div id="cpwd_error" style="display:none;color:var(--red);font-size:12px;background:#fff0f0;padding:8px 12px;border-radius:8px"></div>
     </div>
     <div style="display:flex;gap:10px;margin-top:20px">
-      <button type="button" onclick="document.getElementById('modal_cambiar_pwd').style.display='none'" style="flex:1;padding:9px;border:1.5px solid var(--border);border-radius:9px;background:white;font-size:13px;cursor:pointer;font-family:var(--font-main);color:var(--text-soft)">Cancelar</button>
-      <button type="submit" style="flex:1;padding:9px;border:none;border-radius:9px;background:var(--teal);color:white;font-size:13px;cursor:pointer;font-family:var(--font-main);font-weight:700">Guardar</button>
+      <button onclick="document.getElementById('modal_cambiar_pwd').style.display='none'" style="flex:1;padding:9px;border:1.5px solid var(--border);border-radius:9px;background:white;font-size:13px;cursor:pointer;font-family:var(--font-main);color:var(--text-soft)">Cancelar</button>
+      <button onclick="confirmarCambiarPassword()" style="flex:1;padding:9px;border:none;border-radius:9px;background:var(--teal);color:white;font-size:13px;cursor:pointer;font-family:var(--font-main);font-weight:700">Guardar</button>
     </div>
-    </form>
   </div>
 </div>
 
@@ -1185,7 +1180,7 @@
       </div>
       <div class="form-group">
         <label>Fecha de nacimiento *</label>
-        <input type="date" id="f_fecha" onchange="calcularEdadBadge()"/>
+        <input type="date" id="f_fecha" onchange="calcularEdad()"/>
         <div class="edad-badge" id="edadBadge"></div>
       </div>
       <div class="form-group">
@@ -1342,36 +1337,36 @@
 
 <!-- PLANTILLA PDF -->
 <div id="docTemplate" style="display:none">
-  <div id="docContent" style="width:148mm;height:210mm;font-family:'Amiko',Arial,sans-serif;background:white;position:relative;padding:0;margin:0;box-sizing:border-box;overflow:hidden">
+  <div id="docContent" style="width:148mm;font-family:'Amiko',Arial,sans-serif;background:white;position:relative;padding:0;margin:0;box-sizing:border-box">
     <link href="https://fonts.googleapis.com/css2?family=Amiko:wght@400;600;700&display=swap" rel="stylesheet">
-    <!-- HEADER compacto: sin min-height -->
-    <div style="background:#f0f0f0;padding:6px 10px 6px 12px;border-bottom:2px solid #aaa;display:flex;align-items:center;justify-content:space-between">
-      <div style="flex:1;min-width:0">
-        <div style="font-weight:700;font-size:10pt;color:#1a1a1a;margin-bottom:2px" id="doc_medico_nombre"></div>
-        <div id="doc_especialidades" style="font-size:7pt;color:#555;line-height:1.6"></div>
+    <!-- HEADER -->
+    <div style="background:#f0f0f0;padding:8px 10px 8px 12px;border-bottom:2px solid #aaa;display:flex;align-items:flex-start;justify-content:space-between;min-height:28mm">
+      <div>
+        <div style="font-weight:700;font-size:10.5pt;color:#1a1a1a;margin-bottom:3px" id="doc_medico_nombre"></div>
+        <div id="doc_especialidades" style="font-size:7.5pt;color:#555;line-height:1.7"></div>
       </div>
-      <img src="data:image/svg+xml;base64,PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz4KPCEtLSBHZW5lcmF0b3I6IEFkb2JlIElsbHVzdHJhdG9yIDI1LjIuMCwgU1ZHIEV4cG9ydCBQbHVnLUluIC4gU1ZHIFZlcnNpb246IDYuMDAgQnVpbGQgMCkgIC0tPgo8c3ZnIHZlcnNpb249IjEuMSIgaWQ9IkNhcGFfMSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIiB4bWxuczp4bGluaz0iaHR0cDovL3d3dy53My5vcmcvMTk5OS94bGluayIgeD0iMHB4IiB5PSIwcHgiCgkgdmlld0JveD0iMCAwIDQxNC42NCA0MDcuOTciIHN0eWxlPSJlbmFibGUtYmFja2dyb3VuZDpuZXcgMCAwIDQxNC42NCA0MDcuOTc7IiB4bWw6c3BhY2U9InByZXNlcnZlIj4KPHN0eWxlIHR5cGU9InRleHQvY3NzIj4KCS5zdDB7ZmlsbDojRTZFNkU2O30KCS5zdDF7ZmlsbDpub25lO3N0cm9rZTojNTU1NTU1O3N0cm9rZS13aWR0aDoxLjc7c3Ryb2tlLW1pdGVybGltaXQ6MTA7fQoJLnN0MntmaWxsOiM1NTU1NTU7fQoJLnN0M3tmaWxsOm5vbmU7c3Ryb2tlOiM4ODg4ODg7c3Ryb2tlLXdpZHRoOjEuNztzdHJva2UtbWl0ZXJsaW1pdDoxMDt9Cgkuc3Q0e2ZpbGw6bm9uZTtzdHJva2U6I2FhYWFhYTtzdHJva2Utd2lkdGg6MS43O3N0cm9rZS1taXRlcmxpbWl0OjEwO30KPC9zdHlsZT4KPGNpcmNsZSBjbGFzcz0ic3QwIiBjeD0iLTIxMS42MSIgY3k9IjIxNy4yIiByPSI3OC4zNCIvPgo8Zz4KCTxnPgoJCTxwYXRoIGNsYXNzPSJzdDEiIGQ9Ik0tMzYzLjk0LDIzNy45M2MtMy45MywwLTcuNDUtMC44My0xMC41NC0yLjQ5Yy0zLjA5LTEuNjYtNS41My0zLjk1LTcuMzEtNi44NWMtMS43OC0yLjktMi42Ny02LjIzLTIuNjctOS45OAoJCQl2LTMwLjM1aDEwLjE5djI5LjcyYzAsMi4wNiwwLjQ3LDMuOSwxLjQxLDUuNTJjMC45NCwxLjYyLDIuMTksMi44OSwzLjc2LDMuODNjMS41NywwLjk0LDMuMjksMS40MSw1LjE3LDEuNDEKCQkJYzIuMDEsMCwzLjgzLTAuNDcsNS40NS0xLjQxYzEuNjItMC45NCwyLjktMi4yMSwzLjg3LTMuODNjMC45Ni0xLjYyLDEuNDQtMy40NSwxLjQ0LTUuNTJ2LTI5LjcyaDkuNzd2MzAuMzUKCQkJYzAsMy43NS0wLjg4LDcuMDctMi42Myw5Ljk4Yy0xLjc2LDIuOTEtNC4xOCw1LjE5LTcuMjcsNi44NUMtMzU2LjQyLDIzNy4xLTM1OS45NiwyMzcuOTMtMzYzLjk0LDIzNy45M3oiLz4KCQk8cGF0aCBjbGFzcz0ic3QxIiBkPSJNLTMzMC45MiwyMzcuNTF2LTQ5LjE5aDIxLjY0YzMsMCw1LjczLDAuNjgsOC4xOSwyLjA0YzIuNDYsMS4zNiw0LjQyLDMuMjIsNS44Nyw1LjU5CgkJCWMxLjQ1LDIuMzcsMi4xOCw1LjA1LDIuMTgsOC4wNWMwLDMuMTktMC44NCw2LjA0LTIuNTMsOC41N2MtMS42OSwyLjUzLTMuOTEsNC40My02LjY3LDUuNjlsMTEuMTcsMTkuMzJsLTExLjczLTAuMDdsLTEwLjA1LTE3Ljc4CgkJCWgtOC4yOXYxNy43OEgtMzMwLjkyeiBNLTMyMS4xNSwyMTEuMzdoMTEuNTJjMS45NywwLDMuNTUtMC42Nyw0Ljc0LTJjMS4yLTEuMzMsMS43OS0zLjAxLDEuNzktNS4wMmMwLTIuMTUtMC43My0zLjg5LTIuMTgtNS4yCgkJCWMtMS40NS0xLjMxLTMuMzctMS45Ny01Ljc2LTEuOTdoLTEwLjEyVjIxMS4zN3oiLz4KCQk8cGF0aCBjbGFzcz0ic3QxIiBkPSJNLTI2MS4xNCwyMzguMjFjLTQuNzgsMC05LjAzLTEuMDgtMTIuNzUtMy4yM2MtMy43Mi0yLjE1LTYuNjQtNS4xNC04Ljc1LTguOTYKCQkJYy0yLjExLTMuODItMy4xNi04LjIzLTMuMTYtMTMuMjVjMC0zLjU2LDAuNjQtNi44NywxLjkzLTkuOTRjMS4yOS0zLjA3LDMuMDctNS43NSw1LjM0LTguMDVjMi4yNy0yLjI5LDQuOTQtNC4wOCw4LjAxLTUuMzQKCQkJYzMuMDctMS4yNiw2LjM4LTEuOSw5Ljk0LTEuOWMzLjUxLDAsNi45LDAuNzQsMTAuMTUsMi4yMWMzLjI1LDEuNDgsNS44NywzLjQ2LDcuODMsNS45NGwtNi4zOSw3LjEKCQkJYy0xLjY5LTEuNzgtMy40OS0zLjE2LTUuNDEtNC4xNWMtMS45Mi0wLjk4LTQuMDEtMS40OC02LjI1LTEuNDhjLTIuNzYsMC01LjI2LDAuNjYtNy40OCwxLjk3Yy0yLjIzLDEuMzEtMy45OSwzLjE1LTUuMzEsNS41MgoJCQljLTEuMzEsMi4zNy0xLjk3LDUuMDktMS45Nyw4LjE5YzAsMy4xOSwwLjY0LDUuOTYsMS45Myw4LjMzYzEuMjksMi4zNywzLjEyLDQuMTksNS40OCw1LjQ4YzIuMzYsMS4yOSw1LjA5LDEuOTMsOC4xOSwxLjkzCgkJCWMyLjI5LDAsNC40NS0wLjQ3LDYuNDYtMS40MWMyLjAxLTAuOTQsMy43NS0yLjE1LDUuMi0zLjY1bDQuOTIsNy45NGMtMS4xMiwxLjI2LTIuNjUsMi40MS00LjU3LDMuNDQKCQkJYy0xLjkyLDEuMDMtNC4wNCwxLjg0LTYuMzYsMi40MkMtMjU2LjQ3LDIzNy45Mi0yNTguOCwyMzguMjEtMjYxLjE0LDIzOC4yMXoiLz4KCQk8cGF0aCBjbGFzcz0ic3QxIiBkPSJNLTIzMC4zLDI1My42N2w2Ljg5LTE1Ljk1bC0xNi44Ni0zNy4zMWgxMC44OWw5LjQyLDIyLjJjMC40MiwwLjk4LDAuODQsMi4xMywxLjI3LDMuNDQKCQkJYzAuMTktMC41MSwwLjM2LTEuMDIsMC41My0xLjUxYzAuMTYtMC40OSwwLjM0LTEuMDIsMC41My0xLjU4bDguMDgtMjIuNTZoMTEuMDNsLTE1LjYsMzcuMWwtNi4zOSwxNi4xNkgtMjMwLjN6Ii8+CgkJPHBhdGggY2xhc3M9InN0MSIgZD0iTS0xOTEuNzIsMjM3LjUxdi00OS4xOWg5LjM1bDE0LjksMjQuMzFsMTUuMTgtMjQuMzFoOC45MnY0OS4xOWgtOS45MXYtMTcuMzZjMC0yLjg2LDAuMDUtNS41MiwwLjE0LTcuOTgKCQkJYzAuMDktMi40NiwwLjIzLTQuODQsMC40Mi03LjEzbC0xMi42NSwxOS42aC00LjY0bC0xMi4zNy0xOS40NmMwLjIzLDIuMTYsMC4zOSw0LjQ0LDAuNDYsNi44NWMwLjA3LDIuNDEsMC4xMSw1LjEyLDAuMTEsOC4xMgoJCQl2MTcuMzZILTE5MS43MnoiLz4KCTwvZz4KPC9nPgo8Zz4KCTxnPgoJCTxwYXRoIGNsYXNzPSJzdDIiIGQ9Ik0tMzExLjE5LDE1Ni45OGMtMC42OCwxLjEyLTEuNTMsMS45OS0yLjU0LDIuNThjLTEuMDEsMC42LTIuMDgsMC45LTMuMjIsMC45MQoJCQljLTEuMTQsMC4wMS0yLjI0LTAuMzEtMy4zMi0wLjk2bC04LjY4LTUuMjVsMS43Ni0yLjkxbDguNSw1LjE0YzAuNTksMC4zNiwxLjIsMC41NCwxLjgyLDAuNTVjMC42MiwwLjAxLDEuMjEtMC4xMywxLjc1LTAuNDEKCQkJYzAuNTQtMC4yOSwwLjk3LTAuNywxLjI5LTEuMjNjMC4zNS0wLjU4LDAuNTMtMS4xOCwwLjU0LTEuOHMtMC4xMy0xLjIxLTAuNDMtMS43N2MtMC4zLTAuNTUtMC43NC0xLjAxLTEuMzMtMS4zN2wtOC41LTUuMTQKCQkJbDEuNjktMi43OWw4LjY4LDUuMjVjMS4wNywwLjY1LDEuODcsMS40NywyLjQsMi40OGMwLjUzLDEsMC43NiwyLjA5LDAuNywzLjI2Qy0zMTAuMTMsMTU0LjY5LTMxMC41LDE1NS44NC0zMTEuMTksMTU2Ljk4eiIvPgoJCTxwYXRoIGNsYXNzPSJzdDIiIGQ9Ik0tMzA1LjcsMTQ4LjExbC0xMi42MS0xMC41NGwxLjk0LTIuMzJsMTQuMjEsMC44M2MtMC44NC0wLjU0LTEuNjgtMS4xMy0yLjU0LTEuNzdzLTEuODItMS40My0yLjg5LTIuMzQKCQkJbC0zLjU1LTIuOTdsMi4xMi0yLjU0bDEyLjYxLDEwLjU0bC0xLjk3LDIuMzZsLTE0LjAzLTAuNzVjMC44NSwwLjU5LDEuNTMsMS4wNiwyLjAyLDEuNDFjMC40OSwwLjM1LDAuOSwwLjY1LDEuMjEsMC44OQoJCQljMC4zMiwwLjI0LDAuNjQsMC41LDAuOTYsMC43N2w0LjY1LDMuODlMLTMwNS43LDE0OC4xMXoiLz4KCQk8cGF0aCBjbGFzcz0ic3QyIiBkPSJNLTI5My45NCwxMzQuNjdsLTEuOTktMi4xNmwyLTEuODVsLTcuMTYtNy43NmwtMiwxLjg1bC0xLjk5LTIuMTZsNi41LTZsMS45OSwyLjE2bC0yLjAyLDEuODZsNy4xNyw3Ljc3CgkJCWwyLjAyLTEuODZsMS45OSwyLjE2TC0yOTMuOTQsMTM0LjY3eiIvPgoJCTxwYXRoIGNsYXNzPSJzdDIiIGQ9Ik0tMjg0LjkxLDEyNi40MmwtOS41OC0xMy4zNmw1LjQ0LTMuOWMxLjMtMC45MywyLjY0LTEuNDYsNC4wMS0xLjU5YzEuMzgtMC4xMywyLjcsMC4xMSwzLjk2LDAuNzMKCQkJYzEuMjYsMC42MiwyLjM2LDEuNTgsMy4zLDIuODljMC45NSwxLjMyLDEuNTEsMi42OCwxLjY5LDQuMDZjMC4xNywxLjM5LTAuMDIsMi43MS0wLjU4LDMuOTdjLTAuNTYsMS4yNi0xLjUsMi4zNi0yLjgxLDMuMwoJCQlMLTI4NC45MSwxMjYuNDJ6IE0tMjg3LjM1LDExMS43M2wtMi42LDEuODZsNS45OSw4LjM2bDIuNTktMS44NmMxLjE4LTAuODUsMS44NC0xLjg5LDEuOTgtMy4xMmMwLjEzLTEuMjMtMC4yNi0yLjQ5LTEuMTgtMy43OAoJCQljLTAuOTEtMS4yNy0xLjk4LTIuMDQtMy4yLTIuMzFDLTI4NC45OCwxMTAuNjEtMjg2LjE4LDExMC44OS0yODcuMzUsMTExLjczeiIvPgoJCTxwYXRoIGNsYXNzPSJzdDIiIGQ9Ik0tMjcyLjczLDExNy43MWwtMS45NS0xNy41NGwyLjctMS40MmwxMy4zMiwxMS41N2wtMy4wOCwxLjYybC0yLjgzLTIuNTJsLTUuNjUsMi45N2wwLjQ2LDMuNzYKCQkJTC0yNzIuNzMsMTE3LjcxeiBNLTI3MC45MywxMDYuNjZsMC4zNSwyLjc5bDMuOC0ybC0yLjE0LTEuOWMtMC4xOS0wLjE2LTAuNDMtMC4zOS0wLjcyLTAuNjdjLTAuMjktMC4yOC0wLjYtMC41OC0wLjk0LTAuOQoJCQljLTAuMzQtMC4zMi0wLjY0LTAuNjMtMC45Mi0wLjkyYzAuMSwwLjYsMC4yMSwxLjIyLDAuMzEsMS44NUMtMjcxLjA4LDEwNS41NC0yNzEsMTA2LjEzLTI3MC45MywxMDYuNjZ6Ii8+CgkJPHBhdGggY2xhc3M9InN0MiIgZD0iTS0yNTYuOTQsMTA5LjY1bC01LjQ5LTE1LjQ5bDYuMzEtMi4yNGMxLjUtMC41MywyLjk0LTAuNjcsNC4zLTAuNDJzMi41NiwwLjg2LDMuNiwxLjhzMS44MywyLjE3LDIuMzcsMy42OQoJCQljMC41NCwxLjUzLDAuNzEsMi45OSwwLjQ5LDQuMzdjLTAuMjIsMS4zOC0wLjc3LDIuNi0xLjY2LDMuNjVjLTAuODksMS4wNS0yLjA5LDEuODUtMy42MSwyLjM5TC0yNTYuOTQsMTA5LjY1eiBNLTI1NS4yLDk0Ljg2CgkJCWwtMy4wMSwxLjA3bDMuNDQsOS42OWwzLjAxLTEuMDdjMS4zNy0wLjQ5LDIuMjktMS4zLDIuNzctMi40NWMwLjQ3LTEuMTUsMC40NS0yLjQ3LTAuMDgtMy45NmMtMC41Mi0xLjQ3LTEuMzMtMi41MS0yLjQzLTMuMTEKCQkJQy0yNTIuNjIsOTQuNDQtMjUzLjg1LDk0LjM4LTI1NS4yLDk0Ljg2eiIvPgoJCTxwYXRoIGNsYXNzPSJzdDIiIGQ9Ik0tMjMzLjgxLDEwMi42M2wtMi4xNy0xNi4yOWw2LjYzLTAuODhjMS41OC0wLjIxLDMuMDEtMC4wNSw0LjI5LDAuNDhjMS4yOCwwLjUzLDIuMzMsMS4zNywzLjE1LDIuNTEKCQkJYzAuODIsMS4xNCwxLjM0LDIuNTEsMS41NSw0LjFjMC4yMSwxLjYxLDAuMDcsMy4wNy0wLjQyLDQuMzhjLTAuNSwxLjMxLTEuMjksMi4zOC0yLjM4LDMuMjNjLTEuMDksMC44NS0yLjQzLDEuMzgtNC4wMywxLjU5CgkJCUwtMjMzLjgxLDEwMi42M3ogTS0yMjkuMDYsODguNTJsLTMuMTcsMC40MmwxLjM2LDEwLjE5bDMuMTctMC40MmMxLjQ0LTAuMTksMi41MS0wLjgsMy4yMS0xLjgzYzAuNy0xLjAyLDAuOTUtMi4zMiwwLjc0LTMuODkKCQkJYy0wLjIxLTEuNTUtMC43OS0yLjczLTEuNzQtMy41NUMtMjI2LjQ0LDg4LjY0LTIyNy42Myw4OC4zMy0yMjkuMDYsODguNTJ6Ii8+CgkJPHBhdGggY2xhc3M9InN0MiIgZD0iTS0yMTYuNTgsMTAwLjdsMC4wNS0xNi40M2wxMC45OSwwLjAzbC0wLjAxLDMuMDFsLTcuNjgtMC4wMmwtMC4wMSwzLjU5bDYuNTMsMC4wMmwtMC4wMSwyLjkxbC02LjUzLTAuMDIKCQkJbC0wLjAxLDMuOTJsNy44MiwwLjAybC0wLjAxLDMuMDFMLTIxNi41OCwxMDAuN3oiLz4KCQk8cGF0aCBjbGFzcz0ic3QyIiBkPSJNLTE5NS4zOCwxMDEuN2wzLjEyLTE2LjE0bDcuMSwxLjM3YzAuOTgsMC4xOSwxLjgzLDAuNTksMi41NiwxLjE5YzAuNzIsMC42LDEuMjQsMS4zNCwxLjU3LDIuMjEKCQkJYzAuMzMsMC44NywwLjM5LDEuNzksMC4yLDIuNzhjLTAuMiwxLjA1LTAuNjYsMS45My0xLjM3LDIuNjVjLTAuNzEsMC43Mi0xLjU2LDEuMjEtMi41NSwxLjQ0bDIuNDQsNy4wNWwtMy44NS0wLjc3bC0yLjE3LTYuNDcKCQkJbC0yLjcyLTAuNTJsLTEuMTMsNS44M0wtMTk1LjM4LDEwMS43eiBNLTE5MC41Miw5My43NGwzLjc4LDAuNzNjMC42NSwwLjEzLDEuMjEsMC4wMSwxLjY4LTAuMzZjMC40OC0wLjM2LDAuNzgtMC44NywwLjkxLTEuNTMKCQkJYzAuMTQtMC43MSwwLjAxLTEuMzItMC4zOC0xLjg0Yy0wLjM5LTAuNTItMC45OC0wLjg2LTEuNzctMS4wMWwtMy4zMi0wLjY0TC0xOTAuNTIsOTMuNzR6Ii8+CgkJPHBhdGggY2xhc3M9InN0MiIgZD0iTS0xODAuMjMsMTA0LjkzbDAuODktMi44bDIuNTksMC44M2wzLjIyLTEwLjA2bC0yLjU5LTAuODNsMC44OS0yLjhsOC40MywyLjdsLTAuODksMi43OWwtMi42Mi0wLjg0CgkJCWwtMy4yMiwxMC4wNmwyLjYyLDAuODRsLTAuODksMi44TC0xODAuMjMsMTA0LjkzeiIvPgoJCTxwYXRoIGNsYXNzPSJzdDIiIGQ9Ik0tMTY4LjU4LDEwOC44MWw2LjczLTE0Ljk5bDEwLjAyLDQuNWwtMS4yMywyLjc0bC03LTMuMTVsLTEuNDcsMy4yOGw1Ljk1LDIuNjdsLTEuMTksMi42NmwtNS45NS0yLjY3CgkJCWwtMS42MSwzLjU4bDcuMTMsMy4ybC0xLjIzLDIuNzRMLTE2OC41OCwxMDguODF6Ii8+CgkJPHBhdGggY2xhc3M9InN0MiIgZD0iTS0xNTEuMTgsMTE3Ljg2Yy0xLjMtMC43OS0yLjI3LTEuNy0yLjkxLTIuNzRjLTAuNjQtMS4wNC0xLjAyLTIuMjEtMS4xMy0zLjVsMy4wOC0wLjk2CgkJCWMwLjEsMS4zMSwwLjM4LDIuMzIsMC44MiwzLjA0YzAuNDQsMC43MiwxLjA1LDEuMzEsMS44MywxLjc4YzAuNjMsMC4zOCwxLjI0LDAuNTcsMS44NCwwLjU3YzAuNiwwLDEuMDMtMC4yMywxLjMxLTAuNjkKCQkJYzAuMzMtMC41NSwwLjMyLTEuMTUtMC4wNS0xLjhjLTAuMzYtMC42NS0wLjkzLTEuMzMtMS42OS0yLjAzYy0xLjMyLTEuMjQtMi4xMy0yLjQ0LTIuNDMtMy41OWMtMC4zMS0xLjE2LTAuMS0yLjMyLDAuNjItMy41CgkJCWMwLjUtMC44MSwxLjE3LTEuMzksMi4wMS0xLjczYzAuODUtMC4zNCwxLjc2LTAuNDUsMi43NC0wLjMzYzAuOTgsMC4xMiwxLjk0LDAuNDYsMi44OCwxLjAzYzEuMjQsMC43NiwyLjE1LDEuNTksMi43MiwyLjUyCgkJCWMwLjU3LDAuOTIsMC44NiwxLjkyLDAuODcsMi45OGwtMi45OCwwLjY5Yy0wLjEyLTEuNjgtMC44MS0yLjkxLTIuMS0zLjY5Yy0wLjY3LTAuNDEtMS4yOS0wLjYtMS44Ny0wLjU3cy0xLDAuMjctMS4yOSwwLjc0CgkJCWMtMC4zLDAuNDktMC4zLDEuMDMsMC4wMSwxLjZjMC4zLDAuNTcsMC44MSwxLjE4LDEuNTEsMS44M2MxLjI4LDEuMiwyLjE1LDIuNCwyLjYxLDMuNmMwLjQ1LDEuMiwwLjMzLDIuMzctMC4zNiwzLjUKCQkJYy0wLjU3LDAuOTQtMS4yOCwxLjYtMi4xMywyYy0wLjg1LDAuNC0xLjc5LDAuNTMtMi44LDAuNEMtMTQ5LjA5LDExOC44OC0xNTAuMTIsMTE4LjUtMTUxLjE4LDExNy44NnoiLz4KCQk8cGF0aCBjbGFzcz0ic3QyIiBkPSJNLTEzNy44MiwxMjcuMzVjLTAuOTgtMC44LTEuNzUtMS43LTIuMjktMi42OWMtMC41NC0xLTAuODctMi4wMy0wLjk4LTMuMTFzMC0yLjE1LDAuMzEtMy4yMQoJCQljMC4zMi0xLjA2LDAuODctMi4wNywxLjY0LTMuMDFjMC43NS0wLjkyLDEuNjItMS42NCwyLjYxLTIuMTZjMC45OS0wLjUyLDIuMDMtMC44MywzLjEyLTAuOTNjMS4wOS0wLjEsMi4xOCwwLjAyLDMuMjcsMC4zNgoJCQljMS4wOSwwLjM0LDIuMTIsMC45MSwzLjEsMS43MWMxLjAxLDAuODIsMS43OCwxLjc5LDIuMzMsMi45YzAuNTUsMS4xMSwwLjgyLDIuMTgsMC44MSwzLjJsLTMuMDEsMC4zOQoJCQljLTAuMTEtMC44Ni0wLjMzLTEuNjMtMC42Ny0yLjMyYy0wLjM0LTAuNjktMC44Mi0xLjI5LTEuNDMtMS43OWMtMC43OC0wLjYzLTEuNjItMS4wMi0yLjUyLTEuMTZjLTAuOS0wLjE0LTEuNzktMC4wNC0yLjY1LDAuMwoJCQljLTAuODYsMC4zNC0xLjYxLDAuOS0yLjI2LDEuNjlzLTEuMDQsMS42NS0xLjE4LDIuNThjLTAuMTQsMC45My0wLjA1LDEuODQsMC4yNywyLjczYzAuMzIsMC44OSwwLjg3LDEuNjUsMS42MywyLjI3CgkJCWMwLjU3LDAuNDcsMS4xOCwwLjc3LDEuODIsMC45MmMwLjY0LDAuMTUsMS4yNSwwLjE1LDEuODMsMC4wMWMwLjU3LTAuMTUsMS4wNS0wLjQ1LDEuNDMtMC45MWwtMy4zMS0yLjdsMS44MS0yLjIybDUuODQsNC43NgoJCQljLTAuMTMsMC4yNC0wLjMxLDAuNTEtMC41NCwwLjgxYy0wLjIzLDAuMzEtMC40MiwwLjU1LTAuNTUsMC43MmMtMC45LDEuMS0xLjk1LDEuODctMy4xNiwyLjNjLTEuMjEsMC40My0yLjQ0LDAuNTItMy43MSwwLjI4CgkJCVMtMTM2LjcxLDEyOC4yNS0xMzcuODIsMTI3LjM1eiIvPgoJCTxwYXRoIGNsYXNzPSJzdDIiIGQ9Ik0tMTI1LjM2LDEzOS4yNWMtMC44MS0wLjktMS40LTEuODYtMS43Ni0yLjljLTAuMzctMS4wNC0wLjUyLTIuMDktMC40NS0zLjE1YzAuMDctMS4wNiwwLjM0LTIuMDksMC44My0zLjA5CgkJCWMwLjQ5LTEsMS4xOS0xLjkxLDIuMTEtMi43NGMwLjkxLTAuODIsMS44OC0xLjQyLDIuOTMtMS44YzEuMDUtMC4zOCwyLjEtMC41NSwzLjE2LTAuNTFzMi4wOSwwLjMsMy4wOSwwLjc3CgkJCWMxLDAuNDcsMS45LDEuMTYsMi43LDIuMDVjMC44LDAuODgsMS4zOCwxLjg0LDEuNzUsMi44OGMwLjM3LDEuMDQsMC41MiwyLjA5LDAuNDUsMy4xNmMtMC4wNywxLjA3LTAuMzUsMi4xLTAuODQsMy4xCgkJCWMtMC40OSwxLTEuMTgsMS45LTIuMDgsMi43MWMtMC45MSwwLjgyLTEuODgsMS40Mi0yLjkzLDEuOGMtMS4wNCwwLjM4LTIuMSwwLjU2LTMuMTcsMC41MmMtMS4wNy0wLjA0LTIuMS0wLjI5LTMuMDktMC43NwoJCQlDLTEyMy42NywxNDAuODItMTI0LjU2LDE0MC4xNC0xMjUuMzYsMTM5LjI1eiBNLTEyMi45NywxMzcuMWMwLjYzLDAuNywxLjM2LDEuMTcsMi4xOSwxLjQxYzAuODMsMC4yNCwxLjY4LDAuMjUsMi41NSwwLjAyCgkJCWMwLjg3LTAuMjMsMS42OC0wLjY4LDIuNDQtMS4zNmMwLjc1LTAuNjgsMS4yOS0xLjQ0LDEuNi0yLjI4YzAuMzEtMC44NCwwLjM5LTEuNjgsMC4yNC0yLjU0Yy0wLjE1LTAuODYtMC41NC0xLjYzLTEuMTctMi4zMwoJCQljLTAuNjQtMC43MS0xLjM3LTEuMTgtMi4yLTEuNDNjLTAuODMtMC4yNC0xLjY4LTAuMjUtMi41NS0wLjAyYy0wLjg3LDAuMjMtMS42OCwwLjY4LTIuNDQsMS4zNmMtMC43NywwLjY5LTEuMzEsMS40Ni0xLjYxLDIuMjkKCQkJYy0wLjMxLDAuODQtMC4zOSwxLjY4LTAuMjMsMi41M0MtMTI0LjAxLDEzNS42MS0xMjMuNjEsMTM2LjM5LTEyMi45NywxMzcuMXoiLz4KCQk8cGF0aCBjbGFzcz0ic3QyIiBkPSJNLTExMC43MywxNTkuMzljLTAuODEtMS4zOC0xLjIyLTIuNzgtMS4yMy00LjIyYy0wLjAxLTEuNDQsMC4zNS0yLjc4LDEuMS00LjA0CgkJCWMwLjc0LTEuMjUsMS44My0yLjMxLDMuMjgtMy4xNmMxLjAyLTAuNiwyLjA5LTAuOTgsMy4xOS0xLjEzYzEuMS0wLjE1LDIuMTgtMC4wOSwzLjIyLDAuMTdjMS4wNCwwLjI2LDIuMDEsMC43MywyLjg5LDEuNAoJCQljMC44OCwwLjY3LDEuNjMsMS41MiwyLjIzLDIuNTRjMC42LDEuMDEsMC45NiwyLjExLDEuMDgsMy4zYzAuMTMsMS4xOSwwLDIuMjctMC4zOCwzLjI2bC0zLjEzLTAuNjQKCQkJYzAuMjMtMC43OSwwLjMyLTEuNTQsMC4yOC0yLjI2Yy0wLjA0LTAuNzItMC4yNS0xLjQtMC42NC0yLjA1Yy0wLjQ3LTAuOC0xLjA4LTEuNC0xLjgzLTEuODJjLTAuNzUtMC40Mi0xLjU4LTAuNjItMi40OS0wLjU5CgkJCWMtMC45LDAuMDItMS44LDAuMy0yLjY5LDAuODJjLTAuOTIsMC41NC0xLjYxLDEuMi0yLjA3LDEuOTdjLTAuNDYsMC43Ny0wLjY4LDEuNjEtMC42NSwyLjUxYzAuMDMsMC45LDAuMzEsMS43OSwwLjgzLDIuNjgKCQkJYzAuMzksMC42NiwwLjg5LDEuMiwxLjUsMS42MmMwLjYxLDAuNDIsMS4yNSwwLjcxLDEuOTMsMC44OGwtMS40NSwyLjc2Yy0wLjU1LTAuMTEtMS4xNC0wLjM1LTEuNzctMC43MwoJCQljLTAuNjItMC4zOC0xLjIxLTAuODUtMS43OC0xLjQyQy0xMDkuODUsMTYwLjY5LTExMC4zMywxNjAuMDctMTEwLjczLDE1OS4zOXoiLz4KCQk8cGF0aCBjbGFzcz0ic3QyIiBkPSJNLTEwNy4xOCwxNjQuOTNsMTcuNjQtMC40MWwxLjE4LDIuODJsLTEyLjY5LDEyLjI2bC0xLjM0LTMuMjFsMi43NS0yLjZsLTIuNDYtNS44OWwtMy43OSwwLjEzCgkJCUwtMTA3LjE4LDE2NC45M3ogTS05Ni4zMiwxNjcuN2wtMi44MSwwLjExbDEuNjYsMy45NmwyLjA4LTEuOTZjMC4xOC0wLjE4LDAuNDItMC40LDAuNzMtMC42NmMwLjMxLTAuMjYsMC42My0wLjU1LDAuOTgtMC44NQoJCQlzMC42OC0wLjU5LDEtMC44NGMtMC42MSwwLjA1LTEuMjMsMC4xLTEuODcsMC4xNUMtOTUuMiwxNjcuNjQtOTUuNzksMTY3LjY4LTk2LjMyLDE2Ny43eiIvPgoJCTxwYXRoIGNsYXNzPSJzdDIiIGQ9Ik0tMTAwLjU2LDE4MS40MWwxNS44OC00LjIxbDEuODUsNi45OWMwLjI2LDAuOTcsMC4yNywxLjkxLDAuMDQsMi44MmMtMC4yMywwLjkxLTAuNjYsMS43LTEuMywyLjM3CgkJCWMtMC42NCwwLjY3LTEuNDQsMS4xNC0yLjQxLDEuMzljLTEuMDMsMC4yNy0yLjAyLDAuMjUtMi45OS0wLjA4cy0xLjc2LTAuODgtMi40MS0xLjY3bC01LjI4LDUuMjZsLTAuOTgtMy44bDQuODgtNC43N2wtMC43MS0yLjY4CgkJCWwtNS43NCwxLjUyTC0xMDAuNTYsMTgxLjQxeiBNLTkxLjI4LDE4Mi4zM2wwLjk5LDMuNzJjMC4xNywwLjY0LDAuNTIsMS4wOSwxLjA1LDEuMzZjMC41MywwLjI3LDEuMTIsMC4zMiwxLjc4LDAuMTUKCQkJYzAuNy0wLjE4LDEuMTktMC41NywxLjQ5LTEuMTVjMC4zLTAuNTgsMC4zNS0xLjI2LDAuMTQtMi4wM2wtMC44Ny0zLjI3TC05MS4yOCwxODIuMzN6Ii8+CgkJPHBhdGggY2xhc3M9InN0MiIgZD0iTS05Ni43MSwxOTYuNzdsMTYuMzItMS45MmwwLjc4LDYuNjVjMC4xOSwxLjU5LDAsMy4wMS0wLjU1LDQuMjhjLTAuNTUsMS4yNy0xLjQsMi4zMS0yLjU1LDMuMTEKCQkJYy0xLjE1LDAuOC0yLjUzLDEuMy00LjEzLDEuNDljLTEuNjIsMC4xOS0zLjA3LDAuMDMtNC4zNy0wLjQ5Yy0xLjMtMC41Mi0yLjM2LTEuMzMtMy4xOS0yLjQzYy0wLjgzLTEuMS0xLjM0LTIuNDUtMS41My00LjA1CgkJCUwtOTYuNzEsMTk2Ljc3eiBNLTgyLjY3LDIwMS43NGwtMC4zNy0zLjE3bC0xMC4yMSwxLjJsMC4zNywzLjE3YzAuMTcsMS40NSwwLjc2LDIuNTMsMS43OCwzLjI0YzEuMDEsMC43MiwyLjMxLDAuOTgsMy44OCwwLjgKCQkJYzEuNTUtMC4xOCwyLjc1LTAuNzQsMy41Ny0xLjY4Qy04Mi44NCwyMDQuMzYtODIuNTEsMjAzLjE3LTgyLjY3LDIwMS43NHoiLz4KCQk8cGF0aCBjbGFzcz0ic3QyIiBkPSJNLTk1LjEsMjEzLjMybDIuOTMsMC4wMWwtMC4wMSwyLjcybDEwLjU3LDAuMDZsMC4wMS0yLjcybDIuOTMsMC4wMmwtMC4wNSw4Ljg1bC0yLjk0LTAuMDFsMC4wMi0yLjc1CgkJCWwtMTAuNTctMC4wNmwtMC4wMSwyLjc1bC0yLjkzLTAuMDJMLTk1LjEsMjEzLjMyeiIvPgoJCTxwYXRoIGNsYXNzPSJzdDIiIGQ9Ik0tOTYuMzUsMjMyLjMyYzAuMTYtMS4yLDAuNTEtMi4yNywxLjA2LTMuMjJjMC41NS0wLjk1LDEuMjUtMS43NSwyLjEtMi4zOWMwLjg1LTAuNjQsMS44MS0xLjEsMi44OS0xLjM3CgkJCWMxLjA4LTAuMjgsMi4yMy0wLjM0LDMuNDYtMC4xN2MxLjIxLDAuMTYsMi4zLDAuNTEsMy4yNywxLjA1czEuNzgsMS4yNCwyLjQ0LDIuMDdjMC42NiwwLjg0LDEuMTMsMS43OCwxLjQyLDIuODUKCQkJYzAuMjksMS4wNiwwLjM1LDIuMTksMC4yLDMuMzljLTAuMTUsMS4xOC0wLjUxLDIuMjUtMS4wNiwzLjJjLTAuNTUsMC45NS0xLjI1LDEuNzUtMi4xMSwyLjM5cy0xLjgyLDEuMS0yLjksMS4zNwoJCQljLTEuMDgsMC4yOC0yLjIyLDAuMzQtMy40MSwwLjE4Yy0xLjIxLTAuMTYtMi4zLTAuNTEtMy4yNy0xLjA2Yy0wLjk3LTAuNTUtMS43OS0xLjI0LTIuNDUtMi4wN2MtMC42Ni0wLjg0LTEuMTQtMS43OS0xLjQzLTIuODUKCQkJQy05Ni40MywyMzQuNjItOTYuNSwyMzMuNS05Ni4zNSwyMzIuMzJ6IE0tOTMuMTYsMjMyLjczYy0wLjEyLDAuOTMtMC4wMSwxLjc5LDAuMzUsMi41OHMwLjksMS40NCwxLjY0LDEuOTYKCQkJYzAuNzQsMC41MiwxLjYxLDAuODQsMi42MiwwLjk3YzEuMDEsMC4xMywxLjkzLDAuMDQsMi43Ny0wLjI2YzAuODQtMC4zMSwxLjUzLTAuOCwyLjA5LTEuNDdjMC41NS0wLjY3LDAuODktMS40NywxLjAxLTIuNAoJCQljMC4xMi0wLjk1LDAuMDEtMS44MS0wLjM1LTIuNmMtMC4zNi0wLjc5LTAuOS0xLjQ0LTEuNjQtMS45NmMtMC43NC0wLjUxLTEuNjEtMC44NC0yLjYyLTAuOTdjLTEuMDItMC4xMy0xLjk2LTAuMDUtMi43OSwwLjI2CgkJCWMtMC44NCwwLjMxLTEuNTMsMC44LTIuMDcsMS40N0MtOTIuNywyMzAuOTgtOTMuMDMsMjMxLjc5LTkzLjE2LDIzMi43M3oiLz4KCQk8cGF0aCBjbGFzcz0ic3QyIiBkPSJNLTk4Ljk5LDI0Ny4wNGwxNy41OS0xLjkxbC0wLjk3LDMuNDhsLTkuNjQsMC45M2MtMC43MiwwLjA4LTEuMzMsMC4xMy0xLjgyLDAuMTYKCQkJYy0wLjUsMC4wMy0wLjk3LDAuMDYtMS40MSwwLjA4YzAuMzksMC4yNCwwLjc5LDAuNSwxLjE5LDAuNzhjMC40MSwwLjI4LDAuOSwwLjYzLDEuNDcsMS4wM2w3LjgyLDUuNjFsLTAuOTcsMy40OGwtMTQuMDYtMTAuNzgKCQkJTC05OC45OSwyNDcuMDR6Ii8+CgkJPHBhdGggY2xhc3M9InN0MiIgZD0iTS0xMDEuMDEsMjU0LjY1bDEyLjcxLDEyLjI1bC0xLjE3LDIuODJsLTE3LjY0LTAuMzlsMS4zMy0zLjIxbDMuNzksMC4xMmwyLjQ1LTUuOWwtMi43Ni0yLjZMLTEwMS4wMSwyNTQuNjV6CgkJCSBNLTk1LjMzLDI2NC4zMWwtMi4wNS0xLjkybC0xLjY1LDMuOTdsMi44NiwwLjFjMC4yNSwwLDAuNTgsMC4wMiwwLjk4LDAuMDVzMC44MywwLjA2LDEuMywwLjA5YzAuNDYsMC4wMywwLjg5LDAuMDcsMS4zLDAuMTIKCQkJYy0wLjQ2LTAuNC0wLjk0LTAuOC0xLjQyLTEuMjNDLTk0LjUsMjY1LjA3LTk0Ljk0LDI2NC42Ny05NS4zMywyNjQuMzF6Ii8+CgkJPHBhdGggY2xhc3M9InN0MiIgZD0iTS0xMTAuOTYsMjc1LjQzYzAuNzYtMS4zMSwxLjY1LTIuMywyLjY4LTIuOTdjMS4wMi0wLjY2LDIuMTgtMS4wNywzLjQ4LTEuMjFsMS4wMywzLjA2CgkJCWMtMS4zLDAuMTMtMi4zMSwwLjQzLTMuMDIsMC44OWMtMC43MSwwLjQ2LTEuMjksMS4wOC0xLjc0LDEuODdjLTAuMzcsMC42NC0wLjU0LDEuMjYtMC41MywxLjg1YzAuMDIsMC42LDAuMjUsMS4wMywwLjcyLDEuMjkKCQkJYzAuNTYsMC4zMiwxLjE2LDAuMjksMS44LTAuMDljMC42NC0wLjM4LDEuMzEtMC45NiwxLjk5LTEuNzRjMS4yMS0xLjM1LDIuMzktMi4xOCwzLjU0LTIuNTFjMS4xNS0wLjMzLDIuMzItMC4xNSwzLjUxLDAuNTQKCQkJYzAuODMsMC40OCwxLjQyLDEuMTQsMS43NywxLjk3YzAuMzYsMC44NCwwLjQ5LDEuNzUsMC4zOSwyLjczYy0wLjEsMC45OC0wLjQyLDEuOTUtMC45NywyLjljLTAuNzMsMS4yNi0xLjU1LDIuMTgtMi40NSwyLjc3CgkJCWMtMC45MSwwLjU5LTEuOSwwLjktMi45NiwwLjkzbC0wLjc2LTIuOTZjMS42OC0wLjE1LDIuODktMC44OCwzLjY0LTIuMThjMC4zOS0wLjY4LDAuNTctMS4zLDAuNTMtMS44OAoJCQljLTAuMDQtMC41Ny0wLjMtMS0wLjc3LTEuMjdjLTAuNS0wLjI5LTEuMDMtMC4yOC0xLjYsMC4wNGMtMC41NiwwLjMyLTEuMTYsMC44My0xLjc5LDEuNTVjLTEuMTcsMS4zMS0yLjM1LDIuMjEtMy41NCwyLjY5CgkJCWMtMS4xOSwwLjQ4LTIuMzYsMC4zOS0zLjUxLTAuMjhjLTAuOTUtMC41NS0xLjYzLTEuMjUtMi4wNS0yLjA5Yy0wLjQyLTAuODUtMC41Ny0xLjc3LTAuNDYtMi43OQoJCQlDLTExMS45NCwyNzcuNTUtMTExLjU4LDI3Ni41LTExMC45NiwyNzUuNDN6Ii8+CgkJPHBhdGggY2xhc3M9InN0MiIgZD0iTS0xMTkuOTUsMjg4Ljc1YzAuOTctMS4yNywyLjEyLTIuMTgsMy40NS0yLjczYzEuMzMtMC41NSwyLjcxLTAuNzIsNC4xNS0wLjVjMS40NCwwLjIyLDIuODMsMC44Myw0LjE2LDEuODUKCQkJYzAuOTQsMC43MiwxLjY5LDEuNTcsMi4yNSwyLjUzYzAuNTUsMC45NiwwLjksMS45OCwxLjA1LDMuMDVjMC4xNSwxLjA3LDAuMDgsMi4xNC0wLjIxLDMuMjFjLTAuMjksMS4wNy0wLjc5LDIuMDgtMS41MiwzLjAyCgkJCWMtMC43MSwwLjkzLTEuNiwxLjY4LTIuNjUsMi4yNGMtMS4wNSwwLjU2LTIuMTEsMC44NS0zLjE3LDAuODdsLTAuNTgtMy4xNGMwLjgyLTAuMDksMS41NS0wLjI4LDIuMi0wLjU5CgkJCWMwLjY1LTAuMzEsMS4yMS0wLjc2LDEuNjYtMS4zNmMwLjU2LTAuNzMsMC44OS0xLjUzLDEtMi4zOWMwLjEtMC44Ni0wLjAzLTEuNy0wLjM5LTIuNTNjLTAuMzYtMC44My0wLjk1LTEuNTYtMS43Ny0yLjE4CgkJCWMtMC44NS0wLjY1LTEuNzEtMS4wNC0yLjYtMS4xOGMtMC44OS0wLjE0LTEuNzUtMC4wMi0yLjU3LDAuMzRjLTAuODIsMC4zNy0xLjU1LDAuOTYtMi4xNywxLjc4Yy0wLjQ3LDAuNjEtMC43OCwxLjI3LTAuOTQsMgoJCQljLTAuMTYsMC43Mi0wLjE5LDEuNDMtMC4wOSwyLjEybC0zLjExLTAuMzFjLTAuMTEtMC41NS0wLjEtMS4xOSwwLjAxLTEuOTFjMC4xMi0wLjcyLDAuMzMtMS40NSwwLjY1LTIuMTgKCQkJQy0xMjAuODIsMjkwLjA1LTEyMC40MiwyODkuMzctMTE5Ljk1LDI4OC43NXoiLz4KCQk8cGF0aCBjbGFzcz0ic3QyIiBkPSJNLTEyOS45NCwzMDAuMDdjMC45NC0wLjkyLDEuOTctMS41NSwzLjEtMS44N2MxLjEzLTAuMzMsMi4yNC0wLjM1LDMuMzUtMC4wOGMxLjExLDAuMjcsMi4xLDAuODYsMi45NywxLjc1CgkJCWw3LjExLDcuMjNsLTIuNDMsMi4zOWwtNi45Ni03LjA4Yy0wLjQ4LTAuNDktMS4wMy0wLjgyLTEuNjMtMC45OHMtMS4yLTAuMTgtMS43OS0wLjAzYy0wLjU5LDAuMTQtMS4xMSwwLjQ0LTEuNTYsMC44NwoJCQljLTAuNDgsMC40Ny0wLjgsMS4wMS0wLjk3LDEuNjFjLTAuMTcsMC42LTAuMTcsMS4yMS0wLjAyLDEuODJjMC4xNSwwLjYxLDAuNDcsMS4xNiwwLjk1LDEuNjVsNi45Niw3LjA4bC0yLjMzLDIuMjlsLTcuMTEtNy4yMwoJCQljLTAuODgtMC44OS0xLjQ1LTEuODktMS43MS0zYy0wLjI2LTEuMS0wLjIyLTIuMjIsMC4xMy0zLjM0Qy0xMzEuNTMsMzAyLjAzLTEzMC44OSwzMDEtMTI5Ljk0LDMwMC4wN3oiLz4KCQk8cGF0aCBjbGFzcz0ic3QyIiBkPSJNLTEzNy42MSwzMDcuMjlsOS44OSwxMy4xMmwtMi43LDIuMDNsLTguMDQtMTAuNjdsLTUuOTgsNC41MWwtMS44NS0yLjQ2TC0xMzcuNjEsMzA3LjI5eiIvPgoJCTxwYXRoIGNsYXNzPSJzdDIiIGQ9Ik0tMTQ2Ljk3LDMxNC40NGwyLjU4LDE3LjQ2bC0yLjY1LDEuNTJsLTEzLjczLTExLjA4bDMuMDItMS43MmwyLjkyLDIuNDFsNS41NC0zLjE3bC0wLjYtMy43NEwtMTQ2Ljk3LDMxNC40NAoJCQl6IE0tMTQ4LjM4LDMyNS41NWwtMC40NS0yLjc3bC0zLjczLDIuMTNsMi4yMSwxLjgyYzAuMiwwLjE2LDAuNDUsMC4zNywwLjc1LDAuNjRjMC4zLDAuMjcsMC42MiwwLjU2LDAuOTcsMC44NgoJCQljMC4zNSwwLjMxLDAuNjcsMC42LDAuOTUsMC44OWMtMC4xMi0wLjYtMC4yNS0xLjIxLTAuMzgtMS44NFMtMTQ4LjI5LDMyNi4wOC0xNDguMzgsMzI1LjU1eiIvPgoJCTxwYXRoIGNsYXNzPSJzdDIiIGQ9Ik0tMTYyLjUxLDMyMy4wNGw2LjE0LDE1LjI1bC02LjcxLDIuN2MtMC45MywwLjM3LTEuODYsMC41LTIuNzksMC4zOWMtMC45My0wLjExLTEuNzctMC40NS0yLjUxLTEKCQkJYy0wLjc1LTAuNTUtMS4zMS0xLjI5LTEuNjgtMi4yMmMtMC40LTAuOTktMC40OS0xLjk4LTAuMjktMi45N2MwLjIxLTAuOTksMC42Ni0xLjg2LDEuMzYtMi42bC01Ljg3LTQuNTlsMy42NS0xLjQ0bDUuMzMsNC4yNgoJCQlsMi41Ny0xLjA0bC0yLjIyLTUuNTFMLTE2Mi41MSwzMjMuMDR6IE0tMTYyLjI4LDMzMi4zNmwtMy41NywxLjQ0Yy0wLjYxLDAuMjUtMS4wMiwwLjY1LTEuMjIsMS4yMWMtMC4yLDAuNTYtMC4xOCwxLjE2LDAuMDcsMS43OAoJCQljMC4yNywwLjY3LDAuNzEsMS4xMSwxLjMzLDEuMzRjMC42MSwwLjIyLDEuMjksMC4xOSwyLjAzLTAuMTFsMy4xNC0xLjI2TC0xNjIuMjgsMzMyLjM2eiIvPgoJCTxwYXRoIGNsYXNzPSJzdDIiIGQ9Ik0tMTg4LjIyLDMzMS4zNWwxLjM3LDcuMTVsOC4wOCw3Ljc4bC0zLjg1LDAuNzRsLTUuMzUtNS4yNGwtMi43LDYuNzhsLTMuNzEsMC43MWw0LjItMTAuMDhsLTEuMzctNy4yCgkJCUwtMTg4LjIyLDMzMS4zNXoiLz4KCQk8cGF0aCBjbGFzcz0ic3QyIiBkPSJNLTIwNS45MSwzMzMuODNsLTAuMzQsMTYuNDNsLTMuMTItMC4wNmwtNC44MS04LjIzbC01LjI0LDguMDJsLTIuOTgtMC4wNmwwLjM0LTE2LjQzbDMuMzEsMC4wN2wtMC4xMiw1LjgKCQkJYy0wLjAyLDAuOTUtMC4wNSwxLjg0LTAuMSwyLjY2Yy0wLjA1LDAuODItMC4xMSwxLjYxLTAuMTksMi4zOGw0LjM2LTYuNDZsMS41NSwwLjAzbDQsNi41OWMtMC4wNi0wLjcyLTAuMS0xLjQ5LTAuMS0yLjI5CgkJCXMwLTEuNzEsMC4wMi0yLjcxbDAuMTItNS44TC0yMDUuOTEsMzMzLjgzeiIvPgoJCTxwYXRoIGNsYXNzPSJzdDIiIGQ9Ik0tMjI1Ljc5LDMzMi45NGwtMi43MywxNi4yMWwtMTAuODQtMS44MmwwLjUtMi45Nmw3LjU3LDEuMjdsMC42LTMuNTRsLTYuNDQtMS4wOGwwLjQ4LTIuODdsNi40NCwxLjA4CgkJCWwwLjY1LTMuODdsLTcuNzEtMS4zbDAuNS0yLjk2TC0yMjUuNzksMzMyLjk0eiIvPgoJCTxwYXRoIGNsYXNzPSJzdDIiIGQ9Ik0tMjQzLjEzLDMyOS4zNmwtMy44LDEyLjgxbDQuNTcsMS4zNWwtMC44NywyLjk1bC0xMi41Mi0zLjcxbDAuODgtMi45NWw0LjcsMS4zOWwzLjgtMTIuODFMLTI0My4xMywzMjkuMzZ6IgoJCQkvPgoJCTxwYXRoIGNsYXNzPSJzdDIiIGQ9Ik0tMjUwLjUyLDMyNy4zbC0xMi40MSwxMi41NWwtMi44LTEuMjFsMC42Mi0xNy42M2wzLjE5LDEuMzhsLTAuMTcsMy43OWw1Ljg2LDIuNTNsMi42My0yLjczTC0yNTAuNTIsMzI3LjN6CgkJCSBNLTI2MC4yNSwzMzIuODRsMS45NS0yLjAybC0zLjk1LTEuN2wtMC4xMywyLjg2Yy0wLjAxLDAuMjUtMC4wMywwLjU4LTAuMDcsMC45OGMtMC4wNCwwLjQtMC4wNywwLjgzLTAuMTEsMS4yOQoJCQlzLTAuMDgsMC44OS0wLjE0LDEuM2MwLjQtMC40NiwwLjgyLTAuOTMsMS4yNS0xLjQxQy0yNjEuMDIsMzMzLjY2LTI2MC42MiwzMzMuMjMtMjYwLjI1LDMzMi44NHoiLz4KCQk8cGF0aCBjbGFzcz0ic3QyIiBkPSJNLTI2Ni43MywzMjAuMDJsLTguNSwxNC4wN2wtNi4wNy0zLjY3Yy0xLjQxLTAuODUtMi4zLTEuOC0yLjY3LTIuODZjLTAuMzgtMS4wNi0wLjIzLTIuMTQsMC40NC0zLjI2CgkJCWMwLjg0LTEuMzksMi0yLDMuNDgtMS44MmMtMC41OC0wLjczLTAuOTItMS41NC0xLjAxLTIuNDJjLTAuMDktMC44OCwwLjEyLTEuNzQsMC42My0yLjU4YzAuODMtMS4zOCwxLjkxLTIuMTYsMy4yMy0yLjMzCgkJCWMxLjMyLTAuMTcsMi43MiwwLjE5LDQuMTksMS4wOEwtMjY2LjczLDMyMC4wMnogTS0yNzQuNTYsMzI2LjY4bC0yLjk1LTEuNzhjLTAuNTUtMC4zMy0xLjA4LTAuNDUtMS41OS0wLjM2CgkJCWMtMC41MSwwLjA5LTAuOTIsMC4zOC0xLjIxLDAuODZjLTAuMywwLjUtMC4zNiwwLjk5LTAuMTksMS40N2MwLjE3LDAuNDksMC41OCwwLjkzLDEuMjQsMS4zM2wyLjc3LDEuNjdMLTI3NC41NiwzMjYuNjh6CgkJCSBNLTI3MS4wNSwzMjAuODdsLTMuMzYtMi4wM2MtMC42Ny0wLjQxLTEuMjktMC41Ny0xLjg1LTAuNDhjLTAuNTYsMC4wOC0xLjAyLDAuNDEtMS4zNiwwLjk5Yy0wLjMyLDAuNTQtMC4zNywxLjA3LTAuMTQsMS42CgkJCWMwLjIzLDAuNTMsMC42OCwxLDEuMzcsMS40MmwzLjI2LDEuOTdMLTI3MS4wNSwzMjAuODd6Ii8+CgkJPHBhdGggY2xhc3M9InN0MiIgZD0iTS0yOTUuMzcsMzIxLjk5bC0wLjQyLDEuNzJsLTUuMjktMC44OWwwLjYzLTIuNjhMLTI5NS4zNywzMjEuOTl6IE0tMjg1LjQ3LDMwNi45OQoJCQljMC45MywwLjc3LDEuNjUsMS42NCwyLjE3LDIuNjFjMC41MiwwLjk3LDAuODIsMS45OSwwLjkxLDMuMDVjMC4wOSwxLjA2LTAuMDMsMi4xMi0wLjM3LDMuMThzLTAuOSwyLjA3LTEuNjksMy4wMgoJCQljLTAuNzgsMC45NC0xLjY1LDEuNjgtMi42MywyLjIxYy0wLjk4LDAuNTMtMS45OSwwLjg2LTMuMDUsMC45N2MtMS4wNiwwLjExLTIuMTEsMC4wMS0zLjE3LTAuMzFjLTEuMDUtMC4zMi0yLjA1LTAuODYtMi45OC0xLjYzCgkJCWMtMC45Mi0wLjc2LTEuNjMtMS42Mi0yLjE1LTIuNTljLTAuNTItMC45Ny0wLjgyLTEuOTktMC45LTMuMDZjLTAuMDktMS4wNywwLjA0LTIuMTMsMC4zOC0zLjE5YzAuMzQtMS4wNiwwLjg5LTIuMDYsMS42Ni0yLjk5CgkJCWMwLjc4LTAuOTQsMS42NS0xLjY4LDIuNjMtMi4yMWMwLjk4LTAuNTMsMi0wLjg2LDMuMDYtMC45OGMxLjA2LTAuMTIsMi4xMi0wLjAyLDMuMTcsMC4zCgkJCUMtMjg3LjM4LDMwNS43LTI4Ni4zOSwzMDYuMjQtMjg1LjQ3LDMwNi45OXogTS0yODcuNTIsMzA5LjQ4Yy0wLjcyLTAuNi0xLjUyLTAuOTYtMi4zNy0xLjA3Yy0wLjg2LTAuMTItMS43LDAtMi41MywwLjM1CgkJCWMtMC44MywwLjM1LTEuNTYsMC45Mi0yLjIxLDEuNzFjLTAuNjUsMC43OC0xLjA2LDEuNjEtMS4yNCwyLjQ5cy0wLjE0LDEuNzIsMC4xNCwyLjU1YzAuMjcsMC44MywwLjc3LDEuNTQsMS41LDIuMTMKCQkJYzAuNzQsMC42MSwxLjUzLDAuOTcsMi4zOSwxLjA5YzAuODYsMC4xMiwxLjcsMCwyLjUzLTAuMzVzMS41Ny0wLjkyLDIuMjEtMS43MWMwLjY2LTAuOCwxLjA4LTEuNjMsMS4yNi0yLjUxCgkJCWMwLjE4LTAuODcsMC4xMy0xLjcyLTAuMTQtMi41NEMtMjg2LjI3LDMxMC44LTI4Ni43OCwzMTAuMDgtMjg3LjUyLDMwOS40OHoiLz4KCQk8cGF0aCBjbGFzcz0ic3QyIiBkPSJNLTI5My44NCwyOTkuODZMLTMwNS45MywzMTFsLTIuMjktMi40OWw5LjgyLTkuMDVsLTUuMDgtNS41MWwyLjI2LTIuMDhMLTI5My44NCwyOTkuODZ6Ii8+CgkJPHBhdGggY2xhc3M9InN0MiIgZD0iTS0zMDIuNzEsMjg5LjkybC0yLjM2LDEuNzRsLTEuNjItMi4xOWwtOC41LDYuMjhsMS42MiwyLjE5bC0yLjM2LDEuNzRsLTUuMjYtNy4xMmwyLjM2LTEuNzRsMS42MywyLjIxCgkJCWw4LjUtNi4yOGwtMS42My0yLjIxbDIuMzYtMS43NEwtMzAyLjcxLDI4OS45MnoiLz4KCQk8cGF0aCBjbGFzcz0ic3QyIiBkPSJNLTMxMy4wOSwyNzMuOTZjMC44LDEuMzgsMS4xOSwyLjgsMS4xOSw0LjIzYzAsMS40NC0wLjM4LDIuNzgtMS4xNCw0LjAzYy0wLjc1LDEuMjUtMS44NiwyLjI5LTMuMzEsMy4xMgoJCQljLTEuMDMsMC41OS0yLjEsMC45Ni0zLjIsMS4xYy0xLjEsMC4xNC0yLjE4LDAuMDctMy4yMi0wLjIxYy0xLjA0LTAuMjgtMi0wLjc1LTIuODgtMS40M2MtMC44OC0wLjY4LTEuNjEtMS41My0yLjIxLTIuNTYKCQkJYy0wLjU4LTEuMDItMC45My0yLjEyLTEuMDUtMy4zMWMtMC4xMS0xLjE5LDAuMDItMi4yOCwwLjQyLTMuMjZsMy4xMiwwLjY3Yy0wLjIzLDAuNzgtMC4zMywxLjU0LTAuMywyLjI2CgkJCWMwLjA0LDAuNzIsMC4yNCwxLjQsMC42MSwyLjA2YzAuNDYsMC44LDEuMDcsMS40MSwxLjgyLDEuODRzMS41OCwwLjYzLDIuNDgsMC42MnMxLjgtMC4yOCwyLjctMC43OQoJCQljMC45Mi0wLjUzLDEuNjItMS4xOCwyLjA5LTEuOTVzMC43LTEuNiwwLjY3LTIuNWMtMC4wMi0wLjktMC4yOS0xLjgtMC44LTIuNjljLTAuMzgtMC42Ni0wLjg4LTEuMjEtMS40OC0xLjY0CgkJCWMtMC42MS0wLjQzLTEuMjUtMC43My0xLjkyLTAuOWwxLjQ4LTIuNzVjMC41NSwwLjEyLDEuMTQsMC4zNywxLjc2LDAuNzVjMC42MiwwLjM4LDEuMjEsMC44NiwxLjc2LDEuNDQKCQkJQy0zMTMuOTUsMjcyLjY2LTMxMy40OCwyNzMuMjgtMzEzLjA5LDI3My45NnoiLz4KCQk8cGF0aCBjbGFzcz0ic3QyIiBkPSJNLTMxOS43OCwyNTkuODZjMC40NCwxLjEyLDAuNjUsMi4yMywwLjYzLDMuMzNzLTAuMjUsMi4xNC0wLjY4LDMuMTFjLTAuNDMsMC45Ny0xLjA1LDEuODQtMS44NiwyLjYKCQkJcy0xLjc5LDEuMzgtMi45NCwxLjgzYy0xLjE0LDAuNDUtMi4yNiwwLjY3LTMuMzcsMC42NmMtMS4xMS0wLjAxLTIuMTYtMC4yMi0zLjE0LTAuNjNjLTAuOTgtMC40MS0xLjg1LTEuMDEtMi42Mi0xLjgxCgkJCXMtMS4zNy0xLjc1LTEuODEtMi44N2MtMC40NC0xLjExLTAuNjQtMi4yMS0wLjYzLTMuMzFjMC4wMi0xLjEsMC4yNS0yLjE0LDAuNjktMy4xMWMwLjQ0LTAuOTcsMS4wNi0xLjg0LDEuODctMi42MQoJCQljMC44MS0wLjc2LDEuNzctMS4zNywyLjg5LTEuODFjMS4xMy0wLjQ1LDIuMjYtMC42NywzLjM3LTAuNjZzMi4xNiwwLjIyLDMuMTUsMC42MmMwLjk5LDAuNDEsMS44NiwxLjAxLDIuNjMsMS44CgkJCUMtMzIwLjgyLDI1Ny44MS0zMjAuMjIsMjU4Ljc2LTMxOS43OCwyNTkuODZ6IE0tMzIyLjc3LDI2MS4wNGMtMC4zNC0wLjg3LTAuODYtMS41Ny0xLjU1LTIuMDljLTAuNjktMC41Mi0xLjQ5LTAuODItMi4zOC0wLjkyCgkJCWMtMC45LTAuMDktMS44MiwwLjA1LTIuNzYsMC40MmMtMC45NSwwLjM3LTEuNzEsMC45LTIuMjksMS41N2MtMC41OCwwLjY4LTAuOTUsMS40NC0xLjExLDIuMjljLTAuMTYsMC44NS0wLjA3LDEuNzIsMC4yOCwyLjU5CgkJCWMwLjM1LDAuODksMC44NywxLjU5LDEuNTcsMi4xMWMwLjY5LDAuNTIsMS40OSwwLjgyLDIuMzgsMC45MmMwLjg5LDAuMDksMS44Mi0wLjA1LDIuNzYtMC40MmMwLjk2LTAuMzgsMS43My0wLjkxLDIuMzItMS41OAoJCQljMC41OC0wLjY4LDAuOTUtMS40NCwxLjEtMi4yOUMtMzIyLjMyLDI2Mi44LTMyMi40MiwyNjEuOTMtMzIyLjc3LDI2MS4wNHoiLz4KCTwvZz4KPC9nPgo8Y2lyY2xlIGNsYXNzPSJzdDAiIGN4PSIyMjkuNDkiIGN5PSIyMTcuMiIgcj0iNzguMzQiLz4KPGc+Cgk8Zz4KCQk8cGF0aCBjbGFzcz0ic3QzIiBkPSJNNzcuMTYsMjM3LjkzYy0zLjk0LDAtNy40NS0wLjgzLTEwLjU0LTIuNWMtMy4wOS0xLjY2LTUuNTMtMy45NS03LjMxLTYuODVjLTEuNzgtMi45LTIuNjctNi4yMy0yLjY3LTkuOTgKCQkJdi0zMC4zNmgxMC4xOXYyOS43MmMwLDIuMDYsMC40NywzLjksMS40MSw1LjUyYzAuOTQsMS42MiwyLjE5LDIuODksMy43NiwzLjgzYzEuNTcsMC45NCwzLjI5LDEuNDEsNS4xNywxLjQxCgkJCWMyLjAxLDAsMy44My0wLjQ3LDUuNDUtMS40MWMxLjYyLTAuOTQsMi45LTIuMjEsMy44Ny0zLjgzYzAuOTYtMS42MiwxLjQ0LTMuNDUsMS40NC01LjUydi0yOS43Mmg5Ljc3djMwLjM2CgkJCWMwLDMuNzUtMC44OCw3LjA3LTIuNjMsOS45OGMtMS43NiwyLjkxLTQuMTgsNS4xOS03LjI3LDYuODVDODQuNjgsMjM3LjEsODEuMTQsMjM3LjkzLDc3LjE2LDIzNy45M3oiLz4KCQk8cGF0aCBjbGFzcz0ic3QzIiBkPSJNMTEwLjE4LDIzNy41MXYtNDkuMTloMjEuNjRjMywwLDUuNzMsMC42OCw4LjE5LDIuMDRjMi40NiwxLjM2LDQuNDIsMy4yMiw1Ljg3LDUuNTkKCQkJYzEuNDUsMi4zNywyLjE4LDUuMDUsMi4xOCw4LjA0YzAsMy4xOS0wLjg0LDYuMDQtMi41Myw4LjU3Yy0xLjY5LDIuNTMtMy45MSw0LjQzLTYuNjcsNS42OWwxMS4xNywxOS4zMmwtMTEuNzMtMC4wN2wtMTAuMDUtMTcuNzgKCQkJaC04LjI5djE3Ljc4SDExMC4xOHogTTExOS45NSwyMTEuMzdoMTEuNTJjMS45NywwLDMuNTUtMC42Nyw0Ljc0LTJzMS43OS0zLjAxLDEuNzktNS4wMmMwLTIuMTUtMC43My0zLjg5LTIuMTgtNS4yCgkJCWMtMS40NS0xLjMxLTMuMzctMS45Ny01Ljc2LTEuOTdoLTEwLjEyVjIxMS4zN3oiLz4KCQk8cGF0aCBjbGFzcz0ic3QzIiBkPSJNMTc5Ljk2LDIzOC4yMWMtNC43OCwwLTkuMDMtMS4wOC0xMi43NS0zLjIzYy0zLjcyLTIuMTUtNi42NC01LjE0LTguNzUtOC45NgoJCQljLTIuMTEtMy44Mi0zLjE2LTguMjMtMy4xNi0xMy4yNWMwLTMuNTYsMC42NC02Ljg3LDEuOTMtOS45NGMxLjI5LTMuMDcsMy4wNy01Ljc1LDUuMzQtOC4wNGMyLjI3LTIuMjksNC45NC00LjA4LDguMDEtNS4zNAoJCQlzNi4zOC0xLjksOS45NC0xLjljMy41MSwwLDYuOSwwLjc0LDEwLjE1LDIuMjFzNS44NywzLjQ2LDcuODQsNS45NGwtNi4zOSw3LjFjLTEuNjktMS43OC0zLjQ5LTMuMTYtNS40MS00LjE1CgkJCWMtMS45Mi0wLjk4LTQuMDEtMS40OC02LjI1LTEuNDhjLTIuNzcsMC01LjI2LDAuNjYtNy40OCwxLjk3cy0zLjk5LDMuMTUtNS4zLDUuNTJjLTEuMzEsMi4zNy0xLjk3LDUuMDktMS45Nyw4LjE5CgkJCWMwLDMuMTksMC42NCw1Ljk2LDEuOTMsOC4zM2MxLjI5LDIuMzcsMy4xMiw0LjE5LDUuNDgsNS40OGMyLjM3LDEuMjksNS4wOSwxLjkzLDguMTksMS45M2MyLjI5LDAsNC40NS0wLjQ3LDYuNDYtMS40MQoJCQljMi4wMS0wLjk0LDMuNzUtMi4xNSw1LjItMy42NWw0LjkyLDcuOTRjLTEuMTIsMS4yNi0yLjY1LDIuNDEtNC41NywzLjQ0Yy0xLjkyLDEuMDMtNC4wNCwxLjg0LTYuMzYsMi40MgoJCQlTMTgyLjMsMjM4LjIxLDE3OS45NiwyMzguMjF6Ii8+CgkJPHBhdGggY2xhc3M9InN0MyIgZD0iTTIxMC44LDI1My42N2w2Ljg5LTE1Ljk1bC0xNi44Ni0zNy4zMWgxMC44OWw5LjQyLDIyLjJjMC40MiwwLjk4LDAuODQsMi4xMywxLjI2LDMuNDQKCQkJYzAuMTktMC41MiwwLjM2LTEuMDIsMC41My0xLjUxYzAuMTYtMC40OSwwLjM0LTEuMDIsMC41My0xLjU4bDguMDgtMjIuNTZoMTEuMDNsLTE1LjYsMzcuMWwtNi4zOSwxNi4xNkgyMTAuOHoiLz4KCQk8cGF0aCBjbGFzcz0ic3QzIiBkPSJNMjQ5LjM4LDIzNy41MXYtNDkuMTloOS4zNWwxNC45LDI0LjMxbDE1LjE4LTI0LjMxaDguOTJ2NDkuMTloLTkuOTF2LTE3LjM2YzAtMi44NiwwLjA1LTUuNTIsMC4xNC03Ljk4CgkJCWMwLjA5LTIuNDYsMC4yMy00Ljg0LDAuNDItNy4xM2wtMTIuNjUsMTkuNmgtNC42NGwtMTIuMzctMTkuNDZjMC4yMywyLjE2LDAuMzksNC40NCwwLjQ2LDYuODVjMC4wNywyLjQxLDAuMTEsNS4xMiwwLjExLDguMTIKCQkJdjE3LjM2SDI0OS4zOHoiLz4KCTwvZz4KPC9nPgo8Zz4KCTxnPgoJCTxwYXRoIGNsYXNzPSJzdDIiIGQ9Ik0xMjkuOTEsMTU2Ljk4Yy0wLjY4LDEuMTItMS41MywxLjk5LTIuNTQsMi41OGMtMS4wMSwwLjYtMi4wOCwwLjktMy4yMiwwLjkxYy0xLjE0LDAuMDEtMi4yNC0wLjMxLTMuMzItMC45NgoJCQlsLTguNjgtNS4yNWwxLjc2LTIuOTFsOC41LDUuMTRjMC41OSwwLjM2LDEuMiwwLjU0LDEuODIsMC41NWMwLjYyLDAuMDEsMS4yMS0wLjEyLDEuNzQtMC40MWMwLjU0LTAuMjksMC45Ny0wLjcsMS4yOS0xLjIzCgkJCWMwLjM1LTAuNTgsMC41My0xLjE3LDAuNTQtMS44YzAuMDEtMC42Mi0wLjEzLTEuMjEtMC40My0xLjc3Yy0wLjMtMC41NS0wLjc0LTEuMDEtMS4zMy0xLjM3bC04LjUtNS4xNGwxLjY5LTIuNzlsOC42OCw1LjI1CgkJCWMxLjA3LDAuNjUsMS44NywxLjQ3LDIuNCwyLjQ4YzAuNTMsMSwwLjc2LDIuMDksMC43LDMuMjZDMTMwLjk3LDE1NC42OSwxMzAuNiwxNTUuODQsMTI5LjkxLDE1Ni45OHoiLz4KCQk8cGF0aCBjbGFzcz0ic3QyIiBkPSJNMTM1LjM5LDE0OC4xMWwtMTIuNi0xMC41NGwxLjk0LTIuMzJsMTQuMjEsMC44M2MtMC44NC0wLjU0LTEuNjgtMS4xMy0yLjU0LTEuNzcKCQkJYy0wLjg2LTAuNjUtMS44Mi0xLjQzLTIuODktMi4zNGwtMy41NS0yLjk3bDIuMTItMi41NEwxNDQuNjksMTM3bC0xLjk3LDIuMzZsLTE0LjAzLTAuNzVjMC44NSwwLjU5LDEuNTIsMS4wNiwyLjAyLDEuNDEKCQkJYzAuNDksMC4zNSwwLjksMC42NSwxLjIxLDAuODljMC4zMiwwLjI1LDAuNjQsMC41LDAuOTYsMC43N2w0LjY1LDMuODlMMTM1LjM5LDE0OC4xMXoiLz4KCQk8cGF0aCBjbGFzcz0ic3QyIiBkPSJNMTQ3LjE2LDEzNC42N2wtMS45OS0yLjE2bDItMS44NWwtNy4xNi03Ljc2bC0yLDEuODVsLTEuOTktMi4xNmw2LjUtNmwxLjk5LDIuMTZsLTIuMDIsMS44Nmw3LjE2LDcuNzYKCQkJbDIuMDItMS44NmwxLjk5LDIuMTZMMTQ3LjE2LDEzNC42N3oiLz4KCQk8cGF0aCBjbGFzcz0ic3QyIiBkPSJNMTU2LjE5LDEyNi40MmwtOS41OC0xMy4zNmw1LjQ0LTMuOWMxLjMtMC45MywyLjY0LTEuNDYsNC4wMS0xLjU5czIuNywwLjExLDMuOTYsMC43MwoJCQljMS4yNiwwLjYyLDIuMzYsMS41OCwzLjMsMi44OWMwLjk1LDEuMzIsMS41MSwyLjY4LDEuNjksNC4wNmMwLjE3LDEuMzktMC4wMiwyLjcxLTAuNTgsMy45N2MtMC41NiwxLjI2LTEuNSwyLjM2LTIuODEsMy4zCgkJCUwxNTYuMTksMTI2LjQyeiBNMTUzLjc1LDExMS43M2wtMi41OSwxLjg2bDUuOTksOC4zNmwyLjU5LTEuODZjMS4xOC0wLjg1LDEuODQtMS44OSwxLjk4LTMuMTJjMC4xNC0xLjIzLTAuMjYtMi40OS0xLjE4LTMuNzgKCQkJYy0wLjkxLTEuMjctMS45OC0yLjA0LTMuMi0yLjMxQzE1Ni4xMiwxMTAuNjEsMTU0LjkyLDExMC45LDE1My43NSwxMTEuNzN6Ii8+CgkJPHBhdGggY2xhc3M9InN0MiIgZD0iTTE2OC4zNywxMTcuNzFsLTEuOTUtMTcuNTRsMi43LTEuNDJsMTMuMzIsMTEuNTdsLTMuMDgsMS42MmwtMi44My0yLjUybC01LjY1LDIuOTdsMC40NiwzLjc2TDE2OC4zNywxMTcuNzF6CgkJCSBNMTcwLjE3LDEwNi42NmwwLjM1LDIuNzlsMy44LTJsLTIuMTQtMS45Yy0wLjE5LTAuMTYtMC40My0wLjM5LTAuNzItMC42N2MtMC4yOS0wLjI4LTAuNi0wLjU4LTAuOTQtMC45CgkJCWMtMC4zNC0wLjMyLTAuNjQtMC42My0wLjkyLTAuOTJjMC4xLDAuNiwwLjIxLDEuMjIsMC4zMSwxLjg1QzE3MC4wMiwxMDUuNTQsMTcwLjEsMTA2LjEzLDE3MC4xNywxMDYuNjZ6Ii8+CgkJPHBhdGggY2xhc3M9InN0MiIgZD0iTTE4NC4xNiwxMDkuNjVsLTUuNDktMTUuNDlsNi4zMS0yLjI0YzEuNS0wLjUzLDIuOTQtMC42Nyw0LjMtMC40MmMxLjM2LDAuMjYsMi41NiwwLjg2LDMuNiwxLjgKCQkJYzEuMDQsMC45NCwxLjgzLDIuMTcsMi4zNywzLjY5YzAuNTQsMS41NCwwLjcxLDIuOTksMC40OSw0LjM3Yy0wLjIyLDEuMzgtMC43NywyLjYtMS42NiwzLjY1Yy0wLjg5LDEuMDUtMi4wOSwxLjg1LTMuNjEsMi4zOQoJCQlMMTg0LjE2LDEwOS42NXogTTE4NS44OSw5NC44NmwtMy4wMSwxLjA3bDMuNDQsOS42OWwzLjAxLTEuMDdjMS4zNy0wLjQ5LDIuMjktMS4zLDIuNzctMi40NWMwLjQ3LTEuMTUsMC40NS0yLjQ3LTAuMDgtMy45NgoJCQljLTAuNTItMS40OC0xLjMzLTIuNTEtMi40NC0zLjExQzE4OC40OCw5NC40NCwxODcuMjUsOTQuMzgsMTg1Ljg5LDk0Ljg2eiIvPgoJCTxwYXRoIGNsYXNzPSJzdDIiIGQ9Ik0yMDcuMjksMTAyLjYzbC0yLjE3LTE2LjI5bDYuNjMtMC44OGMxLjU4LTAuMjEsMy4wMS0wLjA1LDQuMjksMC40OHMyLjMzLDEuMzcsMy4xNSwyLjUxCgkJCWMwLjgyLDEuMTQsMS4zNCwyLjUxLDEuNTUsNC4xYzAuMjEsMS42MSwwLjA3LDMuMDctMC40Miw0LjM4Yy0wLjUsMS4zMS0xLjI5LDIuMzgtMi4zOCwzLjIzYy0xLjA5LDAuODUtMi40MywxLjM4LTQuMDMsMS41OQoJCQlMMjA3LjI5LDEwMi42M3ogTTIxMi4wNCw4OC41MmwtMy4xNywwLjQybDEuMzYsMTAuMTlsMy4xNi0wLjQyYzEuNDQtMC4xOSwyLjUxLTAuOCwzLjIxLTEuODNjMC43LTEuMDIsMC45NS0yLjMyLDAuNzQtMy44OQoJCQljLTAuMjEtMS41NS0wLjc5LTIuNzMtMS43NC0zLjU1QzIxNC42Niw4OC42NCwyMTMuNDcsODguMzMsMjEyLjA0LDg4LjUyeiIvPgoJCTxwYXRoIGNsYXNzPSJzdDIiIGQ9Ik0yMjQuNTEsMTAwLjdsMC4wNS0xNi40M2wxMC45OSwwLjAzbC0wLjAxLDMuMDFsLTcuNjgtMC4wMmwtMC4wMSwzLjU5bDYuNTMsMC4wMmwtMC4wMSwyLjkxbC02LjUzLTAuMDIKCQkJbC0wLjAxLDMuOTJsNy44MiwwLjAybC0wLjAxLDNMMjI0LjUxLDEwMC43eiIvPgoJCTxwYXRoIGNsYXNzPSJzdDIiIGQ9Ik0yNDUuNzIsMTAxLjdsMy4xMi0xNi4xNGw3LjEsMS4zN2MwLjk4LDAuMTksMS44NCwwLjU5LDIuNTYsMS4xOXMxLjI0LDEuMzQsMS41NywyLjIxCgkJCWMwLjMzLDAuODcsMC4zOSwxLjc5LDAuMiwyLjc4Yy0wLjIsMS4wNC0wLjY2LDEuOTMtMS4zNywyLjY1Yy0wLjcxLDAuNzItMS41NiwxLjIxLTIuNTUsMS40NGwyLjQ0LDcuMDVsLTMuODQtMC43N2wtMi4xNy02LjQ3CgkJCWwtMi43Mi0wLjUzbC0xLjEzLDUuODNMMjQ1LjcyLDEwMS43eiBNMjUwLjU4LDkzLjc0bDMuNzgsMC43M2MwLjY1LDAuMTIsMS4yMSwwLjAxLDEuNjgtMC4zNmMwLjQ4LTAuMzYsMC43OC0wLjg3LDAuOTEtMS41MwoJCQljMC4xNC0wLjcxLDAuMDEtMS4zMi0wLjM4LTEuODRjLTAuMzktMC41Mi0wLjk4LTAuODYtMS43Ny0xLjAxbC0zLjMyLTAuNjRMMjUwLjU4LDkzLjc0eiIvPgoJCTxwYXRoIGNsYXNzPSJzdDIiIGQ9Ik0yNjAuODcsMTA0LjkzbDAuODktMi44bDIuNTksMC44M2wzLjIyLTEwLjA2bC0yLjU5LTAuODNsMC44OS0yLjhsOC40MywyLjdsLTAuODksMi43OWwtMi42Mi0wLjg0CgkJCWwtMy4yMiwxMC4wNmwyLjYyLDAuODRsLTAuODksMi43OUwyNjAuODcsMTA0LjkzeiIvPgoJCTxwYXRoIGNsYXNzPSJzdDIiIGQ9Ik0yNzIuNTIsMTA4LjgxbDYuNzMtMTQuOTlsMTAuMDIsNC41bC0xLjIzLDIuNzRsLTctMy4xNWwtMS40NywzLjI4bDUuOTUsMi42N2wtMS4xOSwyLjY2bC01Ljk1LTIuNjcKCQkJbC0xLjYxLDMuNThsNy4xMywzLjJsLTEuMjMsMi43NEwyNzIuNTIsMTA4LjgxeiIvPgoJCTxwYXRoIGNsYXNzPSJzdDIiIGQ9Ik0yODkuOTIsMTE3Ljg2Yy0xLjMtMC43OS0yLjI3LTEuNy0yLjkxLTIuNzRjLTAuNjQtMS4wNC0xLjAyLTIuMjEtMS4xMy0zLjVsMy4wOC0wLjk2CgkJCWMwLjEsMS4zMSwwLjM4LDIuMzIsMC44MiwzLjA0YzAuNDQsMC43MiwxLjA1LDEuMzEsMS44MywxLjc4YzAuNjMsMC4zOCwxLjI0LDAuNTcsMS44NCwwLjU3YzAuNiwwLDEuMDMtMC4yMywxLjMxLTAuNjkKCQkJYzAuMzMtMC41NSwwLjMyLTEuMTUtMC4wNS0xLjhjLTAuMzYtMC42NS0wLjkzLTEuMzMtMS42OS0yLjAzYy0xLjMyLTEuMjQtMi4xMy0yLjQ0LTIuNDMtMy41OWMtMC4zMS0xLjE2LTAuMS0yLjMyLDAuNjItMy41CgkJCWMwLjUtMC44MiwxLjE3LTEuMzksMi4wMS0xLjczYzAuODUtMC4zNCwxLjc2LTAuNDUsMi43NC0wLjMzYzAuOTgsMC4xMiwxLjk0LDAuNDYsMi44OCwxLjAzYzEuMjQsMC43NiwyLjE1LDEuNTksMi43MiwyLjUyCgkJCWMwLjU3LDAuOTIsMC44NiwxLjkyLDAuODcsMi45OGwtMi45OCwwLjY5Yy0wLjExLTEuNjgtMC44MS0yLjkxLTIuMS0zLjY5Yy0wLjY3LTAuNDEtMS4yOS0wLjYtMS44Ny0wLjU3CgkJCWMtMC41OCwwLjAzLTEsMC4yNy0xLjI5LDAuNzRjLTAuMywwLjUtMC4zLDEuMDMsMCwxLjZjMC4zLDAuNTcsMC44MSwxLjE4LDEuNTEsMS44M2MxLjI4LDEuMiwyLjE1LDIuNCwyLjYxLDMuNgoJCQljMC40NSwxLjIsMC4zMywyLjM3LTAuMzYsMy41Yy0wLjU3LDAuOTQtMS4yOCwxLjYtMi4xMywyYy0wLjg2LDAuNC0xLjc5LDAuNTMtMi44LDAuNEMyOTIuMDEsMTE4Ljg4LDI5MC45OCwxMTguNSwyODkuOTIsMTE3Ljg2egoJCQkiLz4KCQk8cGF0aCBjbGFzcz0ic3QyIiBkPSJNMzAzLjI4LDEyNy4zNWMtMC45OC0wLjgtMS43NS0xLjctMi4yOS0yLjdjLTAuNTQtMS0wLjg3LTIuMDMtMC45OC0zLjExYy0wLjExLTEuMDgtMC4wMS0yLjE1LDAuMzEtMy4yMQoJCQljMC4zMi0xLjA2LDAuODctMi4wNywxLjY0LTMuMDFjMC43NS0wLjkyLDEuNjItMS42NCwyLjYxLTIuMTZjMC45OS0wLjUyLDIuMDMtMC44MywzLjEyLTAuOTNjMS4wOS0wLjEsMi4xOCwwLjAyLDMuMjcsMC4zNgoJCQljMS4wOSwwLjM0LDIuMTIsMC45MSwzLjEsMS43MWMxLjAxLDAuODIsMS43OCwxLjc5LDIuMzMsMi45czAuODIsMi4xOCwwLjgxLDMuMjFsLTMuMDEsMC4zOWMtMC4xMS0wLjg2LTAuMzMtMS42My0wLjY3LTIuMzIKCQkJYy0wLjM0LTAuNjktMC44Mi0xLjI5LTEuNDMtMS43OWMtMC43OC0wLjYzLTEuNjItMS4wMi0yLjUyLTEuMTZjLTAuOS0wLjE0LTEuNzktMC4wNC0yLjY1LDAuMjljLTAuODYsMC4zNC0xLjYxLDAuOS0yLjI2LDEuNjkKCQkJcy0xLjA0LDEuNjUtMS4xOCwyLjU4Yy0wLjE0LDAuOTMtMC4wNSwxLjg0LDAuMjcsMi43M2MwLjMyLDAuODksMC44NywxLjY1LDEuNjMsMi4yN2MwLjU3LDAuNDYsMS4xOCwwLjc3LDEuODIsMC45MgoJCQljMC42NCwwLjE1LDEuMjUsMC4xNSwxLjgzLDBjMC41OC0wLjE1LDEuMDUtMC40NSwxLjQzLTAuOTFsLTMuMzEtMi43bDEuODEtMi4yMmw1Ljg0LDQuNzZjLTAuMTMsMC4yNC0wLjMxLDAuNTEtMC41NCwwLjgyCgkJCWMtMC4yMywwLjMxLTAuNDEsMC41NC0wLjU1LDAuNzFjLTAuOSwxLjEtMS45NSwxLjg3LTMuMTYsMi4zYy0xLjIxLDAuNDMtMi40NSwwLjUyLTMuNzEsMC4yOAoJCQlDMzA1LjU3LDEyOC44MiwzMDQuMzgsMTI4LjI1LDMwMy4yOCwxMjcuMzV6Ii8+CgkJPHBhdGggY2xhc3M9InN0MiIgZD0iTTMxNS43NCwxMzkuMjVjLTAuODEtMC44OS0xLjQtMS44Ni0xLjc2LTIuOWMtMC4zNy0xLjA0LTAuNTItMi4wOS0wLjQ1LTMuMTVjMC4wNy0xLjA2LDAuMzQtMi4wOSwwLjgzLTMuMDkKCQkJYzAuNDktMSwxLjE5LTEuOTIsMi4xMS0yLjc0YzAuOTEtMC44MiwxLjg4LTEuNDIsMi45My0xLjhzMi4xLTAuNTUsMy4xNi0wLjUxYzEuMDYsMC4wNCwyLjA5LDAuMywzLjA5LDAuNzcKCQkJYzAuOTksMC40NywxLjksMS4xNiwyLjcsMi4wNWMwLjgsMC44OCwxLjM4LDEuODQsMS43NSwyLjg4YzAuMzcsMS4wNCwwLjUyLDIuMDksMC40NSwzLjE2Yy0wLjA3LDEuMDctMC4zNSwyLjEtMC44NCwzLjEKCQkJcy0xLjE4LDEuOS0yLjA4LDIuNzFjLTAuOTEsMC44Mi0xLjg4LDEuNDItMi45MywxLjhjLTEuMDQsMC4zOC0yLjEsMC41Ni0zLjE3LDAuNTJjLTEuMDctMC4wNC0yLjEtMC4yOS0zLjA5LTAuNzcKCQkJQzMxNy40MywxNDAuODEsMzE2LjUzLDE0MC4xNCwzMTUuNzQsMTM5LjI1eiBNMzE4LjEyLDEzNy4xYzAuNjMsMC43LDEuMzYsMS4xNywyLjE5LDEuNDFjMC44MywwLjI0LDEuNjgsMC4yNSwyLjU1LDAuMDIKCQkJYzAuODctMC4yMywxLjY4LTAuNjgsMi40NC0xLjM2YzAuNzYtMC42OCwxLjI5LTEuNDQsMS42LTIuMjhjMC4zMS0wLjg0LDAuMzktMS42OCwwLjI0LTIuNTRzLTAuNTQtMS42My0xLjE3LTIuMzMKCQkJYy0wLjY0LTAuNzEtMS4zOC0xLjE4LTIuMjEtMS40M2MtMC44My0wLjI0LTEuNjgtMC4yNS0yLjU1LTAuMDJjLTAuODcsMC4yMy0xLjY4LDAuNjgtMi40NCwxLjM2Yy0wLjc3LDAuNjktMS4zMSwxLjQ2LTEuNjEsMi4yOQoJCQljLTAuMzEsMC44NC0wLjM5LDEuNjgtMC4yMywyLjUzQzMxNy4wOCwxMzUuNjEsMzE3LjQ4LDEzNi4zOSwzMTguMTIsMTM3LjF6Ii8+CgkJPHBhdGggY2xhc3M9InN0MiIgZD0iTTMzMC4zNywxNTkuMzljLTAuODEtMS4zOC0xLjIyLTIuNzgtMS4yMy00LjIyYy0wLjAxLTEuNDQsMC4zNS0yLjc4LDEuMS00LjA0YzAuNzQtMS4yNSwxLjgzLTIuMzEsMy4yOC0zLjE2CgkJCWMxLjAzLTAuNiwyLjA5LTAuOTgsMy4xOS0xLjEzYzEuMS0wLjE1LDIuMTgtMC4wOSwzLjIyLDAuMTdjMS4wNSwwLjI2LDIuMDEsMC43MywyLjksMS40YzAuODgsMC42NywxLjYzLDEuNTIsMi4yMywyLjU0CgkJCWMwLjU5LDEuMDEsMC45NiwyLjExLDEuMDgsMy4zYzAuMTMsMS4xOSwwLDIuMjctMC4zOCwzLjI2bC0zLjEzLTAuNjRjMC4yMy0wLjc5LDAuMzItMS41NCwwLjI4LTIuMjYKCQkJYy0wLjA0LTAuNzItMC4yNS0xLjQtMC42NC0yLjA1Yy0wLjQ3LTAuOC0xLjA4LTEuNC0xLjgzLTEuODJjLTAuNzYtMC40Mi0xLjU4LTAuNjItMi40OS0wLjU5Yy0wLjksMC4wMi0xLjgsMC4zLTIuNjksMC44MgoJCQljLTAuOTIsMC41NC0xLjYxLDEuMi0yLjA3LDEuOTdjLTAuNDYsMC43Ny0wLjY4LDEuNjEtMC42NSwyLjUxYzAuMDMsMC45LDAuMzEsMS43OSwwLjgzLDIuNjhjMC4zOSwwLjY2LDAuODksMS4yLDEuNSwxLjYyCgkJCWMwLjYxLDAuNDIsMS4yNSwwLjcxLDEuOTMsMC44OGwtMS40NSwyLjc2Yy0wLjU1LTAuMTEtMS4xNC0wLjM1LTEuNzYtMC43M2MtMC42Mi0wLjM4LTEuMjEtMC44NS0xLjc4LTEuNDIKCQkJUzMzMC43NywxNjAuMDYsMzMwLjM3LDE1OS4zOXoiLz4KCQk8cGF0aCBjbGFzcz0ic3QyIiBkPSJNMzMzLjkyLDE2NC45M2wxNy42NC0wLjQxbDEuMTgsMi44MmwtMTIuNjksMTIuMjZsLTEuMzQtMy4yMWwyLjc1LTIuNkwzMzksMTY3LjlsLTMuNzksMC4xM0wzMzMuOTIsMTY0LjkzegoJCQkgTTM0NC43NywxNjcuN2wtMi44MSwwLjExbDEuNjYsMy45NmwyLjA4LTEuOTZjMC4xOC0wLjE4LDAuNDItMC40LDAuNzMtMC42NmMwLjMtMC4yNiwwLjYzLTAuNTUsMC45OC0wLjg1CgkJCWMwLjM1LTAuMzEsMC42OC0wLjU5LDEtMC44NGMtMC42MSwwLjA1LTEuMjMsMC4xLTEuODcsMC4xNVMzNDUuMzEsMTY3LjY4LDM0NC43NywxNjcuN3oiLz4KCQk8cGF0aCBjbGFzcz0ic3QyIiBkPSJNMzQwLjU0LDE4MS40MWwxNS44OC00LjIxbDEuODUsNi45OWMwLjI2LDAuOTcsMC4yNywxLjkxLDAuMDQsMi44MmMtMC4yMywwLjkxLTAuNjYsMS43LTEuMywyLjM3CgkJCXMtMS40NCwxLjE0LTIuNDEsMS4zOWMtMS4wMywwLjI3LTIuMDIsMC4yNS0yLjk4LTAuMDhjLTAuOTYtMC4zMy0xLjc3LTAuODgtMi40MS0xLjY3bC01LjI4LDUuMjZsLTAuOTgtMy44bDQuODgtNC43N2wtMC43MS0yLjY4CgkJCWwtNS43NCwxLjUyTDM0MC41NCwxODEuNDF6IE0zNDkuODEsMTgyLjMzbDAuOTksMy43MmMwLjE3LDAuNjQsMC41MiwxLjA5LDEuMDUsMS4zNmMwLjUzLDAuMjcsMS4xMiwwLjMyLDEuNzgsMC4xNQoJCQljMC43LTAuMTgsMS4xOS0wLjU3LDEuNDktMS4xNWMwLjMtMC41OCwwLjM1LTEuMjYsMC4xNC0yLjAzbC0wLjg3LTMuMjdMMzQ5LjgxLDE4Mi4zM3oiLz4KCQk8cGF0aCBjbGFzcz0ic3QyIiBkPSJNMzQ0LjM5LDE5Ni43N2wxNi4zMi0xLjkybDAuNzgsNi42NWMwLjE5LDEuNTgsMCwzLjAxLTAuNTUsNC4yOGMtMC41NSwxLjI3LTEuNCwyLjMxLTIuNTUsMy4xMQoJCQlzLTIuNTMsMS4zLTQuMTMsMS40OWMtMS42MiwwLjE5LTMuMDcsMC4wMy00LjM3LTAuNDljLTEuMy0wLjUyLTIuMzYtMS4zMy0zLjE5LTIuNDNjLTAuODMtMS4xLTEuMzQtMi40NS0xLjUzLTQuMDVMMzQ0LjM5LDE5Ni43NwoJCQl6IE0zNTguNDIsMjAxLjc0bC0wLjM3LTMuMTdsLTEwLjIxLDEuMmwwLjM3LDMuMTdjMC4xNywxLjQ1LDAuNzYsMi41MywxLjc4LDMuMjRjMS4wMSwwLjcxLDIuMzEsMC45OCwzLjg4LDAuOAoJCQljMS41NS0wLjE4LDIuNzQtMC43NSwzLjU3LTEuNjhDMzU4LjI2LDIwNC4zNiwzNTguNTksMjAzLjE3LDM1OC40MiwyMDEuNzR6Ii8+CgkJPHBhdGggY2xhc3M9InN0MiIgZD0iTTM0NiwyMTMuMzJsMi45MywwLjAxbC0wLjAxLDIuNzJsMTAuNTYsMC4wNmwwLjAxLTIuNzJsMi45NCwwLjAxbC0wLjA1LDguODVsLTIuOTMtMC4wMmwwLjAxLTIuNzUKCQkJbC0xMC41Ny0wLjA2bC0wLjAxLDIuNzVsLTIuOTMtMC4wMkwzNDYsMjEzLjMyeiIvPgoJCTxwYXRoIGNsYXNzPSJzdDIiIGQ9Ik0zNDQuNzUsMjMyLjMyYzAuMTYtMS4yLDAuNTEtMi4yNywxLjA2LTMuMjJjMC41NS0wLjk2LDEuMjUtMS43NSwyLjEtMi4zOWMwLjg1LTAuNjQsMS44MS0xLjEsMi44OS0xLjM3CgkJCWMxLjA4LTAuMjgsMi4yMy0wLjM0LDMuNDYtMC4xN2MxLjIxLDAuMTYsMi4zLDAuNTEsMy4yNywxLjA1YzAuOTcsMC41NSwxLjc4LDEuMjQsMi40NCwyLjA3YzAuNjYsMC44NCwxLjEzLDEuNzgsMS40MiwyLjg1CgkJCWMwLjI5LDEuMDYsMC4zNSwyLjE5LDAuMiwzLjM5Yy0wLjE1LDEuMTgtMC41MSwyLjI1LTEuMDYsMy4yYy0wLjU1LDAuOTUtMS4yNSwxLjc1LTIuMTEsMi4zOWMtMC44NiwwLjY0LTEuODIsMS4wOS0yLjksMS4zNwoJCQljLTEuMDgsMC4yOC0yLjIyLDAuMzQtMy40MSwwLjE4Yy0xLjIxLTAuMTYtMi4zLTAuNTEtMy4yNy0xLjA2Yy0wLjk3LTAuNTUtMS43OS0xLjI0LTIuNDUtMi4wN2MtMC42Ni0wLjg0LTEuMTQtMS43OS0xLjQzLTIuODUKCQkJQzM0NC42NiwyMzQuNjIsMzQ0LjYsMjMzLjUsMzQ0Ljc1LDIzMi4zMnogTTM0Ny45NCwyMzIuNzNjLTAuMTIsMC45My0wLjAxLDEuNzksMC4zNSwyLjU4YzAuMzUsMC43OSwwLjksMS40NCwxLjY0LDEuOTYKCQkJYzAuNzQsMC41MSwxLjYxLDAuODQsMi42MiwwLjk3YzEuMDEsMC4xMywxLjkzLDAuMDQsMi43Ny0wLjI2YzAuODQtMC4zMSwxLjUzLTAuOCwyLjA5LTEuNDdjMC41NS0wLjY3LDAuODktMS40NywxLjAxLTIuNAoJCQljMC4xMi0wLjk1LDAuMDEtMS44MS0wLjM1LTIuNmMtMC4zNi0wLjc5LTAuOS0xLjQ0LTEuNjQtMS45NmMtMC43NC0wLjUxLTEuNjEtMC44NC0yLjYyLTAuOTdjLTEuMDItMC4xMy0xLjk2LTAuMDUtMi43OSwwLjI2CgkJCWMtMC44NCwwLjMxLTEuNTMsMC44LTIuMDcsMS40N1MzNDguMDYsMjMxLjc5LDM0Ny45NCwyMzIuNzN6Ii8+CgkJPHBhdGggY2xhc3M9InN0MiIgZD0iTTM0Mi4xMSwyNDcuMDRsMTcuNTktMS45MWwtMC45NywzLjQ4bC05LjY0LDAuOTNjLTAuNzIsMC4wOC0xLjMzLDAuMTMtMS44MiwwLjE2CgkJCWMtMC41LDAuMDMtMC45NywwLjA2LTEuNDEsMC4wOGMwLjM5LDAuMjQsMC43OSwwLjUsMS4yLDAuNzhjMC40MSwwLjI5LDAuOSwwLjYzLDEuNDcsMS4wM2w3LjgyLDUuNjFsLTAuOTcsMy40OGwtMTQuMDYtMTAuNzgKCQkJTDM0Mi4xMSwyNDcuMDR6Ii8+CgkJPHBhdGggY2xhc3M9InN0MiIgZD0iTTM0MC4wOSwyNTQuNjVsMTIuNzEsMTIuMjVsLTEuMTcsMi44MmwtMTcuNjQtMC4zOWwxLjMzLTMuMjFsMy43OSwwLjEybDIuNDUtNS45bC0yLjc2LTIuNkwzNDAuMDksMjU0LjY1egoJCQkgTTM0NS43NiwyNjQuMzFsLTIuMDUtMS45MmwtMS42NSwzLjk3bDIuODYsMC4wOWMwLjI1LDAsMC41OCwwLjAyLDAuOTgsMC4wNWMwLjQsMC4wMywwLjgzLDAuMDYsMS4zLDAuMDkKCQkJYzAuNDYsMC4wMywwLjg5LDAuMDcsMS4zLDAuMTJjLTAuNDYtMC40LTAuOTQtMC44MS0xLjQyLTEuMjNTMzQ2LjE2LDI2NC42NywzNDUuNzYsMjY0LjMxeiIvPgoJCTxwYXRoIGNsYXNzPSJzdDIiIGQ9Ik0zMzAuMTQsMjc1LjQzYzAuNzYtMS4zMSwxLjY1LTIuMywyLjY4LTIuOTdjMS4wMy0wLjY3LDIuMTgtMS4wNywzLjQ4LTEuMjFsMS4wMywzLjA2CgkJCWMtMS4zLDAuMTMtMi4zMSwwLjQzLTMuMDIsMC44OWMtMC43MSwwLjQ2LTEuMjksMS4wOC0xLjc0LDEuODdjLTAuMzcsMC42NC0wLjU0LDEuMjUtMC41MywxLjg1YzAuMDIsMC42LDAuMjUsMS4wMywwLjcyLDEuMjkKCQkJYzAuNTYsMC4zMiwxLjE2LDAuMjksMS44LTAuMDlzMS4zMS0wLjk2LDEuOTktMS43NGMxLjIxLTEuMzQsMi4zOS0yLjE4LDMuNTQtMi41MWMxLjE1LTAuMzMsMi4zMi0wLjE1LDMuNTEsMC41NAoJCQljMC44MywwLjQ4LDEuNDIsMS4xNCwxLjc3LDEuOTdjMC4zNiwwLjg0LDAuNDksMS43NSwwLjM5LDIuNzNjLTAuMSwwLjk4LTAuNDIsMS45NS0wLjk3LDIuOWMtMC43MywxLjI2LTEuNTUsMi4xOC0yLjQ2LDIuNzcKCQkJYy0wLjkxLDAuNTktMS45LDAuOS0yLjk2LDAuOTNsLTAuNzYtMi45NmMxLjY4LTAuMTUsMi44OS0wLjg4LDMuNjQtMi4xOGMwLjM5LTAuNjgsMC41Ny0xLjMsMC41My0xLjg4CgkJCWMtMC4wNC0wLjU3LTAuMy0xLTAuNzctMS4yN2MtMC41LTAuMjktMS4wMy0wLjI4LTEuNiwwLjA0Yy0wLjU2LDAuMzItMS4xNiwwLjgzLTEuNzksMS41NWMtMS4xNywxLjMxLTIuMzUsMi4yMS0zLjU0LDIuNjgKCQkJYy0xLjE5LDAuNDgtMi4zNiwwLjM5LTMuNTEtMC4yOGMtMC45NS0wLjU1LTEuNjMtMS4yNC0yLjA1LTIuMDljLTAuNDItMC44NS0wLjU3LTEuNzgtMC40Ni0yLjc5CgkJCUMzMjkuMTYsMjc3LjU1LDMyOS41MiwyNzYuNSwzMzAuMTQsMjc1LjQzeiIvPgoJCTxwYXRoIGNsYXNzPSJzdDIiIGQ9Ik0zMjEuMTUsMjg4Ljc1YzAuOTctMS4yNywyLjEyLTIuMTgsMy40NS0yLjczYzEuMzMtMC41NSwyLjcxLTAuNzIsNC4xNS0wLjVzMi44MywwLjgzLDQuMTYsMS44NQoJCQljMC45NSwwLjcyLDEuNjksMS41NywyLjI1LDIuNTNjMC41NSwwLjk2LDAuOSwxLjk4LDEuMDUsMy4wNWMwLjE1LDEuMDcsMC4wOCwyLjE0LTAuMjEsMy4yMXMtMC43OSwyLjA4LTEuNTIsMy4wMgoJCQljLTAuNzEsMC45My0xLjYsMS42OC0yLjY1LDIuMjVjLTEuMDUsMC41Ni0yLjExLDAuODYtMy4xNywwLjg3bC0wLjU4LTMuMTRjMC44MS0wLjA5LDEuNTUtMC4yOCwyLjItMC41OQoJCQljMC42NS0wLjMxLDEuMi0wLjc2LDEuNjYtMS4zNmMwLjU2LTAuNzMsMC44OS0xLjUzLDEtMi4zOGMwLjEtMC44Ni0wLjAzLTEuNy0wLjM5LTIuNTNzLTAuOTUtMS41Ni0xLjc3LTIuMTgKCQkJYy0wLjg1LTAuNjUtMS43MS0xLjA0LTIuNi0xLjE4Yy0wLjg5LTAuMTQtMS43NS0wLjAzLTIuNTcsMC4zNHMtMS41NSwwLjk2LTIuMTcsMS43OGMtMC40NywwLjYxLTAuNzgsMS4yOC0wLjk0LDIKCQkJYy0wLjE2LDAuNzItMC4xOSwxLjQzLTAuMDksMi4xMmwtMy4xMS0wLjMxYy0wLjExLTAuNTYtMC4xLTEuMTksMC4wMS0xLjkxYzAuMTItMC43MiwwLjMzLTEuNDUsMC42NS0yLjE4CgkJCVMzMjAuNjcsMjg5LjM3LDMyMS4xNSwyODguNzV6Ii8+CgkJPHBhdGggY2xhc3M9InN0MiIgZD0iTTMxMS4xNiwzMDAuMDdjMC45NC0wLjkyLDEuOTctMS41NSwzLjEtMS44OGMxLjEzLTAuMzMsMi4yNC0wLjM1LDMuMzUtMC4wOGMxLjEsMC4yOCwyLjEsMC44NiwyLjk3LDEuNzUKCQkJbDcuMTEsNy4yM2wtMi40MywyLjM5bC02Ljk2LTcuMDhjLTAuNDgtMC40OS0xLjAzLTAuODItMS42My0wLjk5Yy0wLjYtMC4xNy0xLjItMC4xOC0xLjc5LTAuMDNzLTEuMTEsMC40NC0xLjU2LDAuODgKCQkJYy0wLjQ4LDAuNDctMC44LDEuMDEtMC45NywxLjYxcy0wLjE3LDEuMjEtMC4wMiwxLjgyYzAuMTUsMC42MSwwLjQ3LDEuMTYsMC45NSwxLjY1bDYuOTYsNy4wOGwtMi4zMywyLjI5bC03LjExLTcuMjMKCQkJYy0wLjg4LTAuODktMS40NS0xLjg5LTEuNzEtMi45OWMtMC4yNi0xLjEtMC4yMi0yLjIxLDAuMTMtMy4zM0MzMDkuNTYsMzAyLjAzLDMxMC4yMSwzMDEsMzExLjE2LDMwMC4wN3oiLz4KCQk8cGF0aCBjbGFzcz0ic3QyIiBkPSJNMzAzLjQ5LDMwNy4yOWw5Ljg5LDEzLjEybC0yLjcsMi4wM2wtOC4wNC0xMC42N2wtNS45OCw0LjUxbC0xLjg1LTIuNDZMMzAzLjQ5LDMwNy4yOXoiLz4KCQk8cGF0aCBjbGFzcz0ic3QyIiBkPSJNMjk0LjEyLDMxNC40NGwyLjU4LDE3LjQ2bC0yLjY1LDEuNTJsLTEzLjczLTExLjA4bDMuMDItMS43M2wyLjkyLDIuNDFsNS41NC0zLjE3bC0wLjYtMy43NEwyOTQuMTIsMzE0LjQ0egoJCQkgTTI5Mi43MiwzMjUuNTVsLTAuNDUtMi43N2wtMy43MywyLjEzbDIuMjEsMS44MmMwLjIsMC4xNiwwLjQ1LDAuMzcsMC43NSwwLjY0YzAuMywwLjI3LDAuNjIsMC41NiwwLjk3LDAuODdzMC42NywwLjYsMC45NSwwLjg5CgkJCWMtMC4xMi0wLjYtMC4yNS0xLjIxLTAuMzgtMS44NEMyOTIuOTEsMzI2LjY2LDI5Mi44LDMyNi4wOCwyOTIuNzIsMzI1LjU1eiIvPgoJCTxwYXRoIGNsYXNzPSJzdDIiIGQ9Ik0yNzguNTgsMzIzLjA0bDYuMTQsMTUuMjVsLTYuNzEsMi43Yy0wLjkzLDAuMzctMS44NiwwLjUtMi43OSwwLjM5Yy0wLjkzLTAuMTEtMS43Ny0wLjQ1LTIuNTEtMQoJCQljLTAuNzUtMC41NS0xLjMxLTEuMjktMS42OC0yLjIyYy0wLjQtMC45OS0wLjQ5LTEuOTgtMC4yOS0yLjk3YzAuMjEtMSwwLjY2LTEuODYsMS4zNi0yLjZsLTUuODctNC41OWwzLjY0LTEuNDRsNS4zMyw0LjI2CgkJCWwyLjU3LTEuMDNsLTIuMjItNS41MUwyNzguNTgsMzIzLjA0eiBNMjc4LjgyLDMzMi4zNmwtMy41NywxLjQ0Yy0wLjYxLDAuMjUtMS4wMiwwLjY1LTEuMjIsMS4yMWMtMC4yLDAuNTYtMC4xOCwxLjE2LDAuMDcsMS43OAoJCQljMC4yNywwLjY3LDAuNzEsMS4xMSwxLjMyLDEuMzRjMC42MSwwLjIyLDEuMjksMC4xOSwyLjAzLTAuMTFsMy4xNC0xLjI2TDI3OC44MiwzMzIuMzZ6Ii8+CgkJPHBhdGggY2xhc3M9InN0MiIgZD0iTTI1Mi44NywzMzEuMzRsMS4zNyw3LjE1bDguMDgsNy43OGwtMy44NSwwLjc0bC01LjM1LTUuMjRsLTIuNyw2Ljc4bC0zLjcxLDAuNzFsNC4yLTEwLjA3bC0xLjM3LTcuMgoJCQlMMjUyLjg3LDMzMS4zNHoiLz4KCQk8cGF0aCBjbGFzcz0ic3QyIiBkPSJNMjM1LjE4LDMzMy44M2wtMC4zNCwxNi40M2wtMy4xMi0wLjA2bC00LjgxLTguMjNsLTUuMjQsOC4wMmwtMi45OC0wLjA2bDAuMzQtMTYuNDNsMy4zMSwwLjA3bC0wLjEyLDUuOAoJCQljLTAuMDIsMC45Ni0wLjA1LDEuODQtMC4xLDIuNjZzLTAuMTEsMS42MS0wLjE5LDIuMzhsNC4zNi02LjQ2bDEuNTUsMC4wM2w0LDYuNTljLTAuMDYtMC43Mi0wLjEtMS40OS0wLjExLTIuMjkKCQkJYy0wLjAxLTAuODEsMC0xLjcxLDAuMDItMi43MWwwLjEyLTUuOEwyMzUuMTgsMzMzLjgzeiIvPgoJCTxwYXRoIGNsYXNzPSJzdDIiIGQ9Ik0yMTUuMzEsMzMyLjk0bC0yLjczLDE2LjIxbC0xMC44My0xLjgybDAuNS0yLjk2bDcuNTcsMS4yN2wwLjYtMy41NGwtNi40NC0xLjA4bDAuNDgtMi44N2w2LjQ0LDEuMDgKCQkJbDAuNjUtMy44N2wtNy43MS0xLjNsMC41LTIuOTZMMjE1LjMxLDMzMi45NHoiLz4KCQk8cGF0aCBjbGFzcz0ic3QyIiBkPSJNMTk3Ljk3LDMyOS4zNmwtMy44LDEyLjgxbDQuNTcsMS4zNWwtMC44NywyLjk1bC0xMi41Mi0zLjcxbDAuODctMi45NWw0LjcxLDEuMzlsMy44LTEyLjgxTDE5Ny45NywzMjkuMzZ6IgoJCQkvPgoJCTxwYXRoIGNsYXNzPSJzdDIiIGQ9Ik0xOTAuNTgsMzI3LjNsLTEyLjQxLDEyLjU0bC0yLjgtMS4yMWwwLjYyLTE3LjYzbDMuMTksMS4zOGwtMC4xNywzLjc5bDUuODYsMi41M2wyLjYzLTIuNzNMMTkwLjU4LDMyNy4zegoJCQkgTTE4MC44NSwzMzIuODRsMS45NS0yLjAzbC0zLjk1LTEuN2wtMC4xMywyLjg2Yy0wLjAxLDAuMjUtMC4wMywwLjU4LTAuMDYsMC45OHMtMC4wNywwLjgzLTAuMTEsMS4yOQoJCQljLTAuMDQsMC40Ni0wLjA4LDAuODktMC4xNCwxLjNjMC40LTAuNDYsMC44Mi0wLjkzLDEuMjUtMS40MUMxODAuMDgsMzMzLjY2LDE4MC40OCwzMzMuMjMsMTgwLjg1LDMzMi44NHoiLz4KCQk8cGF0aCBjbGFzcz0ic3QyIiBkPSJNMTc0LjM3LDMyMC4wM2wtOC40OSwxNC4wN2wtNi4wNy0zLjY3Yy0xLjQxLTAuODUtMi4zLTEuOC0yLjY3LTIuODZjLTAuMzgtMS4wNi0wLjIzLTIuMTQsMC40NC0zLjI2CgkJCWMwLjg0LTEuMzksMi0yLDMuNDgtMS44MmMtMC41OC0wLjczLTAuOTItMS41NC0xLjAxLTIuNDJjLTAuMDktMC44OCwwLjEyLTEuNzQsMC42My0yLjU4YzAuODMtMS4zOCwxLjkxLTIuMTYsMy4yMy0yLjMzCgkJCWMxLjMyLTAuMTcsMi43MiwwLjE5LDQuMTksMS4wOEwxNzQuMzcsMzIwLjAzeiBNMTY2LjU0LDMyNi42OGwtMi45NS0xLjc4Yy0wLjU1LTAuMzMtMS4wOC0wLjQ1LTEuNTktMC4zNnMtMC45MiwwLjM4LTEuMjEsMC44NgoJCQljLTAuMywwLjUtMC4zNiwwLjk5LTAuMTksMS40N2MwLjE3LDAuNDksMC41OSwwLjkzLDEuMjQsMS4zM2wyLjc3LDEuNjdMMTY2LjU0LDMyNi42OHogTTE3MC4wNSwzMjAuODdsLTMuMzYtMi4wMwoJCQljLTAuNjctMC40LTEuMjktMC41Ny0xLjg1LTAuNDhjLTAuNTYsMC4wOC0xLjAyLDAuNDEtMS4zNiwwLjk5Yy0wLjMyLDAuNTQtMC4zNywxLjA3LTAuMTQsMS42YzAuMjMsMC41MywwLjY4LDEsMS4zNywxLjQyCgkJCWwzLjI2LDEuOTdMMTcwLjA1LDMyMC44N3oiLz4KCQk8cGF0aCBjbGFzcz0ic3QyIiBkPSJNMTQ1LjczLDMyMS45OWwtMC40MiwxLjcybC01LjI5LTAuODlsMC42Mi0yLjY4TDE0NS43MywzMjEuOTl6IE0xNTUuNjMsMzA3YzAuOTMsMC43NywxLjY1LDEuNjQsMi4xNywyLjYxCgkJCWMwLjUyLDAuOTcsMC44MiwxLjk5LDAuOTEsMy4wNWMwLjA5LDEuMDYtMC4wMywyLjEyLTAuMzcsMy4xOGMtMC4zNCwxLjA2LTAuOSwyLjA3LTEuNjgsMy4wMmMtMC43OCwwLjk0LTEuNjUsMS42OC0yLjYzLDIuMjEKCQkJYy0wLjk4LDAuNTMtMS45OSwwLjg2LTMuMDUsMC45N2MtMS4wNiwwLjExLTIuMTEsMC4wMS0zLjE3LTAuMzFjLTEuMDUtMC4zMi0yLjA1LTAuODYtMi45OC0xLjYzYy0wLjkyLTAuNzYtMS42My0xLjYyLTIuMTUtMi41OQoJCQlzLTAuODItMS45OS0wLjktMy4wNnMwLjA0LTIuMTMsMC4zOC0zLjE5czAuODktMi4wNiwxLjY2LTIuOTljMC43OC0wLjk0LDEuNjUtMS42OCwyLjYzLTIuMjFjMC45OC0wLjUzLDItMC44NiwzLjA2LTAuOTgKCQkJczIuMTItMC4wMiwzLjE3LDAuM0MxNTMuNzIsMzA1LjcsMTU0LjcxLDMwNi4yNCwxNTUuNjMsMzA3eiBNMTUzLjU4LDMwOS40OGMtMC43Mi0wLjYtMS41Mi0wLjk2LTIuMzctMS4wNwoJCQljLTAuODYtMC4xMi0xLjcsMC0yLjUzLDAuMzVjLTAuODMsMC4zNS0xLjU2LDAuOTItMi4yMSwxLjcxYy0wLjY1LDAuNzgtMS4wNiwxLjYxLTEuMjUsMi40OWMtMC4xOCwwLjg3LTAuMTQsMS43MiwwLjE0LDIuNTUKCQkJYzAuMjcsMC44MywwLjc3LDEuNTQsMS41LDIuMTNjMC43NCwwLjYxLDEuNTMsMC45NywyLjM5LDEuMDljMC44NiwwLjEyLDEuNywwLDIuNTMtMC4zNWMwLjgzLTAuMzUsMS41Ni0wLjkyLDIuMjEtMS43MQoJCQljMC42Ni0wLjgsMS4wOC0xLjYzLDEuMjYtMi41YzAuMTgtMC44NywwLjEzLTEuNzItMC4xNC0yLjU0QzE1NC44MywzMTAuOCwxNTQuMzIsMzEwLjA5LDE1My41OCwzMDkuNDh6Ii8+CgkJPHBhdGggY2xhc3M9InN0MiIgZD0iTTE0Ny4yNiwyOTkuODZMMTM1LjE3LDMxMWwtMi4yOS0yLjQ4bDkuODItOS4wNWwtNS4wOC01LjUxbDIuMjYtMi4wOEwxNDcuMjYsMjk5Ljg2eiIvPgoJCTxwYXRoIGNsYXNzPSJzdDIiIGQ9Ik0xMzguMzgsMjg5LjkybC0yLjM2LDEuNzVsLTEuNjItMi4xOWwtOC41LDYuMjhsMS42MiwyLjE5bC0yLjM2LDEuNzRsLTUuMjYtNy4xMmwyLjM2LTEuNzVsMS42MywyLjIxCgkJCWw4LjUtNi4yOGwtMS42My0yLjIxbDIuMzYtMS43NEwxMzguMzgsMjg5LjkyeiIvPgoJCTxwYXRoIGNsYXNzPSJzdDIiIGQ9Ik0xMjguMDEsMjczLjk2YzAuOCwxLjM4LDEuMTksMi43OSwxLjE5LDQuMjNjMCwxLjQ0LTAuMzgsMi43OC0xLjE0LDQuMDNzLTEuODYsMi4yOS0zLjMxLDMuMTIKCQkJYy0xLjAzLDAuNTktMi4xLDAuOTYtMy4yLDEuMWMtMS4xLDAuMTQtMi4xOCwwLjA3LTMuMjItMC4yMWMtMS4wNC0wLjI4LTItMC43NS0yLjg4LTEuNDNjLTAuODgtMC42OC0xLjYxLTEuNTMtMi4yMS0yLjU2CgkJCWMtMC41OS0xLjAyLTAuOTQtMi4xMi0xLjA1LTMuMzFjLTAuMTEtMS4xOSwwLjAyLTIuMjcsMC40Mi0zLjI2bDMuMTIsMC42N2MtMC4yMywwLjc5LTAuMzMsMS41NC0wLjMsMi4yNgoJCQljMC4wNCwwLjcyLDAuMjQsMS40MSwwLjYxLDIuMDZjMC40NiwwLjgsMS4wNywxLjQxLDEuODIsMS44NGMwLjc1LDAuNDMsMS41OCwwLjYzLDIuNDgsMC42MmMwLjktMC4wMSwxLjgtMC4yOCwyLjctMC43OQoJCQljMC45Mi0wLjUzLDEuNjItMS4xOCwyLjA5LTEuOTVjMC40Ny0wLjc3LDAuNy0xLjYsMC42Ny0yLjVjLTAuMDItMC45LTAuMjktMS44LTAuOC0yLjY5Yy0wLjM4LTAuNjctMC44OC0xLjIxLTEuNDgtMS42NAoJCQljLTAuNjEtMC40My0xLjI1LTAuNzMtMS45Mi0wLjlsMS40OC0yLjc1YzAuNTUsMC4xMiwxLjE0LDAuMzcsMS43NiwwLjc1YzAuNjIsMC4zOSwxLjIxLDAuODYsMS43NiwxLjQ0CgkJCUMxMjcuMTUsMjcyLjY2LDEyNy42MiwyNzMuMjgsMTI4LjAxLDI3My45NnoiLz4KCQk8cGF0aCBjbGFzcz0ic3QyIiBkPSJNMTIxLjMyLDI1OS44NmMwLjQ0LDEuMTIsMC42NSwyLjIzLDAuNjMsMy4zM2MtMC4wMiwxLjEtMC4yNSwyLjE0LTAuNjgsMy4xMWMtMC40MywwLjk3LTEuMDUsMS44NC0xLjg2LDIuNgoJCQljLTAuODEsMC43Ny0xLjc5LDEuMzgtMi45NCwxLjgzYy0xLjE0LDAuNDUtMi4yNiwwLjY3LTMuMzcsMC42NmMtMS4xMS0wLjAxLTIuMTYtMC4yMi0zLjE0LTAuNjNzLTEuODUtMS4wMS0yLjYyLTEuODEKCQkJYy0wLjc3LTAuNzktMS4zNy0xLjc1LTEuODEtMi44N2MtMC40NC0xLjExLTAuNjUtMi4yMS0wLjYzLTMuMzFjMC4wMi0xLjEsMC4yNS0yLjE0LDAuNjktMy4xMWMwLjQ0LTAuOTcsMS4wNy0xLjg0LDEuODctMi42MQoJCQljMC44MS0wLjc3LDEuNzctMS4zNywyLjg5LTEuODFjMS4xNC0wLjQ1LDIuMjYtMC42NywzLjM3LTAuNjZjMS4xMSwwLjAxLDIuMTYsMC4yMiwzLjE1LDAuNjJjMC45OSwwLjQxLDEuODYsMS4wMSwyLjYzLDEuOAoJCQlDMTIwLjI4LDI1Ny44MSwxMjAuODgsMjU4Ljc2LDEyMS4zMiwyNTkuODZ6IE0xMTguMzMsMjYxLjA0Yy0wLjM1LTAuODctMC44Ni0xLjU3LTEuNTUtMi4wOWMtMC42OS0wLjUyLTEuNDktMC44Mi0yLjM4LTAuOTIKCQkJYy0wLjktMC4wOS0xLjgyLDAuMDUtMi43NiwwLjQyYy0wLjk1LDAuMzctMS43MSwwLjktMi4yOSwxLjU4Yy0wLjU4LDAuNjgtMC45NSwxLjQ0LTEuMTEsMi4yOWMtMC4xNiwwLjg1LTAuMDcsMS43MiwwLjI4LDIuNTkKCQkJYzAuMzUsMC44OSwwLjg3LDEuNTksMS41NywyLjExYzAuNjksMC41MiwxLjQ4LDAuODIsMi4zOCwwLjkyYzAuODksMC4wOSwxLjgyLTAuMDUsMi43Ni0wLjQyYzAuOTYtMC4zOCwxLjczLTAuOTEsMi4zMi0xLjU4CgkJCWMwLjU4LTAuNjgsMC45NS0xLjQ0LDEuMS0yLjI5QzExOC43OCwyNjIuOCwxMTguNjgsMjYxLjkzLDExOC4zMywyNjEuMDR6Ii8+Cgk8L2c+CjwvZz4KPGNpcmNsZSBjbGFzcz0ic3QwIiBjeD0iNjU5LjM5IiBjeT0iMjE1Ljk4IiByPSI3OC4zNCIvPgo8Zz4KCTxwYXRoIGNsYXNzPSJzdDQiIGQ9Ik01MDcuMDYsMjM2LjcxYy0zLjkzLDAtNy40NS0wLjgzLTEwLjU0LTIuNWMtMy4wOS0xLjY2LTUuNTMtMy45NS03LjMxLTYuODVjLTEuNzgtMi45LTIuNjctNi4yMy0yLjY3LTkuOTgKCQl2LTMwLjM2aDEwLjE5djI5LjcyYzAsMi4wNiwwLjQ3LDMuOSwxLjQxLDUuNTJjMC45NCwxLjYyLDIuMTksMi44OSwzLjc2LDMuODNjMS41NywwLjk0LDMuMjksMS40MSw1LjE2LDEuNDEKCQljMi4wMSwwLDMuODMtMC40Nyw1LjQ1LTEuNDFjMS42Mi0wLjk0LDIuOS0yLjIxLDMuODYtMy44M2MwLjk2LTEuNjIsMS40NC0zLjQ1LDEuNDQtNS41MnYtMjkuNzJoOS43N3YzMC4zNgoJCWMwLDMuNzUtMC44OCw3LjA3LTIuNjQsOS45OGMtMS43NiwyLjkxLTQuMTgsNS4xOS03LjI3LDYuODVDNTE0LjU4LDIzNS44OCw1MTEuMDQsMjM2LjcxLDUwNy4wNiwyMzYuNzF6Ii8+Cgk8cGF0aCBjbGFzcz0ic3Q0IiBkPSJNNTQwLjA5LDIzNi4yOVYxODcuMWgyMS42NGMzLDAsNS43MywwLjY4LDguMTksMi4wNGMyLjQ2LDEuMzYsNC40MiwzLjIyLDUuODcsNS41OQoJCWMxLjQ1LDIuMzcsMi4xOCw1LjA1LDIuMTgsOC4wNGMwLDMuMTktMC44NCw2LjA0LTIuNTMsOC41N2MtMS42OSwyLjUzLTMuOTEsNC40My02LjY4LDUuNjlsMTEuMTcsMTkuMzJsLTExLjczLTAuMDdsLTEwLjA1LTE3Ljc4CgkJaC04LjI5djE3Ljc4SDU0MC4wOXogTTU0OS44NSwyMTAuMTVoMTEuNTJjMS45NywwLDMuNTUtMC42Nyw0Ljc0LTJzMS43OS0zLjAxLDEuNzktNS4wMmMwLTIuMTUtMC43My0zLjg5LTIuMTgtNS4yCgkJYy0xLjQ1LTEuMzEtMy4zNy0xLjk3LTUuNzYtMS45N2gtMTAuMTJWMjEwLjE1eiIvPgoJPHBhdGggY2xhc3M9InN0NCIgZD0iTTYwOS44NiwyMzYuOTljLTQuNzgsMC05LjAzLTEuMDgtMTIuNzUtMy4yM2MtMy43Mi0yLjE1LTYuNjQtNS4xNC04Ljc1LTguOTZjLTIuMTEtMy44Mi0zLjE2LTguMjMtMy4xNi0xMy4yNQoJCWMwLTMuNTYsMC42NC02Ljg3LDEuOTMtOS45NGMxLjI5LTMuMDcsMy4wNy01Ljc1LDUuMzQtOC4wNGMyLjI3LTIuMjksNC45NC00LjA4LDguMDEtNS4zNGMzLjA3LTEuMjYsNi4zOC0xLjksOS45NC0xLjkKCQljMy41MSwwLDYuOSwwLjc0LDEwLjE1LDIuMjFzNS44NywzLjQ2LDcuODMsNS45NGwtNi4zOSw3LjFjLTEuNjktMS43OC0zLjQ5LTMuMTYtNS40MS00LjE1Yy0xLjkyLTAuOTgtNC0xLjQ4LTYuMjUtMS40OAoJCWMtMi43NiwwLTUuMjYsMC42Ni03LjQ4LDEuOTdjLTIuMjMsMS4zMS0zLjk5LDMuMTUtNS4zLDUuNTJjLTEuMzEsMi4zNy0xLjk3LDUuMDktMS45Nyw4LjE5YzAsMy4xOSwwLjY0LDUuOTYsMS45Myw4LjMzCgkJYzEuMjksMi4zNywzLjExLDQuMTksNS40OCw1LjQ4YzIuMzcsMS4yOSw1LjA5LDEuOTMsOC4xOSwxLjkzYzIuMjksMCw0LjQ1LTAuNDcsNi40Ni0xLjQxYzIuMDEtMC45NCwzLjc1LTIuMTUsNS4yLTMuNjVsNC45Miw3Ljk0CgkJYy0xLjEyLDEuMjYtMi42NSwyLjQxLTQuNTcsMy40NGMtMS45MiwxLjAzLTQuMDQsMS44NC02LjM2LDIuNDJDNjE0LjUzLDIzNi43LDYxMi4yLDIzNi45OSw2MDkuODYsMjM2Ljk5eiIvPgoJPHBhdGggY2xhc3M9InN0NCIgZD0iTTY0MC43MSwyNTIuNDVsNi44OS0xNS45NWwtMTYuODYtMzcuMzFoMTAuODlsOS40MiwyMi4yYzAuNDIsMC45OCwwLjg0LDIuMTMsMS4yNiwzLjQ0CgkJYzAuMTktMC41MiwwLjM2LTEuMDIsMC41My0xLjUxYzAuMTYtMC40OSwwLjM0LTEuMDIsMC41My0xLjU4bDguMDgtMjIuNTZoMTEuMDNsLTE1LjYsMzcuMWwtNi4zOSwxNi4xNkg2NDAuNzF6Ii8+Cgk8cGF0aCBjbGFzcz0ic3Q0IiBkPSJNNjc5LjI4LDIzNi4yOVYxODcuMWg5LjM0bDE0LjksMjQuMzFsMTUuMTgtMjQuMzFoOC45MnY0OS4xOWgtOS45MXYtMTcuMzZjMC0yLjg2LDAuMDUtNS41MiwwLjE0LTcuOTgKCQljMC4wOS0yLjQ2LDAuMjMtNC44NCwwLjQyLTcuMTNsLTEyLjY1LDE5LjZINzAxbC0xMi4zNy0xOS40NmMwLjIzLDIuMTYsMC4zOSw0LjQ0LDAuNDYsNi44NWMwLjA3LDIuNDEsMC4xMSw1LjEyLDAuMTEsOC4xMnYxNy4zNgoJCUg2NzkuMjh6Ii8+CjwvZz4KPGc+Cgk8Zz4KCQk8cGF0aCBjbGFzcz0ic3QyIiBkPSJNNTU5LjgxLDE1NS43NmMtMC42OCwxLjEzLTEuNTMsMS45OS0yLjU0LDIuNThjLTEuMDEsMC42LTIuMDgsMC45LTMuMjIsMC45MWMtMS4xNCwwLjAxLTIuMjQtMC4zMS0zLjMxLTAuOTYKCQkJbC04LjY4LTUuMjVsMS43Ni0yLjkxbDguNSw1LjE0YzAuNTksMC4zNiwxLjIsMC41NCwxLjgyLDAuNTVjMC42MiwwLjAxLDEuMjEtMC4xMywxLjc1LTAuNDFjMC41NC0wLjI5LDAuOTctMC43LDEuMjktMS4yMwoJCQljMC4zNS0wLjU4LDAuNTMtMS4xOCwwLjU0LTEuOHMtMC4xMy0xLjIxLTAuNDMtMS43N2MtMC4zLTAuNTUtMC43NC0xLjAxLTEuMzMtMS4zN2wtOC41LTUuMTRsMS42OS0yLjc5bDguNjgsNS4yNQoJCQljMS4wNywwLjY1LDEuODcsMS40NywyLjQsMi40OGMwLjUzLDEsMC43NiwyLjA5LDAuNywzLjI2QzU2MC44NywxNTMuNDcsNTYwLjUsMTU0LjYzLDU1OS44MSwxNTUuNzZ6Ii8+CgkJPHBhdGggY2xhc3M9InN0MiIgZD0iTTU2NS4zLDE0Ni44OWwtMTIuNjEtMTAuNTRsMS45NC0yLjMybDE0LjIxLDAuODRjLTAuODQtMC41NC0xLjY4LTEuMTMtMi41NC0xLjc3CgkJCWMtMC44Ni0wLjY1LTEuODItMS40My0yLjg5LTIuMzRsLTMuNTUtMi45N2wyLjEyLTIuNTRsMTIuNjEsMTAuNTRsLTEuOTcsMi4zNmwtMTQuMDMtMC43NWMwLjg1LDAuNTksMS41MiwxLjA2LDIuMDIsMS40MQoJCQljMC40OSwwLjM1LDAuOSwwLjY1LDEuMjEsMC44OWMwLjMyLDAuMjQsMC42NCwwLjUsMC45NiwwLjc3bDQuNjUsMy44OUw1NjUuMywxNDYuODl6Ii8+CgkJPHBhdGggY2xhc3M9InN0MiIgZD0iTTU3Ny4wNiwxMzMuNDVsLTEuOTktMi4xNmwyLTEuODVsLTcuMTctNy43NmwtMiwxLjg1bC0xLjk5LTIuMTZsNi41LTZsMS45OSwyLjE2bC0yLjAyLDEuODZsNy4xNyw3Ljc2CgkJCWwyLjAyLTEuODZsMS45OSwyLjE2TDU3Ny4wNiwxMzMuNDV6Ii8+CgkJPHBhdGggY2xhc3M9InN0MiIgZD0iTTU4Ni4xLDEyNS4ybC05LjU4LTEzLjM2bDUuNDQtMy45YzEuMy0wLjkzLDIuNjQtMS40Niw0LjAxLTEuNTljMS4zOC0wLjEzLDIuNywwLjExLDMuOTYsMC43MwoJCQlzMi4zNiwxLjU4LDMuMywyLjg5YzAuOTUsMS4zMiwxLjUxLDIuNjgsMS42OSw0LjA2YzAuMTgsMS4zOS0wLjAyLDIuNzEtMC41OCwzLjk3Yy0wLjU2LDEuMjYtMS41LDIuMzYtMi44MSwzLjNMNTg2LjEsMTI1LjJ6CgkJCSBNNTgzLjY1LDExMC41MmwtMi41OSwxLjg2bDUuOTksOC4zNmwyLjU5LTEuODZjMS4xOC0wLjg1LDEuODQtMS44OSwxLjk4LTMuMTJjMC4xNC0xLjIzLTAuMjYtMi40OS0xLjE4LTMuNzgKCQkJYy0wLjkxLTEuMjctMS45OC0yLjA0LTMuMi0yLjMxQzU4Ni4wMiwxMDkuMzksNTg0LjgzLDEwOS42OCw1ODMuNjUsMTEwLjUyeiIvPgoJCTxwYXRoIGNsYXNzPSJzdDIiIGQ9Ik01OTguMjcsMTE2LjQ5bC0xLjk1LTE3LjU0bDIuNy0xLjQybDEzLjMyLDExLjU3bC0zLjA4LDEuNjJsLTIuODMtMi41MmwtNS42NSwyLjk3bDAuNDYsMy43Nkw1OTguMjcsMTE2LjQ5egoJCQkgTTYwMC4wNywxMDUuNDRsMC4zNSwyLjc5bDMuOC0ybC0yLjE0LTEuOWMtMC4xOS0wLjE2LTAuNDMtMC4zOS0wLjcyLTAuNjdjLTAuMjktMC4yOC0wLjYtMC41OC0wLjk0LTAuOQoJCQljLTAuMzMtMC4zMi0wLjY0LTAuNjItMC45Mi0wLjkyYzAuMSwwLjYsMC4yMSwxLjIyLDAuMzEsMS44NUM1OTkuOTIsMTA0LjMzLDYwMC4wMSwxMDQuOTEsNjAwLjA3LDEwNS40NHoiLz4KCQk8cGF0aCBjbGFzcz0ic3QyIiBkPSJNNjE0LjA3LDEwOC40M2wtNS40OS0xNS40OWw2LjMxLTIuMjRjMS41LTAuNTMsMi45NC0wLjY3LDQuMy0wLjQyYzEuMzYsMC4yNiwyLjU2LDAuODYsMy42LDEuOAoJCQljMS4wNCwwLjk0LDEuODMsMi4xNywyLjM3LDMuNjljMC41NCwxLjUzLDAuNzEsMi45OSwwLjQ5LDQuMzdjLTAuMjIsMS4zOC0wLjc3LDIuNi0xLjY2LDMuNjVjLTAuODksMS4wNS0yLjA5LDEuODUtMy42MSwyLjM5CgkJCUw2MTQuMDcsMTA4LjQzeiBNNjE1LjgsOTMuNjVsLTMuMDEsMS4wN2wzLjQ0LDkuNjlsMy4wMS0xLjA3YzEuMzctMC40OSwyLjI5LTEuMywyLjc3LTIuNDVjMC40Ny0xLjE1LDAuNDUtMi40Ny0wLjA4LTMuOTYKCQkJYy0wLjUyLTEuNDgtMS4zMy0yLjUxLTIuNDMtMy4xMUM2MTguMzgsOTMuMjIsNjE3LjE1LDkzLjE3LDYxNS44LDkzLjY1eiIvPgoJCTxwYXRoIGNsYXNzPSJzdDIiIGQ9Ik02MzcuMTksMTAxLjQxbC0yLjE3LTE2LjI5bDYuNjMtMC44OGMxLjU4LTAuMjEsMy4wMS0wLjA1LDQuMjksMC40OGMxLjI4LDAuNTMsMi4zMywxLjM3LDMuMTUsMi41CgkJCWMwLjgyLDEuMTQsMS4zNCwyLjUxLDEuNTUsNC4xYzAuMjEsMS42MSwwLjA3LDMuMDctMC40Miw0LjM4Yy0wLjUsMS4zMS0xLjI5LDIuMzgtMi4zOCwzLjIzYy0xLjA5LDAuODUtMi40MywxLjM4LTQuMDMsMS41OQoJCQlMNjM3LjE5LDEwMS40MXogTTY0MS45NCw4Ny4zbC0zLjE3LDAuNDJsMS4zNiwxMC4xOWwzLjE3LTAuNDJjMS40NC0wLjE5LDIuNTEtMC44LDMuMjEtMS44M3MwLjk1LTIuMzIsMC43NC0zLjg5CgkJCWMtMC4yMS0xLjU1LTAuNzktMi43My0xLjc0LTMuNTVDNjQ0LjU2LDg3LjQyLDY0My4zNyw4Ny4xMSw2NDEuOTQsODcuM3oiLz4KCQk8cGF0aCBjbGFzcz0ic3QyIiBkPSJNNjU0LjQyLDk5LjQ4bDAuMDUtMTYuNDRsMTAuOTksMC4wM2wtMC4wMSwzbC03LjY4LTAuMDJsLTAuMDEsMy41OWw2LjUzLDAuMDJsLTAuMDEsMi45MWwtNi41My0wLjAyCgkJCWwtMC4wMSwzLjkybDcuODIsMC4wMmwtMC4wMSwzLjAxTDY1NC40Miw5OS40OHoiLz4KCQk8cGF0aCBjbGFzcz0ic3QyIiBkPSJNNjc1LjYyLDEwMC40OGwzLjEyLTE2LjE0bDcuMSwxLjM3YzAuOTgsMC4xOSwxLjgzLDAuNTksMi41NiwxLjE5YzAuNzIsMC42LDEuMjQsMS4zNCwxLjU3LDIuMgoJCQljMC4zMywwLjg3LDAuMzksMS43OSwwLjIsMi43OGMtMC4yLDEuMDUtMC42NiwxLjkzLTEuMzcsMi42NWMtMC43MSwwLjcyLTEuNTYsMS4yLTIuNTUsMS40NWwyLjQ0LDcuMDVsLTMuODUtMC43N2wtMi4xNy02LjQ3CgkJCWwtMi43Mi0wLjUybC0xLjEzLDUuODNMNjc1LjYyLDEwMC40OHogTTY4MC40OCw5Mi41MmwzLjc4LDAuNzNjMC42NSwwLjEyLDEuMjEsMC4wMSwxLjY4LTAuMzZzMC43OC0wLjg3LDAuOTEtMS41MwoJCQljMC4xNC0wLjcxLDAuMDEtMS4zMi0wLjM4LTEuODRjLTAuMzktMC41Mi0wLjk4LTAuODYtMS43Ny0xLjAxbC0zLjMyLTAuNjRMNjgwLjQ4LDkyLjUyeiIvPgoJCTxwYXRoIGNsYXNzPSJzdDIiIGQ9Ik02OTAuNzcsMTAzLjcxbDAuODktMi43OWwyLjU5LDAuODNsMy4yMi0xMC4wNmwtMi41OS0wLjgzbDAuODktMi43OWw4LjQzLDIuN2wtMC44OSwyLjhsLTIuNjItMC44NAoJCQlsLTMuMjIsMTAuMDZsMi42MiwwLjg0bC0wLjg5LDIuOEw2OTAuNzcsMTAzLjcxeiIvPgoJCTxwYXRoIGNsYXNzPSJzdDIiIGQ9Ik03MDIuNDIsMTA3LjU5bDYuNzQtMTQuOTlsMTAuMDIsNC41bC0xLjIzLDIuNzRsLTctMy4xNWwtMS40NywzLjI4bDUuOTUsMi42N2wtMS4xOSwyLjY2bC01Ljk1LTIuNjcKCQkJbC0xLjYxLDMuNThsNy4xMywzLjJsLTEuMjMsMi43NEw3MDIuNDIsMTA3LjU5eiIvPgoJCTxwYXRoIGNsYXNzPSJzdDIiIGQ9Ik03MTkuODIsMTE2LjY0Yy0xLjMtMC43OS0yLjI3LTEuNy0yLjkxLTIuNzRjLTAuNjQtMS4wNC0xLjAyLTIuMjEtMS4xMy0zLjVsMy4wOC0wLjk2CgkJCWMwLjEsMS4zMSwwLjM4LDIuMzIsMC44MiwzLjA0YzAuNDQsMC43MiwxLjA1LDEuMzEsMS44MywxLjc4YzAuNjMsMC4zOCwxLjI0LDAuNTcsMS44NCwwLjU3YzAuNiwwLDEuMDMtMC4yMywxLjMxLTAuNjkKCQkJYzAuMzMtMC41NSwwLjMyLTEuMTUtMC4wNS0xLjhjLTAuMzYtMC42NS0wLjkzLTEuMzMtMS42OS0yLjAzYy0xLjMyLTEuMjQtMi4xMy0yLjQ0LTIuNDMtMy41OWMtMC4zMS0xLjE2LTAuMS0yLjMyLDAuNjItMy41CgkJCWMwLjUtMC44MiwxLjE3LTEuMzksMi4wMS0xLjczYzAuODUtMC4zNCwxLjc2LTAuNDUsMi43NC0wLjMzYzAuOTgsMC4xMiwxLjk0LDAuNDYsMi44OCwxLjAzYzEuMjQsMC43NSwyLjE1LDEuNTksMi43MiwyLjUxCgkJCWMwLjU3LDAuOTIsMC44NiwxLjkyLDAuODcsMi45OWwtMi45OCwwLjY5Yy0wLjExLTEuNjgtMC44MS0yLjkxLTIuMS0zLjY5Yy0wLjY3LTAuNDEtMS4yOS0wLjYtMS44Ny0wLjU3cy0xLDAuMjctMS4yOSwwLjc0CgkJCWMtMC4zLDAuNDktMC4zLDEuMDMsMCwxLjZjMC4zLDAuNTcsMC44MSwxLjE4LDEuNTEsMS44M2MxLjI4LDEuMiwyLjE1LDIuNCwyLjYxLDMuNmMwLjQ1LDEuMiwwLjMzLDIuMzctMC4zNiwzLjUKCQkJYy0wLjU3LDAuOTQtMS4yOCwxLjYtMi4xMywyYy0wLjg2LDAuNC0xLjc5LDAuNTMtMi44LDAuNEM3MjEuOTEsMTE3LjY3LDcyMC44OCwxMTcuMjgsNzE5LjgyLDExNi42NHoiLz4KCQk8cGF0aCBjbGFzcz0ic3QyIiBkPSJNNzMzLjE5LDEyNi4xM2MtMC45OC0wLjgtMS43NS0xLjctMi4yOS0yLjY5Yy0wLjU0LTEtMC44Ny0yLjAzLTAuOTgtMy4xMXMwLTIuMTUsMC4zMi0zLjIxCgkJCWMwLjMyLTEuMDYsMC44Ny0yLjA3LDEuNjQtMy4wMWMwLjc1LTAuOTIsMS42Mi0xLjY0LDIuNjEtMi4xNmMwLjk5LTAuNTIsMi4wMy0wLjgzLDMuMTItMC45M2MxLjA5LTAuMSwyLjE4LDAuMDIsMy4yNywwLjM2CgkJCWMxLjA5LDAuMzQsMi4xMiwwLjkxLDMuMSwxLjcxYzEuMDEsMC44MiwxLjc4LDEuNzksMi4zMywyLjlzMC44MiwyLjE4LDAuODEsMy4yMWwtMy4wMSwwLjM5Yy0wLjExLTAuODYtMC4zMy0xLjYzLTAuNjctMi4zMgoJCQljLTAuMzQtMC42OS0wLjgyLTEuMjktMS40My0xLjc5Yy0wLjc4LTAuNjMtMS42Mi0xLjAyLTIuNTItMS4xNmMtMC45LTAuMTQtMS43OS0wLjA0LTIuNjUsMC4zYy0wLjg2LDAuMzQtMS42MSwwLjktMi4yNiwxLjY5CgkJCWMtMC42NCwwLjc5LTEuMDQsMS42NS0xLjE4LDIuNThjLTAuMTQsMC45My0wLjA1LDEuODQsMC4yNywyLjczYzAuMzIsMC44OSwwLjg3LDEuNjUsMS42MywyLjI3YzAuNTcsMC40NywxLjE4LDAuNzcsMS44MiwwLjkyCgkJCWMwLjY0LDAuMTUsMS4yNSwwLjE1LDEuODMsMGMwLjU4LTAuMTUsMS4wNS0wLjQ1LDEuNDMtMC45MWwtMy4zMS0yLjdsMS44MS0yLjIybDUuODQsNC43NmMtMC4xMywwLjI0LTAuMzEsMC41MS0wLjU0LDAuODIKCQkJYy0wLjIzLDAuMzEtMC40MiwwLjU0LTAuNTUsMC43MWMtMC45LDEuMTEtMS45NSwxLjg3LTMuMTYsMi4zYy0xLjIxLDAuNDMtMi40NCwwLjUyLTMuNzEsMC4yOAoJCQlDNzM1LjQ3LDEyNy42LDczNC4yOSwxMjcuMDMsNzMzLjE5LDEyNi4xM3oiLz4KCQk8cGF0aCBjbGFzcz0ic3QyIiBkPSJNNzQ1LjY0LDEzOC4wNGMtMC44MS0wLjktMS40LTEuODYtMS43Ni0yLjljLTAuMzctMS4wNC0wLjUyLTIuMDktMC40NS0zLjE1czAuMzQtMi4wOSwwLjgzLTMuMDkKCQkJYzAuNDktMSwxLjE5LTEuOTEsMi4xMS0yLjc0YzAuOTEtMC44MiwxLjg4LTEuNDIsMi45My0xLjhjMS4wNC0wLjM4LDIuMS0wLjU1LDMuMTYtMC41MWMxLjA2LDAuMDQsMi4wOSwwLjMsMy4wOSwwLjc3CgkJCWMxLDAuNDcsMS45LDEuMTUsMi43LDIuMDVjMC44LDAuODgsMS4zOCwxLjg0LDEuNzUsMi44OGMwLjM3LDEuMDQsMC41MiwyLjA5LDAuNDUsMy4xNmMtMC4wNywxLjA3LTAuMzUsMi4xLTAuODQsMy4xCgkJCWMtMC40OSwxLTEuMTgsMS45LTIuMDgsMi43MWMtMC45MSwwLjgyLTEuODgsMS40Mi0yLjkzLDEuOGMtMS4wNCwwLjM4LTIuMSwwLjU2LTMuMTcsMC41MmMtMS4wNy0wLjA0LTIuMS0wLjI5LTMuMDktMC43NwoJCQlTNzQ2LjQ0LDEzOC45Miw3NDUuNjQsMTM4LjA0eiBNNzQ4LjAzLDEzNS44OGMwLjYzLDAuNywxLjM2LDEuMTcsMi4xOSwxLjQxYzAuODMsMC4yNCwxLjY4LDAuMjUsMi41NSwwLjAyCgkJCWMwLjg3LTAuMjMsMS42OC0wLjY4LDIuNDQtMS4zNmMwLjc2LTAuNjgsMS4yOS0xLjQ0LDEuNi0yLjI4YzAuMzEtMC44NCwwLjM5LTEuNjgsMC4yNC0yLjU0Yy0wLjE1LTAuODYtMC41NC0xLjYzLTEuMTctMi4zMwoJCQljLTAuNjQtMC43MS0xLjM4LTEuMTgtMi4yMS0xLjQzYy0wLjgzLTAuMjQtMS42OC0wLjI1LTIuNTUtMC4wMmMtMC44NywwLjIzLTEuNjgsMC42OC0yLjQ0LDEuMzZjLTAuNzcsMC42OS0xLjMxLDEuNDYtMS42MSwyLjI5CgkJCWMtMC4zMSwwLjg0LTAuMzksMS42OC0wLjIzLDIuNTNDNzQ2Ljk5LDEzNC4zOSw3NDcuMzksMTM1LjE3LDc0OC4wMywxMzUuODh6Ii8+CgkJPHBhdGggY2xhc3M9InN0MiIgZD0iTTc2MC4yOCwxNTguMTdjLTAuODEtMS4zOC0xLjIyLTIuNzgtMS4yMy00LjIyYy0wLjAxLTEuNDQsMC4zNS0yLjc4LDEuMS00LjA0YzAuNzQtMS4yNSwxLjgzLTIuMzEsMy4yOC0zLjE2CgkJCWMxLjAyLTAuNiwyLjA5LTAuOTgsMy4xOS0xLjEzYzEuMS0wLjE1LDIuMTgtMC4wOSwzLjIyLDAuMTdjMS4wNSwwLjI2LDIuMDEsMC43MywyLjksMS40YzAuODgsMC42NywxLjYzLDEuNTIsMi4yMywyLjU0CgkJCWMwLjYsMS4wMSwwLjk2LDIuMTEsMS4wOCwzLjNjMC4xMywxLjE5LDAsMi4yOC0wLjM4LDMuMjZsLTMuMTMtMC42NGMwLjIzLTAuNzksMC4zMi0xLjU0LDAuMjgtMi4yNgoJCQljLTAuMDQtMC43Mi0wLjI1LTEuNC0wLjYzLTIuMDVjLTAuNDctMC44LTEuMDgtMS40LTEuODMtMS44MmMtMC43NS0wLjQyLTEuNTgtMC42Mi0yLjQ5LTAuNTljLTAuOSwwLjAyLTEuOCwwLjMtMi42OSwwLjgyCgkJCWMtMC45MiwwLjU0LTEuNjEsMS4yLTIuMDcsMS45N2MtMC40NiwwLjc3LTAuNjgsMS42MS0wLjY1LDIuNTFjMC4wMywwLjksMC4zMSwxLjc5LDAuODMsMi42OGMwLjM5LDAuNjYsMC44OSwxLjIsMS41LDEuNjIKCQkJYzAuNjEsMC40MiwxLjI1LDAuNzEsMS45MywwLjg4bC0xLjQ1LDIuNzZjLTAuNTUtMC4xMS0xLjE0LTAuMzUtMS43Ny0wLjczYy0wLjYyLTAuMzgtMS4yMS0wLjg1LTEuNzgtMS40MgoJCQlTNzYwLjY3LDE1OC44NSw3NjAuMjgsMTU4LjE3eiIvPgoJCTxwYXRoIGNsYXNzPSJzdDIiIGQ9Ik03NjMuODMsMTYzLjcybDE3LjY0LTAuNDFsMS4xOCwyLjgxbC0xMi42OSwxMi4yNmwtMS4zNC0zLjIxbDIuNzUtMi42bC0yLjQ2LTUuODlsLTMuNzksMC4xM0w3NjMuODMsMTYzLjcyegoJCQkgTTc3NC42OCwxNjYuNDhsLTIuODEsMC4xMWwxLjY2LDMuOTZsMi4wOC0xLjk3YzAuMTgtMC4xOCwwLjQyLTAuNCwwLjczLTAuNjZjMC4zMS0wLjI2LDAuNjMtMC41NSwwLjk4LTAuODUKCQkJYzAuMzUtMC4zMSwwLjY4LTAuNTksMS0wLjg0Yy0wLjYxLDAuMDUtMS4yMywwLjEtMS44NywwLjE1Qzc3NS44LDE2Ni40Miw3NzUuMjEsMTY2LjQ2LDc3NC42OCwxNjYuNDh6Ii8+CgkJPHBhdGggY2xhc3M9InN0MiIgZD0iTTc3MC40NCwxODAuMmwxNS44OS00LjIxbDEuODUsNi45OWMwLjI2LDAuOTcsMC4yNywxLjkxLDAuMDQsMi44MmMtMC4yMywwLjkxLTAuNjYsMS43LTEuMywyLjM4CgkJCWMtMC42NCwwLjY3LTEuNDQsMS4xMy0yLjQxLDEuMzljLTEuMDMsMC4yNy0yLjAyLDAuMjUtMi45OS0wLjA4Yy0wLjk2LTAuMzMtMS43Ni0wLjg4LTIuNDEtMS42N2wtNS4yOCw1LjI2bC0wLjk4LTMuOGw0Ljg4LTQuNzcKCQkJbC0wLjcxLTIuNjhsLTUuNzQsMS41Mkw3NzAuNDQsMTgwLjJ6IE03NzkuNzIsMTgxLjExbDAuOTksMy43MmMwLjE3LDAuNjQsMC41MiwxLjA5LDEuMDUsMS4zNmMwLjUzLDAuMjcsMS4xMywwLjMyLDEuNzgsMC4xNQoJCQljMC43LTAuMTgsMS4xOS0wLjU3LDEuNDktMS4xNWMwLjMtMC41OCwwLjM1LTEuMjYsMC4xNC0yLjAzbC0wLjg3LTMuMjdMNzc5LjcyLDE4MS4xMXoiLz4KCQk8cGF0aCBjbGFzcz0ic3QyIiBkPSJNNzc0LjI5LDE5NS41NWwxNi4zMi0xLjkybDAuNzgsNi42NGMwLjE5LDEuNTksMCwzLjAxLTAuNTUsNC4yOWMtMC41NSwxLjI3LTEuNCwyLjMxLTIuNTUsMy4xMQoJCQljLTEuMTUsMC44MS0yLjUzLDEuMy00LjEzLDEuNDljLTEuNjIsMC4xOS0zLjA3LDAuMDMtNC4zNy0wLjQ5cy0yLjM2LTEuMzMtMy4xOS0yLjQzYy0wLjgzLTEuMS0xLjM0LTIuNDUtMS41My00LjA1CgkJCUw3NzQuMjksMTk1LjU1eiBNNzg4LjMzLDIwMC41MmwtMC4zNy0zLjE3bC0xMC4yMSwxLjJsMC4zNywzLjE3YzAuMTcsMS40NSwwLjc2LDIuNTMsMS43OCwzLjI0YzEuMDEsMC43MiwyLjMxLDAuOTgsMy44OCwwLjgKCQkJYzEuNTUtMC4xOCwyLjc1LTAuNzQsMy41Ny0xLjY5Qzc4OC4xNywyMDMuMTQsNzg4LjUsMjAxLjk1LDc4OC4zMywyMDAuNTJ6Ii8+CgkJPHBhdGggY2xhc3M9InN0MiIgZD0iTTc3NS45LDIxMi4xbDIuOTMsMC4wMWwtMC4wMSwyLjcybDEwLjU3LDAuMDZsMC4wMS0yLjcybDIuOTMsMC4wMWwtMC4wNSw4Ljg1bC0yLjkzLTAuMDJsMC4wMS0yLjc1CgkJCWwtMTAuNTctMC4wNmwtMC4wMSwyLjc1bC0yLjkzLTAuMDJMNzc1LjksMjEyLjF6Ii8+CgkJPHBhdGggY2xhc3M9InN0MiIgZD0iTTc3NC42NiwyMzEuMWMwLjE2LTEuMiwwLjUxLTIuMjcsMS4wNi0zLjIyczEuMjUtMS43NSwyLjEtMi4zOWMwLjg1LTAuNjQsMS44MS0xLjEsMi44OS0xLjM4CgkJCXMyLjIzLTAuMzMsMy40Ni0wLjE3YzEuMjEsMC4xNiwyLjMsMC41MSwzLjI3LDEuMDZjMC45NywwLjU0LDEuNzgsMS4yMywyLjQ0LDIuMDdzMS4xMywxLjc4LDEuNDIsMi44NXMwLjM1LDIuMTksMC4yLDMuMzkKCQkJYy0wLjE1LDEuMTgtMC41MSwyLjI1LTEuMDYsMy4ycy0xLjI1LDEuNzUtMi4xMSwyLjM5Yy0wLjg2LDAuNjQtMS44MiwxLjA5LTIuOSwxLjM3Yy0xLjA4LDAuMjgtMi4yMSwwLjM0LTMuNDEsMC4xOAoJCQljLTEuMjEtMC4xNi0yLjMtMC41MS0zLjI3LTEuMDZjLTAuOTctMC41NS0xLjc5LTEuMjQtMi40NS0yLjA3Yy0wLjY2LTAuODMtMS4xNC0xLjc5LTEuNDMtMi44NQoJCQlDNzc0LjU3LDIzMy40LDc3NC41LDIzMi4yOCw3NzQuNjYsMjMxLjF6IE03NzcuODQsMjMxLjUyYy0wLjEyLDAuOTMsMCwxLjc5LDAuMzUsMi41OGMwLjM1LDAuNzksMC45LDEuNDQsMS42NCwxLjk2CgkJCWMwLjc0LDAuNTEsMS42MSwwLjg0LDIuNjIsMC45N2MxLjAxLDAuMTMsMS45MywwLjA0LDIuNzctMC4yNmMwLjg0LTAuMzEsMS41My0wLjgsMi4wOS0xLjQ3YzAuNTUtMC42NywwLjg5LTEuNDcsMS4wMS0yLjQKCQkJYzAuMTItMC45NSwwLjAxLTEuODEtMC4zNS0yLjZjLTAuMzYtMC43OS0wLjktMS40NC0xLjY0LTEuOTZjLTAuNzQtMC41Mi0xLjYxLTAuODQtMi42Mi0wLjk3Yy0xLjAyLTAuMTMtMS45Ni0wLjA1LTIuNzksMC4yNgoJCQljLTAuODQsMC4zMS0xLjUzLDAuOC0yLjA3LDEuNDdDNzc4LjMsMjI5Ljc2LDc3Ny45NywyMzAuNTcsNzc3Ljg0LDIzMS41MnoiLz4KCQk8cGF0aCBjbGFzcz0ic3QyIiBkPSJNNzcyLjAxLDI0NS44MmwxNy41OS0xLjkxbC0wLjk3LDMuNDhsLTkuNjQsMC45M2MtMC43MiwwLjA4LTEuMzMsMC4xMy0xLjgyLDAuMTYKCQkJYy0wLjUsMC4wMy0wLjk3LDAuMDYtMS40MSwwLjA4YzAuMzksMC4yNCwwLjc5LDAuNSwxLjIsMC43OHMwLjksMC42MywxLjQ3LDEuMDNsNy44Miw1LjYxbC0wLjk3LDMuNDhsLTE0LjA2LTEwLjc4TDc3Mi4wMSwyNDUuODIKCQkJeiIvPgoJCTxwYXRoIGNsYXNzPSJzdDIiIGQ9Ik03NjkuOTksMjUzLjQ0bDEyLjcxLDEyLjI1bC0xLjE3LDIuODJsLTE3LjY0LTAuMzlsMS4zMy0zLjIxbDMuNzksMC4xMmwyLjQ1LTUuOWwtMi43Ni0yLjZMNzY5Ljk5LDI1My40NHoKCQkJIE03NzUuNjcsMjYzLjA5bC0yLjA1LTEuOTJsLTEuNjUsMy45N2wyLjg2LDAuMWMwLjI1LDAsMC41OCwwLjAyLDAuOTgsMC4wNWMwLjQsMC4wMywwLjgzLDAuMDYsMS4yOSwwLjA5CgkJCWMwLjQ2LDAuMDMsMC44OSwwLjA3LDEuMywwLjEyYy0wLjQ2LTAuNC0wLjk0LTAuOC0xLjQyLTEuMjNDNzc2LjUsMjYzLjg1LDc3Ni4wNiwyNjMuNDYsNzc1LjY3LDI2My4wOXoiLz4KCQk8cGF0aCBjbGFzcz0ic3QyIiBkPSJNNzYwLjA0LDI3NC4yMmMwLjc2LTEuMzIsMS42NS0yLjMsMi42OC0yLjk3YzEuMDMtMC42NiwyLjE4LTEuMDcsMy40OC0xLjIxbDEuMDMsMy4wNgoJCQljLTEuMzEsMC4xMy0yLjMxLDAuNDMtMy4wMiwwLjg4Yy0wLjcxLDAuNDYtMS4yOSwxLjA4LTEuNzQsMS44N2MtMC4zNywwLjY0LTAuNTQsMS4yNS0wLjUzLDEuODVzMC4yNiwxLjAzLDAuNzIsMS4yOQoJCQljMC41NiwwLjMyLDEuMTYsMC4yOSwxLjgtMC4wOWMwLjY0LTAuMzgsMS4zMS0wLjk2LDEuOTktMS43NGMxLjIxLTEuMzQsMi4zOS0yLjE4LDMuNTQtMi41MWMxLjE1LTAuMzMsMi4zMi0wLjE1LDMuNTEsMC41NAoJCQljMC44MywwLjQ4LDEuNDIsMS4xMywxLjc3LDEuOTdjMC4zNiwwLjg0LDAuNDksMS43NSwwLjM5LDIuNzNjLTAuMSwwLjk4LTAuNDIsMS45NS0wLjk3LDIuOWMtMC43MywxLjI2LTEuNTUsMi4xOC0yLjQ1LDIuNzcKCQkJYy0wLjkxLDAuNTktMS45LDAuOS0yLjk2LDAuOTNsLTAuNzYtMi45NmMxLjY4LTAuMTUsMi44OS0wLjg4LDMuNjQtMi4xOGMwLjM5LTAuNjgsMC41Ny0xLjMsMC41My0xLjg4CgkJCWMtMC4wNC0wLjU3LTAuMy0xLTAuNzctMS4yN2MtMC41LTAuMjktMS4wMy0wLjI4LTEuNiwwLjA0Yy0wLjU2LDAuMzItMS4xNiwwLjgzLTEuNzksMS41NWMtMS4xNywxLjMxLTIuMzUsMi4yMS0zLjU0LDIuNjkKCQkJYy0xLjE5LDAuNDgtMi4zNiwwLjM4LTMuNTEtMC4yOGMtMC45NS0wLjU1LTEuNjMtMS4yNS0yLjA1LTIuMDljLTAuNDItMC44NS0wLjU3LTEuNzgtMC40Ni0yLjc5CgkJCUM3NTkuMDYsMjc2LjMzLDc1OS40MiwyNzUuMjksNzYwLjA0LDI3NC4yMnoiLz4KCQk8cGF0aCBjbGFzcz0ic3QyIiBkPSJNNzUxLjA1LDI4Ny41NGMwLjk3LTEuMjcsMi4xMi0yLjE4LDMuNDUtMi43M2MxLjMzLTAuNTUsMi43MS0wLjcyLDQuMTUtMC41YzEuNDQsMC4yMiwyLjgzLDAuODMsNC4xNiwxLjg1CgkJCWMwLjk0LDAuNzIsMS42OSwxLjU3LDIuMjUsMi41M3MwLjksMS45OCwxLjA1LDMuMDVzMC4wOCwyLjE0LTAuMjEsMy4yMWMtMC4yOSwxLjA3LTAuNzksMi4wOC0xLjUxLDMuMDIKCQkJYy0wLjcxLDAuOTMtMS42LDEuNjgtMi42NSwyLjI1Yy0xLjA1LDAuNTYtMi4xMSwwLjg2LTMuMTcsMC44N2wtMC41OS0zLjE0YzAuODItMC4wOCwxLjU1LTAuMjgsMi4yLTAuNTkKCQkJYzAuNjUtMC4zMSwxLjIxLTAuNzYsMS42Ni0xLjM2YzAuNTYtMC43MywwLjg5LTEuNTMsMS0yLjM4YzAuMS0wLjg2LTAuMDMtMS43LTAuMzktMi41M3MtMC45NS0xLjU2LTEuNzctMi4xOAoJCQljLTAuODUtMC42NS0xLjcxLTEuMDQtMi42LTEuMThjLTAuODktMC4xNC0xLjc1LTAuMDMtMi41NywwLjM0Yy0wLjgyLDAuMzctMS41NSwwLjk2LTIuMTcsMS43OGMtMC40NywwLjYxLTAuNzgsMS4yOC0wLjk0LDIKCQkJYy0wLjE2LDAuNzItMC4xOSwxLjQzLTAuMDksMi4xMmwtMy4xMS0wLjMxYy0wLjExLTAuNTUtMC4xLTEuMTksMC4wMS0xLjkxYzAuMTItMC43MiwwLjMzLTEuNDUsMC42NS0yLjE4CgkJCVM3NTAuNTgsMjg4LjE2LDc1MS4wNSwyODcuNTR6Ii8+CgkJPHBhdGggY2xhc3M9InN0MiIgZD0iTTc0MS4wNiwyOTguODVjMC45NC0wLjkyLDEuOTctMS41NSwzLjEtMS44OGMxLjEzLTAuMzMsMi4yNC0wLjM1LDMuMzUtMC4wOHMyLjEsMC44NiwyLjk3LDEuNzVsNy4xMSw3LjIzCgkJCWwtMi40MywyLjM5bC02Ljk2LTcuMDhjLTAuNDgtMC40OS0xLjAyLTAuODItMS42My0wLjk5Yy0wLjYtMC4xNy0xLjItMC4xOC0xLjc5LTAuMDNjLTAuNTksMC4xNC0xLjExLDAuNDMtMS41NiwwLjg3CgkJCWMtMC40OCwwLjQ3LTAuOCwxLjAxLTAuOTcsMS42MWMtMC4xNywwLjYtMC4xNywxLjIxLTAuMDIsMS44MmMwLjE1LDAuNjEsMC40NywxLjE2LDAuOTUsMS42NWw2Ljk2LDcuMDhsLTIuMzMsMi4yOWwtNy4xMS03LjIzCgkJCWMtMC44OC0wLjg5LTEuNDUtMS44OS0xLjcxLTNjLTAuMjYtMS4xLTAuMjItMi4yMSwwLjEzLTMuMzRDNzM5LjQ3LDMwMC44MSw3NDAuMTIsMjk5Ljc5LDc0MS4wNiwyOTguODV6Ii8+CgkJPHBhdGggY2xhc3M9InN0MiIgZD0iTTczMy4zOSwzMDYuMDdsOS44OSwxMy4xMmwtMi43LDIuMDRsLTguMDQtMTAuNjdsLTUuOTgsNC41MWwtMS44NS0yLjQ2TDczMy4zOSwzMDYuMDd6Ii8+CgkJPHBhdGggY2xhc3M9InN0MiIgZD0iTTcyNC4wMywzMTMuMjJsMi41OCwxNy40NmwtMi42NSwxLjUybC0xMy43My0xMS4wOGwzLjAyLTEuNzNsMi45MiwyLjQxbDUuNTQtMy4xN2wtMC42LTMuNzRMNzI0LjAzLDMxMy4yMnoKCQkJIE03MjIuNjIsMzI0LjM0bC0wLjQ1LTIuNzdsLTMuNzMsMi4xM2wyLjIxLDEuODJjMC4yLDAuMTYsMC40NSwwLjM3LDAuNzUsMC42NGMwLjMsMC4yNywwLjYyLDAuNTYsMC45NywwLjg3CgkJCWMwLjM1LDAuMzEsMC42NywwLjYsMC45NSwwLjg5Yy0wLjEyLTAuNi0wLjI1LTEuMjEtMC4zOC0xLjg0QzcyMi44MiwzMjUuNDQsNzIyLjcxLDMyNC44Niw3MjIuNjIsMzI0LjM0eiIvPgoJCTxwYXRoIGNsYXNzPSJzdDIiIGQ9Ik03MDguNDksMzIxLjgybDYuMTQsMTUuMjVsLTYuNzEsMi43Yy0wLjkzLDAuMzctMS44NiwwLjUtMi43OSwwLjM5Yy0wLjkzLTAuMTEtMS43Ny0wLjQ1LTIuNTEtMQoJCQljLTAuNzUtMC41NS0xLjMxLTEuMjktMS42OC0yLjIyYy0wLjQtMC45OS0wLjQ5LTEuOTgtMC4yOS0yLjk3YzAuMjEtMSwwLjY2LTEuODYsMS4zNi0yLjZsLTUuODctNC41OWwzLjY0LTEuNDRsNS4zMyw0LjI2CgkJCWwyLjU3LTEuMDNsLTIuMjItNS41MUw3MDguNDksMzIxLjgyeiBNNzA4LjcyLDMzMS4xNGwtMy41NywxLjQ0Yy0wLjYxLDAuMjUtMS4wMiwwLjY1LTEuMjIsMS4yMWMtMC4yLDAuNTYtMC4xOCwxLjE2LDAuMDcsMS43OAoJCQljMC4yNywwLjY3LDAuNzEsMS4xMSwxLjMyLDEuMzRzMS4yOSwwLjE5LDIuMDMtMC4xMWwzLjE0LTEuMjZMNzA4LjcyLDMzMS4xNHoiLz4KCQk8cGF0aCBjbGFzcz0ic3QyIiBkPSJNNjgyLjc4LDMzMC4xM2wxLjM3LDcuMTVsOC4wOCw3Ljc4bC0zLjg1LDAuNzRsLTUuMzUtNS4yNGwtMi43LDYuNzhsLTMuNzEsMC43MWw0LjItMTAuMDdsLTEuMzctNy4yCgkJCUw2ODIuNzgsMzMwLjEzeiIvPgoJCTxwYXRoIGNsYXNzPSJzdDIiIGQ9Ik02NjUuMDksMzMyLjYxbC0wLjM0LDE2LjQzbC0zLjEyLTAuMDdsLTQuODEtOC4yM2wtNS4yNCw4LjAybC0yLjk4LTAuMDZsMC4zNC0xNi40M2wzLjMxLDAuMDdsLTAuMTIsNS44CgkJCWMtMC4wMiwwLjk2LTAuMDUsMS44NC0wLjEsMi42NmMtMC4wNSwwLjgyLTAuMTEsMS42Mi0wLjE5LDIuMzhsNC4zNi02LjQ2bDEuNTUsMC4wM2w0LDYuNTljLTAuMDYtMC43Mi0wLjEtMS40OS0wLjExLTIuMjkKCQkJYy0wLjAxLTAuODEsMC0xLjcxLDAuMDItMi43MWwwLjEyLTUuOEw2NjUuMDksMzMyLjYxeiIvPgoJCTxwYXRoIGNsYXNzPSJzdDIiIGQ9Ik02NDUuMjEsMzMxLjcybC0yLjczLDE2LjIxbC0xMC44NC0xLjgybDAuNS0yLjk2bDcuNTcsMS4yN2wwLjYtMy41NGwtNi40NC0xLjA4bDAuNDgtMi44N2w2LjQ0LDEuMDgKCQkJbDAuNjUtMy44N2wtNy43MS0xLjNsMC41LTIuOTZMNjQ1LjIxLDMzMS43MnoiLz4KCQk8cGF0aCBjbGFzcz0ic3QyIiBkPSJNNjI3Ljg3LDMyOC4xNWwtMy44LDEyLjgxbDQuNTcsMS4zNWwtMC44NywyLjk1bC0xMi41Mi0zLjcxbDAuODctMi45NWw0LjcxLDEuMzlsMy44LTEyLjgxTDYyNy44NywzMjguMTV6IgoJCQkvPgoJCTxwYXRoIGNsYXNzPSJzdDIiIGQ9Ik02MjAuNDgsMzI2LjA4bC0xMi40MSwxMi41NGwtMi44LTEuMjFsMC42Mi0xNy42M2wzLjE5LDEuMzhsLTAuMTcsMy43OWw1Ljg2LDIuNTNsMi42My0yLjczTDYyMC40OCwzMjYuMDh6CgkJCSBNNjEwLjc1LDMzMS42M2wxLjk1LTIuMDJsLTMuOTUtMS43bC0wLjEzLDIuODZjLTAuMDEsMC4yNS0wLjAzLDAuNTgtMC4wNywwLjk4Yy0wLjA0LDAuNC0wLjA3LDAuODMtMC4xMSwxLjI5CgkJCWMtMC4wNCwwLjQ2LTAuMDgsMC44OS0wLjE0LDEuM2MwLjQtMC40NiwwLjgyLTAuOTMsMS4yNS0xLjQxQzYwOS45OCwzMzIuNDUsNjEwLjM4LDMzMi4wMSw2MTAuNzUsMzMxLjYzeiIvPgoJCTxwYXRoIGNsYXNzPSJzdDIiIGQ9Ik02MDQuMjcsMzE4LjgxbC04LjQ5LDE0LjA3bC02LjA3LTMuNjZjLTEuNDEtMC44NS0yLjMtMS44LTIuNjctMi44NmMtMC4zOC0xLjA2LTAuMjMtMi4xNCwwLjQ0LTMuMjYKCQkJYzAuODQtMS4zOSwyLTIsMy40OC0xLjgyYy0wLjU4LTAuNzMtMC45Mi0xLjU0LTEuMDEtMi40MmMtMC4wOS0wLjg4LDAuMTItMS43NCwwLjYzLTIuNThjMC44My0xLjM4LDEuOTEtMi4xNiwzLjIzLTIuMzMKCQkJYzEuMzItMC4xNywyLjcyLDAuMTksNC4xOSwxLjA4TDYwNC4yNywzMTguODF6IE01OTYuNDQsMzI1LjQ2bC0yLjk1LTEuNzhjLTAuNTUtMC4zMy0xLjA4LTAuNDUtMS41OS0wLjM2CgkJCWMtMC41MSwwLjA5LTAuOTIsMC4zOC0xLjIxLDAuODZjLTAuMywwLjUtMC4zNiwwLjk5LTAuMTksMS40N2MwLjE3LDAuNDksMC41OSwwLjkzLDEuMjQsMS4zM2wyLjc3LDEuNjdMNTk2LjQ0LDMyNS40NnoKCQkJIE01OTkuOTUsMzE5LjY1bC0zLjM2LTIuMDNjLTAuNjctMC40LTEuMjktMC41Ny0xLjg1LTAuNDhjLTAuNTYsMC4wOC0xLjAyLDAuNDEtMS4zNiwwLjk5Yy0wLjMyLDAuNTQtMC4zNywxLjA3LTAuMTQsMS42CgkJCWMwLjIzLDAuNTMsMC42OCwxLDEuMzcsMS40MmwzLjI2LDEuOTZMNTk5Ljk1LDMxOS42NXoiLz4KCQk8cGF0aCBjbGFzcz0ic3QyIiBkPSJNNTc1LjYzLDMyMC43OGwtMC40MiwxLjcybC01LjI5LTAuODlsMC42My0yLjY4TDU3NS42MywzMjAuNzh6IE01ODUuNTMsMzA1Ljc4CgkJCWMwLjkzLDAuNzcsMS42NSwxLjY0LDIuMTcsMi42MWMwLjUyLDAuOTcsMC44MiwxLjk5LDAuOTEsMy4wNWMwLjA5LDEuMDYtMC4wMywyLjEyLTAuMzcsMy4xOGMtMC4zNCwxLjA2LTAuOSwyLjA3LTEuNjksMy4wMgoJCQljLTAuNzgsMC45NC0xLjY1LDEuNjgtMi42MywyLjIxYy0wLjk4LDAuNTMtMS45OSwwLjg2LTMuMDUsMC45N2MtMS4wNiwwLjExLTIuMTEsMC4wMS0zLjE3LTAuMzFjLTEuMDUtMC4zMi0yLjA1LTAuODYtMi45OC0xLjYzCgkJCWMtMC45Mi0wLjc2LTEuNjMtMS42Mi0yLjE1LTIuNTljLTAuNTItMC45Ny0wLjgyLTEuOTktMC45LTMuMDZjLTAuMDktMS4wNiwwLjA0LTIuMTMsMC4zOC0zLjE5YzAuMzQtMS4wNiwwLjg5LTIuMDYsMS42Ni0yLjk5CgkJCWMwLjc4LTAuOTQsMS42NS0xLjY4LDIuNjMtMi4yMXMyLTAuODYsMy4wNi0wLjk4YzEuMDYtMC4xMiwyLjEyLTAuMDIsMy4xNywwLjNDNTgzLjYzLDMwNC40OCw1ODQuNjEsMzA1LjAyLDU4NS41MywzMDUuNzh6CgkJCSBNNTgzLjQ5LDMwOC4yNmMtMC43Mi0wLjYtMS41Mi0wLjk2LTIuMzctMS4wN2MtMC44Ni0wLjEyLTEuNywwLTIuNTMsMC4zNWMtMC44MywwLjM1LTEuNTYsMC45Mi0yLjIxLDEuNzEKCQkJYy0wLjY1LDAuNzgtMS4wNiwxLjYxLTEuMjUsMi40OWMtMC4xOCwwLjg3LTAuMTQsMS43MiwwLjE0LDIuNTVzMC43NywxLjU0LDEuNSwyLjEzYzAuNzQsMC42MSwxLjUzLDAuOTcsMi4zOSwxLjA5CgkJCWMwLjg2LDAuMTIsMS43LDAsMi41My0wLjM1YzAuODMtMC4zNSwxLjU2LTAuOTIsMi4yMS0xLjcxYzAuNjYtMC44LDEuMDgtMS42MywxLjI2LTIuNTFjMC4xOC0wLjg3LDAuMTMtMS43Mi0wLjE0LTIuNTQKCQkJQzU4NC43MywzMDkuNTgsNTg0LjIyLDMwOC44Nyw1ODMuNDksMzA4LjI2eiIvPgoJCTxwYXRoIGNsYXNzPSJzdDIiIGQ9Ik01NzcuMTYsMjk4LjY0bC0xMi4wOCwxMS4xNGwtMi4yOS0yLjQ5bDkuODItOS4wNWwtNS4wOC01LjUxbDIuMjYtMi4wOEw1NzcuMTYsMjk4LjY0eiIvPgoJCTxwYXRoIGNsYXNzPSJzdDIiIGQ9Ik01NjguMjksMjg4LjdsLTIuMzYsMS43NGwtMS42Mi0yLjE5bC04LjUsNi4yOGwxLjYyLDIuMTlsLTIuMzYsMS43NWwtNS4yNi03LjEybDIuMzYtMS43NGwxLjYzLDIuMjEKCQkJbDguNS02LjI4bC0xLjYzLTIuMjFsMi4zNi0xLjc0TDU2OC4yOSwyODguN3oiLz4KCQk8cGF0aCBjbGFzcz0ic3QyIiBkPSJNNTU3LjkyLDI3Mi43NWMwLjc5LDEuMzgsMS4xOSwyLjc5LDEuMTksNC4yM2MwLDEuNDQtMC4zOCwyLjc4LTEuMTQsNC4wM2MtMC43NSwxLjI1LTEuODYsMi4yOS0zLjMxLDMuMTIKCQkJYy0xLjAzLDAuNTktMi4xLDAuOTYtMy4yLDEuMWMtMS4xLDAuMTQtMi4xOCwwLjA3LTMuMjItMC4yMWMtMS4wNC0wLjI4LTItMC43NS0yLjg4LTEuNDNjLTAuODgtMC42OC0xLjYxLTEuNTMtMi4yMS0yLjU2CgkJCWMtMC41OC0xLjAyLTAuOTQtMi4xMi0xLjA1LTMuMzFjLTAuMTEtMS4xOSwwLjAyLTIuMjcsMC40Mi0zLjI2bDMuMTIsMC42N2MtMC4yMywwLjc5LTAuMzMsMS41NC0wLjMsMi4yNgoJCQljMC4wNCwwLjcyLDAuMjQsMS40MSwwLjYxLDIuMDZjMC40NiwwLjgsMS4wNywxLjQxLDEuODIsMS44NGMwLjc1LDAuNDMsMS41OCwwLjYzLDIuNDgsMC42MmMwLjktMC4wMSwxLjgtMC4yOCwyLjctMC43OQoJCQljMC45Mi0wLjUzLDEuNjItMS4xOCwyLjA5LTEuOTVjMC40Ny0wLjc3LDAuNy0xLjYsMC42Ny0yLjVzLTAuMjktMS44LTAuOC0yLjY5Yy0wLjM4LTAuNjctMC44OC0xLjIxLTEuNDgtMS42NAoJCQljLTAuNjEtMC40My0xLjI1LTAuNzMtMS45Mi0wLjlsMS40OC0yLjc1YzAuNTUsMC4xMiwxLjE0LDAuMzcsMS43NiwwLjc1YzAuNjIsMC4zOCwxLjIxLDAuODYsMS43NiwxLjQ0CgkJCVM1NTcuNTMsMjcyLjA3LDU1Ny45MiwyNzIuNzV6Ii8+CgkJPHBhdGggY2xhc3M9InN0MiIgZD0iTTU1MS4yMiwyNTguNjRjMC40NCwxLjEyLDAuNjUsMi4yMywwLjYzLDMuMzNjLTAuMDIsMS4xLTAuMjQsMi4xNC0wLjY4LDMuMTFzLTEuMDUsMS44NC0xLjg2LDIuNgoJCQljLTAuODEsMC43Ny0xLjc5LDEuMzgtMi45NCwxLjgzYy0xLjE0LDAuNDUtMi4yNiwwLjY3LTMuMzcsMC42NmMtMS4xMS0wLjAxLTIuMTYtMC4yMi0zLjE0LTAuNjNjLTAuOTgtMC40MS0xLjg1LTEuMDEtMi42Mi0xLjgxCgkJCWMtMC43Ny0wLjc5LTEuMzctMS43NS0xLjgxLTIuODdjLTAuNDQtMS4xMS0wLjY1LTIuMjEtMC42My0zLjMxYzAuMDItMS4xLDAuMjUtMi4xNCwwLjY5LTMuMTFjMC40NC0wLjk3LDEuMDctMS44NCwxLjg3LTIuNjEKCQkJYzAuODEtMC43NywxLjc3LTEuMzcsMi44OS0xLjgxYzEuMTQtMC40NSwyLjI2LTAuNjcsMy4zNy0wLjY2YzEuMTEsMC4wMSwyLjE2LDAuMjIsMy4xNSwwLjYyYzAuOTksMC40MSwxLjg2LDEuMDEsMi42MywxLjgKCQkJQzU1MC4xOCwyNTYuNTksNTUwLjc5LDI1Ny41NCw1NTEuMjIsMjU4LjY0eiBNNTQ4LjIzLDI1OS44M2MtMC4zNC0wLjg3LTAuODYtMS41Ny0xLjU2LTIuMDljLTAuNjktMC41Mi0xLjQ5LTAuODItMi4zOC0wLjkyCgkJCWMtMC44OS0wLjA5LTEuODIsMC4wNS0yLjc2LDAuNDJjLTAuOTUsMC4zOC0xLjcxLDAuOS0yLjI5LDEuNThjLTAuNTgsMC42OC0wLjk1LDEuNDQtMS4xMSwyLjI5Yy0wLjE2LDAuODUtMC4wNywxLjcyLDAuMjgsMi41OQoJCQljMC4zNSwwLjg5LDAuODcsMS41OSwxLjU2LDIuMTFjMC42OSwwLjUyLDEuNDksMC44MiwyLjM4LDAuOTFjMC45LDAuMDksMS44Mi0wLjA1LDIuNzYtMC40MmMwLjk2LTAuMzgsMS43My0wLjkxLDIuMzItMS41OAoJCQljMC41OC0wLjY4LDAuOTUtMS40NCwxLjEtMi4yOUM1NDguNjgsMjYxLjU4LDU0OC41OCwyNjAuNzEsNTQ4LjIzLDI1OS44M3oiLz4KCTwvZz4KPC9nPgo8L3N2Zz4K" style="width:20mm;height:20mm;object-fit:contain;margin-left:8px;flex-shrink:0"/>
+      <img src="data:image/svg+xml;base64,PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz48c3ZnIHZlcnNpb249IjEuMSIgaWQ9IkNhcGFfMSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIiB4bWxuczp4bGluaz0iaHR0cDovL3d3dy53My5vcmcvMTk5OS94bGluayIgeD0iMHB4IiB5PSIwcHgiIHZpZXdCb3g9IjAgMCA0MTQuNjQgNDA3Ljk3IiBzdHlsZT0iZW5hYmxlLWJhY2tncm91bmQ6bmV3IDAgMCA0MTQuNjQgNDA3Ljk3OyIgeG1sOnNwYWNlPSJwcmVzZXJ2ZSI+PHN0eWxlIHR5cGU9InRleHQvY3NzIj4uc3QwMntmaWxsOiNFNkU2RTY7fS5zdDEye2ZpbGw6bm9uZTtzdHJva2U6IzFEMUQxQjtzdHJva2Utd2lkdGg6MS43O3N0cm9rZS1taXRlcmxpbWl0OjEwO30uc3QyMntmaWxsOiMxRDFEMUI7fS5zdDMye2ZpbGw6bm9uZTtzdHJva2U6IzMwODhDOTtzdHJva2Utd2lkdGg6MS43O3N0cm9rZS1taXRlcmxpbWl0OjEwO30uc3Q0MntmaWxsOm5vbmU7c3Ryb2tlOiNFMjUyNDc7c3Ryb2tlLXdpZHRoOjEuNztzdHJva2UtbWl0ZXJsaW1pdDoxMDt9PC9zdHlsZT48Y2lyY2xlIGNsYXNzPSJzdDAyIiBjeD0iMjI5LjQ5IiBjeT0iMjE3LjIiIHI9Ijc4LjM0Ii8+PGc+PGc+PHBhdGggY2xhc3M9InN0MzIiIGQ9Ik03Ny4xNiwyMzcuOTNjLTMuOTQsMC03LjQ1LTAuODMtMTAuNTQtMi41Yy0zLjA5LTEuNjYtNS41My0zLjk1LTcuMzEtNi44NWMtMS43OC0yLjktMi42Ny02LjIzLTIuNjctOS45OHYtMzAuMzZoMTAuMTl2MjkuNzJjMCwyLjA2LDAuNDcsMy45LDEuNDEsNS41MmMwLjk0LDEuNjIsMi4xOSwyLjg5LDMuNzYsMy44M2MxLjU3LDAuOTQsMy4yOSwxLjQxLDUuMTcsMS40MWMyLjAxLDAsMy44My0wLjQ3LDUuNDUtMS40MWMxLjYyLTAuOTQsMi45LTIuMjEsMy44Ny0zLjgzYzAuOTYtMS42MiwxLjQ0LTMuNDUsMS40NC01LjUydi0yOS43Mmg5Ljc3djMwLjM2YzAsMy43NS0wLjg4LDcuMDctMi42Myw5Ljk4Yy0xLjc2LDIuOTEtNC4xOCw1LjE5LTcuMjcsNi44NUM4NC42OCwyMzcuMSw4MS4xNCwyMzcuOTMsNzcuMTYsMjM3LjkzeiIvPjxwYXRoIGNsYXNzPSJzdDMyIiBkPSJNMTEwLjE4LDIzNy41MXYtNDkuMTloMjEuNjRjMywwLDUuNzMsMC42OCw4LjE5LDIuMDRjMi40NiwxLjM2LDQuNDIsMy4yMiw1Ljg3LDUuNTljMS40NSwyLjM3LDIuMTgsNS4wNSwyLjE4LDguMDRjMCwzLjE5LTAuODQsNi4wNC0yLjUzLDguNTdjLTEuNjksMi41My0zLjkxLDQuNDMtNi42Nyw1LjY5bDExLjE3LDE5LjMybC0xMS43My0wLjA3bC0xMC4wNS0xNy43OGgtOC4yOXYxNy43OEgxMTAuMTh6IE0xMTkuOTUsMjExLjM3aDExLjUyYzEuOTcsMCwzLjU1LTAuNjcsNC43NC0yYzEuMi0xLjMzLDEuNzktMy4wMSwxLjc5LTUuMDJjMC0yLjE1LTAuNzMtMy44OS0yLjE4LTUuMmMtMS40NS0xLjMxLTMuMzctMS45Ny01Ljc2LTEuOTdoLTEwLjEyVjIxMS4zN3oiLz48cGF0aCBjbGFzcz0ic3QzMiIgZD0iTTE3OS45NiwyMzguMjFjLTQuNzgsMC05LjAzLTEuMDgtMTIuNzUtMy4yM2MtMy43Mi0yLjE1LTYuNjQtNS4xNC04Ljc1LTguOTZjLTIuMTEtMy44Mi0zLjE2LTguMjMtMy4xNi0xMy4yNWMwLTMuNTYsMC42NC02Ljg3LDEuOTMtOS45NGMxLjI5LTMuMDcsMy4wNy01Ljc1LDUuMzQtOC4wNGMyLjI3LTIuMjksNC45NC00LjA4LDguMDEtNS4zNHM2LjM4LTEuOSw5Ljk0LTEuOWMzLjUxLDAsNi45LDAuNzQsMTAuMTUsMi4yMXM1Ljg3LDMuNDYsNy44NCw1Ljk0bC02LjM5LDcuMWMtMS42OS0xLjc4LTMuNDktMy4xNi01LjQxLTQuMTVjLTEuOTItMC45OC00LjAxLTEuNDgtNi4yNS0xLjQ4Yy0yLjc3LDAtNS4yNiwwLjY2LTcuNDgsMS45N3MtMy45OSwzLjE1LTUuMyw1LjUyYy0xLjMxLDIuMzctMS45Nyw1LjA5LTEuOTcsOC4xOWMwLDMuMTksMC42NCw1Ljk2LDEuOTMsOC4zM2MxLjI5LDIuMzcsMy4xMiw0LjE5LDUuNDgsNS40OGMyLjM3LDEuMjksNS4wOSwxLjkzLDguMTksMS45M2MyLjI5LDAsNC40NS0wLjQ3LDYuNDYtMS40MWMyLjAxLTAuOTQsMy43NS0yLjE1LDUuMi0zLjY1bDQuOTIsNy45NGMtMS4xMiwxLjI2LTIuNjUsMi40MS00LjU3LDMuNDRjLTEuOTIsMS4wMy00LjA0LDEuODQtNi4zNiwyLjQyUzE4Mi4zLDIzOC4yMSwxNzkuOTYsMjM4LjIxeiIvPjxwYXRoIGNsYXNzPSJzdDMyIiBkPSJNMjEwLjgsMjUzLjY3bDYuODktMTUuOTVsLTE2Ljg2LTM3LjMxaDEwLjg5bDkuNDIsMjIuMmMwLjQyLDAuOTgsMC44NCwyLjEzLDEuMjYsMy40NGMwLjE5LTAuNTIsMC4zNi0xLjAyLDAuNTMtMS41MWMwLjE2LTAuNDksMC4zNC0xLjAyLDAuNTMtMS41OGw4LjA4LTIyLjU2aDExLjAzbC0xNS42LDM3LjFsLTYuMzksMTYuMTZIMjEwLjh6Ii8+PHBhdGggY2xhc3M9InN0MzIiIGQ9Ik0yNDkuMzgsMjM3LjUxdi00OS4xOWg5LjM1bDE0LjksMjQuMzFsMTUuMTgtMjQuMzFoOC45MnY0OS4xOWgtOS45MXYtMTcuMzZjMC0yLjg2LDAuMDUtNS41MiwwLjE0LTcuOThjMC4wOS0yLjQ2LDAuMjMtNC44NCwwLjQyLTcuMTNsLTEyLjY1LDE5LjZoLTQuNjRsLTEyLjM3LTE5LjQ2YzAuMjMsMi4xNiwwLjM5LDQuNDQsMC40Niw2Ljg1YzAuMDcsMi40MSwwLjExLDUuMTIsMC4xMSw4LjEydjE3LjM2SDI0OS4zOHoiLz48L2c+PC9nPjwvc3ZnPg==" style="width:24mm;height:24mm;object-fit:contain;margin-left:6px;filter:grayscale(1)"/>
     </div>
     <!-- DATOS PACIENTE -->
-    <div style="background:#f2f6fa;padding:4px 10px;font-size:7.5pt;color:#444;display:flex;justify-content:space-between;align-items:center">
-      <span id="doc_paciente_nombre" style="font-weight:600"></span>
+    <div style="background:#f2f6fa;padding:5px 10px;font-size:8pt;color:#444;display:flex;justify-content:space-between;align-items:center">
+      <span id="doc_paciente_nombre"></span>
       <span id="doc_paciente_derecha" style="text-align:right"></span>
     </div>
-    <div id="doc_obra_social_row" style="padding:2px 10px;font-size:7pt;color:#777;display:none"></div>
-    <div style="height:1px;background:#c8d8e8;margin:0 8px"></div>
-    <!-- CUERPO: sin min-height, padding-bottom reserva espacio para firma+pie -->
-    <div style="padding:8px 12px 36mm 12px;box-sizing:border-box">
-      <div id="doc_tipo_label" style="font-weight:700;font-size:12pt;color:#1a1a1a;margin-bottom:6px"></div>
-      <div id="doc_cuerpo" style="font-size:9.5pt;color:#232323;white-space:pre-wrap;line-height:1.7"></div>
+    <div id="doc_obra_social_row" style="padding:3px 10px;font-size:7.5pt;color:#888;display:none"></div>
+    <div style="height:1px;background:#c8d8e8;margin:0 10px"></div>
+    <!-- CUERPO -->
+    <div style="padding:10px 10px 0 10px">
+      <div id="doc_tipo_label" style="font-weight:700;font-size:13pt;color:#1a1a1a;margin-bottom:8px"></div>
+      <div id="doc_cuerpo" style="font-size:9.5pt;color:#232323;white-space:pre-wrap;line-height:1.7;min-height:20mm"></div>
     </div>
     <!-- FIRMA -->
-    <div style="position:absolute;bottom:19mm;right:10mm;text-align:center">
-      <img id="doc_firma_img" src="" style="max-width:44mm;max-height:18mm;object-fit:contain;display:block"/>
+    <div style="position:absolute;bottom:22mm;right:8mm;text-align:center">
+      <img id="doc_firma_img" src="" style="max-width:48mm;object-fit:contain;display:block;margin:0 auto"/>
     </div>
     <!-- PIE DE PÁGINA -->
-    <div style="position:absolute;bottom:0;left:0;right:0;background:#f5f5f5;border-top:1.5px solid #aaa;padding:4px 10px">
-      <div style="font-weight:700;font-size:6pt;color:#333;margin-bottom:1px;letter-spacing:0.04em">UNIDAD DE RIESGO CARDIOVASCULAR Y METABÓLICO</div>
-      <div style="display:flex;gap:14px;font-size:5.5pt;color:#555;align-items:center">
+    <div style="position:absolute;bottom:0;left:0;right:0;background:#f5f5f5;border-top:2px solid #aaa;padding:5px 10px">
+      <div style="font-weight:700;font-size:6.5pt;color:#333;text-align:left;margin-bottom:3px;letter-spacing:0.03em">UNIDAD DE RIESGO CARDIOVASCULAR Y METABÓLICO</div>
+      <div style="display:flex;justify-content:flex-start;gap:18px;font-size:6pt;color:#555;align-items:center">
         <span>✉ contactourcym@gmail.com</span>
         <span>📞 02246 588469</span>
         <span>📍 2 N 1553 - Santa Teresita</span>
@@ -1439,43 +1434,6 @@ const _dirty = {lab:false, ant:false, est:false, evol:false};
 const _savedCols = {lab:new Set(), ant:new Set(), est:new Set()};
 // Snapshot of lab data at last save (to detect real changes)
 let _labSnapshot = null;
-
-// ===== VACUNACIÓN — CALENDARIO NACIONAL ARGENTINO =====
-// boosterAnios: años para próximo refuerzo (null = sin refuerzo periódico)
-var CALENDARIO_VAC = [
-  // ── UNIVERSALES (todos los adultos)
-  { id:'influenza', nombre:'Influenza estacional', frecuencia:'Anual', boosterAnios:1, indicacion:'Todos los adultos', grupo:'adultos', antecedentes:[] },
-  { id:'dt_adulto', nombre:'dT — Difteria / Tétanos', frecuencia:'Cada 10 años', boosterAnios:10, indicacion:'Todos los adultos', grupo:'adultos', antecedentes:[] },
-  { id:'hbv', nombre:'Hepatitis B', frecuencia:'3 dosis (0-1-6 meses)', boosterAnios:null, indicacion:'No vacunados o sin serología', grupo:'adultos', antecedentes:[] },
-  { id:'covid19', nombre:'COVID-19', frecuencia:'Según esquema vigente', boosterAnios:null, indicacion:'Todos los adultos', grupo:'adultos', antecedentes:[] },
-  // ── DIABETES
-  { id:'neumo23_dbt', nombre:'Neumococo 23V (PPSV23)', frecuencia:'1 dosis; refuerzo a los 5 años', boosterAnios:5, indicacion:'Diabetes — riesgo neumococo', grupo:'adultos', antecedentes:['diabetes'] },
-  { id:'neumo13_dbt', nombre:'Neumococo 13V (PCV13)', frecuencia:'1 dosis', boosterAnios:null, indicacion:'Diabetes — inmunosupresión relativa', grupo:'adultos', antecedentes:['diabetes'] },
-  { id:'hav_dbt', nombre:'Hepatitis A', frecuencia:'2 dosis (0-6 meses)', boosterAnios:null, indicacion:'Diabetes (mayor susceptibilidad)', grupo:'adultos', antecedentes:['diabetes'] },
-  { id:'varicela_dbt', nombre:'Varicela', frecuencia:'2 dosis (si no inmune)', boosterAnios:null, indicacion:'Diabetes sin inmunidad previa', grupo:'adultos', antecedentes:['diabetes'] },
-  // ── OBESIDAD
-  { id:'neumo23_obe', nombre:'Neumococo 23V (PPSV23)', frecuencia:'1 dosis; refuerzo a los 5 años', boosterAnios:5, indicacion:'Obesidad — riesgo neumococo', grupo:'adultos', antecedentes:['obesidad'] },
-  // ── MAYORES DE 65
-  { id:'neumo23_65', nombre:'Neumococo 23V (PPSV23)', frecuencia:'1 dosis (refuerzo a los 5 años)', boosterAnios:5, indicacion:'≥65 años', grupo:'adultos', antecedentes:['mayores65'] },
-  { id:'neumo13_65', nombre:'Neumococo 13V (PCV13)', frecuencia:'1 dosis', boosterAnios:null, indicacion:'≥65 años', grupo:'adultos', antecedentes:['mayores65'] },
-  { id:'herpes_zoster', nombre:'Herpes Zóster (RZV)', frecuencia:'2 dosis (0 y 2-6 meses)', boosterAnios:null, indicacion:'≥50 años', grupo:'mayores50', antecedentes:[] },
-  // ── EMBARAZO (manual)
-  { id:'dtpa', nombre:'dTpa — Difteria/Tétanos/Pertussis', frecuencia:'Cada embarazo ≥20 semanas', boosterAnios:null, indicacion:'Embarazadas ≥20 semanas', grupo:'adultos', antecedentes:['embarazo'] },
-  { id:'influenza_emb', nombre:'Influenza (embarazo)', frecuencia:'Anual, en cualquier trimestre', boosterAnios:1, indicacion:'Embarazadas', grupo:'adultos', antecedentes:['embarazo'] },
-];
-
-// Antecedentes manuales editables por el médico
-const VAC_ANTECEDENTES = [
-  { id:'diabetes', label:'Diabetes (DBT 1/2/Gestacional)' },
-  { id:'obesidad', label:'Obesidad / Sobrepeso' },
-  { id:'epoc', label:'EPOC / Asma severo' },
-  { id:'card_cronica', label:'Enfermedad cardíaca crónica' },
-  { id:'renal_cronica', label:'Enfermedad renal crónica' },
-  { id:'hepatica_cronica', label:'Enfermedad hepática crónica' },
-  { id:'tabaquismo', label:'Tabaquismo activo' },
-  { id:'embarazo', label:'Embarazo' },
-  { id:'inmunosupresion', label:'Inmunosupresión / HIV' },
-];
 
 function marcarDirty(tab) { _dirty[tab] = true; _tabDirty = tab==='lab'||tab==='ant'||tab==='est'; }
 // Fecha local (evita el bug de UTC en Argentina: a las 21hs del 25/05, toISOString() da 26/05)
@@ -1628,26 +1586,26 @@ const EST_FILAS = [
   {label:'IMVI (g/m²)',    key:'eco_IMVI',     unidades:['g/m²'], defU:0, ref:(v,s)=>parseFloat(v)>(s==='F'?95:115), refTxt:'>115(H) / >95(M)'},
   {label:'EPR',            key:'eco_EPR',      unidades:[''],     defU:0, ref:(v)=>parseFloat(v)>0.42, refTxt:'>0.42'},
   {label:'Geometría VI',   key:'eco_Geo',      unidades:[''],     defU:0, ref:null},
-  {label:'Valvulopatía',   key:'eco_Valv',     unidades:[''],     defU:0, ref:null, opciones:['','Sí','No']},
-  {label:'Dis. diastólica',key:'eco_DD',       unidades:[''],     defU:0, ref:null, opciones:['','No','1','2','3']},
+  {label:'Valvulopatía',   key:'eco_Valv',     unidades:[''],     defU:0, ref:null},
+  {label:'Dis. diastólica',key:'eco_DD',       unidades:[''],     defU:0, ref:null},
   {label:'Comentarios',    key:'eco_Com',      unidades:[''],     defU:0, ref:null},
   // ── ECG
   {cat:true, label:'ECG'},
-  {label:'Ritmo sinusal',  key:'ecg_RS',       unidades:[''],     defU:0, ref:null, opciones:['','Sí','No']},
-  {label:'Eje',            key:'ecg_Eje',      unidades:[''],     defU:0, ref:null, opciones:['','Conservado','Desv. I','Desv. D']},
-  {label:'BAV',            key:'ecg_BAV',      unidades:[''],     defU:0, ref:null, opciones:['','No','1','2','3']},
-  {label:'BRD',            key:'ecg_BRD',      unidades:[''],     defU:0, ref:null, opciones:['','Sí','No']},
-  {label:'BRI',            key:'ecg_BRI',      unidades:[''],     defU:0, ref:null, opciones:['','Sí','No']},
-  {label:'ESV',            key:'ecg_ESV',      unidades:[''],     defU:0, ref:null, opciones:['','Sí','No']},
-  {label:'EV',             key:'ecg_EV',       unidades:[''],     defU:0, ref:null, opciones:['','Sí','No']},
+  {label:'Ritmo sinusal',  key:'ecg_RS',       unidades:[''],     defU:0, ref:null},
+  {label:'Eje (°)',        key:'ecg_Eje',      unidades:['°'],    defU:0, ref:null},
+  {label:'BAV',            key:'ecg_BAV',      unidades:[''],     defU:0, ref:null},
+  {label:'BRD',            key:'ecg_BRD',      unidades:[''],     defU:0, ref:null},
+  {label:'BRI',            key:'ecg_BRI',      unidades:[''],     defU:0, ref:null},
+  {label:'ESV',            key:'ecg_ESV',      unidades:[''],     defU:0, ref:null},
+  {label:'EV',             key:'ecg_EV',       unidades:[''],     defU:0, ref:null},
   {label:'Comentarios',    key:'ecg_Com',      unidades:[''],     defU:0, ref:null},
   // ── DOPPLER CAROTÍDEO
   {cat:true, label:'DOPPLER CAROTÍDEO'},
   {label:'EIM (mm)',       key:'dop_EIM',      unidades:['mm'],   defU:0, ref:(v)=>parseFloat(v)>=0.9, refTxt:'≥0.9 mm'},
-  {label:'Placa ACI D',    key:'dop_PlacaACID', unidades:[''],    defU:0, ref:null, opciones:['','Sí','No']},
-  {label:'Placa ACI I',    key:'dop_PlacaACII', unidades:[''],    defU:0, ref:null, opciones:['','Sí','No']},
-  {label:'Placa fem D',    key:'dop_PlacaFemD', unidades:[''],    defU:0, ref:null, opciones:['','Sí','No']},
-  {label:'Placa fem I',    key:'dop_PlacaFemI', unidades:[''],    defU:0, ref:null, opciones:['','Sí','No']},
+  {label:'Placa ACI D',    key:'dop_PlacaACID', unidades:[''],    defU:0, ref:null},
+  {label:'Placa ACI I',    key:'dop_PlacaACII', unidades:[''],    defU:0, ref:null},
+  {label:'Placa fem D',    key:'dop_PlacaFemD', unidades:[''],    defU:0, ref:null},
+  {label:'Placa fem I',    key:'dop_PlacaFemI', unidades:[''],    defU:0, ref:null},
   {label:'Comentarios',    key:'dop_Com',      unidades:[''],     defU:0, ref:null},
   // ── MAPA
   {cat:true, label:'MAPA'},
@@ -1660,14 +1618,14 @@ const EST_FILAS = [
   {label:'PP 24h',         key:'mapa_PP24',    unidades:['mmHg'], defU:0, ref:(v)=>parseFloat(v)>=53,  refTxt:'≥53 mmHg'},
   {label:'TAS nocturna',   key:'mapa_TASn',    unidades:['mmHg'], defU:0, ref:(v)=>parseFloat(v)>=120, refTxt:'≥120 mmHg'},
   {label:'TAD nocturna',   key:'mapa_TADn',    unidades:['mmHg'], defU:0, ref:(v)=>parseFloat(v)>=70,  refTxt:'≥70 mmHg'},
-  {label:'Patrón',         key:'mapa_Patron',  unidades:[''],     defU:0, ref:null, opciones:['','ED','D','non D','R']},
-  {label:'HTA nocturna',   key:'mapa_HTAn',    unidades:[''],     defU:0, ref:null, opciones:['','Sí','No']},
+  {label:'Patrón',         key:'mapa_Patron',  unidades:[''],     defU:0, ref:null},
+  {label:'HTA nocturna',   key:'mapa_HTAn',    unidades:[''],     defU:0, ref:null},
   {label:'DE TAS diurna',  key:'mapa_DETASd',  unidades:['mmHg'], defU:0, ref:(v)=>parseFloat(v)>=15,  refTxt:'≥15 mmHg'},
   {label:'Comentarios',    key:'mapa_Com',     unidades:[''],     defU:0, ref:null},
   // ── ECO ABDOMINAL
   {cat:true, label:'ECO ABDOMINAL'},
-  {label:'Esteatosis',     key:'ecoabd_Est',   unidades:[''],     defU:0, ref:null, opciones:['','Sí','No']},
-  {label:'Litiasis vesic', key:'ecoabd_Lit',   unidades:[''],     defU:0, ref:null, opciones:['','Sí','No']},
+  {label:'Esteatosis',     key:'ecoabd_Est',   unidades:[''],     defU:0, ref:null},
+  {label:'Litiasis vesic', key:'ecoabd_Lit',   unidades:[''],     defU:0, ref:null},
   {label:'Comentarios',    key:'ecoabd_Com',   unidades:[''],     defU:0, ref:null},
 ];
 
@@ -1972,10 +1930,7 @@ function renderTablaGenerica(datos, filas, wrapId, newColIdx) {
       h += ' style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.5);color:white;border-radius:5px;font-size:10px;padding:2px 4px;width:108px;color-scheme:dark"/>';
     } else {
       h += '<div style="font-size:12px;font-weight:700">'+fechaLabel+'</div>';
-      if(isSaved) {
-        h += '<div style="font-size:9px;opacity:.75;margin-top:2px">🔒 guardado</div>';
-        h += '<button onclick="eliminarColumna(\''+wrapId+'\','+ci+')" style="margin-top:3px;background:rgba(255,80,80,.25);border:1px solid rgba(255,120,120,.5);color:white;border-radius:4px;font-size:9px;padding:1px 6px;cursor:pointer;font-family:var(--font-main)" title="Eliminar esta columna">🗑</button>';
-      }
+      if(isSaved) h += '<div style="font-size:9px;opacity:.75;margin-top:2px">🔒 guardado</div>';
     }
     h += '</th>';
   });
@@ -2027,15 +1982,8 @@ function renderTablaGenerica(datos, filas, wrapId, newColIdx) {
       } else if(isLocked) {
         h += '<div style="font-size:13px;font-weight:'+valFw+';color:'+valColor+';padding:4px 2px">'+val+'</div>';
         if(storedU) h += '<div style="font-size:10px;color:var(--text-soft)">'+storedU+'</div>';
-      } else if(f.opciones) {
-        // Campo con opciones fijas → <select>
-        const borderC = esAlerta ? 'var(--red)' : isActive ? '#1a9e6e' : 'var(--border)';
-        h += '<select data-fi="'+fi+'" data-ci="'+ci+'" data-wrap="'+wrapId+'" onchange="actualizarCelda(this)" onfocus="destacarFila(this,true)" onblur="destacarFila(this,false)"';
-        h += ' style="display:block;width:96%;margin:0 auto;border:none;border-bottom:1.5px solid '+borderC+';background:transparent;font-size:13px;font-family:var(--font-main);outline:none;color:'+valColor+';font-weight:'+valFw+';text-align:center;padding:3px 2px;cursor:pointer">';
-        f.opciones.forEach(op => { h += '<option value="'+op+'"'+(val===op?' selected':'')+'>'+op+'</option>'; });
-        h += '</select>';
       } else {
-        h += '<input type="text" value="'+val+'" data-fi="'+fi+'" data-ci="'+ci+'" data-wrap="'+wrapId+'" oninput="actualizarCelda(this)" onfocus="destacarFila(this,true)" onblur="destacarFila(this,false)" onkeydown="navCeldaTabla(event,this)"';
+        h += '<input type="text" value="'+val+'" data-fi="'+fi+'" data-ci="'+ci+'" data-wrap="'+wrapId+'" oninput="actualizarCelda(this)" onfocus="destacarFila(this,true)" onblur="destacarFila(this,false)"';
         h += ' style="display:block;width:90%;margin:0 auto 2px;border:none;border-bottom:1.5px solid '+(esAlerta?'var(--red)':isActive?'#1a9e6e':'var(--border)')+';background:transparent;font-size:13px;text-align:center;font-family:var(--font-main);outline:none;color:'+valColor+';font-weight:'+valFw+';padding:2px 0"/>';
         if(uns.length > 1) {
           h += '<select data-key="'+f.key+'" data-wrap="'+wrapId+'" onchange="actualizarUnidad(this)" style="display:block;width:96%;margin:0 auto;font-size:10px;padding:1px 2px;border:1px solid var(--border);border-radius:4px;background:#e0f7fa;color:var(--text-soft)">';
@@ -2120,31 +2068,6 @@ function actualizarFechaCol(input) {
   renderTablaGenerica(datos, ['evlab_wrap','lab_tabla_wrap'].includes(wrapId)?LAB_FILAS:['evest_wrap','est_tabla_wrap'].includes(wrapId)?EST_FILAS:ANT_FILAS, wrapId);
 }
 
-async function eliminarColumna(wrapId, ci) {
-  const fechaLabel = (() => {
-    const datos = ['evlab_wrap','lab_tabla_wrap'].includes(wrapId) ? labDatos :
-                  ['evest_wrap','est_tabla_wrap'].includes(wrapId) ? estDatos : antDatos;
-    const c = datos.columnas[ci];
-    return c ? new Date(c+'T12:00:00').toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'}) : '?';
-  })();
-  if(!confirm('¿Eliminar la columna del '+fechaLabel+'? Se borrarán todos los datos de esa fecha. Esta acción no se puede deshacer.')) return;
-  const datos = ['evlab_wrap','lab_tabla_wrap'].includes(wrapId) ? labDatos :
-                ['evest_wrap','est_tabla_wrap'].includes(wrapId) ? estDatos : antDatos;
-  const filas = ['evlab_wrap','lab_tabla_wrap'].includes(wrapId) ? LAB_FILAS :
-                ['evest_wrap','est_tabla_wrap'].includes(wrapId) ? EST_FILAS : ANT_FILAS;
-  // Eliminar la columna del array de fechas
-  datos.columnas.splice(ci, 1);
-  // Eliminar los datos de esa columna en cada fila
-  if(datos.filas) datos.filas.forEach(fila => { if(fila) fila.splice(ci, 1); });
-  // Guardar y re-renderizar
-  const saveWrap = ['evlab_wrap','lab_tabla_wrap'].includes(wrapId)?'lab_tabla_wrap':
-                   ['evest_wrap','est_tabla_wrap'].includes(wrapId)?'est_tabla_wrap':'ant_tabla_wrap';
-  await guardarDatosPac(saveWrap);
-  sincronizarRO();
-  renderTablaGenerica(datos, filas, wrapId, datos.columnas.length - 1);
-  if(['evlab_wrap','lab_tabla_wrap'].includes(wrapId)) renderLpa();
-}
-
 function actualizarUnidad(sel) {
   const key = sel.dataset.key;
   const wrapId = sel.dataset.wrap;
@@ -2196,46 +2119,6 @@ function destacarFila(input, enfocar) {
       delete labelTd.dataset.origColor;
       delete labelTd.dataset.origFw;
     }
-  }
-}
-
-function navCeldaTabla(e, input) {
-  const KEYS = { ArrowUp:38, ArrowDown:40, ArrowLeft:37, ArrowRight:39, Enter:13, Tab:9 };
-  const key = e.key;
-  if(!['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Enter','Tab'].includes(key)) return;
-
-  // Enter / Tab / ArrowDown → celda siguiente en la misma columna (hacia abajo)
-  // Shift+Enter / Shift+Tab / ArrowUp → celda anterior (hacia arriba)
-  // ArrowRight / ArrowLeft → celda contigua en la misma fila
-
-  const wrap = input.closest('table');
-  if(!wrap) return;
-  const allInputs = Array.from(wrap.querySelectorAll('input[data-fi][data-ci]'));
-  const fi = parseInt(input.dataset.fi);
-  const ci = parseInt(input.dataset.ci);
-
-  let targetFi = fi, targetCi = ci;
-
-  if(key === 'ArrowDown' || (key === 'Enter' && !e.shiftKey) || (key === 'Tab' && !e.shiftKey)) {
-    targetFi = fi + 1;
-  } else if(key === 'ArrowUp' || (key === 'Enter' && e.shiftKey) || (key === 'Tab' && e.shiftKey)) {
-    targetFi = fi - 1;
-  } else if(key === 'ArrowRight') {
-    // Solo moverse si el cursor está al final del texto
-    if(input.selectionStart !== input.value.length) return;
-    targetCi = ci + 1;
-  } else if(key === 'ArrowLeft') {
-    // Solo moverse si el cursor está al inicio
-    if(input.selectionStart !== 0) return;
-    targetCi = ci - 1;
-  }
-
-  // Buscar el input destino
-  const target = allInputs.find(inp => parseInt(inp.dataset.fi) === targetFi && parseInt(inp.dataset.ci) === targetCi);
-  if(target) {
-    e.preventDefault();
-    target.focus();
-    target.select();
   }
 }
 
@@ -2608,7 +2491,7 @@ function elegirEmail(email) {
 }
 
 // ===== EDAD =====
-function calcularEdadBadge() {
+function calcularEdad() {
   const fecha = document.getElementById('f_fecha').value;
   if(!fecha) { document.getElementById('edadBadge').textContent=''; return; }
   const hoy = new Date(); const nac = new Date(fecha);
@@ -2643,9 +2526,10 @@ async function verLabReadonly(dni) {
 async function cargarPacientes() {
   const cont = document.getElementById('tablePacientes');
   let data, error;
-  ({ data, error } = await sb.from('pacientes').select('*').order('apellido', {ascending:true}));
+  // Intentar ordenar por id desc; si falla, cargar sin orden
+  ({ data, error } = await sb.from('pacientes').select('*').order('id', {ascending:false}));
   if(error) {
-    console.warn('[cargarPacientes] order by apellido falló, cargando sin orden:', error.message);
+    console.warn('[cargarPacientes] order by id falló, intentando sin orden:', error.message);
     ({ data, error } = await sb.from('pacientes').select('*'));
   }
   if(error) {
@@ -2834,7 +2718,8 @@ function generarPDF(tipo) {
     margin: 0, filename: info.nombre,
     image: { type:'jpeg', quality:0.97 },
     html2canvas: { scale:3, useCORS:true, logging:false, allowTaint:true },
-    jsPDF: { unit:'mm', format:'a5', orientation:'portrait' }
+    jsPDF: { unit:'mm', format:'a5', orientation:'portrait' },
+    pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
   };
   html2pdf().set(opt).from(el).save().then(() => {
     document.getElementById('docTemplate').style.display = 'none';
@@ -2855,6 +2740,106 @@ function enviarPorMail(tipo) {
 
 // ===== MODAL PACIENTE =====
 function cerrarModal(id) { document.getElementById(id).classList.remove('open'); }
+
+// ===== EDITAR EVOLUCIÓN (48h) =====
+let _editEvolId = null;
+function abrirEditarEvolucion(evolId) {
+  const evol = _historialData.find(e=>String(e.id)===String(evolId));
+  if(!evol) return;
+  _editEvolId = evolId;
+  const fh = new Date(evol.fecha_hora);
+  document.getElementById('edit_evol_info').textContent =
+    fh.toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'}) + ' ' +
+    fh.toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'}) +
+    ' — ' + (evol.medico||'');
+  const editor = document.getElementById('edit_evol_editor');
+  editor.innerHTML = evol.contenido_html || '';
+  document.getElementById('modalEditarEvolucion').classList.add('open');
+  setTimeout(()=>{ editor.focus(); moveCursorToEnd(editor); }, 100);
+}
+async function guardarEdicionEvolucion() {
+  if(!_editEvolId) return;
+  const html = document.getElementById('edit_evol_editor').innerHTML;
+  const btn = document.querySelector('#modalEditarEvolucion .btn-teal');
+  btn.textContent = 'Guardando...'; btn.disabled = true;
+  const { error } = await sb.from('evoluciones').update({contenido_html: html}).eq('id', _editEvolId);
+  btn.textContent = '💾 Guardar cambios'; btn.disabled = false;
+  if(!error) {
+    const idx = _historialData.findIndex(e=>String(e.id)===String(_editEvolId));
+    if(idx>=0) _historialData[idx].contenido_html = html;
+    renderHistoria(_historialData, false);
+    cerrarModal('modalEditarEvolucion');
+  } else { alert('Error al guardar: '+error.message); }
+}
+
+// ===== DRAG DE MODALES =====
+function makeDraggable(overlay) {
+  const modal = overlay.querySelector('.modal, [class*="modal"]');
+  if(!modal) return;
+  let dragging=false, ox=0, oy=0, mx=0, my=0;
+  const title = modal.querySelector('.modal-title');
+  if(!title) return;
+  title.addEventListener('mousedown', e=>{
+    if(e.button!==0) return;
+    // posicionar el modal absolutamente la primera vez
+    if(!overlay.classList.contains('draggable-active')) {
+      const r = modal.getBoundingClientRect();
+      overlay.classList.add('draggable-active');
+      modal.style.left = r.left+'px'; modal.style.top = r.top+'px';
+      modal.style.width = r.width+'px';
+    }
+    dragging=true;
+    ox=e.clientX-modal.offsetLeft; oy=e.clientY-modal.offsetTop;
+    e.preventDefault();
+  });
+  document.addEventListener('mousemove', e=>{
+    if(!dragging) return;
+    mx=e.clientX-ox; my=e.clientY-oy;
+    mx=Math.max(0,Math.min(mx,window.innerWidth-modal.offsetWidth));
+    my=Math.max(0,Math.min(my,window.innerHeight-modal.offsetHeight));
+    modal.style.left=mx+'px'; modal.style.top=my+'px';
+  });
+  document.addEventListener('mouseup',()=>{ dragging=false; });
+  // Reset position on close
+  const origClose = window.cerrarModal;
+  overlay.dataset.dragInit='1';
+}
+// Inicializar drag en todos los modales al cargar
+document.addEventListener('DOMContentLoaded',()=>{
+  document.querySelectorAll('.modal-overlay').forEach(ov=>{
+    if(!ov.dataset.dragInit) makeDraggable(ov);
+  });
+});
+// Reset drag state when modal closes
+const _origCerrarModal = cerrarModal;
+cerrarModal = function(id) {
+  _origCerrarModal(id);
+  const ov = document.getElementById(id);
+  if(ov) {
+    ov.classList.remove('draggable-active');
+    const m = ov.querySelector('.modal,[class*="modal-doc"]');
+    if(m){ m.style.left=''; m.style.top=''; m.style.width=''; }
+  }
+};
+
+// ===== HELPER: mover cursor al final de contenteditable =====
+function moveCursorToEnd(el) {
+  try {
+    const r=document.createRange(); r.selectNodeContents(el); r.collapse(false);
+    const s=window.getSelection(); s.removeAllRanges(); s.addRange(r);
+  } catch(e){}
+}
+
+// ===== CLICK DEBAJO DEL TEXTO VOLCADO: mover foco al final =====
+function initEditorClickToEnd(editorId) {
+  const ed = document.getElementById(editorId);
+  if(!ed) return;
+  ed.addEventListener('click', e=>{
+    // Si el click fue sobre el div contenedor (no sobre un nodo de texto), mover al final
+    if(e.target === ed) { ed.focus(); moveCursorToEnd(ed); }
+  });
+}
+
 
 function abrirModalNuevo() {
   modoEdicion = false; dniEdicion = null;
@@ -2891,7 +2876,7 @@ async function editarPaciente(dni) {
   document.getElementById('f_obra_social_input').value = p.obra_social||'';
   document.getElementById('f_afiliado').value = p.numero_afiliado||'';
   document.getElementById('f_ocupacion').value = p.ocupacion||'';
-  calcularEdadBadge();
+  calcularEdad();
   const { data } = await sb.from('paciente_profesionales').select('*').eq('dni_paciente', dni);
   const profs = (data||[]).map(x=>x.profesional);
   document.getElementById('prof_barbara').checked = profs.includes('Dra. Bárbara Guerrero');
@@ -2927,23 +2912,20 @@ async function guardarPaciente() {
     numero_afiliado: document.getElementById('f_afiliado').value.trim()||null,
     ocupacion: document.getElementById('f_ocupacion').value.trim()||null,
   };
-  function limpiarCampos(obj, msg) {
-    let r = {...obj};
-    if(msg && msg.includes("lugar_atencion")) { const {lugar_atencion, ...x} = r; r = x; }
-    if(msg && msg.includes("ocupacion"))      { const {ocupacion, ...x}      = r; r = x; }
-    return r;
-  }
   let error;
   if(modoEdicion) {
     ({ error } = await sb.from('pacientes').update(paciente).eq('dni', dniEdicion));
-    if(error && error.message && (error.message.includes('lugar_atencion') || error.message.includes('ocupacion'))) {
-      ({ error } = await sb.from('pacientes').update(limpiarCampos(paciente, error.message)).eq('dni', dniEdicion));
+    // Si falla por columna inexistente (lugar_atencion), reintentar sin ella
+    if(error && error.message && error.message.includes('lugar_atencion')) {
+      const { lugar_atencion, ...sinLugar } = paciente;
+      ({ error } = await sb.from('pacientes').update(sinLugar).eq('dni', dniEdicion));
     }
     if(!error) ultimoDniCargado = dniEdicion;
   } else {
     ({ error } = await sb.from('pacientes').insert(paciente));
-    if(error && error.message && (error.message.includes('lugar_atencion') || error.message.includes('ocupacion'))) {
-      ({ error } = await sb.from('pacientes').insert(limpiarCampos(paciente, error.message)));
+    if(error && error.message && error.message.includes('lugar_atencion')) {
+      const { lugar_atencion, ...sinLugar } = paciente;
+      ({ error } = await sb.from('pacientes').insert(sinLugar));
     }
     if(!error) ultimoDniCargado = dni;
   }
@@ -3002,86 +2984,18 @@ function renderSnapshotCompacto(snapshotJson) {
 }
 
 // ===== VER PREVIAS =====
-let _previaEditandoId = null;
-
 async function abrirPrevias() {
   if(!pacienteActual) return;
   document.getElementById('modalPrevias').classList.add('open');
-  await renderPreviasList();
-}
-
-async function renderPreviasList() {
   const cont = document.getElementById('previas_lista');
   cont.innerHTML = '<div class="loading">Cargando...</div>';
   const { data } = await sb.from('evoluciones').select('*').eq('dni_paciente', pacienteActual.dni).order('fecha_hora', {ascending:false}).limit(20);
   if(!data || !data.length) { cont.innerHTML='<div class="empty-state"><div>📋</div><p>No hay evoluciones previas.</p></div>'; return; }
-  const ahora = Date.now();
   cont.innerHTML = data.map(e => {
-    const fh = new Date(e.fecha_hora);
+    const fh=new Date(e.fecha_hora);
     const mClase = medicoAClase(e.medico);
-    const editable = true; // todas las evoluciones son editables
-    const editBtn = `<button onclick="editarPrevia(${e.id})" style="margin-left:auto;padding:3px 10px;border:1.5px solid var(--blue);border-radius:7px;background:var(--blue-light);color:var(--blue);font-size:11px;font-weight:600;cursor:pointer;font-family:var(--font-main)">✏️ Editar</button>`;
-    const delBtn = `<button onclick="eliminarPrevia(${e.id})" style="padding:3px 10px;border:1.5px solid var(--red);border-radius:7px;background:var(--red-light);color:var(--red);font-size:11px;font-weight:600;cursor:pointer;font-family:var(--font-main)">🗑 Eliminar</button>`;
-    if(_previaEditandoId === e.id) {
-      return `<div class="hc-entrada" id="previa_entry_${e.id}">
-        <div class="hc-header ${mClase}" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-          <span class="hc-fecha">${fh.toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'})} ${fh.toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'})}</span>
-          <span class="hc-medico">${e.medico||''}</span>
-          ${e.ta_promedio?`<span class="hc-badge-ta">TA: ${e.ta_promedio}</span>`:''}
-          ${e.fc_promedio?`<span class="hc-badge-fc">FC: ${e.fc_promedio} lpm</span>`:''}
-          ${e.peso?`<span class="hc-badge-peso">${e.peso} kg</span>`:''}
-        </div>
-        <div style="padding:10px 14px">
-          <div id="previa_editor_${e.id}" contenteditable="true" spellcheck="true"
-            style="border:1.5px solid var(--blue);border-radius:10px;padding:14px;min-height:100px;font-family:var(--font-main);font-size:13px;line-height:1.7;outline:none;background:#fafeff"
-            onkeydown="if(event.key==='Enter'){event.stopPropagation();}">${e.contenido_html||''}</div>
-          <div style="display:flex;gap:8px;margin-top:8px;justify-content:flex-end">
-            <button onclick="cancelarEditarPrevia()" style="padding:5px 14px;border:1.5px solid var(--border);border-radius:8px;background:white;font-size:12px;cursor:pointer;font-family:var(--font-main)">Cancelar</button>
-            <button onclick="guardarEditarPrevia(${e.id})" style="padding:5px 14px;border:none;border-radius:8px;background:var(--blue);color:white;font-size:12px;font-weight:600;cursor:pointer;font-family:var(--font-main)">💾 Guardar cambios</button>
-          </div>
-        </div>
-      </div>`;
-    }
-    return `<div class="hc-entrada" id="previa_entry_${e.id}">
-      <div class="hc-header ${mClase}" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-        <span class="hc-fecha">${fh.toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'})} ${fh.toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'})}</span>
-        <span class="hc-medico">${e.medico||''}</span>
-        ${e.ta_promedio?`<span class="hc-badge-ta">TA: ${e.ta_promedio}</span>`:''}
-        ${e.fc_promedio?`<span class="hc-badge-fc">FC: ${e.fc_promedio} lpm</span>`:''}
-        ${e.peso?`<span class="hc-badge-peso">${e.peso} kg</span>`:''}
-        ${editBtn}
-        ${delBtn}
-      </div>
-      <div class="hc-cuerpo">${e.contenido_html||''}</div>
-    </div>`;
+    return '<div class="hc-entrada"><div class="hc-header '+mClase+'"><span class="hc-fecha">'+fh.toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'})+' '+fh.toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'})+'</span><span class="hc-medico">'+(e.medico||'')+'</span>'+(e.ta_promedio?'<span class="hc-badge-ta">TA: '+e.ta_promedio+'</span>':'')+(e.fc_promedio?'<span class="hc-badge-fc">FC: '+e.fc_promedio+' lpm</span>':'')+(e.peso?'<span class="hc-badge-peso">'+e.peso+' kg</span>':'')+'</div><div class="hc-cuerpo">'+(e.contenido_html||'')+'</div></div>';
   }).join('');
-}
-
-function editarPrevia(id) {
-  _previaEditandoId = id;
-  renderPreviasList();
-}
-
-function cancelarEditarPrevia() {
-  _previaEditandoId = null;
-  renderPreviasList();
-}
-
-async function eliminarPrevia(id) {
-  if(!confirm('¿Eliminar esta evolución? Esta acción no se puede deshacer.')) return;
-  const { error } = await sb.from('evoluciones').delete().eq('id', id);
-  if(error) { alert('Error al eliminar: ' + error.message); return; }
-  await renderPreviasList();
-}
-
-async function guardarEditarPrevia(id) {
-  const editor = document.getElementById('previa_editor_' + id);
-  if(!editor) return;
-  const contenido = editor.innerHTML;
-  const { error } = await sb.from('evoluciones').update({ contenido_html: contenido }).eq('id', id);
-  if(error) { alert('Error al guardar: ' + error.message); return; }
-  _previaEditandoId = null;
-  await renderPreviasList();
 }
 
 // ===== VOLCADO CLINICO AL EDITOR =====
@@ -3092,10 +3006,10 @@ function generarTextoClinico(c, meds) {
   const FAM_NAMES = {hta:'HTA',dbt:'DBT',obe:'Obesidad',dis:'Dislipemia',iam:'IAM',acv:'ACV',erc:'ERC',ms:'S. Metabólico'};
   const dxList = Object.keys(DX_NAMES).filter(d=>c['dx_'+d]).map(d=>{
     let txt = DX_NAMES[d];
-    if(d==='acv'&&c.dx_acv_fecha){const anio=parseInt(c.dx_acv_fecha,10);if(!isNaN(anio)){const años=new Date().getFullYear()-anio;txt+=' (hace '+(años>0?años+' año'+(años!==1?'s':''):'este año')+')';}}
-    if(d==='iam'&&c.dx_iam_fecha){const anio=parseInt(c.dx_iam_fecha,10);if(!isNaN(anio)){const años=new Date().getFullYear()-anio;txt+=' (hace '+(años>0?años+' año'+(años!==1?'s':''):'este año')+')';}}
-    if(d==='hta'&&c.dx_hta_fecha){const anio=parseInt(c.dx_hta_fecha,10);if(!isNaN(anio)){const años=new Date().getFullYear()-anio;txt+=' (hace '+(años>0?años+' año'+(años!==1?'s':''):'este año')+')';}}
-    if(d==='obe'&&c.dx_obe_fecha){const anio=parseInt(c.dx_obe_fecha,10);if(!isNaN(anio)){const años=new Date().getFullYear()-anio;txt+=' (hace '+(años>0?años+' año'+(años!==1?'s':''):'este año')+')';}}
+    if(d==='acv'&&c.dx_acv_fecha){const diff=Math.floor((Date.now()-new Date(c.dx_acv_fecha).getTime())/86400000);const y=Math.floor(diff/365);const m=Math.floor((diff%365)/30);txt+=' (hace '+(y>0?y+' año'+(y>1?'s':'')+(m>0?' y '+m+' mes'+(m>1?'es':''):''):m>0?m+' mes'+(m>1?'es':''):diff+' días')+')';}
+    if(d==='iam'&&c.dx_iam_fecha){const diff=Math.floor((Date.now()-new Date(c.dx_iam_fecha).getTime())/86400000);const y=Math.floor(diff/365);const m=Math.floor((diff%365)/30);txt+=' (hace '+(y>0?y+' año'+(y>1?'s':'')+(m>0?' y '+m+' mes'+(m>1?'es':''):''):m>0?m+' mes'+(m>1?'es':''):diff+' días')+')';}
+    if(d==='hta'&&c.dx_hta_fecha){const diff=Math.floor((Date.now()-new Date(c.dx_hta_fecha).getTime())/86400000);const y=Math.floor(diff/365);txt+=' (hace '+(y>0?y+' año'+(y>1?'s':''):Math.floor(diff/30)+' meses')+')';}
+    if(d==='obe'&&c.dx_obe_fecha){const diff=Math.floor((Date.now()-new Date(c.dx_obe_fecha).getTime())/86400000);const y=Math.floor(diff/365);txt+=' (hace '+(y>0?y+' año'+(y>1?'s':''):Math.floor(diff/30)+' meses')+')';}
     if(d==='menopausia'&&c.dx_menopausia_edad)txt+=' (edad diagnóstico: '+c.dx_menopausia_edad+' años)';
     return txt;
   });
@@ -3112,9 +3026,7 @@ function generarTextoClinico(c, meds) {
   if(ginList.length) lines.push('ANT. GINECOLÓGICOS: '+ginList.join(' · '));
   const famList = Object.keys(FAM_NAMES).filter(d=>c['fam_'+d]).map(d=>FAM_NAMES[d]);
   if(famList.length) lines.push('ANT. FAMILIARES: '+famList.join(' · '));
-  if(meds && meds.length) lines.push('MEDICACIÓN CARDIOMETABÓLICA: '+meds.map(m=>m.farmaco+' '+m.dosis+(m.frecuencia?' '+m.frecuencia:'')).join(' · '));
-  const medsExtra2 = evolClinicaSnapshot?.medicacion_extra || [];
-  if(medsExtra2.length) lines.push('OTRAS MEDICACIONES: '+medsExtra2.map(m=>(m.droga||m.farmaco||'')+(m.dosis?' '+m.dosis:'')+(m.frecuencia?' '+m.frecuencia:'')).join(' · '));
+  if(meds && meds.length) lines.push('MEDICACIÓN: '+meds.map(m=>m.farmaco+' '+m.dosis+(m.frecuencia?' '+m.frecuencia:'')).join(' · '));
   const habParts = [];
   if(c.tabaquismo==='nunca') habParts.push('No fumador');
   else if(c.tabaquismo==='actual') habParts.push('Fumador ('+((c.cigarrillos_dia||0)*(c.anios_fumando||0)/20).toFixed(1)+' PA)');
@@ -3126,21 +3038,20 @@ function generarTextoClinico(c, meds) {
   if(c.actividad_fisica) habParts.push('Act. física: '+c.actividad_fisica);
   if(c.alimentacion) habParts.push('Alimentación: '+c.alimentacion);
   if(habParts.length) lines.push('HÁBITOS: '+habParts.join(' · '));
-  if(c.cardio_notas) lines.push('NOTAS CARDIOMETABÓLICAS: '+c.cardio_notas);
-  if(c.gineco_notas) lines.push('NOTAS GINECOLÓGICAS: '+c.gineco_notas);
+  if(c.nota_cardio) lines.push('NOTA CARDIOMETABÓLICA: '+c.nota_cardio);
+  if(c.nota_gineco) lines.push('NOTA GINECOLÓGICA: '+c.nota_gineco);
   if(!lines.length) return '';
   return '<div class="bloque-clinico" style="font-family:Arial,sans-serif;font-size:10pt;color:#333;border:1px solid #e0e0e0;padding:8px 10px;border-radius:6px;background:#fafafa;margin-bottom:10px;line-height:1.7">'+lines.join('<br>')+'</div>';
 }
 
 // ===== SNAPSHOT CLÍNICO =====
 async function cargarSnapshotInicial(dni) {
-  const [cr, mr, er] = await Promise.all([
+  const [cr, mr] = await Promise.all([
     sb.from('paciente_clinica').select('*').eq('dni_paciente', dni).maybeSingle(),
-    sb.from('medicacion').select('*').eq('dni_paciente', dni).eq('activo', true).order('grupo'),
-    sb.from('medicacion_extra').select('*').eq('dni_paciente', dni).eq('activo', true).order('id').then(r=>r).catch(()=>({data:[]}))
+    sb.from('medicacion').select('*').eq('dni_paciente', dni).eq('activo', true).order('grupo')
   ]);
   if(cr.data) {
-    evolClinicaSnapshot = { clinica: cr.data, medicacion: mr.data || [], medicacion_extra: er.data || [] };
+    evolClinicaSnapshot = { clinica: cr.data, medicacion: mr.data || [] };
   }
 }
 
@@ -3182,45 +3093,11 @@ async function guardarClinica() {
     alcohol_whisky:parseFloat(document.getElementById('alc_whisky').value)||0,
     actividad_fisica:document.getElementById('hab_actividad').value,
     alimentacion:document.getElementById('hab_alimentacion').value,
-    cardio_notas:document.getElementById('cardio_notas_generales')?.value||null,
-    gineco_notas:document.getElementById('gineco_notas_generales')?.value||null,
+    nota_cardio:document.getElementById('nota_cardio')?.value||null,
+    nota_gineco:document.getElementById('nota_gineco')?.value||null,
     actualizado_en:new Date().toISOString()
   };
-  // Descubrir columnas de la tabla la primera vez y cachear
-  if(!window._clinicaCols) {
-    try {
-      const { data: probe } = await sb.from('paciente_clinica').select('*').limit(1);
-      if(probe && probe.length > 0) {
-        window._clinicaCols = new Set(Object.keys(probe[0]));
-      } else {
-        // Tabla vacía: hacer un select de estructura via RPC no disponible.
-        // Usar lista mínima conocida como fallback.
-        window._clinicaCols = null;
-      }
-    } catch(e) { window._clinicaCols = null; }
-  }
-
-  // Serializar objetos anidados a JSON string
-  const clinicaDataSafe = {};
-  for(const [k,v] of Object.entries(clinicaData)) {
-    if(v !== null && typeof v === 'object' && !Array.isArray(v)) {
-      clinicaDataSafe[k] = JSON.stringify(v);
-    } else {
-      clinicaDataSafe[k] = v;
-    }
-  }
-
-  // Filtrar solo las columnas conocidas (si pudimos descubrirlas)
-  const payload = window._clinicaCols
-    ? Object.fromEntries(Object.entries(clinicaDataSafe).filter(([k]) => window._clinicaCols.has(k)))
-    : clinicaDataSafe;
-
-  const { error: uErr } = await sb.from('paciente_clinica').upsert(payload, {onConflict:'dni_paciente'});
-  if(uErr) {
-    console.error('[guardarClinica] upsert error:', uErr.message);
-    // Limpiar cache para re-descubrir en el próximo intento
-    window._clinicaCols = null;
-  }
+  await sb.from('paciente_clinica').upsert(clinicaData);
   await sb.from('medicacion').update({activo:false}).eq('dni_paciente',dni);
   const meds = [];
   for(const fila of document.querySelectorAll('#med_filas > div')) {
@@ -3231,27 +3108,6 @@ async function guardarClinica() {
     else await sb.from('medicacion').insert(medData);
     meds.push(medData);
   }
-  // Guardar medicación no cardiometabólica
-  const medsExtra = [];
-  try {
-    await sb.from('medicacion_extra').update({activo:false}).eq('dni_paciente',dni);
-    for(const fila of document.querySelectorAll('#med_extra_filas > div')) {
-      const droga = fila.querySelector('.med-extra-droga').value.trim(); if(!droga) continue;
-      const extraData = {dni_paciente:dni, droga, dosis:fila.querySelector('.med-extra-dosis').value.trim(), frecuencia:fila.querySelector('.med-extra-frecuencia').value, activo:true};
-      await sb.from('medicacion_extra').insert(extraData);
-      medsExtra.push(extraData);
-    }
-  } catch(e) {
-    // Si la tabla no existe aún, guardar en localStorage como fallback
-    const key = 'med_extra_' + dni;
-    const rows = [];
-    for(const fila of document.querySelectorAll('#med_extra_filas > div')) {
-      const droga = fila.querySelector('.med-extra-droga').value.trim(); if(!droga) continue;
-      rows.push({droga, dosis:fila.querySelector('.med-extra-dosis').value.trim(), frecuencia:fila.querySelector('.med-extra-frecuencia').value});
-      medsExtra.push({droga, dosis:rows[rows.length-1].dosis, frecuencia:rows[rows.length-1].frecuencia});
-    }
-    try { sessionStorage.setItem(key, JSON.stringify(rows)); } catch(_){}
-  }
   // Volcar al editor
   const texto = generarTextoClinico(clinicaData, meds);
   if(texto) {
@@ -3261,64 +3117,20 @@ async function guardarClinica() {
     editor.insertBefore(tmp.firstChild, editor.firstChild);
   }
   // Actualizar snapshot de la evolución en curso
-  evolClinicaSnapshot = { clinica: clinicaData, medicacion: meds, medicacion_extra: medsExtra };
+  evolClinicaSnapshot = { clinica: clinicaData, medicacion: meds };
   cerrarModal('modalClinica');
-  renderEncabezadoDesdeSnapshot();
   actualizarEncabezadoVariable(dni);
   // Si estábamos en lab/ant/est, volver a evolución
   switchPacMainTab('evol');
 }
 
-// ===== RENDER ENCABEZADO DESDE SNAPSHOT EN MEMORIA =====
-function renderEncabezadoDesdeSnapshot() {
-  if(!evolClinicaSnapshot) return;
-  const c = evolClinicaSnapshot.clinica;
-  const meds = evolClinicaSnapshot.medicacion || [];
-  const DX_L={dx_acv:'ACV',dx_albuminuria:'Albuminuria',dx_atero_subcl:'Atero Subcl.',dx_dbt1:'DBT 1',dx_dbt2:'DBT 2',dx_dbt_otro:'DBT Otro',dx_dis:'Dislipemia',dx_eap:'EAP',dx_epoc:'EPOC',dx_erc:'ERC',dx_fa:'FA',dx_hiperu:'HiperU',dx_hta:'HTA',dx_hta2:'HTA 2',dx_hvi:'HVI',dx_iam:'IAM',dx_icc:'ICC',dx_masld:'MASLD',dx_ms:'S. Met.',dx_neu_dbt:'Neu DBT',dx_obe:'Obesidad',dx_predbt:'PreDBT',dx_rp_dbt:'RP DBT',dx_sahos:'SAHOS',dx_sob:'Sobrepeso'};
-  const GIN_L={dx_pe:'PE',dx_rciu:'RCIU',dx_ppt:'PPT',dx_sop:'SOP',dx_dbtg:'DBT-G',dx_htag:'HTA-G',dx_ms_gineco:'SM-G',dx_menopausia:'Menop.'};
-  const FAM_L={fam_hta:'HTA-F',fam_dbt:'DBT-F',fam_obe:'OBE-F',fam_dis:'DIS-F',fam_iam:'IAM-F',fam_acv:'ACV-F',fam_erc:'ERC-F',fam_ms:'SM-F'};
-  let dxHtml='';
-  if(c){
-    Object.entries(DX_L).forEach(([k,v])=>{if(c[k])dxHtml+='<span class="evh-tag">'+v+'</span>';});
-    Object.entries(GIN_L).forEach(([k,v])=>{if(c[k])dxHtml+='<span class="evh-tag-pink">'+v+'</span>';});
-    Object.entries(FAM_L).forEach(([k,v])=>{if(c[k])dxHtml+='<span class="evh-tag-green">'+v+'</span>';});
-  }
-  const dxEl=document.getElementById('evh_dx');
-  if(dxEl)dxEl.innerHTML=dxHtml||'<span style="font-size:11px;color:var(--text-soft)">Sin diagnósticos</span>';
-  const medEl=document.getElementById('evh_med');
-  if(medEl)medEl.innerHTML=meds.length?meds.map(m=>'<span class="evh-med-item">'+m.farmaco+(m.dosis?' '+m.dosis:'')+(m.frecuencia?' · '+m.frecuencia:'')+'</span>').join(''):'<span style="font-size:11px;color:var(--text-soft)">Sin medicación</span>';
-  // Medicación extra
-  const medsExtra = evolClinicaSnapshot?.medicacion_extra || [];
-  const medExtraEl = document.getElementById('evh_med_extra');
-  const medExtraSection = document.getElementById('evh_med_extra_section');
-  if(medExtraEl && medExtraSection) {
-    if(medsExtra.length) {
-      medExtraEl.innerHTML = medsExtra.map(m=>'<span style="display:inline-flex;align-items:center;background:#f3e8ff;color:#6d3fc0;border:1px solid #d0bfef;border-radius:6px;padding:2px 8px;font-size:11px;font-weight:600;white-space:nowrap">'+(m.droga||m.farmaco||'')+(m.dosis?' '+m.dosis:'')+(m.frecuencia?' · '+m.frecuencia:'')+'</span>').join('');
-      medExtraSection.style.display = '';
-    } else {
-      medExtraSection.style.display = 'none';
-    }
-  }
-  if(c){
-    const py=((c.cigarrillos_dia||0)*(c.anios_fumando||0)/20).toFixed(1);
-    const t=c.tabaquismo==='nunca'?'<span class="evh-habito-bien">No fumador</span>':c.tabaquismo==='actual'?'<span class="evh-habito-malo">Fumador ('+py+' PA)</span>':'<span style="color:#e08c3a;font-weight:600">Ex fumador ('+py+' PA)</span>';
-    const gr=Math.round((c.alcohol_cerveza||0)*13+(c.alcohol_vino||0)*14+(c.alcohol_fernet||0)*22+(c.alcohol_blanca||0)*14+(c.alcohol_whisky||0)*14);
-    const lim=pacienteActual?.sexo==='Femenino'?98:196;
-    const a=!c.alcohol?'<span class="evh-habito-bien">No alcohol</span>':'<span class="'+(gr>lim?'evh-habito-malo':'evh-habito-bien')+'">Alcohol '+gr+'g/sem</span>';
-    const act=c.actividad_fisica==='sedentarismo'?'<span class="evh-habito-malo">Sedentario</span>':'<span class="evh-habito-bien">'+c.actividad_fisica+'</span>';
-    const habEl=document.getElementById('evh_habitos');
-    if(habEl)habEl.innerHTML=t+'<br>'+a+'<br>'+act;
-  }
-}
-
 // ===== NUEVA actualizarEncabezadoVariable CON 3 COLORES =====
 async function actualizarEncabezadoVariable(dni) {
-  const [cr,mr,er] = await Promise.all([
+  const [cr,mr] = await Promise.all([
     sb.from('paciente_clinica').select('*').eq('dni_paciente',dni).maybeSingle(),
-    sb.from('medicacion').select('*').eq('dni_paciente',dni).eq('activo',true).order('grupo'),
-    sb.from('medicacion_extra').select('*').eq('dni_paciente',dni).eq('activo',true).order('id').then(r=>r).catch(()=>({data:[]}))
+    sb.from('medicacion').select('*').eq('dni_paciente',dni).eq('activo',true).order('grupo')
   ]);
-  const c=cr.data; const meds=mr.data||[]; const medsExtra=er.data||[];
+  const c=cr.data; const meds=mr.data||[];
   const DX_L={dx_acv:'ACV',dx_albuminuria:'Albuminuria',dx_atero_subcl:'Atero Subcl.',dx_dbt1:'DBT 1',dx_dbt2:'DBT 2',dx_dbt_otro:'DBT Otro',dx_dis:'Dislipemia',dx_eap:'EAP',dx_epoc:'EPOC',dx_erc:'ERC',dx_fa:'FA',dx_hiperu:'HiperU',dx_hta:'HTA',dx_hta2:'HTA 2',dx_hvi:'HVI',dx_iam:'IAM',dx_icc:'ICC',dx_masld:'MASLD',dx_ms:'S. Met.',dx_neu_dbt:'Neu DBT',dx_obe:'Obesidad',dx_predbt:'PreDBT',dx_rp_dbt:'RP DBT',dx_sahos:'SAHOS',dx_sob:'Sobrepeso'};
   const GIN_L={dx_pe:'PE',dx_rciu:'RCIU',dx_ppt:'PPT',dx_sop:'SOP',dx_dbtg:'DBT-G',dx_htag:'HTA-G',dx_ms_gineco:'SM-G',dx_menopausia:'Menop.'};
   const FAM_L={fam_hta:'HTA-F',fam_dbt:'DBT-F',fam_obe:'OBE-F',fam_dis:'DIS-F',fam_iam:'IAM-F',fam_acv:'ACV-F',fam_erc:'ERC-F',fam_ms:'SM-F'};
@@ -3330,9 +3142,6 @@ async function actualizarEncabezadoVariable(dni) {
   }
   document.getElementById('evh_dx').innerHTML=dxHtml||'<span style="font-size:11px;color:var(--text-soft)">Sin diagnósticos</span>';
   document.getElementById('evh_med').innerHTML=meds.length?meds.map(m=>'<span class="evh-med-item">'+m.farmaco+' '+m.dosis+'</span>').join(''):'<span style="font-size:11px;color:var(--text-soft)">Sin medicación</span>';
-  // Medicación no cardiometabólica
-  const _eEl=document.getElementById('evh_med_extra'), _eSec=document.getElementById('evh_med_extra_section');
-  if(_eEl&&_eSec){if(medsExtra.length){_eEl.innerHTML=medsExtra.map(m=>'<span style="display:inline-flex;align-items:center;background:#f3e8ff;color:#6d3fc0;border:1px solid #d0bfef;border-radius:6px;padding:2px 8px;font-size:11px;font-weight:600;white-space:nowrap">'+(m.droga||'')+(m.dosis?' '+m.dosis:'')+(m.frecuencia?' · '+m.frecuencia:'')+'</span>').join('');_eSec.style.display='';}else{_eSec.style.display='none';}}
   if(c){
     const py=((c.cigarrillos_dia||0)*(c.anios_fumando||0)/20).toFixed(1);
     const t=c.tabaquismo==='nunca'?'<span class="evh-habito-bien">No fumador</span>':c.tabaquismo==='actual'?'<span class="evh-habito-malo">Fumador ('+py+' PA)</span>':'<span style="color:#e08c3a;font-weight:600">Ex fumador ('+py+' PA)</span>';
@@ -3355,42 +3164,13 @@ async function cargarMedicacion(dni) {
 }
 
 async function cargarDatosClinica(dni) {
-  // Resetear TODOS los campos antes de cargar (para evitar residuos del paciente anterior)
-  const DX_ALL = ['hta','hta2','dis','erc','obe','sob','masld','dbt2','dbt1','dbt_otro','predbt','hiperu','atero_subcl','eap','iam','acv','fa','sahos','epoc','icc','hvi','albuminuria','rp_dbt','neu_dbt','ms','pe','rciu','ppt','sop','dbtg','htag','ms_gineco','menopausia'];
-  const FAM_ALL = ['hta','dbt','obe','dis','iam','acv','erc','ms'];
-  DX_ALL.forEach(d=>{const el=document.getElementById('dx_'+d);if(el)el.checked=false;});
-  FAM_ALL.forEach(d=>{const el=document.getElementById('fam_'+d);if(el)el.checked=false;});
-  ['g','p','a','c'].forEach(f=>{const el=document.getElementById('gpac_'+f);if(el)el.value='';});
-  ['acv','iam','hta','obe','menopausia'].forEach(dx=>{
-    const box=document.getElementById('dx_extra_'+dx);if(box)box.style.display='none';
-    const fecha=document.getElementById('dx_'+dx+'_fecha');if(fecha)fecha.value='';
-    const nota=document.getElementById('dx_'+dx+'_nota');if(nota)nota.value='';
-    const tiempo=document.getElementById('dx_'+dx+'_tiempo');if(tiempo)tiempo.textContent='';
-    if(dx==='acv'){['isq','hem','ait'].forEach(s=>{const el=document.getElementById('dx_acv_'+s);if(el)el.checked=false;});}
-    if(dx==='iam'){['stemi','nstemi','angiop','by'].forEach(s=>{const el=document.getElementById('dx_iam_'+s);if(el)el.checked=false;});}
-    if(dx==='menopausia'){const edad=document.getElementById('dx_menopausia_edad');if(edad)edad.value='';}
-  });
-  const tabEl=document.getElementById('hab_tabaquismo');if(tabEl){tabEl.value='nunca';actualizarTabaquismo();}
-  const cigEl=document.getElementById('hab_cig_dia');if(cigEl)cigEl.value='';
-  const aniEl=document.getElementById('hab_anios');if(aniEl)aniEl.value='';
-  calcPackYear();
-  const alcEl=document.getElementById('hab_alcohol');if(alcEl){alcEl.value='no';actualizarAlcohol();}
-  ['cerveza','vino','fernet','blanca','whisky'].forEach(b=>{const el=document.getElementById('alc_'+b);if(el)el.value='';});
-  calcAlcohol();
-  const actEl=document.getElementById('hab_actividad');if(actEl)actEl.value='sedentarismo';
-  const aliEl=document.getElementById('hab_alimentacion');if(aliEl)aliEl.value='no saludable';
-  const cardioNoteEl=document.getElementById('cardio_notas_generales');if(cardioNoteEl)cardioNoteEl.value='';
-  const ginecoNoteEl=document.getElementById('gineco_notas_generales');if(ginecoNoteEl)ginecoNoteEl.value='';
-  document.getElementById('med_filas').innerHTML='';
-  const medExtraReset = document.getElementById('med_extra_filas');
-  if(medExtraReset) medExtraReset.innerHTML = '';
-
   const { data } = await sb.from('paciente_clinica').select('*').eq('dni_paciente',dni).maybeSingle();
   if(!data){agregarFilaMed();return;}
-
-  DX_ALL.forEach(d=>{const el=document.getElementById('dx_'+d);if(el)el.checked=!!data['dx_'+d];});
-  FAM_ALL.forEach(d=>{const el=document.getElementById('fam_'+d);if(el)el.checked=!!data['fam_'+d];});
-  ['g','p','a','c'].forEach(f=>{const el=document.getElementById('gpac_'+f);if(el&&data['gpac_'+f]!=null)el.value=data['gpac_'+f];});
+  ['hta','hta2','dis','erc','obe','sob','masld','dbt2','dbt1','dbt_otro','predbt','hiperu','atero_subcl','eap','iam','acv','fa','sahos','epoc','icc','hvi','albuminuria','rp_dbt','neu_dbt','ms','pe','rciu','ppt','sop','dbtg','htag','ms_gineco','menopausia'].forEach(d=>{const el=document.getElementById('dx_'+d);if(el)el.checked=!!data['dx_'+d];});
+  ['hta','dbt','obe','dis','iam','acv','erc','ms'].forEach(d=>{const el=document.getElementById('fam_'+d);if(el)el.checked=!!data['fam_'+d];});
+  // GPAC
+  ['g','p','a','c'].forEach(f=>{const el=document.getElementById('gpac_'+f);if(el&&data['gpac_'+f])el.value=data['gpac_'+f];});
+  // Extra dx
   ['acv','iam','hta','obe','menopausia'].forEach(dx=>{
     toggleDxExtra(dx);
     const fecha=document.getElementById('dx_'+dx+'_fecha');if(fecha&&data['dx_'+dx+'_fecha'])fecha.value=data['dx_'+dx+'_fecha'];
@@ -3406,18 +3186,20 @@ async function cargarDatosClinica(dni) {
   const ani=document.getElementById('hab_anios');if(ani&&data.anios_fumando)ani.value=data.anios_fumando;
   calcPackYear();
   const alc=document.getElementById('hab_alcohol');
-  if(alc){alc.value=data.alcohol_social?'social':(data.alcohol?'si':'no');actualizarAlcohol();}
+  if(alc){
+    alc.value=data.alcohol_social?'social':(data.alcohol?'si':'no');
+    actualizarAlcohol();
+  }
   ['cerveza','vino','fernet','blanca','whisky'].forEach(b=>{const el=document.getElementById('alc_'+b);if(el&&data['alcohol_'+b])el.value=data['alcohol_'+b];});
   calcAlcohol();
-  if(data.actividad_fisica){const el=document.getElementById('hab_actividad');if(el)el.value=data.actividad_fisica;}
-  if(data.alimentacion){const el=document.getElementById('hab_alimentacion');if(el)el.value=data.alimentacion;}
-  const cardioNotes=document.getElementById('cardio_notas_generales');if(cardioNotes)cardioNotes.value=data.cardio_notas||'';
-  const ginecoNotes=document.getElementById('gineco_notas_generales');if(ginecoNotes)ginecoNotes.value=data.gineco_notas||'';
+  if(data.actividad_fisica)document.getElementById('hab_actividad').value=data.actividad_fisica;
+  if(data.alimentacion)document.getElementById('hab_alimentacion').value=data.alimentacion;
+  const nc=document.getElementById('nota_cardio');if(nc)nc.value=data.nota_cardio||'';
+  const ng=document.getElementById('nota_gineco');if(ng)ng.value=data.nota_gineco||'';
   await cargarMedicacion(dni);
-  await cargarMedExtra(dni);
 }
 
-['modalPaciente','modalReceta','modalIndicaciones','modalHistorialDx','modalHistorialMed','modalLabRO'].forEach(id=>{
+['modalPaciente','modalReceta','modalIndicaciones','modalHistorialDx','modalHistorialMed','modalLabRO','modalEditarEvolucion'].forEach(id=>{
   document.getElementById(id).addEventListener('click',function(e){
     if(e.target===this) cerrarModal(id);
   });
@@ -3676,21 +3458,14 @@ async function abrirEvolucion(dni) {
   actualizarPromedios();
   actualizarIMC();
   evolClinicaSnapshot = null;
-  // Limpiar encabezado variable hasta que se carguen los datos del nuevo paciente
-  const evhDx=document.getElementById('evh_dx');if(evhDx)evhDx.innerHTML='<span style="font-size:11px;color:var(--text-soft)">Cargando...</span>';
-  const evhMed=document.getElementById('evh_med');if(evhMed)evhMed.innerHTML='';
-  const evhHab=document.getElementById('evh_habitos');if(evhHab)evhHab.innerHTML='';
-  const evhBadge=document.getElementById('evh_prevent_badge');if(evhBadge){evhBadge.textContent='—';evhBadge.style.color='var(--text-soft)';}
-  const evhLabel=document.getElementById('evh_prevent_label');if(evhLabel)evhLabel.textContent='';
   // IMPORTANTE: cargar datos históricos PRIMERO, luego mostrar la página
   _savedCols.lab.clear(); _savedCols.ant.clear(); _savedCols.est.clear();
   await cargarDatosTablasEvol(p.dni);
-  await cargarVacunacion(p.dni);
   await restaurarBorradorEvol(p.dni);
   showPage('evolucion');
   switchPacMainTab('evol');
-  await actualizarEncabezadoVariable(p.dni);
-  await cargarSnapshotInicial(p.dni);
+  actualizarEncabezadoVariable(p.dni);
+  cargarSnapshotInicial(p.dni);
   // Precargar PREVENT con datos disponibles del paciente
   setTimeout(precargarPREVENT, 800);
 }
@@ -3744,18 +3519,22 @@ function renderHistoria(data, mostrarContador) {
     return;
   }
   if(countEl) countEl.textContent = mostrarContador ? data.length + ' resultado' + (data.length!==1?'s':'') : '';
+  const ahora = Date.now();
   cont.innerHTML = data.map(e => {
     const fh = new Date(e.fecha_hora);
     const fechaStr = fh.toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'});
     const horaStr = fh.toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'});
     const mClase = medicoAClase(e.medico);
-    return '<div class="hc-entrada">' +
-      '<div class="hc-header '+mClase+'">' +
+    const dentro48h = (ahora - fh.getTime()) < 48*3600*1000;
+    const editBtn = dentro48h ? '<button class="hc-edit-btn" onclick="abrirEditarEvolucion(\''+e.id+'\')">✏️ Editar</button>' : '';
+    return '<div class="hc-entrada'+(dentro48h?' editable-48h':'')+'" data-evol-id="'+e.id+'">' +
+      '<div class="hc-header '+mClase+'" style="display:flex;align-items:center;flex-wrap:wrap;gap:6px">' +
         '<span class="hc-fecha">' + fechaStr + ' ' + horaStr + '</span>' +
         '<span class="hc-medico">' + (e.medico||'') + '</span>' +
         (e.ta_promedio ? '<span class="hc-badge-ta">TA: '+e.ta_promedio+'</span>' : '') +
         (e.fc_promedio ? '<span class="hc-badge-fc">FC: '+e.fc_promedio+' lpm</span>' : '') +
         (e.peso ? '<span class="hc-badge-peso">Peso: '+e.peso+' kg</span>' : '') +
+        editBtn +
       '</div>' +
       '<div class="hc-cuerpo">' + (e.contenido_html || '') + '</div>' +
     '</div>';
@@ -4087,7 +3866,6 @@ async function volcarActualizacion() {
       sb.from('medicacion').select('*').eq('dni_paciente', dni).eq('activo', true)
     ]);
     if(cr.data) evolClinicaSnapshot = { clinica: cr.data, medicacion: mr.data || [] };
-    renderEncabezadoDesdeSnapshot();
   }
 }
 
@@ -4173,34 +3951,22 @@ function generarPDFIndicacionesEvol() {
   const firmaImg = selectedUser==='barbara' ? firmaBarbaraB64 : firmaOmarB64;
   const firmaRatio = selectedUser==='barbara' ? 1.01 : 1.58;
   const firmaH = Math.round(48 * firmaRatio);
-  // Relleno el docTemplate (mismo formato que receta)
-  const mnEl = document.getElementById('doc_medico_nombre');
-  const espEl = document.getElementById('doc_especialidades');
-  if(mnEl) mnEl.textContent = '>> ' + u.titulo + '  —  ' + u.mp;
-  if(espEl) espEl.innerHTML = u.especialidades.join('<br>');
-  document.getElementById('doc_paciente_nombre').textContent = 'Paciente: ' + p.apellido + ', ' + p.nombre;
-  document.getElementById('doc_paciente_derecha').textContent = 'DNI: ' + p.dni + '   Fecha: ' + hoy;
-  const osRow = document.getElementById('doc_obra_social_row');
-  osRow.style.display = 'none'; // Sin obra social en indicaciones de evolución
-  document.getElementById('doc_tipo_label').textContent = 'Indicaciones:';
-  document.getElementById('doc_cuerpo').textContent = txt;
-  const firmaEl = document.getElementById('doc_firma_img');
-  firmaEl.src = firmaImg;
-  firmaEl.style.maxWidth = '48mm';
-  firmaEl.style.maxHeight = firmaH + 'mm';
-  const el = document.getElementById('docContent');
-  el.style.display = 'block';
-  document.getElementById('docTemplate').style.display = 'block';
-  const nombre = 'Indicaciones_' + p.apellido + '_' + hoy.replace(/\//g,'-') + '.pdf';
-  const opt = {
-    margin: 0, filename: nombre,
-    image: { type:'jpeg', quality:0.97 },
-    html2canvas: { scale:3, useCORS:true, logging:false, allowTaint:true },
-    jsPDF: { unit:'mm', format:'a5', orientation:'portrait' }
-  };
-  html2pdf().set(opt).from(el).save().then(() => {
-    document.getElementById('docTemplate').style.display = 'none';
-  });
+  const lines = txt.split('\n').map(l=>l.trim()).filter(Boolean).map(l=>'<li style="margin-bottom:4px">'+l+'</li>').join('');
+  const content = `<div style="font-family:Arial,sans-serif;font-size:11pt;padding:20px;max-width:700px">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;border-bottom:2px solid #3089ca;padding-bottom:12px">
+      <div><div style="font-size:14pt;font-weight:700;color:#3089ca">${u.name}</div><div style="font-size:10pt;color:#666">${u.mp}</div><div style="font-size:9pt;color:#666">URCyM · 2246 58-8469</div></div>
+      <div style="font-size:10pt;color:#666">${hoy}</div>
+    </div>
+    <div style="margin-bottom:16px"><strong>Paciente:</strong> ${p.apellido}, ${p.nombre} · DNI ${p.dni}</div>
+    <div style="font-size:12pt;font-weight:700;margin-bottom:10px;color:#1a2535">Indicaciones</div>
+    <ul style="margin:0;padding-left:20px;line-height:1.8">${lines}</ul>
+    <div style="margin-top:40px;display:flex;align-items:flex-end;gap:12px">
+      <img src="${firmaImg}" style="height:${firmaH}px;object-fit:contain"/>
+      <div><div style="font-size:10pt;font-weight:600">${u.name}</div><div style="font-size:9pt;color:#666">${u.mp}</div></div>
+    </div>
+  </div>`;
+  const el = document.createElement('div'); el.innerHTML = content; document.body.appendChild(el);
+  html2pdf().set({margin:10,filename:'Indicaciones_'+p.apellido+'_'+hoy.replace(/\//g,'-')+'.pdf',html2canvas:{scale:2},jsPDF:{unit:'mm',format:'a4'},pagebreak:{mode:['avoid-all','css','legacy']}}).from(el).save().then(()=>el.remove());
 }
 
 function enviarMailIndicacionesEvol() {
@@ -4397,41 +4163,13 @@ function agregarFilaMed(data) {
     '<select class="med-grupo" onchange="actualizarFarmacos(this)" style="padding:5px 4px;border:1.5px solid var(--border);border-radius:8px;font-size:11px;width:100%">'+GRUPOS_MED.map(g=>'<option value="'+g+'"'+(data&&data.grupo===g?' selected':'')+'>'+g+'</option>').join('')+'</select>'+
     '<select class="med-farmaco" onchange="actualizarDosisMed(this)" style="padding:5px 4px;border:1.5px solid var(--border);border-radius:8px;font-size:11px;width:100%"><option value="">Seleccionar</option></select>'+
     '<select class="med-dosis" style="padding:5px 4px;border:1.5px solid var(--border);border-radius:8px;font-size:11px;width:100%;font-family:var(--font-main)"><option value="">Dosis</option></select>'+
-    '<select class="med-frecuencia" style="padding:5px 4px;border:1.5px solid var(--border);border-radius:8px;font-size:11px;width:100%;font-family:var(--font-main)"><option value="">Frecuencia</option>'+(()=>{const ff=['cada 4 h','cada 6 h','cada 8 h','cada 12 h','cada 24 h','semanal','mensual'];return ff.map(f=>'<option value="'+f+'"'+(data&&data.frecuencia===f?' selected':'')+'>'+f+'</option>').join('');})()+'</select>'+
+    '<select class="med-frecuencia" style="padding:5px 4px;border:1.5px solid var(--border);border-radius:8px;font-size:11px;width:100%;font-family:var(--font-main)"><option value="">Frecuencia</option>'+(()=>{const ff=['cada 4 h','cada 6 h','cada 8 h','cada 12 h','cada 24 h'];return ff.map(f=>'<option value="'+f+'"'+(data&&data.frecuencia===f?' selected':'')+'>'+f+'</option>').join('');})()+'</select>'+
     '<button onclick="this.parentElement.remove()" style="background:var(--red-light);color:var(--red);border:none;border-radius:6px;width:26px;height:26px;cursor:pointer;font-size:16px;line-height:1">×</button>';
   cont.appendChild(div);
   const selFarm = div.querySelector('.med-farmaco');
   const selDosis = div.querySelector('.med-dosis');
   poblarFarmacos(div.querySelector('.med-grupo').value, selFarm, data?data.farmaco:'');
   if(data && data.farmaco) poblarDosisMedEl(selDosis, data.farmaco, data.dosis||'');
-}
-
-function agregarFilaMedExtra(data) {
-  const cont = document.getElementById('med_extra_filas');
-  const div = document.createElement('div');
-  div.style.cssText = 'display:grid;grid-template-columns:1fr 90px 1fr 28px;gap:6px;margin-bottom:6px;align-items:center';
-  const frecuencias = ['cada 4 h','cada 6 h','cada 8 h','cada 12 h','cada 24 h','semanal','mensual','según necesidad'];
-  div.innerHTML =
-    '<input type="text" class="med-extra-droga" placeholder="Droga / medicamento" value="'+(data&&data.droga?data.droga:'')+'" style="padding:5px 8px;border:1.5px solid #d0bfef;border-radius:8px;font-size:12px;font-family:var(--font-main);width:100%"/>'+
-    '<input type="text" class="med-extra-dosis" placeholder="Dosis" value="'+(data&&data.dosis?data.dosis:'')+'" style="padding:5px 8px;border:1.5px solid #d0bfef;border-radius:8px;font-size:12px;font-family:var(--font-main);width:100%"/>'+
-    '<select class="med-extra-frecuencia" style="padding:5px 4px;border:1.5px solid #d0bfef;border-radius:8px;font-size:11px;width:100%;font-family:var(--font-main)"><option value="">Frecuencia</option>'+frecuencias.map(f=>'<option value="'+f+'"'+(data&&data.frecuencia===f?' selected':'')+'>'+f+'</option>').join('')+'</select>'+
-    '<button onclick="this.parentElement.remove()" style="background:#f3e8ff;color:#6d3fc0;border:none;border-radius:6px;width:26px;height:26px;cursor:pointer;font-size:16px;line-height:1">×</button>';
-  cont.appendChild(div);
-}
-
-async function cargarMedExtra(dni) {
-  const cont = document.getElementById('med_extra_filas');
-  if(!cont) return;
-  cont.innerHTML = '';
-  try {
-    const { data } = await sb.from('medicacion_extra').select('*').eq('dni_paciente', dni).eq('activo', true).order('id');
-    if(data && data.length) { data.forEach(m => agregarFilaMedExtra(m)); return; }
-  } catch(e) {}
-  // Fallback: sessionStorage
-  try {
-    const stored = sessionStorage.getItem('med_extra_' + dni);
-    if(stored) { JSON.parse(stored).forEach(m => agregarFilaMedExtra(m)); }
-  } catch(_) {}
 }
 
 function actualizarFarmacos(el) {
@@ -4465,11 +4203,10 @@ function calcDxTiempo(dx) {
   const out = document.getElementById('dx_'+dx+'_tiempo');
   if(!el||!out) return;
   const f = el.value; if(!f){out.textContent='';return;}
-  const anio = parseInt(f, 10);
-  if(isNaN(anio)||anio<1900||anio>2100){out.textContent='';return;}
-  const ahora = new Date();
-  const años = ahora.getFullYear() - anio;
-  out.textContent = años > 0 ? 'Hace '+años+' año'+(años!==1?'s':'') : años === 0 ? 'Este año' : '';
+  const diff = Date.now()-new Date(f).getTime();
+  const days = Math.floor(diff/86400000);
+  const years = Math.floor(days/365); const months = Math.floor((days%365)/30);
+  out.textContent = years>0 ? 'Hace '+years+' año'+(years>1?'s':'')+(months>0?' y '+months+' mes'+(months>1?'es':''):'') : months>0 ? 'Hace '+months+' mes'+(months>1?'es':'') : 'Hace '+days+' día'+(days!==1?'s':'');
 }
 function actualizarTabaquismo(){
   const val=document.getElementById('hab_tabaquismo').value;
@@ -5229,6 +4966,70 @@ document.getElementById('modal_historial_ant').addEventListener('click', functio
   if(e.target===this) cerrarHistorialAnt();
 });
 
+// ===== VACUNACIÓN — CALENDARIO NACIONAL ARGENTINO =====
+
+// Definición del calendario nacional (por categoría)
+const CALENDARIO_VAC = [
+  // ── ADULTOS (todas las edades ≥18)
+  { id:'influenza', nombre:'Influenza estacional', frecuencia:'Anual', indicacion:'Todos los adultos', grupo:'adultos',
+    antecedentes:[] },
+  { id:'covid19', nombre:'COVID-19', frecuencia:'Según esquema vigente', indicacion:'Todos los adultos', grupo:'adultos',
+    antecedentes:[] },
+  { id:'neumo23', nombre:'Neumococo 23V (PPSV23)', frecuencia:'1 dosis (refuerzo a los 5 años en riesgo)', indicacion:'>65 años o factores de riesgo', grupo:'adultos',
+    antecedentes:['mayores65','epoc','asma_severo','card_cronica','renal_cronica','hepatica_cronica','diabetes','inmunosupresion','tabaquismo'] },
+  { id:'neumo13', nombre:'Neumococo 13V (PCV13)', frecuencia:'1 dosis', indicacion:'Inmunocomprometidos, enf. crónicas', grupo:'adultos',
+    antecedentes:['inmunosupresion','epoc','card_cronica','renal_cronica'] },
+  { id:'dt_adulto', nombre:'dT (doble adulto — Difteria/Tétanos)', frecuencia:'Cada 10 años', indicacion:'Todos los adultos', grupo:'adultos',
+    antecedentes:[] },
+  { id:'dtpa', nombre:'dTpa (triple acelular — Difteria/Tétanos/Pertussis)', frecuencia:'1 dosis (adultos), cada embarazo', indicacion:'Adultos sin refuerzo, embarazadas ≥20 semanas', grupo:'adultos',
+    antecedentes:['embarazo'] },
+  { id:'hbv', nombre:'Hepatitis B', frecuencia:'3 dosis (0-1-6 meses)', indicacion:'No vacunados o sin serología', grupo:'adultos',
+    antecedentes:[] },
+  { id:'hav', nombre:'Hepatitis A', frecuencia:'2 dosis (0-6 meses)', indicacion:'No vacunados, hepatopatías, HSH', grupo:'adultos',
+    antecedentes:['hepatica_cronica','riesgo_hav'] },
+  { id:'varicela', nombre:'Varicela', frecuencia:'2 dosis (si susceptible)', indicacion:'Sin antecedente de varicela ni vacuna', grupo:'adultos',
+    antecedentes:['susceptible_varicela'] },
+  { id:'herpes_zoster', nombre:'Herpes Zóster (RZV)', frecuencia:'2 dosis (0 y 2-6 meses)', indicacion:'≥50 años', grupo:'mayores50',
+    antecedentes:[] },
+  { id:'fiebre_amarilla', nombre:'Fiebre Amarilla', frecuencia:'1 dosis (de por vida)', indicacion:'Viajeros a zonas endémicas, residentes', grupo:'adultos',
+    antecedentes:['riesgo_fa'] },
+  { id:'meningococo', nombre:'Meningococo conjugado (MenACWY)', frecuencia:'1-2 dosis', indicacion:'Asplenia, inmunocomprometidos, viajeros', grupo:'adultos',
+    antecedentes:['inmunosupresion','asplenia','riesgo_meningococo'] },
+  { id:'hpv', nombre:'HPV (Papilomavirus)', frecuencia:'2-3 dosis', indicacion:'Hasta 26 años (extendido hasta 45 en grupos de riesgo)', grupo:'adultos',
+    antecedentes:['hasta45_hpv'] },
+  // ── EMBARAZO
+  { id:'rubeolatosf', nombre:'Triple viral (MMR) — pre-concepcional', frecuencia:'Pre-concepcional si no vacunada', indicacion:'Mujeres en edad fértil sin vacuna', grupo:'embarazo',
+    antecedentes:['embarazo','susceptible_mmr'] },
+  // ── OCUPACIONAL / RIESGO
+  { id:'rabia', nombre:'Rabia pre-exposición', frecuencia:'Esquema según riesgo', indicacion:'Veterinarios, trabajadores de salud, viajeros', grupo:'riesgo',
+    antecedentes:['riesgo_rabia'] },
+  { id:'fiebre_tifoidea', nombre:'Fiebre Tifoidea', frecuencia:'1 dosis (oral) o inyectable', indicacion:'Viajeros a zonas endémicas', grupo:'riesgo',
+    antecedentes:['riesgo_tifoidea'] },
+];
+
+// Antecedentes relevantes que pueden marcar el médico
+const VAC_ANTECEDENTES = [
+  { id:'mayores65', label:'≥ 65 años (auto)' },
+  { id:'mayores50', label:'≥ 50 años (auto)' },
+  { id:'embarazo', label:'Embarazo' },
+  { id:'diabetes', label:'Diabetes' },
+  { id:'epoc', label:'EPOC / Asma severo' },
+  { id:'card_cronica', label:'Enfermedad cardíaca crónica' },
+  { id:'renal_cronica', label:'Enfermedad renal crónica' },
+  { id:'hepatica_cronica', label:'Enfermedad hepática crónica' },
+  { id:'inmunosupresion', label:'Inmunosupresión / HIV' },
+  { id:'asplenia', label:'Asplenia funcional o anatómica' },
+  { id:'tabaquismo', label:'Tabaquismo' },
+  { id:'susceptible_varicela', label:'Sin varicela ni vacuna previa' },
+  { id:'susceptible_mmr', label:'Sin triple viral (MMR)' },
+  { id:'riesgo_hav', label:'Riesgo Hepatitis A (hepatopatía, HSH, viaje)' },
+  { id:'riesgo_fa', label:'Riesgo Fiebre Amarilla (zona endémica/viaje)' },
+  { id:'riesgo_meningococo', label:'Riesgo meningococo' },
+  { id:'riesgo_rabia', label:'Riesgo rabia (vet, salud, viaje)' },
+  { id:'riesgo_tifoidea', label:'Viaje zona tifoidea' },
+  { id:'hasta45_hpv', label:'HPV hasta 45 años (grupo riesgo)' },
+];
+
 function calcularEdad(fechaNac) {
   if(!fechaNac) return null;
   const hoy = new Date();
@@ -5242,10 +5043,6 @@ function calcularEdad(fechaNac) {
 function renderVacunacion() {
   const panel = document.getElementById('vac_panel');
   if(!panel) return;
-  if(!vacDatos) vacDatos = { aplicadas: {}, notas: {}, antecedentes: [] };
-  if(!vacDatos.antecedentes) vacDatos.antecedentes = [];
-  if(!vacDatos.aplicadas) vacDatos.aplicadas = {};
-  if(!vacDatos.notas) vacDatos.notas = {};
   const p = pacienteActual;
   const edad = calcularEdad(p?.fecha_nacimiento);
 
@@ -5255,20 +5052,6 @@ function renderVacunacion() {
   else autoAnt.delete('mayores65');
   if(edad !== null && edad >= 50) autoAnt.add('mayores50');
   else autoAnt.delete('mayores50');
-
-  // Auto-detectar desde snapshot clínico
-  if(evolClinicaSnapshot && evolClinicaSnapshot.clinica) {
-    const c = evolClinicaSnapshot.clinica;
-    if(c.dx_dbt1 || c.dx_dbt2 || c.dx_dbt_otro || c.dx_predbt) autoAnt.add('diabetes');
-    if(c.dx_obe || c.dx_sob) autoAnt.add('obesidad');
-    if(c.dx_epoc) autoAnt.add('epoc');
-    if(c.dx_erc) autoAnt.add('renal_cronica');
-    if(c.dx_icc || c.dx_fa || c.dx_iam || c.dx_hvi) autoAnt.add('card_cronica');
-    if(c.dx_masld) autoAnt.add('hepatica_cronica');
-    if(c.tabaquismo === 'actual') autoAnt.add('tabaquismo');
-    // embarazo — se mantiene manual
-  }
-
   vacDatos.antecedentes = [...autoAnt];
 
   // Filtrar vacunas relevantes
@@ -5278,48 +5061,31 @@ function renderVacunacion() {
     return v.antecedentes.some(a => autoAnt.has(a));
   });
 
-  // Build auto-detected labels for display
-  const autoDetectados = [];
-  if(autoAnt.has('mayores65')) autoDetectados.push('≥ 65 años');
-  if(autoAnt.has('mayores50') && !autoAnt.has('mayores65')) autoDetectados.push('≥ 50 años');
-  if(autoAnt.has('diabetes')) autoDetectados.push('Diabetes');
-  if(autoAnt.has('obesidad')) autoDetectados.push('Obesidad');
-  if(autoAnt.has('epoc')) autoDetectados.push('EPOC');
-  if(autoAnt.has('renal_cronica')) autoDetectados.push('ERC');
-  if(autoAnt.has('card_cronica')) autoDetectados.push('Enf. cardíaca');
-  if(autoAnt.has('hepatica_cronica')) autoDetectados.push('Enf. hepática');
-  if(autoAnt.has('tabaquismo')) autoDetectados.push('Tabaquismo');
-
   panel.innerHTML = `
-    <!-- Condiciones detectadas + manuales -->
+    <!-- Antecedentes clínicos relevantes -->
     <div style="background:var(--gray);border-radius:12px;padding:14px 18px;margin-bottom:18px">
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap">
-        <div style="font-size:12px;font-weight:700;color:var(--text-soft);text-transform:uppercase;letter-spacing:.06em">Condiciones del paciente</div>
-        ${autoDetectados.length ? `<div style="font-size:11px;color:var(--teal);background:var(--teal-light);padding:2px 8px;border-radius:10px;font-weight:600">✅ ${autoDetectados.join(' · ')} — detectados automáticamente</div>` : '<div style="font-size:11px;color:var(--text-soft)">No se detectaron condiciones en los diagnósticos cargados</div>'}
-      </div>
+      <div style="font-size:12px;font-weight:700;color:var(--text-soft);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">Factores de riesgo / indicaciones especiales</div>
       <div style="display:flex;flex-wrap:wrap;gap:8px">
-        ${VAC_ANTECEDENTES.map(a => `
+        ${VAC_ANTECEDENTES.filter(a => !['mayores65','mayores50'].includes(a.id)).map(a => `
           <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;padding:4px 10px;background:white;border-radius:20px;border:1.5px solid ${autoAnt.has(a.id)?'var(--blue)':'var(--border)'};color:${autoAnt.has(a.id)?'var(--blue)':'var(--text)'}">
             <input type="checkbox" ${autoAnt.has(a.id)?'checked':''} onchange="toggleVacAnt('${a.id}',this.checked)" style="accent-color:var(--blue)">
             ${a.label}
           </label>
         `).join('')}
       </div>
-      ${edad!==null?`<div style="margin-top:8px;font-size:11px;color:var(--text-soft)">Edad: <b>${edad} años</b>${edad>=65?' — aplica neumococo 23V y 13V, herpes zóster':''}${edad>=50&&edad<65?' — aplica herpes zóster':''}</div>`:''}
+      ${edad!==null?`<div style="margin-top:8px;font-size:11px;color:var(--text-soft)">Edad detectada: <b>${edad} años</b>${edad>=65?' — Aplica neumococo, zóster':''}${edad>=50&&edad<65?' — Aplica zóster':''}</div>`:''}
     </div>
 
-    ${vacRelevantes.length===0?`<div style="text-align:center;padding:60px 20px;color:var(--text-soft);background:white;border-radius:12px;border:1px solid var(--border)"><div style="font-size:40px;margin-bottom:12px">💉</div><p style="font-size:14px">No se encontraron vacunas indicadas.<br><span style="font-size:12px">Revisá que los diagnósticos del paciente estén cargados, o marcá condiciones manualmente arriba.</span></p></div>`:`
     <!-- Tabla de vacunas -->
     <div style="border-radius:12px;overflow:hidden;border:1px solid var(--border)">
       <table style="width:100%;border-collapse:collapse;font-size:12px">
         <thead>
           <tr style="background:var(--blue);color:white">
-            <th style="padding:10px 14px;text-align:left;font-weight:700;min-width:200px">Vacuna</th>
+            <th style="padding:10px 14px;text-align:left;font-weight:700">Vacuna</th>
             <th style="padding:10px 14px;text-align:left;font-weight:700">Indicación</th>
             <th style="padding:10px 14px;text-align:left;font-weight:700">Frecuencia</th>
             <th style="padding:10px 10px;text-align:center;font-weight:700;white-space:nowrap">Estado</th>
-            <th style="padding:10px 14px;text-align:left;font-weight:700;min-width:140px">Fecha aplicación</th>
-            <th style="padding:10px 14px;text-align:left;font-weight:700;white-space:nowrap;min-width:140px">Próximo refuerzo</th>
+            <th style="padding:10px 14px;text-align:left;font-weight:700">Fecha / Notas</th>
           </tr>
         </thead>
         <tbody>
@@ -5328,55 +5094,30 @@ function renderVacunacion() {
             const nota = (vacDatos.notas||{})[v.id] || '';
             const bg = i%2===0 ? 'white' : '#f8fafc';
             const colorEst = est==='completa'?'#16a34a':est==='parcial'?'#ca8a04':'#6b7280';
-
-            // Calculate next booster
-            let boosterHtml = '<span style="color:var(--text-soft);font-size:11px">—</span>';
-            if(est === 'completa' && v.boosterAnios && nota) {
-              const m1 = nota.match(/(\d{2})\/(\d{2})\/(\d{4})/);
-              const m2 = nota.match(/(\d{2})\/(\d{4})/);
-              const m3 = nota.match(/(\d{4})/);
-              let baseDate = null;
-              if(m1) baseDate = new Date(parseInt(m1[3]), parseInt(m1[2])-1, parseInt(m1[1]));
-              else if(m2) baseDate = new Date(parseInt(m2[2]), parseInt(m2[1])-1, 1);
-              else if(m3) baseDate = new Date(parseInt(m3[1]), 0, 1);
-              if(baseDate && !isNaN(baseDate)) {
-                const booster = new Date(baseDate);
-                booster.setFullYear(booster.getFullYear() + v.boosterAnios);
-                const diffMs = booster - new Date();
-                const diffDias = Math.round(diffMs / 86400000);
-                const boosterStr = booster.toLocaleDateString('es-AR',{month:'2-digit',year:'numeric'});
-                if(diffDias < 0) boosterHtml = `<span style="color:var(--red);font-weight:700;font-size:11px">⚠️ Vencido (${boosterStr})</span>`;
-                else if(diffDias <= 90) boosterHtml = `<span style="color:#ca8a04;font-weight:700;font-size:11px">⏰ Próximo: ${boosterStr}</span>`;
-                else boosterHtml = `<span style="color:#16a34a;font-size:11px">✅ ${boosterStr}</span>`;
-              }
-            } else if(v.boosterAnios && est === 'completa') {
-              boosterHtml = `<span style="color:var(--text-soft);font-size:10px">Cargá la fecha →</span>`;
-            } else if(!v.boosterAnios && est === 'completa') {
-              boosterHtml = `<span style="color:#16a34a;font-size:11px">Sin refuerzo necesario</span>`;
-            }
-
+            const emojiEst = est==='completa'?'✅':est==='parcial'?'⚠️':'⬜';
             return `<tr style="background:${bg};border-bottom:1px solid var(--border)">
               <td style="padding:10px 14px;font-weight:600;color:var(--text)">${v.nombre}</td>
-              <td style="padding:10px 14px;color:var(--text-soft);font-size:11px">${v.indicacion}</td>
-              <td style="padding:10px 14px;color:var(--text-soft);font-size:11px">${v.frecuencia}</td>
+              <td style="padding:10px 14px;color:var(--text-soft)">${v.indicacion}</td>
+              <td style="padding:10px 14px;color:var(--text-soft)">${v.frecuencia}</td>
               <td style="padding:10px;text-align:center">
-                <select onchange="setVacEstado('${v.id}',this.value);renderVacunacion()" style="border:1.5px solid ${colorEst};border-radius:6px;padding:3px 6px;font-size:11px;color:${colorEst};background:white;font-family:var(--font-main);font-weight:600;cursor:pointer">
+                <select onchange="setVacEstado('${v.id}',this.value)" style="border:1.5px solid ${colorEst};border-radius:6px;padding:3px 6px;font-size:11px;color:${colorEst};background:white;font-family:var(--font-main);font-weight:600;cursor:pointer">
                   <option value="pendiente" ${est==='pendiente'?'selected':''}>⬜ Pendiente</option>
                   <option value="parcial"   ${est==='parcial'  ?'selected':''}>⚠️ Parcial</option>
                   <option value="completa"  ${est==='completa' ?'selected':''}>✅ Completa</option>
                 </select>
               </td>
               <td style="padding:6px 10px">
-                <input type="text" value="${nota}" placeholder="Ej: 03/2024"
-                  onblur="setVacNota('${v.id}',this.value);renderVacunacion()"
+                <input type="text" value="${nota}" placeholder="Ej: 02/2024, lote XX"
+                  onchange="setVacNota('${v.id}',this.value)"
                   style="width:100%;border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-size:11px;font-family:var(--font-main);color:var(--text)">
               </td>
-              <td style="padding:8px 14px">${boosterHtml}</td>
             </tr>`;
           }).join('')}
         </tbody>
       </table>
-    </div>`}
+    </div>
+
+    ${vacRelevantes.length===0?`<div style="text-align:center;padding:40px;color:var(--text-soft)">Completá los antecedentes para ver las vacunas indicadas</div>`:''}
   `;
 }
 
@@ -5533,94 +5274,6 @@ document.getElementById('modal_evol_historica').addEventListener('click', functi
 });
 
 
-// ===== MODALES ARRASTRABLES =====
-(function() {
-  let dragState = null; // { modal, overlay, startX, startY, origLeft, origTop }
-
-  document.addEventListener('mousedown', function(e) {
-    // Find if we clicked inside a .modal that's inside an open .modal-overlay
-    const modal = e.target.closest('.modal');
-    if(!modal) return;
-    const overlay = modal.closest('.modal-overlay');
-    if(!overlay || !overlay.classList.contains('open')) return;
-    // Only drag from top 60px strip (header area)
-    const rect = modal.getBoundingClientRect();
-    if(e.clientY - rect.top > 60) return;
-    // Don't drag when clicking interactive elements
-    if(['BUTTON','INPUT','SELECT','TEXTAREA','A'].includes(e.target.tagName)) return;
-
-    // First drag: convert from flex-centered to fixed absolute
-    if(modal.style.position !== 'fixed') {
-      modal.style.position = 'fixed';
-      modal.style.left = rect.left + 'px';
-      modal.style.top = rect.top + 'px';
-      modal.style.margin = '0';
-      modal.style.transform = 'none';
-      modal.style.animation = 'none';
-      overlay.style.alignItems = 'flex-start';
-      overlay.style.justifyContent = 'flex-start';
-      overlay.style.pointerEvents = 'none';
-      modal.style.pointerEvents = 'all';
-    }
-
-    dragState = {
-      modal, overlay,
-      startX: e.clientX, startY: e.clientY,
-      origLeft: parseFloat(modal.style.left) || 0,
-      origTop: parseFloat(modal.style.top) || 0,
-    };
-    modal.style.cursor = 'grabbing';
-    e.preventDefault();
-  });
-
-  document.addEventListener('mousemove', function(e) {
-    if(!dragState) return;
-    const { modal, startX, startY, origLeft, origTop } = dragState;
-    modal.style.left = (origLeft + e.clientX - startX) + 'px';
-    modal.style.top = Math.max(0, origTop + e.clientY - startY) + 'px';
-  });
-
-  document.addEventListener('mouseup', function() {
-    if(!dragState) return;
-    dragState.modal.style.cursor = '';
-    dragState = null;
-  });
-
-  // Reset position when modal closes
-  const origCerrar = window.cerrarModal;
-  window.cerrarModal = function(id) {
-    if(origCerrar) origCerrar(id);
-    const overlay = document.getElementById(id);
-    if(!overlay) return;
-    const modal = overlay.querySelector('.modal');
-    if(modal) {
-      modal.style.cssText = modal.style.cssText
-        .replace(/position:[^;]+;?/g,'')
-        .replace(/left:[^;]+;?/g,'')
-        .replace(/top:[^;]+;?/g,'')
-        .replace(/margin:[^;]+;?/g,'')
-        .replace(/transform:[^;]+;?/g,'')
-        .replace(/animation:[^;]+;?/g,'')
-        .replace(/pointer-events:[^;]+;?/g,'');
-      overlay.style.alignItems = '';
-      overlay.style.justifyContent = '';
-      overlay.style.pointerEvents = '';
-    }
-  };
-
-  // Cursor hint: show grab cursor on top 60px of modal header
-  document.addEventListener('mousemove', function(e) {
-    if(dragState) return;
-    const modal = e.target.closest('.modal');
-    if(!modal) return;
-    const overlay = modal.closest('.modal-overlay');
-    if(!overlay || !overlay.classList.contains('open')) return;
-    if(['BUTTON','INPUT','SELECT','TEXTAREA','A'].includes(e.target.tagName)) return;
-    const rect = modal.getBoundingClientRect();
-    modal.style.cursor = (e.clientY - rect.top <= 60) ? 'grab' : '';
-  });
-})();
-
 // Activar cuando sw.js esté subido al repositorio
 // if('serviceWorker' in navigator) {
 //   window.addEventListener('load', () => {
@@ -5733,7 +5386,7 @@ document.getElementById('modal_evol_historica').addEventListener('click', functi
             <label><input type="checkbox" id="dx_acv_hem"> Hemorrágico</label>
             <label><input type="checkbox" id="dx_acv_ait"> AIT</label>
           </div></label>
-          <label>Año del evento:<br><input type="number" id="dx_acv_fecha" min="1940" max="2030" placeholder="aaaa" style="margin-top:4px;padding:4px 8px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;width:90px" oninput="calcDxTiempo('acv')"></label>
+          <label>Fecha del evento:<br><input type="date" id="dx_acv_fecha" style="margin-top:4px;padding:4px 8px;border:1.5px solid var(--border);border-radius:8px;font-size:12px" oninput="calcDxTiempo('acv')"></label>
           <span id="dx_acv_tiempo" style="color:var(--blue);font-weight:600"></span>
         </div>
         <div style="margin-top:8px"><label>Nota (se vuelca a HC):<br><textarea id="dx_acv_nota" rows="2" style="width:100%;margin-top:4px;padding:6px 8px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;resize:vertical"></textarea></label></div>
@@ -5748,7 +5401,7 @@ document.getElementById('modal_evol_historica').addEventListener('click', functi
             <label><input type="checkbox" id="dx_iam_angiop"> Angioplastía</label>
             <label><input type="checkbox" id="dx_iam_by"> By-pass</label>
           </div></label>
-          <label>Año del evento:<br><input type="number" id="dx_iam_fecha" min="1940" max="2030" placeholder="aaaa" style="margin-top:4px;padding:4px 8px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;width:90px" oninput="calcDxTiempo('iam')"></label>
+          <label>Fecha del evento:<br><input type="date" id="dx_iam_fecha" style="margin-top:4px;padding:4px 8px;border:1.5px solid var(--border);border-radius:8px;font-size:12px" oninput="calcDxTiempo('iam')"></label>
           <span id="dx_iam_tiempo" style="color:var(--blue);font-weight:600"></span>
         </div>
         <div style="margin-top:8px"><label>Nota (se vuelca a HC):<br><textarea id="dx_iam_nota" rows="2" style="width:100%;margin-top:4px;padding:6px 8px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;resize:vertical"></textarea></div>
@@ -5757,7 +5410,7 @@ document.getElementById('modal_evol_historica').addEventListener('click', functi
       <div id="dx_extra_hta" style="display:none;background:#f0f4fa;border-radius:10px;padding:10px 14px;margin-top:10px;font-size:12px">
         <div style="font-weight:600;color:var(--blue);margin-bottom:6px">HTA — detalles</div>
         <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
-          <label>Desde (año diagnóstico):<br><input type="number" id="dx_hta_fecha" min="1940" max="2030" placeholder="aaaa" style="margin-top:4px;padding:4px 8px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;width:90px" oninput="calcDxTiempo('hta')"></label>
+          <label>Desde (fecha diagnóstico):<br><input type="date" id="dx_hta_fecha" style="margin-top:4px;padding:4px 8px;border:1.5px solid var(--border);border-radius:8px;font-size:12px" oninput="calcDxTiempo('hta')"></label>
           <span id="dx_hta_tiempo" style="color:var(--blue);font-weight:600"></span>
         </div>
         <div style="margin-top:8px"><label>Nota (se vuelca a HC):<br><textarea id="dx_hta_nota" rows="2" style="width:100%;margin-top:4px;padding:6px 8px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;resize:vertical"></textarea></label></div>
@@ -5766,15 +5419,10 @@ document.getElementById('modal_evol_historica').addEventListener('click', functi
       <div id="dx_extra_obe" style="display:none;background:#f0f4fa;border-radius:10px;padding:10px 14px;margin-top:10px;font-size:12px">
         <div style="font-weight:600;color:var(--blue);margin-bottom:6px">Obesidad — detalles</div>
         <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
-          <label>Desde (año diagnóstico):<br><input type="number" id="dx_obe_fecha" min="1940" max="2030" placeholder="aaaa" style="margin-top:4px;padding:4px 8px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;width:90px" oninput="calcDxTiempo('obe')"></label>
+          <label>Desde (fecha diagnóstico):<br><input type="date" id="dx_obe_fecha" style="margin-top:4px;padding:4px 8px;border:1.5px solid var(--border);border-radius:8px;font-size:12px" oninput="calcDxTiempo('obe')"></label>
           <span id="dx_obe_tiempo" style="color:var(--blue);font-weight:600"></span>
         </div>
         <div style="margin-top:8px"><label>Nota (se vuelca a HC):<br><textarea id="dx_obe_nota" rows="2" style="width:100%;margin-top:4px;padding:6px 8px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;resize:vertical"></textarea></label></div>
-      </div>
-      <!-- Notas generales cardiometabólicas -->
-      <div style="background:#f0f4fa;border-radius:10px;padding:12px 14px;margin-top:14px">
-        <label style="font-size:12px;font-weight:700;color:var(--blue);display:block;margin-bottom:6px">📝 Notas cardiometabólicas (se vuelcan a la evolución)</label>
-        <textarea id="cardio_notas_generales" rows="3" placeholder="Observaciones generales, antecedentes adicionales, detalles clínicos relevantes..." style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;font-family:var(--font-main);resize:vertical;line-height:1.5" onkeydown="event.stopPropagation()"></textarea>
       </div>
     </div>
 
@@ -5807,11 +5455,6 @@ document.getElementById('modal_evol_historica').addEventListener('click', functi
           <div><label style="display:block;font-size:11px;color:var(--text-soft);margin-bottom:3px">A — Abortos</label><input type="number" id="gpac_a" min="0" style="width:100%;padding:5px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;text-align:center"></div>
           <div><label style="display:block;font-size:11px;color:var(--text-soft);margin-bottom:3px">C — Cesáreas</label><input type="number" id="gpac_c" min="0" style="width:100%;padding:5px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;text-align:center"></div>
         </div>
-      </div>
-      <!-- Notas generales ginecológicas -->
-      <div style="background:#fdf0f5;border-radius:10px;padding:12px 14px;margin-top:14px">
-        <label style="font-size:12px;font-weight:700;color:#c2185b;display:block;margin-bottom:6px">📝 Notas ginecológicas (se vuelcan a la evolución)</label>
-        <textarea id="gineco_notas_generales" rows="3" placeholder="Observaciones ginecológicas, antecedentes adicionales, detalles clínicos relevantes..." style="width:100%;padding:8px 10px;border:1.5px solid #f8bbd9;border-radius:8px;font-size:13px;font-family:var(--font-main);resize:vertical;line-height:1.5" onkeydown="event.stopPropagation()"></textarea>
       </div>
     </div>
 
@@ -5889,7 +5532,20 @@ document.getElementById('modal_evol_historica').addEventListener('click', functi
         </div>
       </div>
 
-      <!-- MEDICACION CARDIOMETABOLICA -->
+      <!-- NOTAS CLÍNICAS -->
+      <div class="clinica-section" style="margin-top:16px">
+        <h4>Notas clínicas (se vuelcan a la evolución)</h4>
+        <div style="margin-bottom:10px">
+          <label style="font-size:12px;font-weight:600;color:var(--text-soft);text-transform:uppercase;letter-spacing:.05em">Cardiometabólicos</label>
+          <textarea id="nota_cardio" rows="3" placeholder="Observaciones cardiometabólicas..." style="width:100%;margin-top:4px;padding:8px 10px;border:1.5px solid var(--border);border-radius:10px;font-family:var(--font-main);font-size:13px;resize:vertical"></textarea>
+        </div>
+        <div>
+          <label style="font-size:12px;font-weight:600;color:#c2185b;text-transform:uppercase;letter-spacing:.05em">Ginecológicos</label>
+          <textarea id="nota_gineco" rows="3" placeholder="Observaciones ginecológicas..." style="width:100%;margin-top:4px;padding:8px 10px;border:1.5px solid #f8bbd0;border-radius:10px;font-family:var(--font-main);font-size:13px;resize:vertical"></textarea>
+        </div>
+      </div>
+
+      <!-- MEDICACION -->
       <div class="clinica-section" style="margin-top:16px">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
           <h4 style="margin:0">Medicación cardiometabólica</h4>
@@ -5899,18 +5555,6 @@ document.getElementById('modal_evol_historica').addEventListener('click', functi
           <div>Grupo</div><div>Fármaco</div><div>Dosis</div><div>Frecuencia</div><div></div>
         </div>
         <div id="med_filas"></div>
-      </div>
-
-      <!-- MEDICACION NO CARDIOMETABOLICA -->
-      <div class="clinica-section" style="margin-top:12px;background:#f3f0fa;border:1.5px solid #d0bfef">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
-          <h4 style="margin:0;color:#6d3fc0">💊 Medicación no cardiometabólica</h4>
-          <button onclick="agregarFilaMedExtra()" style="background:#7c5cbf;color:white;border:none;border-radius:8px;padding:5px 12px;font-size:12px;cursor:pointer">+ Agregar</button>
-        </div>
-        <div style="display:grid;grid-template-columns:1fr 90px 1fr 28px;gap:6px;margin-bottom:6px;font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#6d3fc0">
-          <div>Droga / Medicamento</div><div>Dosis</div><div>Frecuencia</div><div></div>
-        </div>
-        <div id="med_extra_filas"></div>
       </div>
     </div>
 
@@ -5942,6 +5586,21 @@ document.getElementById('modal_evol_historica').addEventListener('click', functi
       <button onclick="cerrarModal('modalLabRO')" style="background:none;border:none;font-size:22px;cursor:pointer;color:var(--text-soft)">✕</button>
     </div>
     <div id="labro_wrap"></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modalEditarEvolucion">
+  <div class="modal" style="max-width:680px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <div class="modal-title" style="margin:0">✏️ Editar evolución</div>
+      <button onclick="cerrarModal('modalEditarEvolucion')" style="background:none;border:none;font-size:22px;cursor:pointer;color:var(--text-soft)">✕</button>
+    </div>
+    <div id="edit_evol_info" style="font-size:12px;color:var(--text-soft);margin-bottom:12px"></div>
+    <div id="edit_evol_editor" style="border:1.5px solid var(--border);border-radius:12px;padding:12px;min-height:200px;outline:none;font-family:var(--font-main);font-size:14px;line-height:1.7" contenteditable="true"></div>
+    <div style="margin-top:16px;display:flex;gap:10px;justify-content:flex-end">
+      <button class="btn btn-secondary" onclick="cerrarModal('modalEditarEvolucion')">Cancelar</button>
+      <button class="btn btn-teal" onclick="guardarEdicionEvolucion()">💾 Guardar cambios</button>
+    </div>
   </div>
 </div>
 
