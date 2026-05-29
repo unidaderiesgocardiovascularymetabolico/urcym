@@ -1936,6 +1936,78 @@ function calcAntValues(datos, filas) {
   });
 }
 
+function calcEstValues(datos, filas) {
+  if(!datos.filas) datos.filas = [];
+  const get = (key, ci) => {
+    const fi = filas.findIndex(f=>f.key===key);
+    if(fi<0) return null;
+    const v = (datos.filas[fi]||[])[ci]||'';
+    const n = parseFloat(v);
+    return isNaN(n) ? null : n;
+  };
+  const set = (key, ci, val) => {
+    const fi = filas.findIndex(f=>f.key===key);
+    if(fi<0) return;
+    if(!datos.filas[fi]) datos.filas[fi]=[];
+    datos.filas[fi][ci] = val!=null ? val : '';
+  };
+  const setN = (key, ci, val) => {
+    const fi = filas.findIndex(f=>f.key===key);
+    if(fi<0) return;
+    if(!datos.filas[fi]) datos.filas[fi]=[];
+    datos.filas[fi][ci] = val!=null ? (Math.round(val*100)/100)+'' : '';
+  };
+
+  datos.columnas.forEach((_,ci) => {
+    const ddvi = get('eco_DDVI',ci);  // mm
+    const siv  = get('eco_SIV',ci);   // mm
+    const pp   = get('eco_PP',ci);    // mm
+    const peso = get('eco_Peso',ci);  // g  ← peso del paciente (kg), guardado en eco_Peso
+    const talla= get('eco_Talla',ci); // cm
+
+    // ── EPR = (2 × PP) / DDVI ──────────────────────────────────────────
+    if(pp && ddvi) setN('eco_EPR', ci, (2 * pp) / ddvi);
+    else setN('eco_EPR', ci, null);
+
+    // ── LV Mass (Devereux) en gramos ────────────────────────────────────
+    // Masa = 0.8 × [1.04 × (SIV + DDVI + PP)³ − DDVI³] + 0.6
+    // todas en cm
+    let lvmass = null;
+    if(siv && ddvi && pp) {
+      const a = (siv/10 + ddvi/10 + pp/10);
+      const d = ddvi/10;
+      lvmass = 0.8 * (1.04 * (Math.pow(a,3) - Math.pow(d,3))) + 0.6;
+    }
+
+    // ── BSA (Mosteller) ─────────────────────────────────────────────────
+    // BSA = √(altura_cm × peso_kg / 3600)
+    let bsa = null;
+    if(peso && talla) bsa = Math.sqrt((talla * peso) / 3600);
+
+    // ── IMVI = Masa / BSA ───────────────────────────────────────────────
+    if(lvmass && bsa) setN('eco_IMVI', ci, lvmass / bsa);
+    else setN('eco_IMVI', ci, null);
+
+    // ── Geometría VI ────────────────────────────────────────────────────
+    // Usa IMVI y EPR (RWT)
+    const imviVal = lvmass && bsa ? (lvmass / bsa) : null;
+    const eprVal  = (pp && ddvi) ? (2 * pp) / ddvi : null;
+    if(imviVal !== null && eprVal !== null) {
+      const sexoPac = pacienteActual?.sexo==='Femenino'?'F':'H';
+      const umbral = sexoPac === 'F' ? 95 : 115;
+      const hvl = imviVal > umbral;
+      const concentrica = eprVal > 0.42;
+      let geo;
+      if(hvl && concentrica)      geo = 'HVI concéntrica';
+      else if(hvl && !concentrica) geo = 'HVI excéntrica';
+      else if(!hvl && concentrica) geo = 'Rem. concéntrico';
+      else                          geo = 'Normal';
+      set('eco_Geo', ci, geo);
+    }
+    // Si no hay datos suficientes no pisamos un valor manual existente
+  });
+}
+
 function renderTablaGenerica(datos, filas, wrapId, newColIdx) {
   const wrap = document.getElementById(wrapId);
   if(!wrap) return;
@@ -1948,6 +2020,7 @@ function renderTablaGenerica(datos, filas, wrapId, newColIdx) {
   const hasHistory = isLab || isAnt || isEst; // todas las 3 pestañas bloquean columnas previas
   if(isLab) calcLabValues(datos, filas);
   if(isAnt) calcAntValues(datos, filas);
+  if(isEst) calcEstValues(datos, filas);
   const todosFilas = [...filas, ...datos.extraFilas.map(lbl=>({label:lbl,key:'extra_'+lbl,unidades:[''],defU:0,ref:null}))];
   const nci = newColIdx !== undefined ? newColIdx : (datos.columnas.length > 0 ? datos.columnas.length - 1 : 0);
   const lastIdx = datos.columnas.length - 1;
@@ -2282,6 +2355,20 @@ function actualizarCelda(input) {
     calcAntValues(antDatos, ANT_FILAS);
     const nci = antDatos.columnas.length - 1;
     renderTablaGenerica(antDatos, ANT_FILAS, wrapId, nci);
+    setTimeout(() => {
+      const wrap2 = document.getElementById(wrapId);
+      if(wrap2) {
+        const inp = wrap2.querySelector('input[data-fi="'+fi+'"][data-ci="'+ci+'"]');
+        if(inp) { inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length); }
+      }
+    }, 0);
+  }
+  // Recalculate derived values for estudios (IMVI, EPR, Geometría VI)
+  const esEst = ['evest_wrap','est_tabla_wrap'].includes(wrapId);
+  if(esEst) {
+    calcEstValues(estDatos, EST_FILAS);
+    const nci = estDatos.columnas.length - 1;
+    renderTablaGenerica(estDatos, EST_FILAS, wrapId, nci);
     setTimeout(() => {
       const wrap2 = document.getElementById(wrapId);
       if(wrap2) {
