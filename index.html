@@ -18,7 +18,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Amiko:wght@400;600;700&family=Encode+Sans:wght@300;400;500;600;700&family=Encode+Sans+Condensed:wght@400;600&display=swap" rel="stylesheet"/>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     :root {
@@ -2701,65 +2701,147 @@ function abrirDocumento(tipo, dni) {
   }
 }
 
-// ===== PDF con html2pdf =====
-function prepararTemplate(tipo) {
+// ===== PDF con jsPDF directo =====
+
+function _crearPDFDocumento(tipo) {
+  const { jsPDF } = window.jspdf;
   const p = pacienteActual;
   const u = users[selectedUser];
   const fecha = document.getElementById(tipo==='receta'?'rec_fecha':'ind_fecha').value;
-  const fechaStr = fecha ? new Date(fecha+'T12:00:00').toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'}) : '';
+  const fechaStr = fecha ? new Date(fecha+'T12:00:00').toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'}) : new Date().toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'});
   const contenido = document.getElementById(tipo==='receta'?'rec_contenido':'ind_contenido').value;
-  const firmaImg = selectedUser==='barbara' ? firmaBarbaraB64 : firmaOmarB64;
-  const firmaRatio = selectedUser==='barbara' ? 1.01 : 1.58;
-  const firmaH = Math.round(48 * firmaRatio);
+  const filename = (tipo==='receta'?'Receta_':'Indicaciones_') + p.apellido + '_' + fechaStr.replace(/\//g,'-') + '.pdf';
 
-  // Header: nombre y especialidades del médico
-  const mnEl = document.getElementById('doc_medico_nombre');
-  const espEl = document.getElementById('doc_especialidades');
-  if(mnEl) mnEl.textContent = '>> ' + u.titulo + '  —  ' + u.mp;
-  if(espEl) espEl.innerHTML = u.especialidades.join('<br>');
-  document.getElementById('doc_paciente_nombre').textContent = 'Paciente: ' + p.apellido + ', ' + p.nombre;
-  document.getElementById('doc_paciente_derecha').textContent = 'DNI: ' + p.dni + '   Fecha: ' + fechaStr;
-  const osRow = document.getElementById('doc_obra_social_row');
+  const doc = new jsPDF({ unit:'mm', format:'a5', orientation:'portrait' });
+  const PW = 148; // A5 width mm
+  const PH = 210; // A5 height mm
+  const ML = 12;  // margin left
+  const MR = 12;  // margin right
+  const CW = PW - ML - MR; // content width
+
+  // --- HEADER: fondo gris ---
+  doc.setFillColor(240, 240, 240);
+  doc.rect(0, 0, PW, 30, 'F');
+  doc.setDrawColor(170, 170, 170);
+  doc.setLineWidth(0.5);
+  doc.line(0, 30, PW, 30);
+
+  // Logo URCyM (izquierda del header)
+  try {
+    doc.addImage(logoPNGB64, 'PNG', ML, 3, 20, 20);
+  } catch(e) {}
+
+  // Nombre médico y especialidades (después del logo)
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9);
+  doc.setTextColor(26, 26, 26);
+  doc.text(u.titulo + '  —  ' + u.mp, ML + 23, 10);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7.5);
+  doc.setTextColor(85, 85, 85);
+  u.especialidades.forEach((esp, i) => {
+    doc.text(esp, ML + 23, 15 + i * 4.5);
+  });
+
+  // --- FRANJA PACIENTE ---
+  doc.setFillColor(255, 255, 255);
+  doc.setDrawColor(210, 210, 210);
+  doc.setLineWidth(0.3);
+  doc.rect(0, 30, PW, 16, 'FD');
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8);
+  doc.setTextColor(26, 26, 26);
+  doc.text('Paciente: ' + p.apellido + ', ' + p.nombre, ML, 38);
+
+  const dniText = 'DNI: ' + p.dni + '   Fecha: ' + fechaStr;
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  doc.setTextColor(80, 80, 80);
+  const dniW = doc.getTextWidth(dniText);
+  doc.text(dniText, PW - MR - dniW, 38);
+
   if(p.obra_social) {
-    osRow.style.display='block';
-    osRow.textContent = 'Obra social: ' + p.obra_social + (p.numero_afiliado ? '   N° afil.: '+p.numero_afiliado : '');
-  } else { osRow.style.display='none'; }
-  document.getElementById('doc_tipo_label').textContent = tipo==='receta' ? 'Rp:' : 'Indicaciones:';
-  document.getElementById('doc_cuerpo').textContent = contenido;
-  const firmaEl = document.getElementById('doc_firma_img');
-  firmaEl.src = firmaImg;
-  firmaEl.style.maxWidth = '48mm';
-  firmaEl.style.maxHeight = firmaH + 'mm';
-  return { fechaStr, p, nombre: (tipo==='receta'?'Receta_':'Indicaciones_') + p.apellido + '_' + fechaStr.replace(/\//g,'-') + '.pdf' };
+    doc.setFontSize(7.5);
+    doc.setTextColor(100, 100, 100);
+    const osText = 'Obra social: ' + p.obra_social + (p.numero_afiliado ? '   N° afil.: ' + p.numero_afiliado : '');
+    doc.text(osText, ML, 43);
+  }
+
+  // --- CUERPO ---
+  let curY = 54;
+
+  // Etiqueta tipo (Rp: / Indicaciones:)
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(12);
+  doc.setTextColor(26, 26, 26);
+  doc.text(tipo === 'receta' ? 'Rp:' : 'Indicaciones:', ML, curY);
+  curY += 8;
+
+  // Contenido (texto multilínea)
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9.5);
+  doc.setTextColor(35, 35, 35);
+  const lines = doc.splitTextToSize(contenido || '', CW);
+  // Si hay muchas líneas, reducir fuente
+  const lineH = 5.5;
+  const maxBodyH = PH - curY - 40; // reservar 40mm para firma
+  if(lines.length * lineH > maxBodyH) {
+    doc.setFontSize(8.5);
+  }
+  lines.forEach(line => {
+    if(curY > PH - 40) {
+      doc.addPage();
+      curY = 15;
+    }
+    doc.text(line, ML, curY);
+    curY += lineH;
+  });
+
+  // --- FIRMA ---
+  const firmaImg = (selectedUser === 'barbara') ? firmaBarbaraB64 : (selectedUser === 'omar') ? firmaOmarB64 : null;
+  const firmaY = PH - 35;
+
+  doc.setDrawColor(200, 200, 200);
+  doc.setLineWidth(0.3);
+  doc.line(ML, firmaY - 2, ML + 55, firmaY - 2);
+
+  if(firmaImg) {
+    try {
+      const fH = selectedUser === 'barbara' ? 18 : 28;
+      const fW = 48;
+      doc.addImage(firmaImg, 'JPEG', ML, firmaY - fH - 2, fW, fH);
+    } catch(e) {}
+  }
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8);
+  doc.setTextColor(26, 26, 26);
+  doc.text(u.titulo, ML, firmaY + 4);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7.5);
+  doc.setTextColor(85, 85, 85);
+  doc.text(u.mp, ML, firmaY + 9);
+  doc.text('URCyM · 2246 58-8469', ML, firmaY + 14);
+
+  return { doc, filename, fechaStr };
 }
 
 function generarPDF(tipo) {
-  const info = prepararTemplate(tipo);
-  const el = document.getElementById('docContent');
-  el.style.display = 'block';
-  document.getElementById('docTemplate').style.display = 'block';
-  const opt = {
-    margin: 0, filename: info.nombre,
-    image: { type:'jpeg', quality:0.97 },
-    html2canvas: { scale:3, useCORS:true, logging:false, allowTaint:true },
-    jsPDF: { unit:'mm', format:'a5', orientation:'portrait' },
-    pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
-  };
-  html2pdf().set(opt).from(el).save().then(() => {
-    document.getElementById('docTemplate').style.display = 'none';
-  });
+  const { doc, filename } = _crearPDFDocumento(tipo);
+  doc.save(filename);
 }
 
 function enviarPorMail(tipo) {
   const p = pacienteActual;
   if(!p.email) { alert('Este paciente no tiene email registrado.\nPodés editarlo en la ficha del paciente.'); return; }
-  generarPDF(tipo);
-  const info = prepararTemplate(tipo);
+  const { doc, filename, fechaStr } = _crearPDFDocumento(tipo);
+  doc.save(filename);
   setTimeout(() => {
-    const asunto = tipo==='receta' ? 'Receta medica - URCyM - '+info.fechaStr : 'Indicaciones medicas - URCyM - '+info.fechaStr;
-    const cuerpo = 'Estimado/a '+p.nombre+' '+p.apellido+',\n\nAdjunto su '+(tipo==='receta'?'receta medica':'indicaciones')+' del '+info.fechaStr+'.\n\nSaludos,\n'+users[selectedUser].titulo+'\nURCyM - 2246 58-8469';
+    const asunto = tipo==='receta' ? 'Receta medica - URCyM - '+fechaStr : 'Indicaciones medicas - URCyM - '+fechaStr;
+    const cuerpo = 'Estimado/a '+p.nombre+' '+p.apellido+',\n\nAdjunto su '+(tipo==='receta'?'receta medica':'indicaciones')+' del '+fechaStr+'.\n\nSaludos,\n'+users[selectedUser].titulo+'\nURCyM - 2246 58-8469';
     window.location.href = 'mailto:'+p.email+'?subject='+encodeURIComponent(asunto)+'&body='+encodeURIComponent(cuerpo);
-  }, 2500);
+  }, 800);
 }
 
 // ===== MODAL PACIENTE =====
@@ -3976,27 +4058,109 @@ function generarPDFIndicacionesEvol() {
   const indEl3 = document.getElementById('evol_indicaciones_editor');
   const txt = indEl3 ? indEl3.innerText.trim() : '';
   if(!txt) { alert('No hay indicaciones para generar.'); return; }
+  const { doc, filename } = _crearPDFIndicacionesEvol(txt);
+  doc.save(filename);
+}
+
+function _crearPDFIndicacionesEvol(txt) {
+  const { jsPDF } = window.jspdf;
+  const p = pacienteActual;
   const u = users[selectedUser];
   const hoy = new Date().toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'});
-  const firmaImg = selectedUser==='barbara' ? firmaBarbaraB64 : firmaOmarB64;
-  const firmaRatio = selectedUser==='barbara' ? 1.01 : 1.58;
-  const firmaH = Math.round(48 * firmaRatio);
-  const lines = txt.split('\n').map(l=>l.trim()).filter(Boolean).map(l=>'<li style="margin-bottom:4px">'+l+'</li>').join('');
-  const content = `<div style="font-family:Arial,sans-serif;font-size:11pt;padding:20px;max-width:700px">
-    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;border-bottom:2px solid #3089ca;padding-bottom:12px">
-      <div><div style="font-size:14pt;font-weight:700;color:#3089ca">${u.name}</div><div style="font-size:10pt;color:#666">${u.mp}</div><div style="font-size:9pt;color:#666">URCyM · 2246 58-8469</div></div>
-      <div style="font-size:10pt;color:#666">${hoy}</div>
-    </div>
-    <div style="margin-bottom:16px"><strong>Paciente:</strong> ${p.apellido}, ${p.nombre} · DNI ${p.dni}</div>
-    <div style="font-size:12pt;font-weight:700;margin-bottom:10px;color:#1a2535">Indicaciones</div>
-    <ul style="margin:0;padding-left:20px;line-height:1.8">${lines}</ul>
-    <div style="margin-top:40px;display:flex;align-items:flex-end;gap:12px">
-      <img src="${firmaImg}" style="height:${firmaH}px;object-fit:contain"/>
-      <div><div style="font-size:10pt;font-weight:600">${u.name}</div><div style="font-size:9pt;color:#666">${u.mp}</div></div>
-    </div>
-  </div>`;
-  const el = document.createElement('div'); el.innerHTML = content; document.body.appendChild(el);
-  html2pdf().set({margin:10,filename:'Indicaciones_'+p.apellido+'_'+hoy.replace(/\//g,'-')+'.pdf',html2canvas:{scale:2},jsPDF:{unit:'mm',format:'a4'},pagebreak:{mode:['avoid-all','css','legacy']}}).from(el).save().then(()=>el.remove());
+  const filename = 'Indicaciones_' + p.apellido + '_' + hoy.replace(/\//g,'-') + '.pdf';
+
+  const doc = new jsPDF({ unit:'mm', format:'a5', orientation:'portrait' });
+  const PW = 148;
+  const PH = 210;
+  const ML = 12;
+  const MR = 12;
+  const CW = PW - ML - MR;
+
+  // --- HEADER ---
+  doc.setFillColor(240, 240, 240);
+  doc.rect(0, 0, PW, 30, 'F');
+  doc.setDrawColor(170, 170, 170);
+  doc.setLineWidth(0.5);
+  doc.line(0, 30, PW, 30);
+
+  try { doc.addImage(logoPNGB64, 'PNG', ML, 3, 20, 20); } catch(e) {}
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9);
+  doc.setTextColor(26, 26, 26);
+  doc.text(u.titulo + '  —  ' + u.mp, ML + 23, 10);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7.5);
+  doc.setTextColor(85, 85, 85);
+  u.especialidades.forEach((esp, i) => { doc.text(esp, ML + 23, 15 + i * 4.5); });
+
+  // --- FRANJA PACIENTE ---
+  doc.setFillColor(255, 255, 255);
+  doc.setDrawColor(210, 210, 210);
+  doc.setLineWidth(0.3);
+  doc.rect(0, 30, PW, 16, 'FD');
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8);
+  doc.setTextColor(26, 26, 26);
+  doc.text('Paciente: ' + p.apellido + ', ' + p.nombre, ML, 38);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  doc.setTextColor(80, 80, 80);
+  const dniText = 'DNI: ' + p.dni + '   Fecha: ' + hoy;
+  doc.text(dniText, PW - MR - doc.getTextWidth(dniText), 38);
+  if(p.obra_social) {
+    doc.setFontSize(7.5);
+    doc.setTextColor(100, 100, 100);
+    doc.text('Obra social: ' + p.obra_social + (p.numero_afiliado ? '   N° afil.: ' + p.numero_afiliado : ''), ML, 43);
+  }
+
+  // --- TÍTULO ---
+  let curY = 54;
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(12);
+  doc.setTextColor(26, 26, 26);
+  doc.text('Indicaciones:', ML, curY);
+  curY += 8;
+
+  // --- LISTA DE INDICACIONES ---
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9.5);
+  doc.setTextColor(35, 35, 35);
+  const lineH = 5.5;
+  txt.split('\n').map(l => l.trim()).filter(Boolean).forEach(item => {
+    const itemLines = doc.splitTextToSize('• ' + item, CW - 4);
+    itemLines.forEach((ln, idx) => {
+      if(curY > PH - 40) { doc.addPage(); curY = 15; }
+      doc.text(ln, ML + (idx > 0 ? 4 : 0), curY);
+      curY += lineH;
+    });
+    curY += 1;
+  });
+
+  // --- FIRMA ---
+  const firmaImg = (selectedUser === 'barbara') ? firmaBarbaraB64 : (selectedUser === 'omar') ? firmaOmarB64 : null;
+  const firmaY = PH - 35;
+  doc.setDrawColor(200, 200, 200);
+  doc.setLineWidth(0.3);
+  doc.line(ML, firmaY - 2, ML + 55, firmaY - 2);
+  if(firmaImg) {
+    try {
+      const fH = selectedUser === 'barbara' ? 18 : 28;
+      doc.addImage(firmaImg, 'JPEG', ML, firmaY - fH - 2, 48, fH);
+    } catch(e) {}
+  }
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8);
+  doc.setTextColor(26, 26, 26);
+  doc.text(u.titulo, ML, firmaY + 4);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7.5);
+  doc.setTextColor(85, 85, 85);
+  doc.text(u.mp, ML, firmaY + 9);
+  doc.text('URCyM · 2246 58-8469', ML, firmaY + 14);
+
+  return { doc, filename, hoy };
 }
 
 function enviarMailIndicacionesEvol() {
@@ -4004,11 +4168,14 @@ function enviarMailIndicacionesEvol() {
   const indEl2 = document.getElementById('evol_indicaciones_editor');
   const txt = indEl2 ? indEl2.innerText.trim() : '';
   if(!txt || !p.email) { alert(!txt?'Sin indicaciones.':'El paciente no tiene email registrado.'); return; }
-  const hoy = new Date().toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'});
+  const { doc, filename, hoy } = _crearPDFIndicacionesEvol(txt);
+  doc.save(filename);
   const u = users[selectedUser];
-  const asunto = encodeURIComponent('Indicaciones médicas - URCyM - '+hoy);
-  const cuerpo = encodeURIComponent('Estimado/a '+p.nombre+',\n\nSus indicaciones del '+hoy+':\n\n'+txt+'\n\nSaludos,\n'+u.name+'\nURCyM - 2246 58-8469');
-  window.location.href = 'mailto:'+p.email+'?subject='+asunto+'&body='+cuerpo;
+  setTimeout(() => {
+    const asunto = encodeURIComponent('Indicaciones médicas - URCyM - '+hoy);
+    const cuerpo = encodeURIComponent('Estimado/a '+p.nombre+',\n\nSus indicaciones del '+hoy+':\n\n'+txt+'\n\nSaludos,\n'+u.titulo+'\nURCyM - 2246 58-8469');
+    window.location.href = 'mailto:'+p.email+'?subject='+asunto+'&body='+cuerpo;
+  }, 800);
 }
 
 // ===== PESTAÑAS PACIENTE =====
