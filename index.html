@@ -2701,7 +2701,25 @@ function abrirDocumento(tipo, dni) {
   }
 }
 
-// ===== PDF con jsPDF directo =====
+// ===== LOGO: convertir SVG a PNG para jsPDF =====
+let _logoPNGcache = null;
+function _getLogoPNG(callback) {
+  if(_logoPNGcache) { callback(_logoPNGcache); return; }
+  try {
+    const img = new Image();
+    img.onload = function() {
+      const canvas = document.createElement('canvas');
+      canvas.width = 300; canvas.height = 300;
+      const ctx = canvas.getContext('2d');
+      ctx.clearRect(0,0,300,300);
+      ctx.drawImage(img, 0, 0, 300, 300);
+      _logoPNGcache = canvas.toDataURL('image/png');
+      callback(_logoPNGcache);
+    };
+    img.onerror = function() { callback(null); };
+    img.src = logoPNGB64;
+  } catch(e) { callback(null); }
+}
 
 function _pdfHeader(doc, u, PW, ML) {
   // Fondo general de la página: gris muy claro (como la muestra)
@@ -2722,12 +2740,16 @@ function _pdfHeader(doc, u, PW, ML) {
   doc.setFillColor(100, 185, 220);
   doc.rect(6, 4, PW - 12, 1.5, 'F');
 
-  // Logo SVG URCyM — tamaño completo, bien posicionado
-  try {
-    doc.addImage(logoPNGB64, 'SVG', ML + 2, 7, 29, 29);
-  } catch(e) {
-    doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(48,136,201);
-    doc.text('URCyM', ML + 2, 18);
+  // Logo — usar PNG cacheado si existe, si no fallback texto
+  if(_logoPNGcache) {
+    try { doc.addImage(_logoPNGcache, 'PNG', ML + 2, 7, 29, 29); } catch(e) {}
+  } else {
+    doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.setTextColor(48,136,201);
+    doc.text('URCyM', ML + 3, 14);
+    doc.setFontSize(5.5); doc.setFont('helvetica','normal'); doc.setTextColor(30,30,30);
+    doc.text('UNIDAD DE RIESGO', ML + 1, 18);
+    doc.text('CARDIOVASCULAR', ML + 1, 21.5);
+    doc.text('Y METABOLICO', ML + 1, 25);
   }
 
   // Nombre médico — azul oscuro, bold, grande (igual a la muestra)
@@ -2777,43 +2799,51 @@ function _pdfPatientBar(doc, p, fechaStr, PW, ML, MR) {
 }
 
 function _pdfFirma(doc, u, PW, PH, ML) {
-  const firmaY = PH - 38;
-  doc.setDrawColor(200, 200, 200);
-  doc.setLineWidth(0.3);
-  doc.line(ML, firmaY, ML + 60, firmaY);
+  const MR = 10;
+  const firmaY = PH - 42; // zona firma, por encima del footer
 
-  // Firma imagen SIN distorsión: calcular alto a partir del ratio real
-  const FIRMA_W = 42; // ancho fijo en mm
+  // Firma a la DERECHA
+  const FIRMA_W = 38;
+  const firmaX = PW - MR - FIRMA_W; // alineada a la derecha
+
   if(selectedUser === 'barbara' && firmaBarbaraB64) {
-    // ratio: 350x349 → casi cuadrado
     const fH = FIRMA_W * (349/350);
-    try { doc.addImage(firmaBarbaraB64, 'JPEG', ML, firmaY - fH - 1, FIRMA_W, fH); } catch(e){}
+    try { doc.addImage(firmaBarbaraB64, 'JPEG', firmaX, firmaY - fH - 1, FIRMA_W, fH); } catch(e){}
   } else if(selectedUser === 'omar' && firmaOmarB64) {
-    // ratio: 350x540 → más alto que ancho → limitamos ancho a 28mm para no invadir
     const fw = 28;
     const fH = fw * (540/350);
-    try { doc.addImage(firmaOmarB64, 'JPEG', ML, firmaY - fH - 1, fw, fH); } catch(e){}
+    const omarX = PW - MR - fw;
+    try { doc.addImage(firmaOmarB64, 'JPEG', omarX, firmaY - fH - 1, fw, fH); } catch(e){}
   }
 
+  // Línea bajo la firma
+  doc.setDrawColor(180, 180, 180);
+  doc.setLineWidth(0.3);
+  doc.line(firmaX, firmaY, PW - MR, firmaY);
+
+  // Texto del médico bajo la línea, alineado a la derecha
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(8);
-  doc.setTextColor(26, 26, 26);
-  doc.text(u.titulo, ML, firmaY + 5);
-  doc.setFont('helvetica', 'normal');
   doc.setFontSize(7.5);
+  doc.setTextColor(26, 26, 26);
+  const tW = doc.getTextWidth(u.titulo);
+  doc.text(u.titulo, PW - MR - tW, firmaY + 4.5);
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7);
   doc.setTextColor(85, 85, 85);
-  doc.text(u.mp, ML, firmaY + 10);
+  const mpW = doc.getTextWidth(u.mp);
+  doc.text(u.mp, PW - MR - mpW, firmaY + 9);
 }
 
 function _pdfFooter(doc, PW, PH) {
   const footerH = 16;
   const footerY = PH - footerH - 2;
 
-  // Fondo azul oscuro (igual a la muestra)
+  // Fondo azul oscuro
   doc.setFillColor(31, 73, 125);
   doc.rect(6, footerY, PW - 12, footerH, 'F');
 
-  // Línea institucional — blanco, bold, centrada, subrayada simulada
+  // Línea institucional — blanca, bold, centrada
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(7);
   doc.setTextColor(255, 255, 255);
@@ -2825,33 +2855,41 @@ function _pdfFooter(doc, PW, PH) {
   doc.setLineWidth(0.2);
   doc.line(x1, footerY + 5.8, x1 + doc.getTextWidth(line1), footerY + 5.8);
 
-  // Línea de contacto — tres columnas con cuadradito como bullet
+  // Línea de contacto — tres columnas
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(6.5);
-  const cy = footerY + 11;
+  const cy = footerY + 11.5;
 
-  // Columna 1: email
-  doc.setTextColor(100, 200, 240);
-  doc.text('\u25A0', 10, cy); // cuadrado sólido
-  doc.setTextColor(255, 255, 255);
-  doc.text('contactourcym@gmail.com', 14, cy);
-
-  // Columna 2: WhatsApp — centrada
-  const wa = 'WhatsApp 2246 58-8469';
-  doc.setTextColor(100, 210, 100);
-  doc.text('\u25A0', PW/2 - doc.getTextWidth(wa)/2 - 4, cy);
+  // Col 1: email — icono arroba (@)
+  doc.setTextColor(150, 210, 245);
   doc.setFont('helvetica', 'bold');
-  doc.setTextColor(100, 210, 100);
-  doc.text('WhatsApp', PW/2 - doc.getTextWidth(wa)/2, cy);
+  doc.text('@', 11, cy);
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(255, 255, 255);
-  doc.text(' 2246 58-8469', PW/2 - doc.getTextWidth(wa)/2 + doc.getTextWidth('WhatsApp'), cy);
+  doc.text('contactourcym@gmail.com', 15, cy);
 
-  // Columna 3: dirección — derecha
+  // Col 2: WhatsApp — icono tel simple
+  const waLabel = 'WhatsApp';
+  const waNum = ' 2246 58-8469';
+  const waFullW = doc.getTextWidth(waLabel + waNum);
+  const waX = PW/2 - waFullW/2;
+  doc.setTextColor(150, 210, 245);
+  doc.setFont('helvetica', 'bold');
+  doc.text('T', waX - 5, cy);
+  doc.setTextColor(130, 220, 130);
+  doc.text(waLabel, waX, cy);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(255, 255, 255);
+  doc.text(waNum, waX + doc.getTextWidth(waLabel), cy);
+
+  // Col 3: dirección — icono punto/lugar
   const dir = 'Calle 2 N\u00b0 1553, Santa Teresita';
-  const xDir = PW - 12 - doc.getTextWidth(dir) - 5;
-  doc.setTextColor(100, 200, 240);
-  doc.text('\u25A0', xDir - 4, cy);
+  const dirW = doc.getTextWidth(dir);
+  const xDir = PW - 10 - dirW;
+  doc.setTextColor(150, 210, 245);
+  doc.setFont('helvetica', 'bold');
+  doc.text('*', xDir - 5, cy);
+  doc.setFont('helvetica', 'normal');
   doc.setTextColor(255, 255, 255);
   doc.text(dir, xDir, cy);
 }
@@ -2872,23 +2910,22 @@ function _crearPDFDocumento(tipo) {
   _pdfPatientBar(doc, p, fechaStr, PW, ML, MR);
 
   // Tipo label
-  let curY = 62;
+  let curY = 65;
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(11);
   doc.setTextColor(26, 26, 26);
   doc.text(tipo === 'receta' ? 'Rp:' : 'Indicaciones:', ML, curY);
   curY += 7;
 
-  // Contenido
+  // Contenido — zona segura: no bajar de firmaY - 5 (deja espacio para firma + footer)
+  const firmaZoneTop = PH - 58; // reserva espacio para firma + footer
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(9.5);
   doc.setTextColor(35, 35, 35);
   const lines = doc.splitTextToSize(contenido || '', CW);
   const lineH = 5.5;
-  const maxBodyH = PH - curY - 45;
-  if(lines.length * lineH > maxBodyH) doc.setFontSize(8.5);
   lines.forEach(line => {
-    if(curY > PH - 45) { doc.addPage(); curY = 15; }
+    if(curY > firmaZoneTop) { doc.addPage(); curY = 15; }
     doc.text(line, ML, curY);
     curY += lineH;
   });
@@ -2987,6 +3024,8 @@ document.addEventListener('DOMContentLoaded',()=>{
   document.querySelectorAll('.modal-overlay').forEach(ov=>{
     if(!ov.dataset.dragInit) makeDraggable(ov);
   });
+  // Precargar logo como PNG para jsPDF
+  _getLogoPNG(function(png){ if(png) _logoPNGcache = png; });
 });
 // Reset drag state when modal closes
 const _origCerrarModal = cerrarModal;
@@ -4150,13 +4189,14 @@ function _crearPDFIndicacionesEvol(txt) {
   _pdfHeader(doc, u, PW, ML);
   _pdfPatientBar(doc, p, hoy, PW, ML, MR);
 
-  let curY = 62;
+  let curY = 65;
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(11);
   doc.setTextColor(26, 26, 26);
   doc.text('Indicaciones:', ML, curY);
   curY += 7;
 
+  const firmaZoneTop = PH - 58;
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(9.5);
   doc.setTextColor(35, 35, 35);
@@ -4164,7 +4204,7 @@ function _crearPDFIndicacionesEvol(txt) {
   txt.split('\n').map(l => l.trim()).filter(Boolean).forEach(item => {
     const itemLines = doc.splitTextToSize('• ' + item, CW - 4);
     itemLines.forEach((ln, idx) => {
-      if(curY > PH - 45) { doc.addPage(); curY = 15; }
+      if(curY > firmaZoneTop) { doc.addPage(); curY = 15; }
       doc.text(ln, ML + (idx > 0 ? 4 : 0), curY);
       curY += lineH;
     });
