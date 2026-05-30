@@ -2706,30 +2706,34 @@ function abrirDocumento(tipo, dni) {
 function _pdfHeader(doc, u, PW, ML) {
   // Header gris
   doc.setFillColor(240, 240, 240);
-  doc.rect(0, 0, PW, 32, 'F');
+  doc.rect(0, 0, PW, 34, 'F');
   doc.setDrawColor(170, 170, 170);
   doc.setLineWidth(0.5);
-  doc.line(0, 32, PW, 32);
+  doc.line(0, 34, PW, 34);
 
-  // Logo SVG URCyM (izquierda)
+  // Logo SVG URCyM (izquierda) — más grande
   try {
-    doc.addImage(logoPNGB64, 'SVG', ML, 3, 22, 22);
+    doc.addImage(logoPNGB64, 'SVG', ML, 2, 28, 28);
   } catch(e) {
     // Logo fallback: texto
-    doc.setFont('helvetica','bold'); doc.setFontSize(7); doc.setTextColor(48,136,201);
-    doc.text('URCyM', ML, 10);
+    doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.setTextColor(48,136,201);
+    doc.text('URCyM', ML, 12);
   }
 
-  // Nombre médico y especialidades
+  // Nombre médico y especialidades — más grandes y armónicos
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(11);
+  doc.setTextColor(26, 26, 26);
+  doc.text(u.titulo, ML + 31, 10);
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(9);
-  doc.setTextColor(26, 26, 26);
-  doc.text(u.titulo + '  —  ' + u.mp, ML + 25, 11);
+  doc.setTextColor(48, 136, 201);
+  doc.text(u.mp, ML + 31, 15.5);
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(7.5);
+  doc.setFontSize(8);
   doc.setTextColor(85, 85, 85);
   u.especialidades.forEach((esp, i) => {
-    doc.text(esp, ML + 25, 16.5 + i * 4.5);
+    doc.text(esp, ML + 31, 21 + i * 4.5);
   });
 }
 
@@ -2737,24 +2741,24 @@ function _pdfPatientBar(doc, p, fechaStr, PW, ML, MR) {
   doc.setFillColor(255, 255, 255);
   doc.setDrawColor(210, 210, 210);
   doc.setLineWidth(0.3);
-  doc.rect(0, 32, PW, 17, 'FD');
+  doc.rect(0, 34, PW, 17, 'FD');
 
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(8);
   doc.setTextColor(26, 26, 26);
-  doc.text('Paciente: ' + p.apellido + ', ' + p.nombre, ML, 40);
+  doc.text('Paciente: ' + p.apellido + ', ' + p.nombre, ML, 42);
 
   const dniText = 'DNI: ' + p.dni + '   Fecha: ' + fechaStr;
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8);
   doc.setTextColor(80, 80, 80);
-  doc.text(dniText, PW - MR - doc.getTextWidth(dniText), 40);
+  doc.text(dniText, PW - MR - doc.getTextWidth(dniText), 42);
 
   if(p.obra_social) {
     doc.setFontSize(7.5);
     doc.setTextColor(100, 100, 100);
     const osText = 'Obra social: ' + p.obra_social + (p.numero_afiliado ? '   N° afil.: ' + p.numero_afiliado : '');
-    doc.text(osText, ML, 45.5);
+    doc.text(osText, ML, 47.5);
   }
 }
 
@@ -2788,17 +2792,32 @@ function _pdfFirma(doc, u, PW, PH, ML) {
 }
 
 function _pdfFooter(doc, PW, PH) {
-  const footerY = PH - 8;
-  doc.setDrawColor(180, 180, 180);
-  doc.setLineWidth(0.3);
-  doc.line(8, footerY - 4, PW - 8, footerY - 4);
+  const footerY = PH - 10;
+  // Línea decorativa
+  doc.setDrawColor(48, 136, 201);
+  doc.setLineWidth(0.4);
+  doc.line(8, footerY - 5, PW - 8, footerY - 5);
+  // Fondo sutil
+  doc.setFillColor(240, 246, 252);
+  doc.rect(8, footerY - 5, PW - 16, 12, 'F');
+
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(6.5);
-  doc.setTextColor(130, 130, 130);
-  const line1 = 'UNIDAD DE RIESGO CARDIOVASCULAR Y METABÓLICO  ·  Calle 2 N° 1553, Santa Teresita';
-  const line2 = 'contactourcym@gmail.com  ·  WhatsApp 2246 58-8469';
-  doc.text(line1, PW/2 - doc.getTextWidth(line1)/2, footerY - 1.5);
-  doc.text(line2, PW/2 - doc.getTextWidth(line2)/2, footerY + 2.5);
+  doc.setTextColor(48, 136, 201);
+
+  // Línea 1: institución y dirección
+  const line1 = 'UNIDAD DE RIESGO CARDIOVASCULAR Y METABOLICO   |   Calle 2 N\u00b0 1553, Santa Teresita';
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(6.5);
+  doc.setTextColor(48, 100, 160);
+  doc.text(line1, PW/2 - doc.getTextWidth(line1)/2, footerY - 1);
+
+  // Línea 2: contacto
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(6.5);
+  doc.setTextColor(80, 120, 160);
+  const line2 = '\u2709  contactourcym@gmail.com     \u260E  WhatsApp 2246 58-8469';
+  doc.text(line2, PW/2 - doc.getTextWidth(line2)/2, footerY + 3.5);
 }
 
 function _crearPDFDocumento(tipo) {
@@ -2817,7 +2836,7 @@ function _crearPDFDocumento(tipo) {
   _pdfPatientBar(doc, p, fechaStr, PW, ML, MR);
 
   // Tipo label
-  let curY = 60;
+  let curY = 62;
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(11);
   doc.setTextColor(26, 26, 26);
@@ -4095,7 +4114,7 @@ function _crearPDFIndicacionesEvol(txt) {
   _pdfHeader(doc, u, PW, ML);
   _pdfPatientBar(doc, p, hoy, PW, ML, MR);
 
-  let curY = 60;
+  let curY = 62;
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(11);
   doc.setTextColor(26, 26, 26);
