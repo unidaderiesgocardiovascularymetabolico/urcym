@@ -3070,254 +3070,276 @@ function abrirDocumento(tipo, dni) {
 
 // ===== LOGO: convertir SVG a PNG para jsPDF =====
 let _logoPNGcache = null;
+
 function _getLogoPNG(callback) {
-  if(_logoPNGcache) { callback(_logoPNGcache); return; }
-  try {
-    const img = new Image();
-    img.onload = function() {
-      const canvas = document.createElement('canvas');
-      canvas.width = 300; canvas.height = 300;
-      const ctx = canvas.getContext('2d');
-      ctx.clearRect(0,0,300,300);
-      ctx.drawImage(img, 0, 0, 300, 300);
-      _logoPNGcache = canvas.toDataURL('image/png');
-      callback(_logoPNGcache);
-    };
-    img.onerror = function() { callback(null); };
-    img.src = logoPNGB64;
-  } catch(e) { callback(null); }
+  if (_logoPNGcache) { callback(_logoPNGcache); return; }
+  const img = new Image();
+  img.onload = function () {
+    const scale = 4;                                   // alta resolución para impresión
+    const w = img.naturalWidth || 400, h = img.naturalHeight || 400;
+    const cv = document.createElement('canvas');
+    cv.width = w * scale; cv.height = h * scale;
+    const ctx = cv.getContext('2d');
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.scale(scale, scale);
+    ctx.drawImage(img, 0, 0, w, h);
+    _logoPNGcache = cv.toDataURL('image/png', 1.0);
+    callback(_logoPNGcache);
+  };
+  img.onerror = () => callback(null);
+  img.src = logoPNGB64.startsWith('data:')
+    ? logoPNGB64
+    : 'data:image/svg+xml;base64,' + logoPNGB64;
 }
 
+/* ── Paleta institucional ─────────────────────────── */
+const _C = {
+  azul:   [48,137,202],  teal:   [77,188,190],
+  oscuro: [26,37,53],    suave:  [107,122,141],
+  gris:   [200,215,228], blanco: [255,255,255],
+  hdrBg:  [248,252,255], rpBg:   [243,249,254],
+  footer: [26,65,100],
+};
+
+/* ── Íconos para el pie (dibujados con jsPDF) ─────── */
+function _icon(doc, tipo, x, y, col) {
+  doc.setDrawColor(...col); doc.setFillColor(...col); doc.setLineWidth(0.3);
+  if (tipo === 'mail') {
+    doc.rect(x, y, 4.4, 3, 'S');
+    doc.line(x, y, x+2.2, y+1.5);
+    doc.line(x+4.4, y, x+2.2, y+1.5);
+  } else if (tipo === 'phone') {
+    doc.roundedRect(x+0.5, y, 3, 3.8, 0.5, 0.5, 'S');
+    doc.roundedRect(x+1, y+0.5, 2, 0.8, 0.15, 0.15, 'F');
+    doc.roundedRect(x+1, y+2.3, 2, 0.8, 0.15, 0.15, 'F');
+  } else if (tipo === 'pin') {
+    doc.circle(x+1.5, y+1.3, 1.3, 'S');
+    doc.setLineWidth(0.4);
+    doc.line(x+0.7, y+2.3, x+1.5, y+4);
+    doc.line(x+2.3, y+2.3, x+1.5, y+4);
+  }
+}
+
+/* ─────────────────────────────────────────────────── */
+/*  ENCABEZADO                                         */
+/* ─────────────────────────────────────────────────── */
 function _pdfHeader(doc, u, PW, ML) {
-  // Fondo general de la página: gris muy claro (como la muestra)
-  doc.setFillColor(235, 243, 250);
-  doc.rect(0, 0, PW, 297, 'F');
+  const MR = 12, W = PW - ML - MR;
+  const HY = 8, HH = 40;
 
-  // Caja del header: fondo blanco con bordes redondeados simulados
-  doc.setFillColor(255, 255, 255);
-  doc.setDrawColor(210, 228, 242);
-  doc.setLineWidth(0.4);
-  doc.rect(6, 4, PW - 12, 38, 'FD');
+  // Card con fondo suave
+  doc.setFillColor(..._C.hdrBg);
+  doc.roundedRect(ML, HY, W, HH, 3, 3, 'F');
+  doc.setDrawColor(..._C.gris); doc.setLineWidth(0.25);
+  doc.roundedRect(ML, HY, W, HH, 3, 3, 'S');
 
-  // Borde izquierdo azul grueso (acento decorativo)
-  doc.setFillColor(48, 136, 201);
-  doc.rect(6, 4, 2.5, 38, 'F');
+  // Acento teal izquierdo
+  doc.setFillColor(..._C.teal);
+  doc.roundedRect(ML, HY, 2.5, HH, 1.5, 0, 'F');
 
-  // Franja superior celeste delgada
-  doc.setFillColor(100, 185, 220);
-  doc.rect(6, 4, PW - 12, 1.5, 'F');
-
-  // Logo — usar PNG cacheado si existe, si no fallback texto
-  if(_logoPNGcache) {
-    try { doc.addImage(_logoPNGcache, 'PNG', ML + 2, 7, 29, 29); } catch(e) {}
-  } else {
-    doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.setTextColor(48,136,201);
-    doc.text('URCyM', ML + 3, 14);
-    doc.setFontSize(5.5); doc.setFont('helvetica','normal'); doc.setTextColor(30,30,30);
-    doc.text('UNIDAD DE RIESGO', ML + 1, 18);
-    doc.text('CARDIOVASCULAR', ML + 1, 21.5);
-    doc.text('Y METABOLICO', ML + 1, 25);
+  // Logo
+  const lSz = 24, lX = ML + 6, lY = HY + (HH - lSz) / 2;
+  if (_logoPNGcache) {
+    try { doc.addImage(_logoPNGcache, 'PNG', lX, lY, lSz, lSz); } catch(e) {}
   }
 
-  // Nombre médico — azul oscuro, bold, grande (igual a la muestra)
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(12);
-  doc.setTextColor(0, 112, 192);
-  doc.text(u.titulo, ML + 36, 14);
+  // Separador vertical logo / texto
+  const sepX = lX + lSz + 4;
+  doc.setDrawColor(..._C.gris); doc.setLineWidth(0.2);
+  doc.line(sepX, HY + 6, sepX, HY + HH - 6);
 
-  // MP — azul medio, bold, pequeño
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(8);
-  doc.setTextColor(0, 112, 192);
-  doc.text(u.mp, ML + 36, 19.5);
+  // Bloque de texto
+  const tX = sepX + 5; let tY = HY + 10;
 
-  // Especialidades — gris, normal
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(7.5);
-  doc.setTextColor(90, 90, 90);
-  u.especialidades.forEach((esp, i) => {
-    doc.text(esp, ML + 36, 24.5 + i * 4.2);
-  });
+  // Nombre — elemento principal
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(15);
+  doc.setTextColor(..._C.azul);
+  doc.text(u.titulo || u.name || '', tX, tY); tY += 5.5;
+
+  // Matrícula
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(8.5);
+  doc.setTextColor(..._C.teal);
+  doc.text(u.mp || '', tX, tY); tY += 4.5;
+
+  // Especialidades
+  const specs = Array.isArray(u.especialidades)
+    ? u.especialidades
+    : (u.role || '').split(/[·|\/]/).map(s => s.trim()).filter(Boolean);
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(7);
+  doc.setTextColor(..._C.suave);
+  specs.forEach(s => { if (tY < HY + HH - 2) { doc.text(s, tX, tY); tY += 3.8; } });
+
+  // Línea teal de cierre
+  const lineY = HY + HH + 3;
+  doc.setDrawColor(..._C.teal); doc.setLineWidth(0.5);
+  doc.line(ML, lineY, ML + W, lineY);
+  return lineY + 4;   // ← Y donde empieza el cuerpo
 }
 
+/* ─────────────────────────────────────────────────── */
+/*  BARRA DE PACIENTE                                  */
+/* ─────────────────────────────────────────────────── */
 function _pdfPatientBar(doc, p, fechaStr, PW, ML, MR) {
-  doc.setFillColor(255, 255, 255);
-  doc.setDrawColor(210, 228, 242);
-  doc.setLineWidth(0.3);
-  doc.rect(6, 44, PW - 12, 17, 'FD');
+  const W = PW - ML - MR, bY = 55, bH = 10;
 
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(8);
-  doc.setTextColor(26, 26, 26);
-  doc.text('Paciente: ' + p.apellido + ', ' + p.nombre, ML + 2, 51);
+  doc.setFillColor(236, 247, 253);
+  doc.roundedRect(ML, bY, W, bH, 2, 2, 'F');
+  doc.setDrawColor(..._C.gris); doc.setLineWidth(0.2);
+  doc.roundedRect(ML, bY, W, bH, 2, 2, 'S');
 
-  const dniText = 'DNI: ' + p.dni + '   Fecha: ' + fechaStr;
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8);
-  doc.setTextColor(80, 80, 80);
-  doc.text(dniText, PW - MR - doc.getTextWidth(dniText), 51);
+  const nombre = ((p.apellido ? p.apellido.toUpperCase() + ', ' : '') + (p.nombre || '')).trim();
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(8.5);
+  doc.setTextColor(..._C.oscuro);
+  doc.text(nombre, ML + 4, bY + 4.5);
 
-  if(p.obra_social) {
-    doc.setFontSize(7.5);
-    doc.setTextColor(100, 100, 100);
-    const osText = 'Obra social: ' + p.obra_social + (p.numero_afiliado ? '   N\u00b0 afil.: ' + p.numero_afiliado : '');
-    doc.text(osText, ML + 2, 57);
+  if (p.dni) {
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(7);
+    doc.setTextColor(..._C.suave);
+    doc.text('DNI ' + p.dni, ML + 4, bY + 8.2);
   }
+
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5);
+  doc.setTextColor(..._C.suave);
+  doc.text(fechaStr, PW - MR - 3, bY + 6.2, { align: 'right' });
+
+  return bY + bH + 4;   // ← Y donde empieza el contenido
 }
 
+/* ─────────────────────────────────────────────────── */
+/*  FIRMA Y SELLO                                      */
+/* ─────────────────────────────────────────────────── */
 function _pdfFirma(doc, u, PW, PH, ML) {
-  const MR = 10;
-  const firmaY = PH - 42; // zona firma, por encima del footer
+  const MR = 12, FW = 38;
+  const FX = PW - MR - FW;
+  const FY = PH - 78;   // posición fija sobre el footer
 
-  // Firma a la DERECHA
-  const FIRMA_W = 38;
-  const firmaX = PW - MR - FIRMA_W; // alineada a la derecha
-
-  if(selectedUser === 'barbara' && firmaBarbaraB64) {
-    const fH = FIRMA_W * (349/350);
-    try { doc.addImage(firmaBarbaraB64, 'JPEG', firmaX, firmaY - fH - 1, FIRMA_W, fH); } catch(e){}
-  } else if(selectedUser === 'omar' && firmaOmarB64) {
-    const fw = 28;
-    const fH = fw * (540/350);
-    const omarX = PW - MR - fw;
-    try { doc.addImage(firmaOmarB64, 'JPEG', omarX, firmaY - fH - 1, fw, fH); } catch(e){}
+  const fb = (selectedUser === 'barbara') ? firmaBarbaraB64 : firmaOmarB64;
+  if (fb) {
+    try {
+      const fH = FW * (349 / 350);
+      doc.addImage(fb, 'JPEG', FX, FY, FW, fH);
+    } catch(e) {}
   }
 
-  // Línea bajo la firma
-  doc.setDrawColor(180, 180, 180);
-  doc.setLineWidth(0.3);
-  doc.line(firmaX, firmaY, PW - MR, firmaY);
+  // Línea de firma
+  doc.setDrawColor(..._C.gris); doc.setLineWidth(0.3);
+  doc.line(FX, FY + 40, FX + FW, FY + 40);
 
-  // Texto del médico bajo la línea, alineado a la derecha
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(7.5);
-  doc.setTextColor(26, 26, 26);
-  const tW = doc.getTextWidth(u.titulo);
-  doc.text(u.titulo, PW - MR - tW, firmaY + 4.5);
+  // Nombre, matrícula, etiqueta
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(7.5);
+  doc.setTextColor(..._C.oscuro);
+  doc.text(u.titulo || u.name || '', FX + FW / 2, FY + 44, { align: 'center' });
 
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(7);
-  doc.setTextColor(85, 85, 85);
-  const mpW = doc.getTextWidth(u.mp);
-  doc.text(u.mp, PW - MR - mpW, firmaY + 9);
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(7);
+  doc.setTextColor(..._C.suave);
+  doc.text(u.mp || '', FX + FW / 2, FY + 48, { align: 'center' });
+
+  doc.setFont('helvetica', 'italic'); doc.setFontSize(6.5);
+  doc.text('Firma y Sello', FX + FW / 2, FY + 52, { align: 'center' });
 }
 
+/* ─────────────────────────────────────────────────── */
+/*  PIE DE PÁGINA                                      */
+/* ─────────────────────────────────────────────────── */
 function _pdfFooter(doc, PW, PH) {
-  const footerH = 16;
-  const footerY = PH - footerH - 2;
+  const ML = 12, MR = 12, W = PW - ML - MR;
+  const FH = 22, FY = PH - FH;
 
-  // Fondo azul oscuro
-  doc.setFillColor(31, 73, 125);
-  doc.rect(6, footerY, PW - 12, footerH, 'F');
+  // Fondo oscuro
+  doc.setFillColor(..._C.footer);
+  doc.rect(ML, FY, W, FH, 'F');
 
-  // Línea institucional — blanca, bold, centrada
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(7);
-  doc.setTextColor(255, 255, 255);
-  const line1 = 'UNIDAD DE RIESGO CARDIOVASCULAR Y METABOLICO';
-  const x1 = PW/2 - doc.getTextWidth(line1)/2;
-  doc.text(line1, x1, footerY + 5);
-  // Subrayado manual
-  doc.setDrawColor(255, 255, 255);
-  doc.setLineWidth(0.2);
-  doc.line(x1, footerY + 5.8, x1 + doc.getTextWidth(line1), footerY + 5.8);
+  // Nombre institucional
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(7.5);
+  doc.setTextColor(..._C.blanco);
+  doc.text('UNIDAD DE RIESGO CARDIOVASCULAR Y METABÓLICO',
+           ML + W / 2, FY + 6, { align: 'center' });
 
-  // Línea de contacto — tres columnas
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(6.5);
-  const cy = footerY + 11.5;
+  // Línea divisora teal
+  doc.setDrawColor(77, 188, 190); doc.setLineWidth(0.2);
+  doc.line(ML + 8, FY + 8, ML + W - 8, FY + 8);
 
-  // Col 1: email — icono arroba (@)
-  doc.setTextColor(150, 210, 245);
-  doc.setFont('helvetica', 'bold');
-  doc.text('@', 11, cy);
-  doc.setFont('helvetica', 'normal');
-  doc.setTextColor(255, 255, 255);
-  doc.text('contactourcym@gmail.com', 15, cy);
+  const ic = [160, 210, 230], ty = FY + 16;
 
-  // Col 2: WhatsApp — icono tel simple
-  const waLabel = 'WhatsApp';
-  const waNum = ' 2246 58-8469';
-  const waFullW = doc.getTextWidth(waLabel + waNum);
-  const waX = PW/2 - waFullW/2;
-  doc.setTextColor(150, 210, 245);
-  doc.setFont('helvetica', 'bold');
-  doc.text('T', waX - 5, cy);
-  doc.setTextColor(130, 220, 130);
-  doc.text(waLabel, waX, cy);
-  doc.setFont('helvetica', 'normal');
-  doc.setTextColor(255, 255, 255);
-  doc.text(waNum, waX + doc.getTextWidth(waLabel), cy);
+  // Email
+  _icon(doc, 'mail', ML + 6, ty - 3.5, ic);
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(6.5);
+  doc.setTextColor(..._C.blanco);
+  doc.text('contactourcym@gmail.com', ML + 12, ty);
 
-  // Col 3: dirección — icono punto/lugar
-  const dir = 'Calle 2 N\u00b0 1553, Santa Teresita';
-  const dirW = doc.getTextWidth(dir);
-  const xDir = PW - 10 - dirW;
-  doc.setTextColor(150, 210, 245);
-  doc.setFont('helvetica', 'bold');
-  doc.text('*', xDir - 5, cy);
-  doc.setFont('helvetica', 'normal');
-  doc.setTextColor(255, 255, 255);
-  doc.text(dir, xDir, cy);
+  // WhatsApp
+  _icon(doc, 'phone', ML + W / 2 + 2, ty - 3.8, ic);
+  doc.text('WhatsApp 2246 58-8469', ML + W / 2 + 7, ty);
+
+  // Dirección
+  _icon(doc, 'pin', PW - MR - 45, ty - 3.5, ic);
+  doc.text('Calle 2 Nº 1553, Santa Teresita', PW - MR - 40, ty);
 }
 
-function _crearPDFDocumento(tipo) {
-  const { jsPDF } = window.jspdf;
+/* ─────────────────────────────────────────────────── */
+/*  GENERAR PDF                                        */
+/* ─────────────────────────────────────────────────── */
+function generarPDF(tipo) {
+  const u = users[selectedUser]; if (!u) return;
   const p = pacienteActual;
-  const u = users[selectedUser];
-  const fecha = document.getElementById(tipo==='receta'?'rec_fecha':'ind_fecha').value;
-  const fechaStr = fecha ? new Date(fecha+'T12:00:00').toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'}) : new Date().toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'});
-  const contenido = document.getElementById(tipo==='receta'?'rec_contenido':'ind_contenido').value;
-  const filename = (tipo==='receta'?'Receta_':'Indicaciones_') + p.apellido + '_' + fechaStr.replace(/\//g,'-') + '.pdf';
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ unit: 'mm', format: 'a5', orientation: 'portrait' });
+  const PW = 148, PH = 210, ML = 12, MR = 12, W = PW - ML - MR;
 
-  const doc = new jsPDF({ unit:'mm', format:'a5', orientation:'portrait' });
-  const PW = 148, PH = 210, ML = 10, MR = 10, CW = PW - ML - MR;
+  const headerEndY = _pdfHeader(doc, u, PW, ML);
+  const hoy = new Date().toLocaleDateString('es-AR',
+    { day: '2-digit', month: '2-digit', year: 'numeric' });
+  const cY = p ? _pdfPatientBar(doc, p, hoy, PW, ML, MR) : headerEndY;
 
-  _pdfHeader(doc, u, PW, ML);
-  _pdfPatientBar(doc, p, fechaStr, PW, ML, MR);
+  if (tipo === 'receta') {
+    // ── Caja Rp/ ──────────────────────────────────
+    const rpH = 59;
+    doc.setFillColor(..._C.rpBg);
+    doc.setDrawColor(..._C.azul); doc.setLineWidth(0.4);
+    doc.roundedRect(ML, cY, W, rpH, 2, 2, 'FD');
 
-  // Tipo label
-  let curY = 65;
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(11);
-  doc.setTextColor(26, 26, 26);
-  doc.text(tipo === 'receta' ? 'Rp:' : 'Indicaciones:', ML, curY);
-  curY += 7;
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(12);
+    doc.setTextColor(..._C.azul);
+    doc.text('Rp/', ML + 4, cY + 9);
+    doc.setLineWidth(0.2); doc.setDrawColor(..._C.gris);
+    doc.line(ML + 4, cY + 11, ML + 22, cY + 11);
 
-  // Contenido — zona segura: no bajar de firmaY - 5 (deja espacio para firma + footer)
-  const firmaZoneTop = PH - 58; // reserva espacio para firma + footer
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(9.5);
-  doc.setTextColor(35, 35, 35);
-  const lines = doc.splitTextToSize(contenido || '', CW);
-  const lineH = 5.5;
-  lines.forEach(line => {
-    if(curY > firmaZoneTop) { doc.addPage(); curY = 15; }
-    doc.text(line, ML, curY);
-    curY += lineH;
-  });
+    // Contenido de la receta
+    // *** Si el PDF sale vacío: buscar en el HTML el id del editor
+    //     dentro de #modalReceta y reemplazar en el querySelector ***
+    const elR = document.querySelector('#modalReceta [contenteditable]')
+             || document.querySelector('#modalReceta textarea')
+             || document.getElementById('receta_editor');
+    if (elR) {
+      const txt = (elR.innerText || elR.textContent || elR.value || '').trim();
+      if (txt) {
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(9.5);
+        doc.setTextColor(..._C.oscuro);
+        doc.text(doc.splitTextToSize(txt, W - 8), ML + 4, cY + 18);
+      }
+    }
+
+  } else {
+    // ── Indicaciones ──────────────────────────────
+    const elI = document.querySelector('#modalIndicaciones [contenteditable]')
+             || document.querySelector('#modalIndicaciones textarea')
+             || document.getElementById('indicaciones_editor');
+    if (elI) {
+      const txt = (elI.innerText || elI.textContent || elI.value || '').trim();
+      if (txt) {
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(9.5);
+        doc.setTextColor(..._C.oscuro);
+        doc.text(doc.splitTextToSize(txt, W), ML, cY + 4);
+      }
+    }
+  }
 
   _pdfFirma(doc, u, PW, PH, ML);
   _pdfFooter(doc, PW, PH);
 
-  return { doc, filename, fechaStr };
-}
-
-function generarPDF(tipo) {
-  const { doc, filename } = _crearPDFDocumento(tipo);
-  doc.save(filename);
-}
-
-function enviarPorMail(tipo) {
-  const p = pacienteActual;
-  if(!p.email) { alert('Este paciente no tiene email registrado.\nPodés editarlo en la ficha del paciente.'); return; }
-  const { doc, filename, fechaStr } = _crearPDFDocumento(tipo);
-  doc.save(filename);
-  setTimeout(() => {
-    const asunto = tipo==='receta' ? 'Receta medica - URCyM - '+fechaStr : 'Indicaciones medicas - URCyM - '+fechaStr;
-    const cuerpo = 'Estimado/a '+p.nombre+' '+p.apellido+',\n\nAdjunto su '+(tipo==='receta'?'receta medica':'indicaciones')+' del '+fechaStr+'.\n\nSaludos,\n'+users[selectedUser].titulo+'\nURCyM - 2246 58-8469';
-    window.location.href = 'mailto:'+p.email+'?subject='+encodeURIComponent(asunto)+'&body='+encodeURIComponent(cuerpo);
-  }, 800);
+  const np = p ? (p.apellido || p.nombre || 'doc').replace(/\s+/g, '_') : 'doc';
+  doc.save(`${tipo}_${np}_${hoy.replace(/\//g, '-')}.pdf`);
 }
 
 // ===== MODAL PACIENTE =====
