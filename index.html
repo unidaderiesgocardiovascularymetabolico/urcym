@@ -765,7 +765,7 @@
       <div id="ag-modal-bg" class="ag-modal-bg" style="display:none">
         <div class="ag-modal" role="dialog" aria-modal="true">
           <h3 id="ag-modal-title">Turno</h3>
-          <div class="ag-form-row"><label>Fecha y hora</label><div style="display:flex;align-items:center;gap:8px;"><span id="ag-f-date-label" style="font-size:13px;color:#6b7280;white-space:nowrap;"></span><input id="ag-f-time" type="time" style="border:1px solid #d1d5db;border-radius:6px;padding:5px 8px;font-size:13px;color:#374151;background:#fff;width:110px;"></div></div>
+          <div class="ag-form-row"><label>Fecha y hora</label><div style="display:flex;align-items:center;gap:8px;"><input id="ag-f-date" type="date" style="border:1px solid #d1d5db;border-radius:6px;padding:5px 8px;font-size:13px;color:#374151;background:#fff;"><input id="ag-f-time" type="time" style="border:1px solid #d1d5db;border-radius:6px;padding:5px 8px;font-size:13px;color:#374151;background:#fff;width:110px;"></div></div>
           <div class="ag-form-row"><label>Paciente</label><input type="text" id="ag-f-paciente" placeholder="Apellido, Nombre"></div>
           <div class="ag-form-row" id="ag-f-prof-row"><label>Profesional</label>
             <select id="ag-f-prof">
@@ -777,9 +777,9 @@
           </div>
           <div class="ag-form-row"><label>Estado</label>
             <select id="ag-f-estado">
-              <option value="pendiente">Pendiente</option>
-              <option value="confirmado">Confirmado</option>
-              <option value="cancelado">Cancelado</option>
+              <option value="">—</option>
+              <option value="presente">Presente</option>
+              <option value="atendido">Atendido</option>
             </select>
           </div>
           <div class="ag-form-row-2">
@@ -6094,17 +6094,32 @@ document.getElementById('modal_evol_historica').addEventListener('click', functi
 
 <!-- ═══ AGENDA URCyM — SCRIPT v2 ═══ -->
 <script id="agenda-script">
-/* URCyM — Lógica del módulo Agenda */
+/* URCyM — Lógica del módulo Agenda v3 */
 
 (function(){
 var DIAS=['Lun','Mar','Mié','Jue','Vie','Sáb'];
 var DIAS_FULL=['lunes','martes','miércoles','jueves','viernes','sábado'];
 var MONTHS=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
-var SLOTS=['08:00','08:30','09:00','09:30','10:00','10:30','11:00','11:30','12:00','12:30','13:00','13:30','14:00','14:30','15:00','15:30','16:00','16:30','17:00','17:30'];
+
+// Slots base (LA, SA): cada 30 min
+var SLOTS_30=['08:00','08:30','09:00','09:30','10:00','10:30','11:00','11:30','12:00','12:30','13:00','13:30','14:00','14:30','15:00','15:30','16:00','16:30','17:00','17:30'];
+// Slots BG/OB: cada 45 min
+var SLOTS_45=['08:00','08:45','09:30','10:15','11:00','11:45','12:30','13:15','14:00','14:45','15:30','16:15','17:00','17:45'];
+// Union ordenada para el grid
+function buildSlots(){
+  var all={};
+  SLOTS_30.forEach(function(s){all[s]=true;});
+  SLOTS_45.forEach(function(s){all[s]=true;});
+  return Object.keys(all).sort();
+}
+var SLOTS=buildSlots();
+
 var PROF_CLS={BG:'bg',OB:'ob',LA:'la',SA:'sa'};
 var PROF_LBL={BG:'Guerrero',OB:'Bertani',LA:'López A.',SA:'Saracho'};
 var PROF_FULL={BG:'Dra. Bárbara Guerrero',OB:'Dr. Omar Bertani',LA:'Dra. López Armaretti',SA:'Dra. Saracho Ana'};
-var EST_L={confirmado:'C',pendiente:'P',cancelado:'X'};
+// BG y OB tienen slots de 45 min
+var PROF_45=['BG','OB'];
+var EST_L={presente:'PR',atendido:'AT'};
 var PAGO_L={pagado:'Pagado ✓',señado:'Con seña','sin-seña':'Sin seña'};
 var NL_PROFS=['BG','OB'];
 var ALL_PROFS=['BG','OB','LA','SA'];
@@ -6140,7 +6155,7 @@ var currentMonday=getMonday(new Date());
 var editKey=null, pendingDate=null, pendingTime=null;
 var todayStr=kd(new Date());
 
-// ── Menú contextual (click izquierdo) ──────────────────────────────────────
+// ── Menú contextual ────────────────────────────────────────────────────────
 var ctxMenu=null;
 function closeCtxMenu(){if(ctxMenu){ctxMenu.remove();ctxMenu=null;}}
 document.addEventListener('click',function(e){
@@ -6168,55 +6183,64 @@ function openCtxMenu(e,key){
     return li;
   }
 
-  // Asistencia
   menu.appendChild(mkItem(
     (asistio?'<span style="color:#1D9E75">✓</span> ':'<span style="opacity:.3">○</span> ')+'Asistió',
     asistio?'#1D9E75':'#374151',
-    function(){
-      turnos[key].asistencia=asistio?null:'asistio';
-      saveLocal();renderGrid();
-    }
+    function(){turnos[key].asistencia=asistio?null:'asistio';saveLocal();renderGrid();}
   ));
   menu.appendChild(mkItem(
     (ausente?'<span style="color:#E24B4A">✕</span> ':'<span style="opacity:.3">○</span> ')+'Ausente',
     ausente?'#E24B4A':'#374151',
-    function(){
-      turnos[key].asistencia=ausente?null:'ausente';
-      saveLocal();renderGrid();
-    }
+    function(){turnos[key].asistencia=ausente?null:'ausente';saveLocal();renderGrid();}
   ));
-
-  // Separador
   var sep=document.createElement('div');sep.style.cssText='height:1px;background:#e5e7eb;margin:4px 0;';
   menu.appendChild(sep);
-
-  // Editar
   menu.appendChild(mkItem('✎ &nbsp;Editar turno','#374151',function(){openModal(null,null,key);}));
 
-  // Posición
   var x=e.clientX,y=e.clientY;
   menu.style.left=x+'px';menu.style.top=y+'px';
   document.body.appendChild(menu);
   ctxMenu=menu;
-  // Ajustar si se sale de pantalla
   var r=menu.getBoundingClientRect();
   if(r.right>window.innerWidth)menu.style.left=(x-r.width)+'px';
   if(r.bottom>window.innerHeight)menu.style.top=(y-r.height)+'px';
 }
 
+// ── Utilidades ─────────────────────────────────────────────────────────────
 function getMonday(d){var dt=new Date(d);var day=dt.getDay();dt.setDate(dt.getDate()+(day===0?-6:1-day));dt.setHours(0,0,0,0);return dt;}
 function addDays(d,n){var dt=new Date(d);dt.setDate(dt.getDate()+n);return dt;}
 function kd(d){return d.toISOString().slice(0,10);}
+// Parsear fecha sin problema de zona horaria (yyyy-mm-dd → local)
+function parseLocalDate(s){var p=s.split('-');return new Date(parseInt(p[0]),parseInt(p[1])-1,parseInt(p[2]));}
 function t2m(t){var p=t.split(':');return parseInt(p[0])*60+parseInt(p[1]);}
+function m2t(m){var h=Math.floor(m/60),mn=m%60;return (h<10?'0':'')+h+':'+(mn<10?'0':'')+mn;}
 function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 function weekLabel(m){var s=addDays(m,5);return m.getMonth()===s.getMonth()?m.getDate()+'–'+s.getDate()+' '+MONTHS[m.getMonth()]+' '+m.getFullYear():m.getDate()+' '+MONTHS[m.getMonth()]+' – '+s.getDate()+' '+MONTHS[s.getMonth()]+' '+s.getFullYear();}
 
+// dow de un dateStr sin UTC shift
+function dowOf(ds){return parseLocalDate(ds).getDay();}
+function diOf(ds){var dw=dowOf(ds);return dw===0?6:dw-1;}// 0=Lun..5=Sáb
+
 function getBlocksAt(blocks,dateStr,time,profFilter){
-  var dow=new Date(dateStr).getDay();
-  var di=dow===0?6:dow-1;
+  var di=diOf(dateStr);
   var tm=t2m(time);
   var src=profFilter?blocks.filter(function(b){return b.prof===profFilter;}):blocks;
   return src.filter(function(b){return b.day===di&&t2m(b.from)<=tm&&tm<t2m(b.to);});
+}
+
+// Slot válido para un prof dado (BG/OB → 45min, resto → 30min)
+function isValidSlotForProf(time,prof){
+  if(PROF_45.indexOf(prof)>=0) return SLOTS_45.indexOf(time)>=0;
+  return SLOTS_30.indexOf(time)>=0;
+}
+
+// Calcular fin del turno (hora siguiente para ese prof)
+function nextSlotTime(time,prof){
+  var slots=PROF_45.indexOf(prof)>=0?SLOTS_45:SLOTS_30;
+  var idx=slots.indexOf(time);
+  if(idx>=0&&idx<slots.length-1)return slots[idx+1];
+  var dur=PROF_45.indexOf(prof)>=0?45:30;
+  return m2t(t2m(time)+dur);
 }
 
 function renderGrid(){
@@ -6233,7 +6257,8 @@ function renderGrid(){
   SLOTS.forEach(function(time){
     var tl=document.createElement('div');
     tl.className='ag-time-label';
-    tl.textContent=time.endsWith(':00')?time:'';
+    // Mostrar hora en tiempo exacto en horas o en slots 45 min exactos
+    tl.textContent=time.endsWith(':00')?time:(SLOTS_45.indexOf(time)>=0?time:'');
     grid.appendChild(tl);
 
     days.forEach(function(d){
@@ -6254,7 +6279,7 @@ function renderGrid(){
         return;
       }
 
-      // 2. Disponibilidad (fondo suave)
+      // 2. Disponibilidad
       var dispHit=getBlocksAt(dispBlocks,ds,time,pf);
 
       // 3. Turno
@@ -6271,6 +6296,24 @@ function renderGrid(){
             if(idx===1)av.style.left='50%';
             slot.appendChild(av);
           });
+        }
+        // Mostrar horario en slot vacío disponible
+        if(dispHit.length){
+          // Si hay filtro de prof y ese prof es 45-min, solo mostrar en slots válidos
+          var showTime=true;
+          if(pf&&PROF_45.indexOf(pf)>=0&&SLOTS_45.indexOf(time)<0)showTime=false;
+          if(!pf){
+            // Mostrar si al menos un prof del dispHit tiene slot válido
+            showTime=dispHit.some(function(b){
+              return PROF_45.indexOf(b.prof)>=0?SLOTS_45.indexOf(time)>=0:SLOTS_30.indexOf(time)>=0;
+            });
+          }
+          if(showTime){
+            var tLabel=document.createElement('div');
+            tLabel.style.cssText='position:absolute;bottom:2px;right:4px;font-size:9px;color:#9ca3af;pointer-events:none;';
+            tLabel.textContent=time;
+            slot.appendChild(tLabel);
+          }
         }
         (function(ds2,t2){
           slot.addEventListener('click',function(){openModal(ds2,t2,null);});
@@ -6294,29 +6337,37 @@ function makeTurnoEl(t,key){
   el.className='ag-turno '+pc+(t.estado==='cancelado'?' cancelado':'');
   var dc=t.pago||'sin-seña';
 
-  // Color de texto según asistencia
   var nameColor='';
   if(t.asistencia==='asistio')nameColor='color:#1D9E75;';
   else if(t.asistencia==='ausente')nameColor='color:#E24B4A;';
 
+  // Calcular fin del turno para mostrar rango
+  var tTime=key.split('_')[1]||'';
+  var tEnd=nextSlotTime(tTime,t.prof);
+  var timeRange=tTime+(tEnd?'–'+tEnd:'');
+
+  var estBadge=t.estado?'<span class="ag-badge">'+(EST_L[t.estado]||'')+'</span>':'';
+
   el.innerHTML='<div class="ag-turno-body">'
+    +'<span style="font-size:9px;color:#9ca3af;display:block;margin-bottom:1px;">'+esc(timeRange)+'</span>'
     +'<strong style="'+nameColor+'">'+esc(t.paciente||'—')+'</strong>'
     +'<span style="font-size:9px;opacity:.8">'+esc(PROF_LBL[t.prof]||'')+'</span>'
     +'</div>'
     +'<div class="ag-turno-right">'
-    +'<span class="ag-badge">'+(EST_L[t.estado]||'P')+'</span>'
+    +estBadge
     +'<div class="ag-dot '+dc+'"></div>'
     +'</div>';
 
   var tt=document.getElementById('ag-tooltip');
   (function(turno,tKey){
     el.addEventListener('mouseenter',function(e){
-      var tTime=tKey.split('_')[1]||'';
+      var kTime=tKey.split('_')[1]||'';
+      var kEnd=nextSlotTime(kTime,turno.prof);
       var asistLabel=turno.asistencia==='asistio'?'<span style="color:#1D9E75">Asistió ✓</span>':turno.asistencia==='ausente'?'<span style="color:#E24B4A">Ausente ✕</span>':'—';
       tt.innerHTML='<div class="ag-tt-name">'+esc(turno.paciente||'—')+'</div>'
-        +(tTime?'<div class="ag-tt-row"><span>Hora</span><span>'+esc(tTime)+'</span></div>':'')
+        +'<div class="ag-tt-row"><span>Hora</span><span>'+esc(kTime+(kEnd?' – '+kEnd:''))+'</span></div>'
         +'<div class="ag-tt-row"><span>Profesional</span><span>'+esc(PROF_FULL[turno.prof]||'')+'</span></div>'
-        +'<div class="ag-tt-row"><span>Estado</span><span>'+esc(turno.estado||'')+'</span></div>'
+        +(turno.estado?'<div class="ag-tt-row"><span>Estado</span><span>'+esc(turno.estado)+'</span></div>':'')
         +(turno.sena?'<div class="ag-tt-row"><span>Seña</span><span>$'+Number(turno.sena).toLocaleString('es-AR')+'</span></div>':'')
         +'<div class="ag-tt-row"><span>Pago</span><span>'+(PAGO_L[turno.pago||'sin-seña']||'')+'</span></div>'
         +'<div class="ag-tt-row"><span>Asistencia</span><span>'+asistLabel+'</span></div>'
@@ -6325,7 +6376,6 @@ function makeTurnoEl(t,key){
     });
     el.addEventListener('mousemove',moveTT);
     el.addEventListener('mouseleave',function(){tt.style.display='none';});
-    // Click izquierdo → menú contextual
     el.addEventListener('click',function(e){e.stopPropagation();openCtxMenu(e,tKey);});
   })(t,key);
   return el;
@@ -6348,29 +6398,26 @@ function openModal(ds,time,key){
   editKey=key;
   if(key&&turnos[key]){var p=key.split('_');pendingDate=p[0];pendingTime=p[1];ds=pendingDate;time=pendingTime;}
   else{pendingDate=ds;pendingTime=time;}
-  var parts=ds.split('-');var y=parts[0],m=parts[1],dd=parts[2];
-  var di=new Date(ds).getDay();
-  document.getElementById('ag-f-date-label').textContent=DIAS_FULL[di===0?6:di-1]+' '+parseInt(dd)+'/'+parseInt(m)+'/'+y;
-  document.getElementById('ag-f-time').value=time;
+  document.getElementById('ag-f-date').value=pendingDate;
+  document.getElementById('ag-f-time').value=pendingTime;
   document.getElementById('ag-modal-title').textContent=key?'Editar turno':'Nuevo turno';
   document.getElementById('ag-btn-delete').style.display=key?'inline-flex':'none';
   if(key&&turnos[key]){
     var t=turnos[key];
     document.getElementById('ag-f-paciente').value=t.paciente||'';
     document.getElementById('ag-f-prof').value=t.prof||'BG';
-    document.getElementById('ag-f-estado').value=t.estado||'pendiente';
+    document.getElementById('ag-f-estado').value=t.estado||'';
     document.getElementById('ag-f-sena').value=t.sena||'';
     document.getElementById('ag-f-pago').value=t.pago||'sin-seña';
     document.getElementById('ag-f-notas').value=t.notas||'';
   }else{
     document.getElementById('ag-f-paciente').value='';
     document.getElementById('ag-f-prof').value=document.getElementById('ag-prof-filter').value||'BG';
-    document.getElementById('ag-f-estado').value='pendiente';
+    document.getElementById('ag-f-estado').value='';
     document.getElementById('ag-f-sena').value='';
     document.getElementById('ag-f-pago').value='sin-seña';
     document.getElementById('ag-f-notas').value='';
   }
-  // Profesional: visible solo al editar
   var profRow=document.getElementById('ag-f-prof-row');
   if(profRow)profRow.style.display=key?'block':'none';
   document.getElementById('ag-modal-bg').style.display='flex';
@@ -6380,18 +6427,17 @@ function openModal(ds,time,key){
 document.getElementById('ag-btn-cancel').addEventListener('click',function(){document.getElementById('ag-modal-bg').style.display='none';editKey=null;});
 document.getElementById('ag-modal-bg').addEventListener('click',function(e){if(e.target===this){document.getElementById('ag-modal-bg').style.display='none';editKey=null;}});
 document.getElementById('ag-btn-save').addEventListener('click',function(){
+  var newDate=document.getElementById('ag-f-date').value||pendingDate;
   var newTime=document.getElementById('ag-f-time').value||pendingTime;
   if(newTime&&newTime.length>5)newTime=newTime.slice(0,5);
   var oldKey=editKey;
-  var newKey=pendingDate+'_'+newTime;
+  var newKey=newDate+'_'+newTime;
   if(oldKey&&oldKey!==newKey&&turnos[newKey]){alert('Ya existe un turno en ese horario.');return;}
-  // Preservar asistencia al editar
   var prevAsist=(oldKey&&turnos[oldKey]&&turnos[oldKey].asistencia)||null;
   if(oldKey&&oldKey!==newKey){delete turnos[oldKey];}
   var profVal=document.getElementById('ag-f-prof').value||document.getElementById('ag-prof-filter').value||'BG';
   var senaVal=document.getElementById('ag-f-sena').value.trim();
   var pagoVal=document.getElementById('ag-f-pago').value;
-  // Auto-pago: si hay seña y pago sigue en sin-seña, marcar señado
   if(senaVal&&pagoVal==='sin-seña')pagoVal='señado';
   if(!senaVal&&pagoVal==='señado')pagoVal='sin-seña';
   turnos[newKey]={
