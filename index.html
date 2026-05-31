@@ -510,8 +510,8 @@
 #agenda-app .ag-day-col{position:relative;border-left:1px solid #e5e7eb;background:#fff;}
 #agenda-app .ag-day-col.ag-today-col{background:rgba(55,138,221,.03);}
 /* Filas de hora (líneas horizontales) */
-#agenda-app .ag-hour-line{position:absolute;left:0;right:0;border-top:1px solid #e5e7eb;}
-#agenda-app .ag-hour-line.ag-half{border-top:1px dashed #f3f4f6;}
+#agenda-app .ag-hour-line{position:absolute;left:0;right:0;border-top:1px solid #e5e7eb;z-index:0;}
+#agenda-app .ag-hour-line.ag-half{border-top:1px dashed #f3f4f6;z-index:0;}
 /* Etiqueta de hora en columna izquierda */
 #agenda-app .ag-time-tick{position:absolute;right:6px;font-size:10px;color:#9ca3af;transform:translateY(-50%);}
 /* Bloques NL */
@@ -524,8 +524,6 @@
 #agenda-app .ag-disp-block.ob{background:#378ADD;}
 #agenda-app .ag-disp-block.la{background:#E24B4A;}
 #agenda-app .ag-disp-block.sa{background:#EF9F27;}
-/* Turnos */
-#agenda-app .ag-turno{position:absolute;border-radius:5px;padding:3px 5px 3px 7px;font-size:10px;line-height:1.35;cursor:pointer;overflow:hidden;display:flex;align-items:flex-start;gap:4px;box-shadow:0 1px 3px rgba(0,0,0,.08);}
 /* Modal reprogramar */
 #ag-reprog-bg .ag-reprog-day{margin-bottom:4px;}
 #ag-reprog-bg .ag-reprog-day-head{font-size:12px;font-weight:600;color:#374151;margin-bottom:5px;padding-bottom:4px;border-bottom:1px solid #e5e7eb;text-transform:capitalize;}
@@ -553,8 +551,8 @@
 #agenda-app .ag-av-bg.la{background:#E24B4A;}
 #agenda-app .ag-av-bg.sa{background:#EF9F27;}
 /* Turnos */
-#agenda-app .ag-turno{position:absolute;border-radius:5px;padding:2px 5px 2px 7px;font-size:10px;line-height:1.35;cursor:pointer;overflow:hidden;display:flex;align-items:flex-start;gap:4px;}
-#agenda-app .ag-turno-body{flex:1;overflow:hidden;}
+#agenda-app .ag-turno{position:absolute;border-radius:5px;padding:3px 5px 3px 7px;font-size:10px;line-height:1.35;cursor:pointer;display:flex;align-items:flex-start;gap:4px;z-index:3;}
+#agenda-app .ag-turno-body{flex:1;min-width:0;}
 #agenda-app .ag-turno-body strong{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 #agenda-app .ag-turno-right{display:flex;flex-direction:column;align-items:flex-end;gap:2px;flex-shrink:0;}
 #agenda-app .ag-badge{font-size:9px;font-weight:600;border-radius:3px;padding:1px 4px;line-height:1.4;}
@@ -610,14 +608,17 @@
 
 /* ── Slots de disponibilidad individuales por profesional ── */
 #agenda-app .ag-disp-slot{
-  border-radius:3px;border:1px solid rgba(255,255,255,.6);
-  transition:filter .15s,opacity .15s;
+  border-radius:4px;
+  border:1px solid rgba(0,0,0,.08);
+  transition:filter .15s;
+  z-index:2;
+  overflow:visible;
 }
-#agenda-app .ag-disp-slot:hover{filter:brightness(.92);opacity:1!important;}
-#agenda-app .ag-disp-slot.bg{background:rgba(175,169,236,.28);border-color:rgba(127,119,221,.5);color:#4a3fa8;}
-#agenda-app .ag-disp-slot.ob{background:rgba(133,183,235,.28);border-color:rgba(55,138,221,.5);color:#1a4e8a;}
-#agenda-app .ag-disp-slot.la{background:rgba(240,149,149,.28);border-color:rgba(226,75,74,.5);color:#822020;}
-#agenda-app .ag-disp-slot.sa{background:rgba(250,199,117,.28);border-color:rgba(239,159,39,.5);color:#7a4a0a;}
+#agenda-app .ag-disp-slot:hover{filter:brightness(.93);}
+#agenda-app .ag-disp-slot.bg{background:#EEEDFE;border-color:#AFA9EC;color:#3C3489;}
+#agenda-app .ag-disp-slot.ob{background:#E6F1FB;border-color:#85B7EB;color:#0C447C;}
+#agenda-app .ag-disp-slot.la{background:#FCEBEB;border-color:#F09595;color:#791F1F;}
+#agenda-app .ag-disp-slot.sa{background:#FAEEDA;border-color:#FAC775;color:#633806;}
 </style>
 </head>
 <body>
@@ -6400,9 +6401,12 @@ function renderGrid(){
       });
     });
 
-    // ── Disp: tarjeta independiente por profesional x slot ────────────────────
-    // Paso 1: lista plana de tarjetas libres, una por (prof, slot)
-    var freeCards=[];
+    // ── Layout unificado: slots libres + turnos asignados comparten columnas ──
+    // Paso 1: construir lista de TODOS los items (libres y ocupados) por prof×slot
+    // Cada item tiene: prof, tm, startM, endM, dur, tipo ('free'|'turno'), key?
+    var allItems=[];
+
+    // Items libres (sin turno asignado para ese prof)
     visProfs.forEach(function(p){
       var profSlots=PROF_45.indexOf(p)>=0?SLOTS_45:SLOTS_30;
       var dur=PROF_45.indexOf(p)>=0?45:30;
@@ -6418,130 +6422,98 @@ function renderGrid(){
         });
         if(inNL)return;
         var tk=ds+'_'+tm;
-        if(turnos[tk]&&turnos[tk].prof===p)return;
-        freeCards.push({prof:p,tm:tm,startM:startM,endM:endM,dur:dur});
+        if(turnos[tk]&&turnos[tk].prof===p)return; // este slot será el turno asignado
+        allItems.push({prof:p,tm:tm,startM:startM,endM:endM,dur:dur,tipo:'free'});
       });
     });
 
-    // Paso 2: asignar columna visual por solapamiento temporal
-    freeCards.sort(function(a,b){return a.startM-b.startM||(a.prof<b.prof?-1:1);});
-    var fcLayout=[];
-    freeCards.forEach(function(card){
-      var overlapping=fcLayout.filter(function(x){return x.endM>card.startM&&x.startM<card.endM;});
-      var usedCols=overlapping.map(function(x){return x.col;});
+    // Items ocupados (turnos asignados)
+    Object.keys(turnos).forEach(function(k){
+      var parts=k.split('_');
+      if(parts[0]!==ds)return;
+      var t=turnos[k];
+      if(pf&&t.prof!==pf)return;
+      var dur=PROF_45.indexOf(t.prof)>=0?45:30;
+      var startM=t2m(parts[1]);
+      allItems.push({prof:t.prof,tm:parts[1],startM:startM,endM:startM+dur,dur:dur,tipo:'turno',key:k,turno:t});
+    });
+
+    // Paso 2: greedy column assignment por solapamiento temporal
+    allItems.sort(function(a,b){return a.startM-b.startM||(a.prof<b.prof?-1:1);});
+    var uLayout=[];
+    allItems.forEach(function(item){
+      var ov=uLayout.filter(function(x){return x.endM>item.startM&&x.startM<item.endM;});
+      var used=ov.map(function(x){return x.col;});
       var ci=0;
-      while(usedCols.indexOf(ci)>=0)ci++;
-      fcLayout.push({prof:card.prof,tm:card.tm,startM:card.startM,endM:card.endM,dur:card.dur,col:ci});
+      while(used.indexOf(ci)>=0)ci++;
+      uLayout.push({prof:item.prof,tm:item.tm,startM:item.startM,endM:item.endM,
+                    dur:item.dur,tipo:item.tipo,key:item.key,turno:item.turno,col:ci});
     });
 
-    // Paso 3: total de columnas por grupo de solapamiento
-    fcLayout.forEach(function(card){
-      var ov=fcLayout.filter(function(x){return x.endM>card.startM&&x.startM<card.endM;});
-      card.totalCols=Math.max.apply(null,ov.map(function(x){return x.col+1;}));
+    // Paso 3: totalCols por grupo de solapamiento
+    uLayout.forEach(function(item){
+      var ov=uLayout.filter(function(x){return x.endM>item.startM&&x.startM<item.endM;});
+      item.totalCols=Math.max.apply(null,ov.map(function(x){return x.col+1;}));
     });
 
-    // Paso 4: renderizar una tarjeta independiente por entrada
-    fcLayout.forEach(function(card){
-      var topPx=topOf(card.tm);
-      var hPx=Math.max(22,card.dur*PX_PER_MIN-2);
-      var wPct=Math.floor(100/card.totalCols);
-      var leftPct=card.col*wPct;
-      var p=card.prof;
-      var el=document.createElement('div');
-      el.className='ag-disp-slot '+p.toLowerCase();
-      el.style.cssText='position:absolute;top:'+topPx+'px;height:'+hPx+'px;'
-        +'left:'+leftPct+'%;width:'+wPct+'%;'
-        +'z-index:1;box-sizing:border-box;cursor:pointer;'
-        +'display:flex;align-items:center;justify-content:center;gap:2px;'
-        +'flex-direction:column;overflow:hidden;';
-      el.dataset.prof=p;
-      el.dataset.time=card.tm;
-      el.dataset.date=ds;
-      var tl=document.createElement('span');
-      tl.style.cssText='font-size:9px;font-weight:700;opacity:.9;line-height:1;pointer-events:none;';
-      tl.textContent=card.tm;
-      el.appendChild(tl);
-      var pl=document.createElement('span');
-      pl.style.cssText='font-size:8px;opacity:.75;line-height:1;pointer-events:none;font-weight:600;';
-      pl.textContent=PROF_LBL[p]||p;
-      el.appendChild(pl);
-      (function(ds2,tm2,prof2){
-        el.addEventListener('click',function(e){
-          e.stopPropagation();
-          openModal(ds2,tm2,null,prof2);
-        });
-      })(ds,card.tm,p);
-      col.appendChild(el);
+    // Paso 4: renderizar cada item en su columna
+    uLayout.forEach(function(item){
+      var topPx=topOf(item.tm);
+      var hPx=Math.max(36,item.dur*PX_PER_MIN-2);
+      var wPct=Math.floor(100/item.totalCols);
+      var leftPct=item.col*wPct;
+      var p=item.prof;
+
+      if(item.tipo==='free'){
+        var el=document.createElement('div');
+        el.className='ag-disp-slot '+p.toLowerCase();
+        el.style.cssText='position:absolute;top:'+topPx+'px;height:'+hPx+'px;'
+          +'left:calc('+leftPct+'% + 1px);width:calc('+wPct+'% - 2px);'
+          +'box-sizing:border-box;cursor:pointer;'
+          +'display:flex;align-items:center;justify-content:center;'
+          +'flex-direction:column;gap:1px;';
+        el.dataset.prof=p;
+        el.dataset.time=item.tm;
+        el.dataset.date=ds;
+        var tl=document.createElement('span');
+        tl.style.cssText='font-size:9px;font-weight:700;line-height:1.2;pointer-events:none;';
+        tl.textContent=item.tm;
+        el.appendChild(tl);
+        var pl=document.createElement('span');
+        pl.style.cssText='font-size:8px;font-weight:600;line-height:1.2;opacity:.8;pointer-events:none;';
+        pl.textContent=PROF_LBL[p]||p;
+        el.appendChild(pl);
+        (function(ds2,tm2,prof2){
+          el.addEventListener('click',function(e){
+            e.stopPropagation();
+            openModal(ds2,tm2,null,prof2);
+          });
+        })(ds,item.tm,p);
+        col.appendChild(el);
+
+      } else {
+        // turno asignado
+        var el2=makeTurnoEl(item.turno,item.key,hPx);
+        el2.style.top=topPx+'px';
+        el2.style.height=hPx+'px';
+        el2.style.left='calc('+leftPct+'% + 1px)';
+        el2.style.width='calc('+wPct+'% - 2px)';
+        col.appendChild(el2);
+      }
     });
-    // Click en área vacía (fuera de slots) para nuevo turno
+
+    // Click en área vacía (col o líneas de grilla)
     (function(ds2){
       col.addEventListener('click',function(e){
-        if(e.target!==col&&!e.target.classList.contains('ag-hour-line')&&
-           !e.target.classList.contains('ag-disp-slot')&&
-           !e.target.classList.contains('ag-time-tick'))return;
+        if(e.target!==col&&!e.target.classList.contains('ag-hour-line'))return;
         var rect=col.getBoundingClientRect();
         var relY=e.clientY-rect.top;
         var mins=Math.round(relY/PX_PER_MIN/15)*15+HOUR_START*60;
         var hh=Math.floor(mins/60),mm=mins%60;
         var t2=(hh<10?'0':'')+hh+':'+(mm<10?'0':'')+mm;
-        var profToUse=(e.target.classList.contains('ag-disp-slot')&&e.target.dataset.prof)||pf||ALL_PROFS[0];
-        openModal(ds2,t2,null,profToUse);
+        openModal(ds2,t2,null,pf||ALL_PROFS[0]);
       });
     })(ds);
-
-    // Collect all turnos for this day, grouped by start time
-    var dayTurnos=[];
-    Object.keys(turnos).forEach(function(k){
-      var parts=k.split('_');
-      if(parts[0]===ds){
-        var t=turnos[k];
-        if(!pf||t.prof===pf) dayTurnos.push({key:k,time:parts[1],turno:t});
-      }
-    });
-
-    // Sort by time
-    dayTurnos.sort(function(a,b){return t2m(a.time)-t2m(b.time);});
-
-    // Layout: group overlapping turnos and give each a column slot
-    // Simple greedy: assign column index within overlapping groups
-    var layout=[];
-    dayTurnos.forEach(function(item){
-      var prof=item.turno.prof;
-      var dur=PROF_45.indexOf(prof)>=0?45:30;
-      var start=t2m(item.time);
-      var end=start+dur;
-      // Find column slot
-      var col_idx=0;
-      var used=layout.filter(function(x){return x.end>start&&x.start<end;}).map(function(x){return x.col_idx;});
-      while(used.indexOf(col_idx)>=0)col_idx++;
-      layout.push({key:item.key,time:item.time,turno:item.turno,start:start,end:end,col_idx:col_idx});
-    });
-
-    // Find max cols per overlap group
-    layout.forEach(function(item){
-      var overlapping=layout.filter(function(x){return x.end>item.start&&x.start<item.end;});
-      item.total_cols=overlapping.length;
-      // Use max col_idx+1 among overlapping
-      item.total_cols=Math.max.apply(null,overlapping.map(function(x){return x.col_idx+1;}));
-    });
-
-    layout.forEach(function(item){
-      var t=item.turno;
-      var prof=t.prof;
-      var dur=PROF_45.indexOf(prof)>=0?45:30;
-      var topPx=topOf(item.time);
-      var hPx=Math.max(22,dur*PX_PER_MIN-2);
-      var wPct=Math.floor(100/item.total_cols);
-      var leftPct=item.col_idx*wPct;
-
-      var el=makeTurnoEl(t,item.key,hPx);
-      el.style.top=topPx+'px';
-      el.style.height=hPx+'px';
-      el.style.left='calc('+leftPct+'% + 1px)';
-      el.style.width='calc('+wPct+'% - 2px)';
-      el.style.zIndex=10;
-      col.appendChild(el);
-    });
 
     wrap.appendChild(col);
   });
