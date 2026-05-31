@@ -865,7 +865,50 @@
             <select id="ag-f-date" style="border:1px solid #d1d5db;border-radius:6px;padding:5px 8px;font-size:13px;color:#374151;background:#fff;flex:1;"></select>
             <select id="ag-f-time" style="border:1px solid #d1d5db;border-radius:6px;padding:5px 8px;font-size:13px;color:#374151;background:#fff;width:110px;"></select>
           </div></div>
-          <div class="ag-form-row"><label>Paciente</label><input type="text" id="ag-f-paciente" placeholder="Apellido, Nombre"></div>
+          <div class="ag-form-row" style="position:relative">
+            <label>Paciente</label>
+            <input type="text" id="ag-f-paciente" placeholder="Buscar por apellido, nombre o DNI..." autocomplete="off" style="width:100%">
+            <div id="ag-pac-suggestions" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:99999;background:#fff;border:1px solid #d1d5db;border-radius:8px;margin-top:2px;box-shadow:0 4px 16px rgba(0,0,0,.12);max-height:220px;overflow-y:auto;"></div>
+            <input type="hidden" id="ag-f-paciente-dni">
+          </div>
+
+          <!-- Mini-modal: Alta rápida de paciente nuevo -->
+          <div id="ag-new-pac-bg" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:10200;align-items:center;justify-content:center;">
+            <div style="background:#fff;border-radius:16px;padding:28px;width:100%;max-width:480px;box-shadow:0 8px 40px rgba(0,0,0,.18);">
+              <h4 style="font-family:'Outfit',sans-serif;font-size:16px;font-weight:700;margin:0 0 20px;color:#1a2a3a;">➕ Nuevo paciente</h4>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                <div style="grid-column:1/-1">
+                  <label style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:#6b7280;display:block;margin-bottom:5px;">DNI *</label>
+                  <input id="np-dni" type="text" placeholder="12345678" style="width:100%;border:1px solid #d1d5db;border-radius:8px;padding:8px 10px;font-size:13px;">
+                  <div id="np-dni-warn" style="font-size:11px;color:#e53e3e;margin-top:4px;display:none;"></div>
+                </div>
+                <div>
+                  <label style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:#6b7280;display:block;margin-bottom:5px;">Apellido *</label>
+                  <input id="np-apellido" type="text" placeholder="García" style="width:100%;border:1px solid #d1d5db;border-radius:8px;padding:8px 10px;font-size:13px;">
+                </div>
+                <div>
+                  <label style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:#6b7280;display:block;margin-bottom:5px;">Nombre *</label>
+                  <input id="np-nombre" type="text" placeholder="Juan" style="width:100%;border:1px solid #d1d5db;border-radius:8px;padding:8px 10px;font-size:13px;">
+                </div>
+                <div>
+                  <label style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:#6b7280;display:block;margin-bottom:5px;">Fecha de nacimiento *</label>
+                  <input id="np-fnac" type="date" style="width:100%;border:1px solid #d1d5db;border-radius:8px;padding:8px 10px;font-size:13px;">
+                </div>
+                <div>
+                  <label style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:#6b7280;display:block;margin-bottom:5px;">Obra social *</label>
+                  <input id="np-os" type="text" placeholder="OSDE, IOMA..." style="width:100%;border:1px solid #d1d5db;border-radius:8px;padding:8px 10px;font-size:13px;">
+                </div>
+                <div>
+                  <label style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:#6b7280;display:block;margin-bottom:5px;">Teléfono *</label>
+                  <input id="np-tel" type="text" placeholder="11-1234-5678" style="width:100%;border:1px solid #d1d5db;border-radius:8px;padding:8px 10px;font-size:13px;">
+                </div>
+              </div>
+              <div style="display:flex;gap:10px;margin-top:20px;justify-content:flex-end;">
+                <button id="np-cancel" style="background:none;border:1px solid #d1d5db;border-radius:8px;padding:8px 18px;font-size:13px;cursor:pointer;color:#374151;">Cancelar</button>
+                <button id="np-save" style="background:#185FA5;color:#fff;border:none;border-radius:8px;padding:8px 18px;font-size:13px;font-weight:600;cursor:pointer;">Crear paciente y vincular</button>
+              </div>
+            </div>
+          </div>
           <div class="ag-form-row" id="ag-f-prof-row"><label>Profesional</label>
             <select id="ag-f-prof">
               <option value="BG">Dra. Bárbara Guerrero</option>
@@ -5938,159 +5981,7 @@ document.getElementById('modal_evol_historica').addEventListener('click', functi
 //       .catch(err => console.warn('SW error:', err));
 //   });
 // }
-// ═══ AUTOCOMPLETE PACIENTE EN AGENDA ═══
-(function(){
-  const inp   = document.getElementById('ag-f-paciente');
-  const sugg  = document.getElementById('ag-pac-suggestions');
-  const dniH  = document.getElementById('ag-f-paciente-dni');
-  let debTimer = null;
 
-  // Normaliza texto para comparación insensible a acentos/mayúsculas
-  function norm(s){ return (s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,''); }
-
-  function renderSuggestions(lista, query){
-    sugg.innerHTML='';
-    if(!lista.length){
-      sugg.innerHTML='<div id="ag-pac-create" style="padding:10px 14px;font-size:13px;color:#185FA5;cursor:pointer;font-weight:600;">+ Crear paciente nuevo</div>';
-      document.getElementById('ag-pac-create').onclick=()=>{ sugg.style.display='none'; openNuevoPaciente(inp.value); };
-      sugg.style.display='block';
-      return;
-    }
-    lista.slice(0,8).forEach(p=>{
-      const edad = p.fecha_nac ? (function(){ const d=new Date(); const n=new Date(p.fecha_nac); let e=d.getFullYear()-n.getFullYear(); if(d<new Date(d.getFullYear(),n.getMonth(),n.getDate())) e--; return e+'a'; })() : '';
-      const div=document.createElement('div');
-      div.style.cssText='padding:9px 14px;cursor:pointer;border-bottom:1px solid #f3f4f6;font-size:13px;';
-      div.innerHTML=`<strong>${p.apellido}, ${p.nombre}</strong> <span style="color:#6b7280;font-size:12px;">DNI ${p.dni}${edad?' · '+edad:''}</span>`;
-      div.onmouseenter=()=>div.style.background='#f0f6ff';
-      div.onmouseleave=()=>div.style.background='';
-      div.onclick=()=>selectPaciente(p);
-      sugg.appendChild(div);
-    });
-    // Siempre mostrar opción de crear al final
-    const cr=document.createElement('div');
-    cr.style.cssText='padding:9px 14px;cursor:pointer;font-size:12px;color:#185FA5;font-weight:600;background:#f8fafc;border-top:1px solid #e5e7eb;';
-    cr.textContent='+ Crear paciente nuevo';
-    cr.onclick=()=>{ sugg.style.display='none'; openNuevoPaciente(inp.value); };
-    sugg.appendChild(cr);
-    sugg.style.display='block';
-  }
-
-  function selectPaciente(p){
-    inp.value = p.apellido+', '+p.nombre;
-    dniH.value = p.dni;
-    sugg.style.display='none';
-  }
-
-  inp.addEventListener('input', function(){
-    const q = norm(this.value.trim());
-    dniH.value='';
-    clearTimeout(debTimer);
-    if(q.length<2){ sugg.style.display='none'; return; }
-    debTimer=setTimeout(()=>{
-      const res = pacientesData.filter(p=>{
-        return norm(p.apellido+' '+p.nombre).includes(q)
-          || norm(p.nombre+' '+p.apellido).includes(q)
-          || (p.dni||'').includes(q);
-      });
-      renderSuggestions(res, q);
-    },150);
-  });
-
-  inp.addEventListener('keydown', function(e){
-    if(e.key==='Escape'){ sugg.style.display='none'; }
-  });
-
-  document.addEventListener('click',function(e){
-    if(!sugg.contains(e.target)&&e.target!==inp) sugg.style.display='none';
-  });
-
-  // ── Alta rápida ────────────────────────────────────────────────
-  function openNuevoPaciente(prefill){
-    const bg=document.getElementById('ag-new-pac-bg');
-    // Pre-llenar apellido/nombre si el usuario ya escribió algo
-    const parts=(prefill||'').split(/,|\s+/).filter(Boolean);
-    document.getElementById('np-apellido').value=parts[0]||'';
-    document.getElementById('np-nombre').value=parts.slice(1).join(' ')||'';
-    document.getElementById('np-dni').value='';
-    document.getElementById('np-fnac').value='';
-    document.getElementById('np-os').value='';
-    document.getElementById('np-tel').value='';
-    document.getElementById('np-dni-warn').style.display='none';
-    bg.style.display='flex';
-    setTimeout(()=>document.getElementById('np-dni').focus(),50);
-  }
-
-  document.getElementById('np-cancel').onclick=function(){
-    document.getElementById('ag-new-pac-bg').style.display='none';
-  };
-
-  document.getElementById('np-save').onclick=async function(){
-    const dni     = document.getElementById('np-dni').value.trim();
-    const apellido= document.getElementById('np-apellido').value.trim();
-    const nombre  = document.getElementById('np-nombre').value.trim();
-    const fnac    = document.getElementById('np-fnac').value;
-    const os      = document.getElementById('np-os').value.trim();
-    const tel     = document.getElementById('np-tel').value.trim();
-    const warn    = document.getElementById('np-dni-warn');
-
-    if(!dni||!apellido||!nombre||!fnac||!os||!tel){
-      alert('Completá todos los campos obligatorios.'); return;
-    }
-
-    // Verificar duplicados por DNI
-    const existeDni = pacientesData.find(p=>p.dni===dni);
-    if(existeDni){
-      warn.textContent=`Ya existe un paciente con DNI ${dni}: ${existeDni.apellido}, ${existeDni.nombre}. ¿Querés usar ese?`;
-      warn.style.display='block';
-      warn.style.cursor='pointer';
-      warn.onclick=()=>{ selectPaciente(existeDni); document.getElementById('ag-new-pac-bg').style.display='none'; };
-      return;
-    }
-
-    // Verificar duplicado por nombre
-    const existeNom = pacientesData.find(p=>norm(p.apellido)===norm(apellido)&&norm(p.nombre)===norm(nombre));
-    if(existeNom){
-      if(!confirm(`Ya existe "${existeNom.apellido}, ${existeNom.nombre}" (DNI ${existeNom.dni}).\n¿Usar ese paciente existente?`)){
-        return; // el usuario quiere crear igual (distinto apellido/nombre similar)
-      } else {
-        selectPaciente(existeNom);
-        document.getElementById('ag-new-pac-bg').style.display='none';
-        return;
-      }
-    }
-
-    const btn=this; btn.disabled=true; btn.textContent='Guardando...';
-    try {
-      // 1. Crear paciente
-      const { data:newPac, error:errPac } = await sb.from('pacientes').insert([{
-        dni, apellido, nombre, fecha_nac:fnac, obra_social:os, telefono:tel
-      }]).select().single();
-      if(errPac) throw errPac;
-
-      // 2. Actualizar array local para que futuras búsquedas lo encuentren
-      pacientesData.push(newPac);
-
-      // 3. Vincular en el formulario
-      selectPaciente(newPac);
-      document.getElementById('ag-new-pac-bg').style.display='none';
-
-    } catch(err){
-      alert('Error al crear paciente: '+(err.message||err));
-    } finally {
-      btn.disabled=false; btn.textContent='Crear paciente y vincular';
-    }
-  };
-
-  // Limpiar DNI oculto cuando el modal de turno se resetea
-  const origOpen = window.openTurnoModal;
-  if(typeof origOpen==='function'){
-    window.openTurnoModal=function(){
-      dniH.value='';
-      origOpen.apply(this,arguments);
-    };
-  }
-
-})();
 </script>
 
 <!-- MODAL CARGA EVOLUCIÓN HISTÓRICA -->
@@ -7359,6 +7250,158 @@ function loadLocal(){
   renderGrid();
 }
 loadLocal();
+})();
+
+// ═══ AUTOCOMPLETE PACIENTE EN AGENDA ═══
+(function(){
+  var inp   = document.getElementById('ag-f-paciente');
+  var sugg  = document.getElementById('ag-pac-suggestions');
+  var dniH  = document.getElementById('ag-f-paciente-dni');
+  if(!inp||!sugg) return;
+  var debTimer = null;
+
+  function norm(s){ return (s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,''); }
+
+  function calcEdad(fnac){
+    if(!fnac) return '';
+    var d=new Date(), n=new Date(fnac);
+    var e=d.getFullYear()-n.getFullYear();
+    if(d<new Date(d.getFullYear(),n.getMonth(),n.getDate())) e--;
+    return e+'a';
+  }
+
+  function renderSuggestions(lista){
+    sugg.innerHTML='';
+    if(!lista.length){
+      var cr=document.createElement('div');
+      cr.style.cssText='padding:10px 14px;font-size:13px;color:#185FA5;cursor:pointer;font-weight:600;';
+      cr.textContent='+ Crear paciente nuevo';
+      cr.onclick=function(){ sugg.style.display='none'; openNuevoPaciente(inp.value); };
+      sugg.appendChild(cr);
+      sugg.style.display='block';
+      return;
+    }
+    lista.slice(0,8).forEach(function(p){
+      var edad=calcEdad(p.fecha_nac);
+      var div=document.createElement('div');
+      div.style.cssText='padding:9px 14px;cursor:pointer;border-bottom:1px solid #f3f4f6;font-size:13px;';
+      div.innerHTML='<strong>'+p.apellido+', '+p.nombre+'</strong> <span style="color:#6b7280;font-size:12px;">DNI '+p.dni+(edad?' · '+edad:'')+'</span>';
+      div.onmouseenter=function(){ this.style.background='#f0f6ff'; };
+      div.onmouseleave=function(){ this.style.background=''; };
+      div.onclick=function(){ selectPaciente(p); };
+      sugg.appendChild(div);
+    });
+    var cr=document.createElement('div');
+    cr.style.cssText='padding:9px 14px;cursor:pointer;font-size:12px;color:#185FA5;font-weight:600;background:#f8fafc;border-top:1px solid #e5e7eb;';
+    cr.textContent='+ Crear paciente nuevo';
+    cr.onclick=function(){ sugg.style.display='none'; openNuevoPaciente(inp.value); };
+    sugg.appendChild(cr);
+    sugg.style.display='block';
+  }
+
+  function selectPaciente(p){
+    inp.value=p.apellido+', '+p.nombre;
+    if(dniH) dniH.value=p.dni;
+    sugg.style.display='none';
+  }
+
+  inp.addEventListener('input', function(){
+    var q=norm(this.value.trim());
+    if(dniH) dniH.value='';
+    clearTimeout(debTimer);
+    if(q.length<2){ sugg.style.display='none'; return; }
+    debTimer=setTimeout(function(){
+      var res=(pacientesData||[]).filter(function(p){
+        return norm(p.apellido+' '+p.nombre).includes(q)
+          || norm(p.nombre+' '+p.apellido).includes(q)
+          || (p.dni||'').includes(q);
+      });
+      renderSuggestions(res);
+    },150);
+  });
+
+  inp.addEventListener('keydown', function(e){
+    if(e.key==='Escape') sugg.style.display='none';
+  });
+
+  document.addEventListener('click', function(e){
+    if(!sugg.contains(e.target)&&e.target!==inp) sugg.style.display='none';
+  });
+
+  // ── Alta rápida ────────────────────────────────────────────────
+  function openNuevoPaciente(prefill){
+    var bg=document.getElementById('ag-new-pac-bg');
+    var parts=(prefill||'').split(/,/).map(function(s){return s.trim();});
+    document.getElementById('np-apellido').value=parts[0]||'';
+    document.getElementById('np-nombre').value=parts[1]||'';
+    document.getElementById('np-dni').value='';
+    document.getElementById('np-fnac').value='';
+    document.getElementById('np-os').value='';
+    document.getElementById('np-tel').value='';
+    document.getElementById('np-dni-warn').style.display='none';
+    bg.style.display='flex';
+    setTimeout(function(){ document.getElementById('np-dni').focus(); },50);
+  }
+
+  document.getElementById('np-cancel').onclick=function(){
+    document.getElementById('ag-new-pac-bg').style.display='none';
+  };
+
+  document.getElementById('np-save').onclick=async function(){
+    var dni     =document.getElementById('np-dni').value.trim();
+    var apellido=document.getElementById('np-apellido').value.trim();
+    var nombre  =document.getElementById('np-nombre').value.trim();
+    var fnac    =document.getElementById('np-fnac').value;
+    var os      =document.getElementById('np-os').value.trim();
+    var tel     =document.getElementById('np-tel').value.trim();
+    var warn    =document.getElementById('np-dni-warn');
+
+    if(!dni||!apellido||!nombre||!fnac||!os||!tel){
+      alert('Completá todos los campos obligatorios.'); return;
+    }
+
+    // Verificar duplicado por DNI
+    var existeDni=(pacientesData||[]).find(function(p){ return p.dni===dni; });
+    if(existeDni){
+      warn.textContent='Ya existe un paciente con DNI '+dni+': '+existeDni.apellido+', '+existeDni.nombre+'. Hacé clic acá para usarlo.';
+      warn.style.display='block';
+      warn.style.cursor='pointer';
+      warn.onclick=function(){ selectPaciente(existeDni); document.getElementById('ag-new-pac-bg').style.display='none'; };
+      return;
+    }
+
+    // Verificar duplicado por nombre
+    var existeNom=(pacientesData||[]).find(function(p){
+      return norm(p.apellido)===norm(apellido)&&norm(p.nombre)===norm(nombre);
+    });
+    if(existeNom){
+      if(!confirm('Ya existe "'+existeNom.apellido+', '+existeNom.nombre+'" (DNI '+existeNom.dni+').\n¿Usar ese paciente existente?')){
+        // sigue para crear igual
+      } else {
+        selectPaciente(existeNom);
+        document.getElementById('ag-new-pac-bg').style.display='none';
+        return;
+      }
+    }
+
+    var btn=this; btn.disabled=true; btn.textContent='Guardando...';
+    try {
+      var res=await sb.from('pacientes').insert([{
+        dni:dni, apellido:apellido, nombre:nombre,
+        fecha_nac:fnac, obra_social:os, telefono:tel
+      }]).select().single();
+      if(res.error) throw res.error;
+      var newPac=res.data;
+      if(pacientesData) pacientesData.push(newPac);
+      selectPaciente(newPac);
+      document.getElementById('ag-new-pac-bg').style.display='none';
+    } catch(err){
+      alert('Error al crear paciente: '+(err.message||err));
+    } finally {
+      btn.disabled=false; btn.textContent='Crear paciente y vincular';
+    }
+  };
+
 })();
 </script>
 </body>
