@@ -607,6 +607,17 @@
 .ag-cfg-block button.ag-cfg-del:hover{background:#FCEBEB;}
 .ag-btn-add-block{background:none;border:1px dashed #d1d5db;border-radius:8px;padding:7px;font-size:12px;width:100%;color:#6b7280;cursor:pointer;margin-bottom:1rem;font-family:inherit;}
 .ag-btn-add-block:hover{background:#f9fafb;}
+
+/* ── Slots de disponibilidad individuales por profesional ── */
+#agenda-app .ag-disp-slot{
+  border-radius:3px;border:1px solid rgba(255,255,255,.6);
+  transition:filter .15s,opacity .15s;
+}
+#agenda-app .ag-disp-slot:hover{filter:brightness(.92);opacity:1!important;}
+#agenda-app .ag-disp-slot.bg{background:rgba(175,169,236,.28);border-color:rgba(127,119,221,.5);color:#4a3fa8;}
+#agenda-app .ag-disp-slot.ob{background:rgba(133,183,235,.28);border-color:rgba(55,138,221,.5);color:#1a4e8a;}
+#agenda-app .ag-disp-slot.la{background:rgba(240,149,149,.28);border-color:rgba(226,75,74,.5);color:#822020;}
+#agenda-app .ag-disp-slot.sa{background:rgba(250,199,117,.28);border-color:rgba(239,159,39,.5);color:#7a4a0a;}
 </style>
 </head>
 <body>
@@ -6389,43 +6400,94 @@ function renderGrid(){
       });
     });
 
-    // Disp blocks per prof (behind turnos)
-    // Only split among profs that actually have disp blocks on this day
+    // ── Disp: generar slots individuales por profesional ──────────────────────
+    // Recopilar todos los slots libres por prof para este día
+    var slotsByTime={};// {time: [{prof,left,width}]}
     var profsWithDisp=visProfs.filter(function(p){
       return dispBlocks.some(function(b){return b.prof===p&&diOf(ds)===b.day;});
     });
-    var totalDisp=profsWithDisp.length||1;
-    visProfs.forEach(function(p){
-      var pi=profsWithDisp.indexOf(p);
-      if(pi<0)return;
-      var w=Math.floor(100/totalDisp);
-      var left=pi*w;
-      dispBlocks.filter(function(b){return b.prof===p&&diOf(ds)===b.day;}).forEach(function(b){
+
+    // Para cada prof con disponibilidad, generar sus slots según duración propia
+    profsWithDisp.forEach(function(p){
+      var profSlots=PROF_45.indexOf(p)>=0?SLOTS_45:SLOTS_30;
+      var dur=PROF_45.indexOf(p)>=0?45:30;
+      profSlots.forEach(function(tm){
+        // ¿está dentro de algún bloque de disp de este prof este día?
+        var inDisp=dispBlocks.some(function(b){
+          return b.prof===p&&diOf(ds)===b.day&&t2m(b.from)<=t2m(tm)&&t2m(tm)<t2m(b.to);
+        });
+        if(!inDisp)return;
+        // ¿hay no-laborable para este prof en este horario?
+        var inNL=nlBlocks.some(function(b){
+          return b.prof===p&&diOf(ds)===b.day&&t2m(b.from)<=t2m(tm)&&t2m(tm)<t2m(b.to);
+        });
+        if(inNL)return;
+        // ¿ya tiene turno asignado a este prof en este slot?
+        var occupied=turnos[ds+'_'+tm];
+        if(occupied&&occupied.prof===p)return;
+        if(!slotsByTime[tm])slotsByTime[tm]=[];
+        slotsByTime[tm].push({prof:p,dur:dur});
+      });
+    });
+
+    // Renderizar slots libres (posicionados absolutamente, lado a lado si hay varios profs)
+    Object.keys(slotsByTime).forEach(function(tm){
+      var items=slotsByTime[tm];
+      var total=items.length;
+      items.forEach(function(item,idx){
+        var dur=item.dur;
+        var p=item.prof;
+        var topPx=topOf(tm);
+        var hPx=Math.max(18,dur*PX_PER_MIN-2);
+        var wPct=Math.floor(100/total);
+        var leftPct=idx*wPct;
+
         var el=document.createElement('div');
-        el.className='ag-disp-block '+p.toLowerCase();
-        el.style.top=topOf(b.from)+'px';
-        el.style.height=heightOf(b.from,b.to)+'px';
-        el.style.left=left+'%';
-        el.style.width=w+'%';
-        el.style.zIndex=1;
+        el.className='ag-disp-slot '+p.toLowerCase();
+        el.style.cssText='position:absolute;top:'+topPx+'px;height:'+hPx+'px;'
+          +'left:'+leftPct+'%;width:'+wPct+'%;'
+          +'z-index:1;box-sizing:border-box;cursor:pointer;'
+          +'display:flex;align-items:center;justify-content:center;gap:2px;'
+          +'flex-direction:column;overflow:hidden;';
         el.dataset.prof=p;
+        el.dataset.time=tm;
+        el.dataset.date=ds;
+
+        var timeLabel=document.createElement('span');
+        timeLabel.style.cssText='font-size:9px;font-weight:700;opacity:.9;line-height:1;pointer-events:none;';
+        timeLabel.textContent=tm;
+        el.appendChild(timeLabel);
+
+        if(total>1){
+          var profLabel=document.createElement('span');
+          profLabel.style.cssText='font-size:8px;opacity:.7;line-height:1;pointer-events:none;';
+          profLabel.textContent=PROF_LBL[p]||p;
+          el.appendChild(profLabel);
+        }
+
+        (function(ds2,tm2,prof2){
+          el.addEventListener('click',function(e){
+            e.stopPropagation();
+            openModal(ds2,tm2,null,prof2);
+          });
+        })(ds,tm,p);
+
         col.appendChild(el);
       });
     });
 
-    // Click en área vacía para nuevo turno
+    // Click en área vacía (fuera de slots) para nuevo turno
     (function(ds2){
       col.addEventListener('click',function(e){
         if(e.target!==col&&!e.target.classList.contains('ag-hour-line')&&
-           !e.target.classList.contains('ag-disp-block')&&
+           !e.target.classList.contains('ag-disp-slot')&&
            !e.target.classList.contains('ag-time-tick'))return;
         var rect=col.getBoundingClientRect();
         var relY=e.clientY-rect.top;
         var mins=Math.round(relY/PX_PER_MIN/15)*15+HOUR_START*60;
         var hh=Math.floor(mins/60),mm=mins%60;
         var t2=(hh<10?'0':'')+hh+':'+(mm<10?'0':'')+mm;
-        // Use prof from clicked disp block if available, else fall back to filter or default
-        var profToUse=(e.target.classList.contains('ag-disp-block')&&e.target.dataset.prof)||pf||ALL_PROFS[0];
+        var profToUse=(e.target.classList.contains('ag-disp-slot')&&e.target.dataset.prof)||pf||ALL_PROFS[0];
         openModal(ds2,t2,null,profToUse);
       });
     })(ds);
@@ -6506,9 +6568,9 @@ function makeTurnoEl(t,key,hPx){
   var estBadge=t.estado?'<span class="ag-badge">'+(EST_L[t.estado]||'')+'</span>':'';
 
   el.innerHTML='<div class="ag-turno-body">'
-    +'<strong style="'+nameColor+'">'+esc(t.paciente||'—')+'</strong>'
-    +'<span style="font-size:9px;color:#9ca3af;display:block;margin-top:1px;">'+esc(timeRange)+'</span>'
-    +'<span style="font-size:9px;opacity:.8">'+esc(PROF_LBL[t.prof]||'')+'</span>'
+    +'<span style="font-size:9px;font-weight:700;opacity:.75;display:block;line-height:1.2;margin-bottom:1px;">'+esc(timeRange)+'</span>'
+    +'<strong style="'+nameColor+'display:block;line-height:1.2;">'+esc(t.paciente||'—')+'</strong>'
+    +'<span style="font-size:9px;opacity:.7;display:block;margin-top:1px;">'+esc(PROF_LBL[t.prof]||'')+'</span>'
     +'</div>'
     +'<div class="ag-turno-right">'
     +estBadge
@@ -6715,7 +6777,7 @@ document.getElementById('ag-btn-save').addEventListener('click',function(){
   if(oldKey&&oldKey!==newKey&&turnos[newKey]){alert('Ya existe un turno en ese horario.');return;}
   var prevAsist=(oldKey&&turnos[oldKey]&&turnos[oldKey].asistencia)||null;
   if(oldKey&&oldKey!==newKey){delete turnos[oldKey];}
-  var profVal=document.getElementById('ag-f-prof').value||document.getElementById('ag-prof-filter').value||'BG';
+  var profVal=document.getElementById('ag-f-prof').value||pf||'BG';
   var senaVal=document.getElementById('ag-f-sena').value.trim();
   var pagoVal=document.getElementById('ag-f-pago').value;
   if(senaVal&&pagoVal==='sin-seña')pagoVal='señado';
