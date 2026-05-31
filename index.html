@@ -765,7 +765,10 @@
       <div id="ag-modal-bg" class="ag-modal-bg" style="display:none">
         <div class="ag-modal" role="dialog" aria-modal="true">
           <h3 id="ag-modal-title">Turno</h3>
-          <div class="ag-form-row"><label>Fecha y hora</label><div style="display:flex;align-items:center;gap:8px;"><input id="ag-f-date" type="date" style="border:1px solid #d1d5db;border-radius:6px;padding:5px 8px;font-size:13px;color:#374151;background:#fff;"><input id="ag-f-time" type="time" style="border:1px solid #d1d5db;border-radius:6px;padding:5px 8px;font-size:13px;color:#374151;background:#fff;width:110px;"></div></div>
+          <div class="ag-form-row"><label>Fecha y hora</label><div style="display:flex;align-items:center;gap:8px;">
+            <select id="ag-f-date" style="border:1px solid #d1d5db;border-radius:6px;padding:5px 8px;font-size:13px;color:#374151;background:#fff;flex:1;"></select>
+            <select id="ag-f-time" style="border:1px solid #d1d5db;border-radius:6px;padding:5px 8px;font-size:13px;color:#374151;background:#fff;width:110px;"></select>
+          </div></div>
           <div class="ag-form-row"><label>Paciente</label><input type="text" id="ag-f-paciente" placeholder="Apellido, Nombre"></div>
           <div class="ag-form-row" id="ag-f-prof-row"><label>Profesional</label>
             <select id="ag-f-prof">
@@ -792,7 +795,20 @@
               </select>
             </div>
           </div>
-          <div class="ag-form-row"><label>Notas / motivo</label><textarea id="ag-f-notas" placeholder="Motivo de consulta..."></textarea></div>
+          <div class="ag-form-row"><label>Motivo de consulta</label>
+            <select id="ag-f-notas">
+              <option value="">—</option>
+              <option value="Hipertensión">Hipertensión</option>
+              <option value="Diabetes">Diabetes</option>
+              <option value="Adiposopatía">Adiposopatía</option>
+              <option value="Dislipidemia">Dislipidemia</option>
+              <option value="Hipertensión en el embarazo">Hipertensión en el embarazo</option>
+              <option value="ACV/AIT/ateromatosis carotídea">ACV/AIT/ateromatosis carotídea</option>
+              <option value="Esteatosis hepática">Esteatosis hepática</option>
+              <option value="Hepatitis">Hepatitis</option>
+              <option value="Enfermedad hepática">Enfermedad hepática</option>
+            </select>
+          </div>
           <div class="ag-modal-actions">
             <button class="ag-btn-danger" id="ag-btn-delete" style="display:none">&#128465; Eliminar</button>
             <button class="ag-btn-ghost" id="ag-btn-cancel">Cancelar</button>
@@ -6378,14 +6394,72 @@ document.getElementById('ag-f-sena').addEventListener('input',function(){
   }
 });
 
+// Poblar select de fechas disponibles para un prof dado (próximas 8 semanas)
+function buildDateOptions(prof,selectedDate){
+  var slots=PROF_45.indexOf(prof)>=0?SLOTS_45:SLOTS_30;
+  var sel=document.getElementById('ag-f-date');
+  sel.innerHTML='';
+  var seen={};
+  var base=getMonday(new Date());
+  for(var w=0;w<8;w++){
+    for(var di=0;di<6;di++){
+      var d=addDays(base,w*7+di);
+      var ds=kd(d);
+      // Verificar si hay al menos un bloque de disp para este prof en este día
+      var hasDisp=slots.some(function(t){return getBlocksAt(dispBlocks,ds,t,prof).length>0;});
+      if(!hasDisp)continue;
+      var opt=document.createElement('option');
+      opt.value=ds;
+      var pd=parseLocalDate(ds);
+      opt.textContent=DIAS_FULL[di]+' '+pd.getDate()+'/'+(pd.getMonth()+1)+'/'+pd.getFullYear();
+      if(ds===selectedDate)opt.selected=true;
+      sel.appendChild(opt);
+    }
+  }
+  // Si la fecha seleccionada no está en las opciones (turno pasado), agregarla igual
+  if(selectedDate&&!sel.querySelector('option[value="'+selectedDate+'"]')){
+    var pd2=parseLocalDate(selectedDate);
+    var dw=pd2.getDay();var di2=dw===0?6:dw-1;
+    var opt2=document.createElement('option');
+    opt2.value=selectedDate;
+    opt2.textContent=DIAS_FULL[di2]+' '+pd2.getDate()+'/'+(pd2.getMonth()+1)+'/'+pd2.getFullYear();
+    opt2.selected=true;
+    sel.insertBefore(opt2,sel.firstChild);
+  }
+}
+
+function buildTimeOptions(prof,ds,selectedTime){
+  var slots=PROF_45.indexOf(prof)>=0?SLOTS_45:SLOTS_30;
+  var sel=document.getElementById('ag-f-time');
+  sel.innerHTML='';
+  // Filtrar slots dentro de bloques de disp para esa fecha
+  var available=slots.filter(function(t){
+    return getBlocksAt(dispBlocks,ds,t,prof).length>0;
+  });
+  // Si no hay disp cargada, mostrar todos los slots del prof
+  if(!available.length)available=slots;
+  available.forEach(function(t){
+    var opt=document.createElement('option');
+    opt.value=t;opt.textContent=t;
+    if(t===selectedTime)opt.selected=true;
+    sel.appendChild(opt);
+  });
+}
+
 function openModal(ds,time,key){
   editKey=key;
   if(key&&turnos[key]){var p=key.split('_');pendingDate=p[0];pendingTime=p[1];ds=pendingDate;time=pendingTime;}
   else{pendingDate=ds;pendingTime=time;}
-  document.getElementById('ag-f-date').value=pendingDate;
-  document.getElementById('ag-f-time').value=pendingTime;
+  var prof=key&&turnos[key]?turnos[key].prof:(document.getElementById('ag-prof-filter').value||'BG');
   document.getElementById('ag-modal-title').textContent=key?'Editar turno':'Nuevo turno';
   document.getElementById('ag-btn-delete').style.display=key?'inline-flex':'none';
+  // Poblar selects de fecha y hora según prof
+  buildDateOptions(prof,pendingDate);
+  buildTimeOptions(prof,pendingDate,pendingTime);
+  // Cuando cambia la fecha, repoblar horarios
+  document.getElementById('ag-f-date').onchange=function(){
+    buildTimeOptions(prof,this.value,null);
+  };
   if(key&&turnos[key]){
     var t=turnos[key];
     document.getElementById('ag-f-paciente').value=t.paciente||'';
@@ -6396,7 +6470,7 @@ function openModal(ds,time,key){
     document.getElementById('ag-f-notas').value=t.notas||'';
   }else{
     document.getElementById('ag-f-paciente').value='';
-    document.getElementById('ag-f-prof').value=document.getElementById('ag-prof-filter').value||'BG';
+    document.getElementById('ag-f-prof').value=prof;
     document.getElementById('ag-f-estado').value='';
     document.getElementById('ag-f-sena').value='';
     document.getElementById('ag-f-pago').value='sin-seña';
@@ -6413,7 +6487,6 @@ document.getElementById('ag-modal-bg').addEventListener('click',function(e){if(e
 document.getElementById('ag-btn-save').addEventListener('click',function(){
   var newDate=document.getElementById('ag-f-date').value||pendingDate;
   var newTime=document.getElementById('ag-f-time').value||pendingTime;
-  if(newTime&&newTime.length>5)newTime=newTime.slice(0,5);
   var oldKey=editKey;
   var newKey=newDate+'_'+newTime;
   if(oldKey&&oldKey!==newKey&&turnos[newKey]){alert('Ya existe un turno en ese horario.');return;}
@@ -6430,7 +6503,7 @@ document.getElementById('ag-btn-save').addEventListener('click',function(){
     estado:document.getElementById('ag-f-estado').value,
     sena:senaVal,
     pago:pagoVal,
-    notas:document.getElementById('ag-f-notas').value.trim(),
+    notas:document.getElementById('ag-f-notas').value,
     asistencia:prevAsist
   };
   saveLocal();document.getElementById('ag-modal-bg').style.display='none';editKey=null;renderGrid();
