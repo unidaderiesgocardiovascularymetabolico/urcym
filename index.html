@@ -500,6 +500,21 @@
 #agenda-app .ag-btn-disp:hover{background:#E6F1FB;}
 #agenda-app .ag-grid-wrap{overflow-x:auto;}
 #agenda-app .ag-grid{display:grid;grid-template-columns:52px repeat(6,minmax(0,1fr));border:1px solid #e5e7eb;border-radius:10px;overflow:hidden;}
+/* Sub-columnas multi-prof dentro de una celda */
+#agenda-app .ag-slot-inner{display:flex;height:100%;width:100%;}
+#agenda-app .ag-sub-col{flex:1;position:relative;border-right:1px solid #e5e7eb;min-height:36px;cursor:pointer;}
+#agenda-app .ag-sub-col:last-child{border-right:none;}
+#agenda-app .ag-sub-col:hover{background:#f3f4f6;}
+#agenda-app .ag-sub-col.ag-sub-turno{cursor:default;}
+#agenda-app .ag-sub-col.ag-sub-turno:hover{background:transparent;}
+/* Modal reprogramar */
+#ag-reprog-bg .ag-reprog-day{margin-bottom:4px;}
+#ag-reprog-bg .ag-reprog-day-head{font-size:12px;font-weight:600;color:#374151;margin-bottom:5px;padding-bottom:4px;border-bottom:1px solid #e5e7eb;text-transform:capitalize;}
+#ag-reprog-bg .ag-reprog-slots{display:flex;flex-wrap:wrap;gap:6px;}
+#ag-reprog-bg .ag-reprog-slot{border:1px solid #d1d5db;border-radius:6px;padding:5px 12px;font-size:12px;color:#374151;cursor:pointer;background:#fff;font-family:inherit;transition:all .12s;}
+#ag-reprog-bg .ag-reprog-slot:hover{background:#185FA5;color:#fff;border-color:#185FA5;}
+#ag-reprog-bg .ag-reprog-slot.ocupado{opacity:.4;cursor:not-allowed;text-decoration:line-through;}
+#ag-reprog-bg .ag-reprog-slot.ocupado:hover{background:#fff;color:#374151;border-color:#d1d5db;}
 #agenda-app .ag-cell-head{background:#f9fafb;padding:6px 4px;text-align:center;font-size:11px;font-weight:500;color:#6b7280;border-bottom:1px solid #e5e7eb;}
 #agenda-app .ag-cell-head.ag-today{color:#185FA5;background:#E6F1FB;}
 #agenda-app .ag-time-label{background:#f9fafb;font-size:10px;color:#9ca3af;display:flex;align-items:flex-start;justify-content:flex-end;padding:3px 6px 0 0;border-right:1px solid #e5e7eb;min-height:36px;}
@@ -843,6 +858,17 @@
           <div style="display:flex;justify-content:flex-end;gap:8px;">
             <button class="ag-btn-ghost" id="ag-disp-cancel">Cancelar</button>
             <button class="ag-btn-primary" id="ag-disp-save">Guardar</button>
+          </div>
+        </div>
+      </div>
+      <!-- Modal reprogramar turno -->
+      <div id="ag-reprog-bg" class="ag-modal-bg" style="display:none;z-index:10100;">
+        <div class="ag-modal" style="width:430px;max-width:96vw;" role="dialog" aria-modal="true">
+          <h3 style="margin-bottom:.25rem;">📅 Reprogramar turno</h3>
+          <p id="ag-reprog-info" style="font-size:12px;color:#6b7280;margin-bottom:.9rem;"></p>
+          <div id="ag-reprog-days" style="display:grid;gap:10px;max-height:55vh;overflow-y:auto;padding-right:2px;"></div>
+          <div class="ag-modal-actions" style="margin-top:1rem;">
+            <button class="ag-btn-ghost" id="ag-reprog-cancel">Cancelar</button>
           </div>
         </div>
       </div>
@@ -6212,6 +6238,7 @@ function openCtxMenu(e,key){
   var sep=document.createElement('div');sep.style.cssText='height:1px;background:#e5e7eb;margin:4px 0;';
   menu.appendChild(sep);
   menu.appendChild(mkItem('✎ &nbsp;Editar turno','#374151',function(){openModal(null,null,key);}));
+  menu.appendChild(mkItem('📅 &nbsp;Reprogramar','#374151',function(){openReprog(key);}));
 
   var x=e.clientX,y=e.clientY;
   menu.style.left=x+'px';menu.style.top=y+'px';
@@ -6267,66 +6294,102 @@ function renderGrid(){
   document.getElementById('ag-week-label').textContent=weekLabel(currentMonday);
   var days=[];for(var i=0;i<6;i++)days.push(addDays(currentMonday,i));
 
+  // Qué profs mostrar: si hay filtro solo ese, si no todos con alguna disp o turno esta semana
+  var visProfs=pf?[pf]:ALL_PROFS;
+
   grid.appendChild(mkEl('div','ag-cell-head',''));
   days.forEach(function(d,i){grid.appendChild(mkEl('div','ag-cell-head'+(kd(d)===todayStr?' ag-today':''),DIAS[i]+' '+d.getDate()));});
 
   SLOTS.forEach(function(time){
     var tl=document.createElement('div');
     tl.className='ag-time-label';
-    // Mostrar hora en tiempo exacto en horas o en slots 45 min exactos
     tl.textContent=time.endsWith(':00')?time:(SLOTS_45.indexOf(time)>=0?time:'');
     grid.appendChild(tl);
 
     days.forEach(function(d){
       var ds=kd(d);
-      var slot=document.createElement('div');
-      slot.className='ag-slot'+(ds===todayStr?' ag-today-col':'');
+      var cell=document.createElement('div');
+      cell.className='ag-slot'+(ds===todayStr?' ag-today-col':'');
+      cell.style.padding='0';cell.style.overflow='hidden';
 
-      // 1. No laborable
-      var nlHit=getBlocksAt(nlBlocks,ds,time,pf);
-      if(nlHit.length){
-        slot.classList.add('ag-blocked');
-        var b=nlHit[0];
-        var bg=document.createElement('div');
-        bg.className=b.prof==='BG'?'ag-nl-lila':'ag-nl-blue';
-        if(time===b.from)bg.textContent=b.label+(pf?'':' ('+PROF_LBL[b.prof]+')');
-        slot.appendChild(bg);
-        grid.appendChild(slot);
+      // Detectar profs activos en este slot (tienen NL, disp o turno)
+      var activeProfs=visProfs.filter(function(p){
+        var nlH=getBlocksAt(nlBlocks,ds,time,p);
+        var dH=getBlocksAt(dispBlocks,ds,time,p);
+        var tKey=ds+'_'+time;
+        return nlH.length||dH.length||(turnos[tKey]&&turnos[tKey].prof===p);
+      });
+      // Si no hay ninguno activo, mostrar celda vacía simple
+      if(!activeProfs.length){
+        var inner=document.createElement('div');
+        inner.style.cssText='height:100%;width:100%;min-height:36px;position:relative;cursor:pointer;';
+        var tLbl=document.createElement('div');
+        tLbl.style.cssText='position:absolute;bottom:2px;right:4px;font-size:9px;color:#e5e7eb;pointer-events:none;';
+        tLbl.textContent=time;
+        inner.appendChild(tLbl);
+        (function(ds2,t2){inner.addEventListener('click',function(){openModal(ds2,t2,null);});})(ds,time);
+        cell.appendChild(inner);
+        grid.appendChild(cell);
         return;
       }
 
-      // 2. Disponibilidad
-      var dispHit=getBlocksAt(dispBlocks,ds,time,pf);
+      // Una sub-columna por prof activo
+      var inner2=document.createElement('div');
+      inner2.className='ag-slot-inner';
+      activeProfs.forEach(function(p){
+        var sub=document.createElement('div');
+        sub.className='ag-sub-col';
 
-      // 3. Turno
-      var key=ds+'_'+time;
-      var turno=turnos[key];
-      if(turno&&(!pf||turno.prof===pf)){
-        slot.appendChild(makeTurnoEl(turno,key));
-      } else {
-        if(dispHit.length){
-          dispHit.forEach(function(b,idx){
-            if(idx>1)return;
-            var av=document.createElement('div');
-            av.className='ag-av-bg '+b.prof.toLowerCase();
-            if(idx===1)av.style.left='50%';
-            slot.appendChild(av);
-          });
+        // NL
+        var nlH=getBlocksAt(nlBlocks,ds,time,p);
+        if(nlH.length){
+          sub.classList.add('ag-blocked');sub.style.cursor='default';
+          var bg=document.createElement('div');
+          bg.className=p==='BG'?'ag-nl-lila':'ag-nl-blue';
+          if(time===nlH[0].from)bg.textContent=nlH[0].label;
+          sub.appendChild(bg);
+          inner2.appendChild(sub);
+          return;
         }
-        // Mostrar horario en TODAS las celdas vacías
-        var showTime=true;
-        if(pf&&PROF_45.indexOf(pf)>=0&&SLOTS_45.indexOf(time)<0)showTime=false;
-        if(showTime){
-          var tLabel=document.createElement('div');
-          tLabel.style.cssText='position:absolute;bottom:2px;right:4px;font-size:9px;color:#9ca3af;pointer-events:none;';
-          tLabel.textContent=time;
-          slot.appendChild(tLabel);
+
+        // Turno
+        var tKey=ds+'_'+time;
+        var turno=turnos[tKey];
+        if(turno&&turno.prof===p){
+          sub.classList.add('ag-sub-turno');
+          sub.appendChild(makeTurnoEl(turno,tKey));
+          inner2.appendChild(sub);
+          return;
         }
-        (function(ds2,t2){
-          slot.addEventListener('click',function(){openModal(ds2,t2,null);});
-        })(ds,time);
-      }
-      grid.appendChild(slot);
+
+        // Disponibilidad
+        var dH=getBlocksAt(dispBlocks,ds,time,p);
+        if(dH.length){
+          var av=document.createElement('div');
+          av.className='ag-av-bg '+p.toLowerCase();
+          sub.appendChild(av);
+        }
+        // Horario
+        var showT=true;
+        if(PROF_45.indexOf(p)>=0&&SLOTS_45.indexOf(time)<0)showT=false;
+        if(showT){
+          var tl2=document.createElement('div');
+          tl2.style.cssText='position:absolute;bottom:2px;right:2px;font-size:8px;color:#9ca3af;pointer-events:none;white-space:nowrap;';
+          tl2.textContent=time;
+          sub.appendChild(tl2);
+        }
+        // Prof label si hay múltiples
+        if(activeProfs.length>1){
+          var pl=document.createElement('div');
+          pl.style.cssText='position:absolute;top:2px;left:3px;font-size:7px;font-weight:600;color:#9ca3af;pointer-events:none;text-transform:uppercase;';
+          pl.textContent=p;
+          sub.appendChild(pl);
+        }
+        (function(ds2,t2,p2){sub.addEventListener('click',function(){openModal(ds2,t2,null,p2);});})(ds,time,p);
+        inner2.appendChild(sub);
+      });
+      cell.appendChild(inner2);
+      grid.appendChild(cell);
     });
   });
 }
@@ -6446,17 +6509,15 @@ function buildTimeOptions(prof,ds,selectedTime){
   });
 }
 
-function openModal(ds,time,key){
+function openModal(ds,time,key,forcedProf){
   editKey=key;
   if(key&&turnos[key]){var p=key.split('_');pendingDate=p[0];pendingTime=p[1];ds=pendingDate;time=pendingTime;}
   else{pendingDate=ds;pendingTime=time;}
-  var prof=key&&turnos[key]?turnos[key].prof:(document.getElementById('ag-prof-filter').value||'BG');
+  var prof=key&&turnos[key]?turnos[key].prof:(forcedProf||document.getElementById('ag-prof-filter').value||'BG');
   document.getElementById('ag-modal-title').textContent=key?'Editar turno':'Nuevo turno';
   document.getElementById('ag-btn-delete').style.display=key?'inline-flex':'none';
-  // Poblar selects de fecha y hora según prof
   buildDateOptions(prof,pendingDate);
   buildTimeOptions(prof,pendingDate,pendingTime);
-  // Cuando cambia la fecha, repoblar horarios
   document.getElementById('ag-f-date').onchange=function(){
     buildTimeOptions(prof,this.value,null);
   };
@@ -6481,6 +6542,74 @@ function openModal(ds,time,key){
   document.getElementById('ag-modal-bg').style.display='flex';
   setTimeout(function(){document.getElementById('ag-f-paciente').focus();},50);
 }
+
+// ── Modal reprogramar turno ────────────────────────────────────────────────
+function openReprog(key){
+  var t=turnos[key];if(!t)return;
+  var prof=t.prof;
+  var slots=PROF_45.indexOf(prof)>=0?SLOTS_45:SLOTS_30;
+  var base=getMonday(addDays(new Date(),7));
+
+  document.getElementById('ag-reprog-info').textContent=
+    'Turno de '+PROF_LBL[prof]+' — '+(t.paciente||'Paciente')+'. Elegí el nuevo horario:';
+
+  var container=document.getElementById('ag-reprog-days');
+  container.innerHTML='';
+
+  for(var di=0;di<6;di++){
+    var d=addDays(base,di);
+    var ds=kd(d);
+    var slotsDisp=slots.filter(function(tm){
+      return getBlocksAt(dispBlocks,ds,tm,prof).length>0&&
+             !getBlocksAt(nlBlocks,ds,tm,prof).length;
+    });
+    if(!slotsDisp.length)continue;
+
+    var dayDiv=document.createElement('div');
+    dayDiv.className='ag-reprog-day';
+    var head=document.createElement('div');
+    head.className='ag-reprog-day-head';
+    var pd=parseLocalDate(ds);
+    head.textContent=DIAS_FULL[di]+' '+pd.getDate()+'/'+(pd.getMonth()+1);
+    dayDiv.appendChild(head);
+
+    var slotsWrap=document.createElement('div');
+    slotsWrap.className='ag-reprog-slots';
+    slotsDisp.forEach(function(tm){
+      var btn=document.createElement('button');
+      btn.className='ag-reprog-slot';
+      var occupied=turnos[ds+'_'+tm];
+      if(occupied){
+        btn.classList.add('ocupado');
+        btn.title='Ocupado: '+(occupied.paciente||'—');
+      } else {
+        (function(ds2,tm2){
+          btn.addEventListener('click',function(){
+            var newKey=ds2+'_'+tm2;
+            var old=Object.assign({},turnos[key]);
+            delete turnos[key];
+            turnos[newKey]=old;
+            saveLocal();
+            document.getElementById('ag-reprog-bg').style.display='none';
+            renderGrid();
+          });
+        })(ds,tm);
+      }
+      btn.textContent=tm;
+      slotsWrap.appendChild(btn);
+    });
+    dayDiv.appendChild(slotsWrap);
+    container.appendChild(dayDiv);
+  }
+
+  if(!container.children.length){
+    container.innerHTML='<p style="font-size:12px;color:#9ca3af;text-align:center;padding:1rem 0;">No hay disponibilidad para la próxima semana.</p>';
+  }
+  document.getElementById('ag-reprog-bg').style.display='flex';
+}
+
+document.getElementById('ag-reprog-cancel').addEventListener('click',function(){document.getElementById('ag-reprog-bg').style.display='none';});
+document.getElementById('ag-reprog-bg').addEventListener('click',function(e){if(e.target===this)document.getElementById('ag-reprog-bg').style.display='none';});
 
 document.getElementById('ag-btn-cancel').addEventListener('click',function(){document.getElementById('ag-modal-bg').style.display='none';editKey=null;});
 document.getElementById('ag-modal-bg').addEventListener('click',function(e){if(e.target===this){document.getElementById('ag-modal-bg').style.display='none';editKey=null;}});
