@@ -6400,82 +6400,79 @@ function renderGrid(){
       });
     });
 
-    // ── Disp: generar slots individuales por profesional ──────────────────────
-    // Recopilar todos los slots libres por prof para este día
-    var slotsByTime={};// {time: [{prof,left,width}]}
-    var profsWithDisp=visProfs.filter(function(p){
-      return dispBlocks.some(function(b){return b.prof===p&&diOf(ds)===b.day;});
-    });
-
-    // Para cada prof con disponibilidad, generar sus slots según duración propia
-    profsWithDisp.forEach(function(p){
+    // ── Disp: tarjeta independiente por profesional x slot ────────────────────
+    // Paso 1: lista plana de tarjetas libres, una por (prof, slot)
+    var freeCards=[];
+    visProfs.forEach(function(p){
       var profSlots=PROF_45.indexOf(p)>=0?SLOTS_45:SLOTS_30;
       var dur=PROF_45.indexOf(p)>=0?45:30;
       profSlots.forEach(function(tm){
-        // ¿está dentro de algún bloque de disp de este prof este día?
+        var startM=t2m(tm);
+        var endM=startM+dur;
         var inDisp=dispBlocks.some(function(b){
-          return b.prof===p&&diOf(ds)===b.day&&t2m(b.from)<=t2m(tm)&&t2m(tm)<t2m(b.to);
+          return b.prof===p&&diOf(ds)===b.day&&t2m(b.from)<=startM&&startM<t2m(b.to);
         });
         if(!inDisp)return;
-        // ¿hay no-laborable para este prof en este horario?
         var inNL=nlBlocks.some(function(b){
-          return b.prof===p&&diOf(ds)===b.day&&t2m(b.from)<=t2m(tm)&&t2m(tm)<t2m(b.to);
+          return b.prof===p&&diOf(ds)===b.day&&t2m(b.from)<=startM&&startM<t2m(b.to);
         });
         if(inNL)return;
-        // ¿ya tiene turno asignado a este prof en este slot?
-        var occupied=turnos[ds+'_'+tm];
-        if(occupied&&occupied.prof===p)return;
-        if(!slotsByTime[tm])slotsByTime[tm]=[];
-        slotsByTime[tm].push({prof:p,dur:dur});
+        var tk=ds+'_'+tm;
+        if(turnos[tk]&&turnos[tk].prof===p)return;
+        freeCards.push({prof:p,tm:tm,startM:startM,endM:endM,dur:dur});
       });
     });
 
-    // Renderizar slots libres (posicionados absolutamente, lado a lado si hay varios profs)
-    Object.keys(slotsByTime).forEach(function(tm){
-      var items=slotsByTime[tm];
-      var total=items.length;
-      items.forEach(function(item,idx){
-        var dur=item.dur;
-        var p=item.prof;
-        var topPx=topOf(tm);
-        var hPx=Math.max(18,dur*PX_PER_MIN-2);
-        var wPct=Math.floor(100/total);
-        var leftPct=idx*wPct;
-
-        var el=document.createElement('div');
-        el.className='ag-disp-slot '+p.toLowerCase();
-        el.style.cssText='position:absolute;top:'+topPx+'px;height:'+hPx+'px;'
-          +'left:'+leftPct+'%;width:'+wPct+'%;'
-          +'z-index:1;box-sizing:border-box;cursor:pointer;'
-          +'display:flex;align-items:center;justify-content:center;gap:2px;'
-          +'flex-direction:column;overflow:hidden;';
-        el.dataset.prof=p;
-        el.dataset.time=tm;
-        el.dataset.date=ds;
-
-        var timeLabel=document.createElement('span');
-        timeLabel.style.cssText='font-size:9px;font-weight:700;opacity:.9;line-height:1;pointer-events:none;';
-        timeLabel.textContent=tm;
-        el.appendChild(timeLabel);
-
-        if(total>1){
-          var profLabel=document.createElement('span');
-          profLabel.style.cssText='font-size:8px;opacity:.7;line-height:1;pointer-events:none;';
-          profLabel.textContent=PROF_LBL[p]||p;
-          el.appendChild(profLabel);
-        }
-
-        (function(ds2,tm2,prof2){
-          el.addEventListener('click',function(e){
-            e.stopPropagation();
-            openModal(ds2,tm2,null,prof2);
-          });
-        })(ds,tm,p);
-
-        col.appendChild(el);
-      });
+    // Paso 2: asignar columna visual por solapamiento temporal
+    freeCards.sort(function(a,b){return a.startM-b.startM||(a.prof<b.prof?-1:1);});
+    var fcLayout=[];
+    freeCards.forEach(function(card){
+      var overlapping=fcLayout.filter(function(x){return x.endM>card.startM&&x.startM<card.endM;});
+      var usedCols=overlapping.map(function(x){return x.col;});
+      var ci=0;
+      while(usedCols.indexOf(ci)>=0)ci++;
+      fcLayout.push({prof:card.prof,tm:card.tm,startM:card.startM,endM:card.endM,dur:card.dur,col:ci});
     });
 
+    // Paso 3: total de columnas por grupo de solapamiento
+    fcLayout.forEach(function(card){
+      var ov=fcLayout.filter(function(x){return x.endM>card.startM&&x.startM<card.endM;});
+      card.totalCols=Math.max.apply(null,ov.map(function(x){return x.col+1;}));
+    });
+
+    // Paso 4: renderizar una tarjeta independiente por entrada
+    fcLayout.forEach(function(card){
+      var topPx=topOf(card.tm);
+      var hPx=Math.max(22,card.dur*PX_PER_MIN-2);
+      var wPct=Math.floor(100/card.totalCols);
+      var leftPct=card.col*wPct;
+      var p=card.prof;
+      var el=document.createElement('div');
+      el.className='ag-disp-slot '+p.toLowerCase();
+      el.style.cssText='position:absolute;top:'+topPx+'px;height:'+hPx+'px;'
+        +'left:'+leftPct+'%;width:'+wPct+'%;'
+        +'z-index:1;box-sizing:border-box;cursor:pointer;'
+        +'display:flex;align-items:center;justify-content:center;gap:2px;'
+        +'flex-direction:column;overflow:hidden;';
+      el.dataset.prof=p;
+      el.dataset.time=card.tm;
+      el.dataset.date=ds;
+      var tl=document.createElement('span');
+      tl.style.cssText='font-size:9px;font-weight:700;opacity:.9;line-height:1;pointer-events:none;';
+      tl.textContent=card.tm;
+      el.appendChild(tl);
+      var pl=document.createElement('span');
+      pl.style.cssText='font-size:8px;opacity:.75;line-height:1;pointer-events:none;font-weight:600;';
+      pl.textContent=PROF_LBL[p]||p;
+      el.appendChild(pl);
+      (function(ds2,tm2,prof2){
+        el.addEventListener('click',function(e){
+          e.stopPropagation();
+          openModal(ds2,tm2,null,prof2);
+        });
+      })(ds,card.tm,p);
+      col.appendChild(el);
+    });
     // Click en área vacía (fuera de slots) para nuevo turno
     (function(ds2){
       col.addEventListener('click',function(e){
