@@ -7064,13 +7064,44 @@ function openReprog(key){
     return wrap;
   }
 
-  var thisWeek=buildWeekSection(currentMonday,'Turnos esta semana');
-  var nextWeek=buildWeekSection(getMonday(addDays(new Date(),7)),'Turnos próximos');
-  if(thisWeek)container.appendChild(thisWeek);
-  if(nextWeek)container.appendChild(nextWeek);
+  // Siempre usar la semana actual (no la que se está viendo en pantalla)
+  var realMonday=getMonday(new Date());
+  var thisWeek=buildWeekSection(realMonday,'Esta semana');
+  var nextWeekBase=getMonday(addDays(new Date(),7));
+  var nextWeek=buildWeekSection(nextWeekBase,'Próxima semana');
+
+  if(thisWeek){
+    container.appendChild(thisWeek);
+  } else {
+    var noThisWk=document.createElement('div');
+    noThisWk.style.cssText='font-size:12px;color:#9ca3af;padding:8px 10px 4px;font-style:italic;';
+    noThisWk.textContent='Sin disponibilidad esta semana';
+    var lbl=document.createElement('div');
+    lbl.style.cssText='font-size:11px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:#185FA5;background:#E6F1FB;padding:5px 10px;border-radius:6px;margin-bottom:4px;';
+    lbl.textContent='Esta semana';
+    var wrap0=document.createElement('div');
+    wrap0.appendChild(lbl);
+    wrap0.appendChild(noThisWk);
+    container.appendChild(wrap0);
+  }
+
+  if(nextWeek){
+    container.appendChild(nextWeek);
+  } else {
+    var noNextWk=document.createElement('div');
+    noNextWk.style.cssText='font-size:12px;color:#9ca3af;padding:8px 10px 4px;font-style:italic;';
+    noNextWk.textContent='Sin disponibilidad la próxima semana';
+    var lbl2=document.createElement('div');
+    lbl2.style.cssText='font-size:11px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:#185FA5;background:#E6F1FB;padding:5px 10px;border-radius:6px;margin-bottom:4px;margin-top:8px;';
+    lbl2.textContent='Próxima semana';
+    var wrap1=document.createElement('div');
+    wrap1.appendChild(lbl2);
+    wrap1.appendChild(noNextWk);
+    container.appendChild(wrap1);
+  }
 
   if(!container.children.length){
-    container.innerHTML='<p style="font-size:12px;color:#9ca3af;text-align:center;padding:1rem 0;">No hay disponibilidad en las próximas semanas.</p>';
+    container.innerHTML='<p style="font-size:12px;color:#9ca3af;text-align:center;padding:1rem 0;">Sin disponibilidad en las próximas semanas.</p>';
   }
   document.getElementById('ag-reprog-bg').style.display='flex';
 }
@@ -7476,55 +7507,55 @@ loadLocal();
 
 // ═══ PANEL DE TAREAS POR PROFESIONAL ═══
 (function(){
+  // Constantes locales (independiente del IIFE de agenda)
+  var T_PROFS = ['BG','OB','LA','SA'];
+  var T_LBL   = {BG:'Guerrero',OB:'Bertani',LA:'López A.',SA:'Saracho'};
+  var T_COLOR = {BG:'#7F77DD',OB:'#378ADD',LA:'#E24B4A',SA:'#EF9F27'};
   var LS_TASKS = 'urcym_ag_tasks_v1';
-  var tasks = {};  // { BG: [{id, text, done}], OB: [...], ... }
-  var openSections = { BG: true, OB: true, LA: true, SA: true };
+
+  var tasks = {};
+  var openSections = {BG:true,OB:true,LA:true,SA:true};
 
   function loadTasks(){
     try{ var s=localStorage.getItem(LS_TASKS); if(s) tasks=JSON.parse(s); }catch(e){}
-    ALL_PROFS.forEach(function(p){ if(!tasks[p]) tasks[p]=[]; });
+    T_PROFS.forEach(function(p){ if(!tasks[p]) tasks[p]=[]; });
   }
-
   function saveTasks(){
     try{ localStorage.setItem(LS_TASKS, JSON.stringify(tasks)); }catch(e){}
   }
+  function pendingCount(p){ return (tasks[p]||[]).filter(function(t){return !t.done;}).length; }
 
-  function pendingCount(prof){
-    return (tasks[prof]||[]).filter(function(t){return !t.done;}).length;
-  }
-
-  var PROF_COLORS = {BG:'#7F77DD',OB:'#378ADD',LA:'#E24B4A',SA:'#EF9F27'};
+  function escT(s){ var d=document.createElement('div');d.textContent=s;return d.innerHTML; }
 
   function renderPanel(){
     var cont = document.getElementById('ag-tasks-content');
     if(!cont) return;
     var html = '';
-    ALL_PROFS.forEach(function(p){
+    T_PROFS.forEach(function(p){
       var list = tasks[p]||[];
       var pending = pendingCount(p);
       var open = openSections[p];
-      var badgeCls = pending>0 ? 'ag-tasks-badge has-tasks' : 'ag-tasks-badge';
       html += '<div class="ag-tasks-prof-section">';
       html += '<div class="ag-tasks-prof-header" data-prof="'+p+'">'
-        + '<div style="width:10px;height:10px;border-radius:2px;background:'+PROF_COLORS[p]+';flex-shrink:0"></div>'
-        + '<span class="ag-tasks-prof-name">'+PROF_LBL[p]+'</span>'
-        + '<span class="'+badgeCls+'">'+pending+'</span>'
+        + '<div style="width:10px;height:10px;border-radius:2px;background:'+T_COLOR[p]+';flex-shrink:0"></div>'
+        + '<span class="ag-tasks-prof-name">'+T_LBL[p]+'</span>'
+        + '<span class="ag-tasks-badge'+(pending>0?' has-tasks':'')+'">'+pending+'</span>'
         + '<span class="ag-tasks-chevron">'+(open?'▼':'▶')+'</span>'
         + '</div>';
       if(open){
         html += '<div class="ag-tasks-body">';
         html += '<div class="ag-tasks-input-row">'
           + '<input class="ag-tasks-input" type="text" placeholder="Nueva tarea..." data-prof-input="'+p+'" maxlength="120">'
-          + '<button class="ag-tasks-add-btn" data-prof-add="'+p+'">Agregar</button>'
+          + '<button class="ag-tasks-add-btn" data-prof-add="'+p+'">+ Agregar</button>'
           + '</div>';
         var pendingList = list.filter(function(t){return !t.done;});
-        if(pendingList.length===0){
+        if(!pendingList.length){
           html += '<div class="ag-tasks-empty">Sin tareas pendientes</div>';
         } else {
           pendingList.forEach(function(t){
-            html += '<div class="ag-task-item" data-task-id="'+t.id+'" data-task-prof="'+p+'">'
+            html += '<div class="ag-task-item" data-task-id="'+escT(t.id)+'" data-task-prof="'+p+'">'
               + '<div class="ag-task-check"></div>'
-              + '<span class="ag-task-text">'+esc(t.text)+'</span>'
+              + '<span class="ag-task-text">'+escT(t.text)+'</span>'
               + '</div>';
           });
         }
@@ -7534,13 +7565,12 @@ loadLocal();
     });
     cont.innerHTML = html;
 
-    // bind section toggles
+    // bind section toggle
     cont.querySelectorAll('.ag-tasks-prof-header').forEach(function(el){
       el.addEventListener('click', function(){
         var p = el.dataset.prof;
         openSections[p] = !openSections[p];
         renderPanel();
-        // refocus input if opening
         if(openSections[p]){
           var inp = cont.querySelector('[data-prof-input="'+p+'"]');
           if(inp) setTimeout(function(){inp.focus();},50);
@@ -7551,61 +7581,52 @@ loadLocal();
     // bind add buttons
     cont.querySelectorAll('[data-prof-add]').forEach(function(btn){
       btn.addEventListener('click', function(){
-        var p = btn.dataset.profAdd;
-        var inp = cont.querySelector('[data-prof-input="'+p+'"]');
-        var text = (inp ? inp.value : '').trim();
-        if(!text) return;
-        var id = Date.now() + '-' + Math.random().toString(36).slice(2,6);
-        tasks[p].push({id:id, text:text, done:false});
-        saveTasks();
-        inp.value = '';
-        renderPanel();
-        var inp2 = document.querySelector('[data-prof-input="'+p+'"]');
-        if(inp2) inp2.focus();
+        addTask(btn.dataset.profAdd, cont);
       });
     });
 
-    // bind enter on inputs
+    // bind Enter on inputs
     cont.querySelectorAll('.ag-tasks-input').forEach(function(inp){
       inp.addEventListener('keydown', function(e){
-        if(e.key==='Enter'){
-          var addBtn = cont.querySelector('[data-prof-add="'+inp.dataset.profInput+'"]');
-          if(addBtn) addBtn.click();
-        }
+        if(e.key==='Enter') addTask(inp.dataset.profInput, cont);
       });
     });
 
-    // bind task check (mark done → disappear)
+    // bind task check
     cont.querySelectorAll('.ag-task-item').forEach(function(item){
       item.addEventListener('click', function(){
         var id = item.dataset.taskId;
         var p  = item.dataset.taskProf;
         var t  = (tasks[p]||[]).find(function(x){return x.id===id;});
         if(!t) return;
-        // flash verde y desaparece
         item.style.background='#d1fae5';
-        item.querySelector('.ag-task-check').innerHTML='<span style="color:#059669;font-size:12px;">✓</span>';
-        item.querySelector('.ag-task-check').style.borderColor='#059669';
-        setTimeout(function(){
-          t.done = true;
-          saveTasks();
-          renderPanel();
-        }, 400);
+        var chk = item.querySelector('.ag-task-check');
+        if(chk){ chk.innerHTML='<span style="color:#059669;font-size:12px;">✓</span>'; chk.style.borderColor='#059669'; }
+        setTimeout(function(){ t.done=true; saveTasks(); renderPanel(); }, 400);
       });
     });
   }
 
+  function addTask(p, cont){
+    var inp = cont ? cont.querySelector('[data-prof-input="'+p+'"]') : null;
+    var text = (inp ? inp.value : '').trim();
+    if(!text) return;
+    var id = Date.now()+'-'+Math.random().toString(36).slice(2,6);
+    if(!tasks[p]) tasks[p]=[];
+    tasks[p].push({id:id,text:text,done:false});
+    saveTasks();
+    if(inp) inp.value='';
+    renderPanel();
+    var inp2 = document.querySelector('[data-prof-input="'+p+'"]');
+    if(inp2) inp2.focus();
+  }
+
   function openTasksPanel(){
     loadTasks();
-    document.getElementById('ag-tasks-bg').style.display='flex';
+    var bg = document.getElementById('ag-tasks-bg');
+    if(!bg) return;
+    bg.style.display='flex';
     renderPanel();
-    // open first prof with pending tasks
-    var first = ALL_PROFS.find(function(p){ return pendingCount(p)>0; });
-    if(first){
-      ALL_PROFS.forEach(function(p){ openSections[p]=false; });
-      openSections[first]=true;
-      renderPanel();
-    }
     setTimeout(function(){
       var inp = document.querySelector('.ag-tasks-input');
       if(inp) inp.focus();
@@ -7614,14 +7635,16 @@ loadLocal();
 
   loadTasks();
 
-  // Usar delegación en document para que funcione aunque la página esté oculta al cargar
+  // Delegación global
   document.addEventListener('click', function(e){
-    var btn = e.target.closest('#ag-btn-tasks');
-    if(btn){ openTasksPanel(); return; }
-    var cl = e.target.closest('#ag-tasks-close');
-    if(cl){ document.getElementById('ag-tasks-bg').style.display='none'; return; }
-    var bg = document.getElementById('ag-tasks-bg');
-    if(bg && e.target===bg){ bg.style.display='none'; }
+    if(e.target.closest('#ag-btn-tasks')){ openTasksPanel(); return; }
+    if(e.target.closest('#ag-tasks-close')){
+      var bg=document.getElementById('ag-tasks-bg');
+      if(bg) bg.style.display='none';
+      return;
+    }
+    var bg=document.getElementById('ag-tasks-bg');
+    if(bg && e.target===bg) bg.style.display='none';
   });
 })();
 </script>
