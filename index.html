@@ -157,6 +157,8 @@
     .hc-entrada.editable-48h .hc-edit-btn { display:inline-flex; }
     .hc-edit-btn { display:none; align-items:center; gap:4px; background:#e8f3fc; color:#1a5a8a; border:1.5px solid #b8d8f0; border-radius:8px; padding:3px 10px; font-size:11px; cursor:pointer; margin-left:auto; font-weight:600; }
     .hc-edit-btn:hover { background:#3089ca; color:white; }
+    .hc-del-btn { display:inline-flex; align-items:center; gap:4px; background:#fdecea; color:#c0392b; border:1.5px solid #f5a9a2; border-radius:8px; padding:3px 10px; font-size:11px; cursor:pointer; font-weight:600; margin-left:4px; }
+    .hc-del-btn:hover { background:#e74c3c; color:white; }
     .form-grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
     .form-grid .full { grid-column:1/-1; }
     .form-actions { display:flex; gap:10px; margin-top:24px; }
@@ -3293,7 +3295,7 @@ function _pdfHeader(doc, u, PW, ML) {
   doc.text(u.titulo || u.name || '', tX, tY); tY += 5;
 
   // Matrícula
-  doc.setFont('helvetica', 'bold'); doc.setFontSize(8);
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(10);
   doc.setTextColor(160, 210, 230);
   doc.text(u.mp || '', tX, tY); tY += 5;
 
@@ -3301,7 +3303,7 @@ function _pdfHeader(doc, u, PW, ML) {
   const specs = Array.isArray(u.especialidades)
     ? u.especialidades
     : (u.role || '').split(/[·|\/]/).map(s => s.trim()).filter(Boolean);
-  doc.setFont('helvetica', 'normal'); doc.setFontSize(8);
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(10);
   doc.setTextColor(..._C.blanco);
   specs.forEach(s => { if (tY < HY + HH - 2) { doc.text(s, tX, tY); tY += 4.5; } });
 
@@ -3505,6 +3507,30 @@ async function guardarEdicionEvolucion() {
     renderHistoria(_historialData, false);
     cerrarModal('modalEditarEvolucion');
   } else { alert('Error al guardar: '+error.message); }
+}
+
+async function eliminarEvolucion(evolId, desdePrevias = false) {
+  if(!confirm('¿Eliminar esta evolución? Esta acción no se puede deshacer.')) return;
+  const { error } = await sb.from('evoluciones').delete().eq('id', evolId);
+  if(error) { alert('Error al eliminar: ' + error.message); return; }
+  // Actualizar cache y re-renderizar vista principal
+  _historialData = _historialData.filter(e => String(e.id) !== String(evolId));
+  renderHistoria(_historialData, false);
+  // Si se llamó desde modal de Previas, refrescar esa lista también
+  if(desdePrevias) {
+    const cont = document.getElementById('previas_lista');
+    const entry = cont?.querySelector('[data-evol-id="'+evolId+'"]');
+    if(entry) entry.remove();
+    if(cont && !cont.querySelector('.hc-entrada')) {
+      cont.innerHTML = '<div class="empty-state"><div>📋</div><p>No hay evoluciones previas.</p></div>';
+    }
+  }
+  // Notificación
+  const notif = document.createElement('div');
+  notif.style.cssText = 'position:fixed;bottom:24px;right:24px;background:#c0392b;color:white;padding:12px 20px;border-radius:10px;font-size:13px;font-weight:600;z-index:9999;box-shadow:0 4px 16px rgba(0,0,0,.2)';
+  notif.textContent = '🗑️ Evolución eliminada';
+  document.body.appendChild(notif);
+  setTimeout(() => notif.remove(), 3000);
 }
 
 // ===== DRAG DE MODALES =====
@@ -3729,9 +3755,18 @@ async function abrirPrevias() {
   const { data } = await sb.from('evoluciones').select('*').eq('dni_paciente', pacienteActual.dni).order('fecha_hora', {ascending:false}).limit(20);
   if(!data || !data.length) { cont.innerHTML='<div class="empty-state"><div>📋</div><p>No hay evoluciones previas.</p></div>'; return; }
   cont.innerHTML = data.map(e => {
-    const fh=new Date(e.fecha_hora);
+    const fh = new Date(e.fecha_hora);
     const mClase = medicoAClase(e.medico);
-    return '<div class="hc-entrada"><div class="hc-header '+mClase+'"><span class="hc-fecha">'+fh.toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'})+' '+fh.toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'})+'</span><span class="hc-medico">'+(e.medico||'')+'</span>'+(e.ta_promedio?'<span class="hc-badge-ta">TA: '+e.ta_promedio+'</span>':'')+(e.fc_promedio?'<span class="hc-badge-fc">FC: '+e.fc_promedio+' lpm</span>':'')+(e.peso?'<span class="hc-badge-peso">'+e.peso+' kg</span>':'')+'</div><div class="hc-cuerpo">'+(e.contenido_html||'')+'</div></div>';
+    const editBtn = '<button class="hc-edit-btn" style="display:inline-flex" onclick="abrirEditarEvolucion(\''+e.id+'\')">✏️ Editar</button>';
+    const delBtn  = '<button class="hc-del-btn" onclick="eliminarEvolucion(\''+e.id+'\',true)">🗑️</button>';
+    return '<div class="hc-entrada" data-evol-id="'+e.id+'"><div class="hc-header '+mClase+'" style="display:flex;align-items:center;flex-wrap:wrap;gap:6px">' +
+      '<span class="hc-fecha">'+fh.toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'})+' '+fh.toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'})+'</span>' +
+      '<span class="hc-medico">'+(e.medico||'')+'</span>' +
+      (e.ta_promedio?'<span class="hc-badge-ta">TA: '+e.ta_promedio+'</span>':'') +
+      (e.fc_promedio?'<span class="hc-badge-fc">FC: '+e.fc_promedio+' lpm</span>':'') +
+      (e.peso?'<span class="hc-badge-peso">'+e.peso+' kg</span>':'') +
+      '<span style="margin-left:auto;display:flex;gap:4px">'+editBtn+delBtn+'</span>' +
+      '</div><div class="hc-cuerpo">'+(e.contenido_html||'')+'</div></div>';
   }).join('');
 }
 
@@ -4265,22 +4300,21 @@ function renderHistoria(data, mostrarContador) {
     return;
   }
   if(countEl) countEl.textContent = mostrarContador ? data.length + ' resultado' + (data.length!==1?'s':'') : '';
-  const ahora = Date.now();
   cont.innerHTML = data.map(e => {
     const fh = new Date(e.fecha_hora);
     const fechaStr = fh.toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'});
     const horaStr = fh.toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'});
     const mClase = medicoAClase(e.medico);
-    const dentro48h = (ahora - fh.getTime()) < 48*3600*1000;
-    const editBtn = dentro48h ? '<button class="hc-edit-btn" onclick="abrirEditarEvolucion(\''+e.id+'\')">✏️ Editar</button>' : '';
-    return '<div class="hc-entrada'+(dentro48h?' editable-48h':'')+'" data-evol-id="'+e.id+'">' +
+    const editBtn = '<button class="hc-edit-btn" style="display:inline-flex" onclick="abrirEditarEvolucion(\''+e.id+'\')">✏️ Editar</button>';
+    const delBtn  = '<button class="hc-del-btn" onclick="eliminarEvolucion(\''+e.id+'\')">🗑️</button>';
+    return '<div class="hc-entrada" data-evol-id="'+e.id+'">' +
       '<div class="hc-header '+mClase+'" style="display:flex;align-items:center;flex-wrap:wrap;gap:6px">' +
         '<span class="hc-fecha">' + fechaStr + ' ' + horaStr + '</span>' +
         '<span class="hc-medico">' + (e.medico||'') + '</span>' +
         (e.ta_promedio ? '<span class="hc-badge-ta">TA: '+e.ta_promedio+'</span>' : '') +
         (e.fc_promedio ? '<span class="hc-badge-fc">FC: '+e.fc_promedio+' lpm</span>' : '') +
         (e.peso ? '<span class="hc-badge-peso">Peso: '+e.peso+' kg</span>' : '') +
-        editBtn +
+        '<span style="margin-left:auto;display:flex;gap:4px">' + editBtn + delBtn + '</span>' +
       '</div>' +
       '<div class="hc-cuerpo">' + (e.contenido_html || '') + '</div>' +
     '</div>';
@@ -5991,12 +6025,17 @@ function abrirCargaEvolucionHistorica() {
   document.getElementById('evh_medico').value = currentUser ? currentUser.titulo + ' — ' + currentUser.mp : '';
   document.getElementById('evh_editor').innerHTML = '';
   document.getElementById('evh_indicaciones').innerHTML = '';
+  // Resetear botón por si quedó en estado "Guardando..."
+  const btn = document.querySelector('button[onclick="guardarEvolucionHistorica()"]');
+  if(btn) { btn.textContent = '💾 Guardar e insertar'; btn.disabled = false; }
   modal.style.display = 'flex';
   setTimeout(() => document.getElementById('evh_fecha').focus(), 100);
 }
 
 function cerrarEvolucionHistorica() {
   document.getElementById('modal_evol_historica').style.display = 'none';
+  const btn = document.querySelector('button[onclick="guardarEvolucionHistorica()"]');
+  if(btn) { btn.textContent = '💾 Guardar e insertar'; btn.disabled = false; }
 }
 
 async function guardarEvolucionHistorica() {
