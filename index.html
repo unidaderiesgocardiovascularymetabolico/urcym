@@ -6426,7 +6426,7 @@ function openCtxMenu(e,key){
   menu.id='ag-ctx-menu';
   menu.style.cssText='position:fixed;z-index:20000;background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:4px 0;min-width:160px;box-shadow:0 4px 16px rgba(0,0,0,.12);font-family:inherit;font-size:13px;';
 
-  var asistio=t.asistencia==='asistio';
+  var pago=t.pago==='pagado';
   var ausente=t.asistencia==='ausente';
 
   function mkItem(label,color,handler){
@@ -6440,9 +6440,9 @@ function openCtxMenu(e,key){
   }
 
   menu.appendChild(mkItem(
-    (asistio?'<span style="color:#1D9E75">✓</span> ':'<span style="opacity:.3">○</span> ')+'Asistió',
-    asistio?'#1D9E75':'#374151',
-    function(){turnos[key].asistencia=asistio?null:'asistio';saveLocal();renderGrid();}
+    (pago?'<span style="color:#1D9E75">✓</span> ':'<span style="opacity:.3">○</span> ')+'Pagó total',
+    pago?'#1D9E75':'#374151',
+    function(){turnos[key].pago=pago?'sin-seña':'pagado';saveLocal();renderGrid();}
   ));
   menu.appendChild(mkItem(
     (ausente?'<span style="color:#E24B4A">✕</span> ':'<span style="opacity:.3">○</span> ')+'Ausente',
@@ -6485,6 +6485,7 @@ function isBlockActiveOnDate(b, dateStr){
   if(b.day!==di)return false; // día de semana no coincide
   var freq=b.freq||'semanal';
   if(freq==='semanal')return true; // siempre aplica ese día de semana
+  if(freq==='unico'){return b.startDate===ds;} // solo ese día exacto
   if(!b.startDate)return true; // sin fecha de inicio → aplica siempre
   var startD=parseLocalDate(b.startDate);
   var checkD=parseLocalDate(dateStr);
@@ -6940,7 +6941,6 @@ function openReprog(key){
   var t=turnos[key];if(!t)return;
   var prof=t.prof;
   var slots=PROF_45.indexOf(prof)>=0?SLOTS_45:SLOTS_30;
-  var base=getMonday(addDays(new Date(),7));
 
   document.getElementById('ag-reprog-info').textContent=
     'Turno de '+PROF_LBL[prof]+' — '+(t.paciente||'Paciente')+'. Elegí el nuevo horario:';
@@ -6948,61 +6948,74 @@ function openReprog(key){
   var container=document.getElementById('ag-reprog-days');
   container.innerHTML='';
 
-  for(var di=0;di<6;di++){
-    var d=addDays(base,di);
-    var ds=kd(d);
-    var slotsDisp=slots.filter(function(tm){
-      return getBlocksAt(dispBlocks,ds,tm,prof).length>0&&
-             !getBlocksAt(nlBlocks,ds,tm,prof).length;
-    });
-    if(!slotsDisp.length)continue;
-
-    var dayDiv=document.createElement('div');
-    dayDiv.className='ag-reprog-day';
-    var head=document.createElement('div');
-    head.className='ag-reprog-day-head';
-    var pd=parseLocalDate(ds);
-    head.textContent=DIAS_FULL[di]+' '+pd.getDate()+'/'+(pd.getMonth()+1);
-    dayDiv.appendChild(head);
-
-    var slotsWrap=document.createElement('div');
-    slotsWrap.className='ag-reprog-slots';
-    slotsDisp.forEach(function(tm){
-      var btn=document.createElement('button');
-      btn.className='ag-reprog-slot';
-      var occupied=Object.values(turnos).find(function(tv){
-        // FIX: buscar turno ocupado para el mismo prof en la misma fecha+hora
-        return turnos[ds+'_'+tm+'_'+prof]||
-               // compatibilidad con keys viejas sin prof
-               (turnos[ds+'_'+tm]&&turnos[ds+'_'+tm].prof===prof);
-      });
-      var occupiedKey=turnos[ds+'_'+tm+'_'+prof]?ds+'_'+tm+'_'+prof:
-                      (turnos[ds+'_'+tm]&&turnos[ds+'_'+tm].prof===prof?ds+'_'+tm:null);
-      if(occupiedKey){
-        btn.classList.add('ocupado');
-        btn.title='Ocupado: '+(turnos[occupiedKey]&&turnos[occupiedKey].paciente||'—');
-      } else {
-        (function(ds2,tm2){
-          btn.addEventListener('click',function(){
-            var newKey=ds2+'_'+tm2+'_'+prof;
-            var old=Object.assign({},turnos[key]);
-            delete turnos[key];
-            turnos[newKey]=old;
-            saveLocal();
-            document.getElementById('ag-reprog-bg').style.display='none';
-            renderGrid();
-          });
-        })(ds,tm);
-      }
-      btn.textContent=tm;
-      slotsWrap.appendChild(btn);
-    });
-    dayDiv.appendChild(slotsWrap);
-    container.appendChild(dayDiv);
+  function buildSlotBtn(ds,tm,prof,key){
+    var btn=document.createElement('button');
+    btn.className='ag-reprog-slot';
+    var occupiedKey=turnos[ds+'_'+tm+'_'+prof]?ds+'_'+tm+'_'+prof:
+                    (turnos[ds+'_'+tm]&&turnos[ds+'_'+tm].prof===prof?ds+'_'+tm:null);
+    if(occupiedKey){
+      btn.classList.add('ocupado');
+      btn.title='Ocupado: '+(turnos[occupiedKey]&&turnos[occupiedKey].paciente||'—');
+    } else {
+      (function(ds2,tm2){
+        btn.addEventListener('click',function(){
+          var newKey=ds2+'_'+tm2+'_'+prof;
+          var old=Object.assign({},turnos[key]);
+          delete turnos[key];
+          turnos[newKey]=old;
+          saveLocal();
+          document.getElementById('ag-reprog-bg').style.display='none';
+          renderGrid();
+        });
+      })(ds,tm);
+    }
+    btn.textContent=tm;
+    return btn;
   }
 
+  function buildWeekSection(weekBase,sectionLabel){
+    var secItems=[];
+    for(var di=0;di<6;di++){
+      var d=addDays(weekBase,di);
+      var ds=kd(d);
+      if(ds<kd(new Date()))continue;
+      var slotsDisp=slots.filter(function(tm){
+        return getBlocksAt(dispBlocks,ds,tm,prof).length>0&&
+               !getBlocksAt(nlBlocks,ds,tm,prof).length;
+      });
+      if(!slotsDisp.length)continue;
+      var dayDiv=document.createElement('div');
+      dayDiv.className='ag-reprog-day';
+      var head=document.createElement('div');
+      head.className='ag-reprog-day-head';
+      var pd=parseLocalDate(ds);
+      head.textContent=DIAS_FULL[di]+' '+pd.getDate()+'/'+(pd.getMonth()+1);
+      dayDiv.appendChild(head);
+      var slotsWrap=document.createElement('div');
+      slotsWrap.className='ag-reprog-slots';
+      slotsDisp.forEach(function(tm){
+        slotsWrap.appendChild(buildSlotBtn(ds,tm,prof,key));
+      });
+      dayDiv.appendChild(slotsWrap);
+      secItems.push(dayDiv);
+    }
+    if(!secItems.length)return null;
+    var wrap=document.createElement('div');
+    var secHead=document.createElement('div');
+    secHead.style.cssText='font-size:11px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:#185FA5;background:#E6F1FB;padding:5px 10px;border-radius:6px;margin-bottom:8px;margin-top:4px;';
+    secHead.textContent=sectionLabel;
+    wrap.appendChild(secHead);
+    secItems.forEach(function(el){wrap.appendChild(el);});
+    return wrap;
+  }
+
+  var thisWeek=buildWeekSection(currentMonday,'Turnos esta semana');
+  var nextWeek=buildWeekSection(getMonday(addDays(new Date(),7)),'Turnos próximos');
+  if(thisWeek)container.appendChild(thisWeek);
+  if(nextWeek)container.appendChild(nextWeek);
+
   if(!container.children.length){
-    container.innerHTML='<p style="font-size:12px;color:#9ca3af;text-align:center;padding:1rem 0;">No hay disponibilidad para la próxima semana.</p>';
+    container.innerHTML='<p style="font-size:12px;color:#9ca3af;text-align:center;padding:1rem 0;">No hay disponibilidad en las próximas semanas.</p>';
   }
   document.getElementById('ag-reprog-bg').style.display='flex';
 }
@@ -7058,8 +7071,8 @@ document.getElementById('ag-btn-delete').addEventListener('click',function(){
 // Formato interno guardado: {prof, day, from, to, label, freq}
 // freq: 'semanal'(default)|'quincenal'|'mensual'
 
-var FREQ_OPTS=['semanal','quincenal','mensual'];
-var FREQ_LBL={semanal:'Semanal',quincenal:'Quincenal',mensual:'Mensual'};
+var FREQ_OPTS=['semanal','quincenal','mensual','unico'];
+var FREQ_LBL={semanal:'Semanal',quincenal:'Quincenal',mensual:'Mensual',unico:'Solo este día'};
 var PROF_COLOR={BG:'bg',OB:'ob',LA:'la',SA:'sa'};
 
 // ─── Genérico: render de la barra de pills y la lista de bloques ───
@@ -7105,9 +7118,10 @@ function initCfgV2(modalId,pillsId,listId,profSet,tmpArr,defaultProf){
         +'<input type="time" data-ri="'+ri+'" data-f="to" value="'+b.to+'">'
         +'<input type="text" data-ri="'+ri+'" data-f="label" value="'+esc(b.label||'')+'" placeholder="Etiqueta">'
         +'<select data-ri="'+ri+'" data-f="freq">'+freqOpts+'</select>';
-      if(isNL){
-        html+='<input type="date" data-ri="'+ri+'" data-f="startDate" value="'+(b.startDate||'')+'" title="Fecha de inicio de la frecuencia" style="font-size:11px;">';
-      }
+      // Mostrar fecha para NL e inst; para 'unico' es el día exacto, para otros es inicio de frecuencia
+      var dateTitle=(b.freq==='unico'?'Fecha del bloque':'Fecha de inicio de la frecuencia');
+      var dateRequired=(b.freq==='unico'?' required':'');
+      html+='<input type="date" data-ri="'+ri+'" data-f="startDate" value="'+(b.startDate||'')+'" title="'+dateTitle+'" style="font-size:11px;'+( (b.freq||'semanal')==='unico'?'border:1.5px solid #185FA5;':'')+'">'
       html+='<button class="ag-cfg-v2-del" data-ri="'+ri+'" title="Eliminar">&#10005;</button>';
       row.innerHTML=html;
       list.appendChild(row);
@@ -7137,7 +7151,7 @@ function initCfgV2(modalId,pillsId,listId,profSet,tmpArr,defaultProf){
   var newAdd=addBtn.cloneNode(true);
   addBtn.parentNode.replaceChild(newAdd,addBtn);
   newAdd.addEventListener('click',function(){
-    tmpArr.push({prof:selectedProf,day:0,from:'09:00',to:'12:00',label:'',freq:'semanal'});
+    tmpArr.push({prof:selectedProf,day:0,from:'09:00',to:'12:00',label:'',freq:'semanal',startDate:''});
     renderRows();
   });
 }
