@@ -6899,22 +6899,29 @@ function renderGrid(){
           pl.textContent=PROF_LBL[p]||p;
           el.appendChild(pl);
         }
-        // ── click izq = agregar turno | click der = bloquear/desbloquear ──
+        // ── click izq: si libre → modal; si ofrecido → popup opciones
+        //    click der: toggle ofrecido (gris) ──
         (function(el2,ds2,tm2,prof2){
+          var offKey=ds2+'_'+tm2+'_'+prof2;
+          if(offeredSlots[offKey]) el2.classList.add('ofrecido');
           el2.addEventListener('click',function(e){
             e.stopPropagation();
-            openModal(ds2,tm2,null,prof2);
+            if(offeredSlots[offKey]){
+              openOfferedPopup(e,ds2,tm2,prof2);
+            } else {
+              openModal(ds2,tm2,null,prof2);
+            }
           });
           el2.addEventListener('contextmenu',function(e){
             e.preventDefault();e.stopPropagation();
-            var bk=ds2+'_'+tm2+'_'+prof2;
-            if(blockedSlots[bk]){
-              delete blockedSlots[bk];
+            if(offeredSlots[offKey]){
+              delete offeredSlots[offKey];
+              el2.classList.remove('ofrecido');
             } else {
-              blockedSlots[bk]=true;
+              offeredSlots[offKey]=true;
+              el2.classList.add('ofrecido');
             }
-            saveBlocked();
-            renderGrid();
+            saveOffered();
           });
         })(el,ds,item.tm,p);
         col.appendChild(el);
