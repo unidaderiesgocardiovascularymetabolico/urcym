@@ -917,7 +917,8 @@
               <input type="time" id="ag-f-extra-time" style="border:1px solid #d1d5db;border-radius:6px;padding:4px 7px;font-size:13px;display:none;width:100px;border-color:#E59500;">
               <span style="margin-left:12px;display:inline-flex;align-items:center;gap:4px;">
                 <input type="checkbox" id="ag-f-video" style="width:14px;height:14px;accent-color:#7B3FC4;cursor:pointer;">
-                <label for="ag-f-video" style="font-size:11px;color:#6b7280;cursor:pointer;margin:0;">📹 Videollamada</label>
+                <label for="ag-f-video" style="font-size:11px;color:#6b7280;cursor:pointer;margin:0;">📹 Videollamada — horario libre:</label>
+                <input type="time" id="ag-f-video-time" style="border:1px solid #d1d5db;border-radius:6px;padding:4px 7px;font-size:13px;display:none;width:100px;border-color:#7B3FC4;">
               </span>
             </div>
           </div>
@@ -965,16 +966,13 @@
               </div>
             </div>
           </div>
-          <div class="ag-form-row" id="ag-f-prof-row" style="display:none"><label>Profesional</label>
-            <select id="ag-f-prof">
+          <div class="ag-form-row" id="ag-f-prof-row"><label>Profesional</label>
+            <select id="ag-f-prof" style="border:1px solid #d1d5db;border-radius:6px;padding:6px 8px;font-size:13px;background:#fff;color:#374151;width:100%;">
               <option value="BG">Dra. Bárbara Guerrero</option>
               <option value="OB">Dr. Omar Bertani</option>
               <option value="LA">Dra. López Armaretti</option>
               <option value="SA">Dra. Saracho Ana</option>
             </select>
-          </div>
-          <div class="ag-form-row" id="ag-f-prof-display-row"><label>Profesional</label>
-            <div id="ag-f-prof-badge" style="font-size:13px;color:#374151;font-weight:600;padding:6px 0;"></div>
           </div>
           <div class="ag-form-row"><label>Estado</label>
             <select id="ag-f-estado">
@@ -7030,7 +7028,13 @@ function openModal(ds,time,key,forcedProf){
     exTm.value=isExtra?(pendingTime||''):'';
   }
   var vidCb=document.getElementById('ag-f-video');
-  if(vidCb) vidCb.checked=!!(key&&turnos[key]&&turnos[key].video);
+  var isVid=!!(key&&turnos[key]&&turnos[key].video);
+  if(vidCb) vidCb.checked=isVid;
+  var vidTm2=document.getElementById('ag-f-video-time');
+  if(vidTm2){
+    vidTm2.style.display=isVid?'inline-block':'none';
+    vidTm2.value=isVid?(pendingTime||''):'';
+  }
   // FIX: el prof se determina en este orden estricto:
   //   1. turno existente (edición)
   //   2. forcedProf (bloque clickeado — NUNCA sobreescribir con filtro global)
@@ -7078,9 +7082,11 @@ function openModal(ds,time,key,forcedProf){
     document.getElementById('ag-f-pago').value='sin-seña';
     document.getElementById('ag-f-notas').value='';
   }
-  // Solo mostrar el badge del profesional, NO el selector
-  var profBadge=document.getElementById('ag-f-prof-badge');
-  if(profBadge){profBadge.textContent=PROF_FULL[prof]||prof;}
+  // Mostrar selector de profesional con valor correcto
+  var profSel=document.getElementById('ag-f-prof');
+  if(profSel) profSel.value=prof;
+  var profRow=document.getElementById('ag-f-prof-row');
+  if(profRow) profRow.style.display='';
   document.getElementById('ag-modal-bg').style.display='flex';
   setTimeout(function(){document.getElementById('ag-f-paciente').focus();},50);
 }
@@ -7218,11 +7224,17 @@ document.getElementById('ag-btn-save').addEventListener('click',function(){
   // Si es turno extra, usar el horario libre ingresado
   var exCb=document.getElementById('ag-f-extra');
   var exTm=document.getElementById('ag-f-extra-time');
+  var vidCb3=document.getElementById('ag-f-video');
+  var vidTm3=document.getElementById('ag-f-video-time');
+  var isVideo3=vidCb3&&vidCb3.checked;
   var isExtra=exCb&&exCb.checked;
   var newTime;
   if(isExtra){
     newTime=exTm&&exTm.value?exTm.value:(document.getElementById('ag-f-time').value||pendingTime);
     if(!newTime){alert('Ingresá el horario del turno extra.');return;}
+  } else if(isVideo3){
+    newTime=vidTm3&&vidTm3.value?vidTm3.value:(document.getElementById('ag-f-time').value||pendingTime);
+    if(!newTime){alert('Ingresá el horario de la videollamada.');return;}
   } else {
     newTime=document.getElementById('ag-f-time').value||pendingTime;
   }
@@ -7235,7 +7247,7 @@ document.getElementById('ag-btn-save').addEventListener('click',function(){
   if(oldKey&&oldKey!==newKey){delete turnos[oldKey];}
   // Validar disponibilidad solo si NO es turno extra
   var ds=newDate;
-  if(!isExtra){
+  if(!isExtra&&!isVideo3){
     var inDisp=dispBlocks.some(function(b){
       return b.prof===profVal&&isBlockActiveOnDate(b,ds)&&t2m(b.from)<=t2m(newTime)&&t2m(newTime)<t2m(b.to);
     });
@@ -7248,8 +7260,6 @@ document.getElementById('ag-btn-save').addEventListener('click',function(){
   var pagoVal=document.getElementById('ag-f-pago').value;
   if(senaVal&&pagoVal==='sin-seña')pagoVal='señado';
   if(!senaVal&&pagoVal==='señado')pagoVal='sin-seña';
-  var vidCb2=document.getElementById('ag-f-video');
-  var isVideo=vidCb2&&vidCb2.checked;
   turnos[newKey]={
     paciente:document.getElementById('ag-f-paciente').value.trim(),
     prof:profVal,
@@ -7259,7 +7269,7 @@ document.getElementById('ag-btn-save').addEventListener('click',function(){
     notas:document.getElementById('ag-f-notas').value,
     asistencia:prevAsist,
     extra:isExtra?true:undefined,
-    video:isVideo?true:undefined
+    video:isVideo3?true:undefined
   };
   saveLocal();document.getElementById('ag-modal-bg').style.display='none';editKey=null;renderGrid();
 });
@@ -7275,6 +7285,18 @@ document.addEventListener('change',function(e){
     } else {
       exTm.style.display='none';
       exTm.value='';
+    }
+  }
+  if(e.target.id==='ag-f-video'){
+    var vidTm=document.getElementById('ag-f-video-time');
+    var sel2=document.getElementById('ag-f-time');
+    if(e.target.checked){
+      vidTm.style.display='inline-block';
+      vidTm.value=sel2.value||'';
+      vidTm.focus();
+    } else {
+      vidTm.style.display='none';
+      vidTm.value='';
     }
   }
 });
