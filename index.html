@@ -6727,16 +6727,36 @@ function renderGrid(){
     });
 
     // Items ocupados (turnos asignados)
+    // Pre-calcular próximos turnos por prof para duración de extras
+    var turnosPorProf={};
     Object.keys(turnos).forEach(function(k){
       var parts=k.split('_');
-      // FIX: key format es fecha_hora_PROF (3 partes) o fecha_hora (2 partes, legacy)
+      var tDate=parts[0],tTime=parts[1];
+      if(tDate!==ds)return;
+      var t=turnos[k];
+      if(!turnosPorProf[t.prof])turnosPorProf[t.prof]=[];
+      turnosPorProf[t.prof].push(t2m(tTime));
+    });
+    Object.keys(turnosPorProf).forEach(function(p){turnosPorProf[p].sort(function(a,b){return a-b;});});
+
+    Object.keys(turnos).forEach(function(k){
+      var parts=k.split('_');
       var tDate=parts[0];
       var tTime=parts[1];
       if(tDate!==ds)return;
       var t=turnos[k];
       if(pf&&t.prof!==pf)return;
-      var dur=PROF_45.indexOf(t.prof)>=0?45:30;
+      var defaultDur=PROF_45.indexOf(t.prof)>=0?45:30;
       var startM=t2m(tTime);
+      var dur=defaultDur;
+      // Para turnos extra: usar distancia al próximo turno del mismo prof (mínimo 15 min)
+      if(t.extra){
+        var lista=turnosPorProf[t.prof]||[];
+        var next=null;
+        for(var ii=0;ii<lista.length;ii++){if(lista[ii]>startM){next=lista[ii];break;}}
+        if(next!==null) dur=Math.max(15,next-startM);
+        else dur=defaultDur;
+      }
       allItems.push({prof:t.prof,tm:tTime,startM:startM,endM:startM+dur,dur:dur,tipo:'turno',key:k,turno:t});
     });
 
