@@ -578,6 +578,7 @@
 #agenda-app .ag-turno.sa{background:#FAEEDA;border-left:3px solid #EF9F27;color:#633806;}
 #agenda-app .ag-turno.sa .ag-badge{background:#FAC775;color:#412402;}
 #agenda-app .ag-turno.cancelado{opacity:.55;text-decoration:line-through;}
+#agenda-app .ag-turno.ag-turno-extra{border:1.5px dashed #E59500 !important;box-shadow:inset 2px 0 0 #E59500;}
 /* Leyenda */
 #agenda-app .ag-legend{display:flex;gap:12px;margin-bottom:10px;flex-wrap:wrap;align-items:center;}
 #agenda-app .ag-legend-item{display:flex;align-items:center;gap:5px;font-size:11px;color:#6b7280;}
@@ -902,10 +903,17 @@
       <div id="ag-modal-bg" class="ag-modal-bg" style="display:none">
         <div class="ag-modal" role="dialog" aria-modal="true">
           <h3 id="ag-modal-title">Turno</h3>
-          <div class="ag-form-row"><label>Fecha y hora</label><div style="display:flex;align-items:center;gap:8px;">
-            <select id="ag-f-date" style="border:1px solid #d1d5db;border-radius:6px;padding:5px 8px;font-size:13px;color:#374151;background:#fff;flex:1;"></select>
-            <select id="ag-f-time" style="border:1px solid #d1d5db;border-radius:6px;padding:5px 8px;font-size:13px;color:#374151;background:#fff;width:110px;"></select>
-          </div></div>
+          <div class="ag-form-row"><label>Fecha y hora</label>
+            <div style="display:flex;align-items:center;gap:8px;">
+              <select id="ag-f-date" style="border:1px solid #d1d5db;border-radius:6px;padding:5px 8px;font-size:13px;color:#374151;background:#fff;flex:1;"></select>
+              <select id="ag-f-time" style="border:1px solid #d1d5db;border-radius:6px;padding:5px 8px;font-size:13px;color:#374151;background:#fff;width:110px;"></select>
+            </div>
+            <div style="display:flex;align-items:center;gap:6px;margin-top:6px;">
+              <input type="checkbox" id="ag-f-extra" style="width:14px;height:14px;accent-color:#E59500;cursor:pointer;">
+              <label for="ag-f-extra" style="font-size:11px;color:#6b7280;cursor:pointer;margin:0;">Turno extra — horario libre:</label>
+              <input type="time" id="ag-f-extra-time" style="border:1px solid #d1d5db;border-radius:6px;padding:4px 7px;font-size:13px;display:none;width:100px;border-color:#E59500;">
+            </div>
+          </div>
           <div class="ag-form-row" style="position:relative">
             <label>Paciente</label>
             <input type="text" id="ag-f-paciente" placeholder="Buscar por apellido, nombre o DNI..." autocomplete="off" style="width:100%">
@@ -6820,7 +6828,7 @@ function renderGrid(){
 function makeTurnoEl(t,key,hPx){
   var el=document.createElement('div');
   var pc=PROF_CLS[t.prof]||'bg';
-  el.className='ag-turno '+pc+(t.estado==='cancelado'?' cancelado':'');
+  el.className='ag-turno '+pc+(t.estado==='cancelado'?' cancelado':'')+(t.extra?' ag-turno-extra':'');
   var dc=t.pago||'sin-seña';
 
   var nameColor='';
@@ -6959,12 +6967,20 @@ function buildTimeOptions(prof,ds,selectedTime){
 function openModal(ds,time,key,forcedProf){
   editKey=key;
   if(key&&turnos[key]){
-    // FIX: key puede ser fecha_hora (legacy) o fecha_hora_PROF (nuevo formato)
     var kparts=key.split('_');
     pendingDate=kparts[0];pendingTime=kparts[1];
     ds=pendingDate;time=pendingTime;
   }
   else{pendingDate=ds;pendingTime=time;}
+  // Reset extra turno state
+  var exCb=document.getElementById('ag-f-extra');
+  var exTm=document.getElementById('ag-f-extra-time');
+  var isExtra=key&&turnos[key]&&turnos[key].extra;
+  if(exCb){exCb.checked=!!isExtra;}
+  if(exTm){
+    exTm.style.display=isExtra?'inline-block':'none';
+    exTm.value=isExtra?(pendingTime||''):'';
+  }
   // FIX: el prof se determina en este orden estricto:
   //   1. turno existente (edición)
   //   2. forcedProf (bloque clickeado — NUNCA sobreescribir con filtro global)
@@ -7149,26 +7165,34 @@ document.getElementById('ag-btn-cancel').addEventListener('click',function(){doc
 document.getElementById('ag-modal-bg').addEventListener('click',function(e){if(e.target===this){document.getElementById('ag-modal-bg').style.display='none';editKey=null;}});
 document.getElementById('ag-btn-save').addEventListener('click',function(){
   var newDate=document.getElementById('ag-f-date').value||pendingDate;
-  var newTime=document.getElementById('ag-f-time').value||pendingTime;
-  // FIX: profVal tomado SIEMPRE del formulario, nunca del filtro global ni recalculado
+  // Si es turno extra, usar el horario libre ingresado
+  var exCb=document.getElementById('ag-f-extra');
+  var exTm=document.getElementById('ag-f-extra-time');
+  var isExtra=exCb&&exCb.checked;
+  var newTime;
+  if(isExtra){
+    newTime=exTm&&exTm.value?exTm.value:(document.getElementById('ag-f-time').value||pendingTime);
+    if(!newTime){alert('Ingresá el horario del turno extra.');return;}
+  } else {
+    newTime=document.getElementById('ag-f-time').value||pendingTime;
+  }
   var profVal=document.getElementById('ag-f-prof').value;
   if(!profVal){alert('Error: no hay profesional seleccionado.');return;}
   var oldKey=editKey;
-  // FIX: la key incluye prof para evitar colisiones entre profesionales en el mismo horario
   var newKey=newDate+'_'+newTime+'_'+profVal;
-  // Compatibilidad con keys viejas sin prof (formato: fecha_hora)
   if(oldKey&&oldKey!==newKey&&turnos[newKey]){alert('Ya existe un turno para '+PROF_FULL[profVal]+' en ese horario.');return;}
   var prevAsist=(oldKey&&turnos[oldKey]&&turnos[oldKey].asistencia)||null;
   if(oldKey&&oldKey!==newKey){delete turnos[oldKey];}
-  // Validar que el horario pertenece a la disponibilidad del prof seleccionado
+  // Validar disponibilidad solo si NO es turno extra
   var ds=newDate;
-  var slots=PROF_45.indexOf(profVal)>=0?SLOTS_45:SLOTS_30;
-  var inDisp=dispBlocks.some(function(b){
-    return b.prof===profVal&&isBlockActiveOnDate(b,ds)&&t2m(b.from)<=t2m(newTime)&&t2m(newTime)<t2m(b.to);
-  });
-  var hasAnyDisp=dispBlocks.some(function(b){return b.prof===profVal;});
-  if(hasAnyDisp&&!inDisp){
-    if(!confirm('⚠️ Atención: el horario '+newTime+' del '+new Date(ds+'T12:00:00').toLocaleDateString('es-AR',{weekday:'long',day:'numeric',month:'long'})+' está fuera de la disponibilidad configurada para '+PROF_FULL[profVal]+'.\n\n¿Guardar igualmente?'))return;
+  if(!isExtra){
+    var inDisp=dispBlocks.some(function(b){
+      return b.prof===profVal&&isBlockActiveOnDate(b,ds)&&t2m(b.from)<=t2m(newTime)&&t2m(newTime)<t2m(b.to);
+    });
+    var hasAnyDisp=dispBlocks.some(function(b){return b.prof===profVal;});
+    if(hasAnyDisp&&!inDisp){
+      if(!confirm('⚠️ Atención: el horario '+newTime+' del '+new Date(ds+'T12:00:00').toLocaleDateString('es-AR',{weekday:'long',day:'numeric',month:'long'})+' está fuera de la disponibilidad configurada para '+PROF_FULL[profVal]+'.\n\n¿Guardar igualmente?'))return;
+    }
   }
   var senaVal=document.getElementById('ag-f-sena').value.trim();
   var pagoVal=document.getElementById('ag-f-pago').value;
@@ -7181,10 +7205,27 @@ document.getElementById('ag-btn-save').addEventListener('click',function(){
     sena:senaVal,
     pago:pagoVal,
     notas:document.getElementById('ag-f-notas').value,
-    asistencia:prevAsist
+    asistencia:prevAsist,
+    extra:isExtra?true:undefined
   };
   saveLocal();document.getElementById('ag-modal-bg').style.display='none';editKey=null;renderGrid();
 });
+// Turno extra: mostrar/ocultar input de horario libre
+document.addEventListener('change',function(e){
+  if(e.target.id==='ag-f-extra'){
+    var exTm=document.getElementById('ag-f-extra-time');
+    var sel=document.getElementById('ag-f-time');
+    if(e.target.checked){
+      exTm.style.display='inline-block';
+      exTm.value=sel.value||'';
+      exTm.focus();
+    } else {
+      exTm.style.display='none';
+      exTm.value='';
+    }
+  }
+});
+
 document.getElementById('ag-btn-delete').addEventListener('click',function(){
   if(editKey&&turnos[editKey]){delete turnos[editKey];saveLocal();document.getElementById('ag-modal-bg').style.display='none';editKey=null;renderGrid();}
 });
