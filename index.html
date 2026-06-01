@@ -700,6 +700,29 @@
 #agenda-app .ag-disp-slot .ag-slot-prof{font-size:8px;font-weight:600;line-height:1.2;opacity:.8;pointer-events:none;}
 #agenda-app .ag-disp-slot.ag-slot-narrow .ag-slot-time{font-size:8px;}
 #agenda-app .ag-disp-slot.ag-slot-narrow .ag-slot-prof{font-size:7px;}
+
+/* ── Slot ofrecido ── */
+#agenda-app .ag-disp-slot.ofrecido{
+  background:#e5e7eb !important;
+  border-color:#9ca3af !important;
+  color:#6b7280 !important;
+  opacity:.85;
+}
+#agenda-app .ag-disp-slot.ofrecido .ag-slot-time{text-decoration:line-through;opacity:.7;}
+/* Popup opciones slot ofrecido */
+.ag-offered-popup{
+  position:fixed;z-index:9999;background:white;border-radius:14px;
+  box-shadow:0 8px 32px rgba(0,0,0,.18);border:1.5px solid #e5e7eb;
+  padding:10px;min-width:190px;animation:fadeUp .15s ease;
+}
+.ag-offered-popup-title{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+  color:#6b7280;padding:4px 8px 8px;border-bottom:1px solid #f3f4f6;margin-bottom:6px;}
+.ag-offered-popup-btn{display:flex;align-items:center;gap:8px;width:100%;padding:8px 10px;
+  border:none;background:none;border-radius:9px;font-size:13px;font-family:inherit;
+  cursor:pointer;color:#1a2535;text-align:left;transition:background .15s;}
+.ag-offered-popup-btn:hover{background:#f3f4f6;}
+.ag-offered-popup-btn.liberar{color:#e25247;}
+.ag-offered-popup-btn.liberar:hover{background:#fdecea;}
 </style>
 </head>
 <body>
@@ -6485,6 +6508,58 @@ var currentMonday=getMonday(new Date());
 var editKey=null, pendingDate=null, pendingTime=null;
 var todayStr=kd(new Date());
 
+// ── Slots ofrecidos ────────────────────────────────────────────────────────
+var LS_OFFERED='urcym_ag_offered';
+var offeredSlots={};  // { "2026-06-01_09:00_BG": true, ... }
+function loadOffered(){try{var s=localStorage.getItem(LS_OFFERED);if(s)offeredSlots=JSON.parse(s);}catch(e){}}
+function saveOffered(){try{localStorage.setItem(LS_OFFERED,JSON.stringify(offeredSlots));}catch(e){}}
+loadOffered();
+
+var _offeredPopup=null;
+function closeOfferedPopup(){if(_offeredPopup){_offeredPopup.remove();_offeredPopup=null;}}
+document.addEventListener('click',function(e){
+  if(_offeredPopup&&!_offeredPopup.contains(e.target))closeOfferedPopup();
+});
+
+function openOfferedPopup(e,ds,tm,prof){
+  e.stopPropagation();
+  closeOfferedPopup();
+  var popup=document.createElement('div');
+  popup.className='ag-offered-popup';
+  var title=document.createElement('div');
+  title.className='ag-offered-popup-title';
+  title.textContent=tm+' · '+(PROF_LBL[prof]||prof);
+  popup.appendChild(title);
+
+  var btnAsignar=document.createElement('button');
+  btnAsignar.className='ag-offered-popup-btn';
+  btnAsignar.innerHTML='📋 Asignar turno';
+  btnAsignar.onclick=function(){closeOfferedPopup();openModal(ds,tm,null,prof);};
+  popup.appendChild(btnAsignar);
+
+  var btnLiberar=document.createElement('button');
+  btnLiberar.className='ag-offered-popup-btn liberar';
+  btnLiberar.innerHTML='✕ Liberar slot';
+  btnLiberar.onclick=function(){
+    var key=ds+'_'+tm+'_'+prof;
+    delete offeredSlots[key];
+    saveOffered();
+    closeOfferedPopup();
+    renderGrid();
+  };
+  popup.appendChild(btnLiberar);
+
+  document.body.appendChild(popup);
+  _offeredPopup=popup;
+
+  // Posición: junto al cursor pero dentro de la pantalla
+  var x=e.clientX+8, y=e.clientY+8;
+  popup.style.left=x+'px'; popup.style.top=y+'px';
+  var r=popup.getBoundingClientRect();
+  if(r.right>window.innerWidth-8) popup.style.left=(window.innerWidth-r.width-8)+'px';
+  if(r.bottom>window.innerHeight-8) popup.style.top=(e.clientY-r.height-4)+'px';
+}
+
 // ── Menú contextual ────────────────────────────────────────────────────────
 var ctxMenu=null;
 function closeCtxMenu(){if(ctxMenu){ctxMenu.remove();ctxMenu=null;}}
@@ -6836,12 +6911,23 @@ function renderGrid(){
           pl.textContent=PROF_LBL[p]||p;
           el.appendChild(pl);
         }
-        (function(ds2,tm2,prof2){
-          el.addEventListener('click',function(e){
+        // ── Lógica ofrecido: 1er click = gris "ofrecido", 2do click = popup ──
+        (function(el2,ds2,tm2,prof2){
+          var offKey=ds2+'_'+tm2+'_'+prof2;
+          if(offeredSlots[offKey]) el2.classList.add('ofrecido');
+          el2.addEventListener('click',function(e){
             e.stopPropagation();
-            openModal(ds2,tm2,null,prof2);
+            if(offeredSlots[offKey]){
+              // Ya ofrecido → mostrar popup
+              openOfferedPopup(e,ds2,tm2,prof2);
+            } else {
+              // Primer click → marcar ofrecido
+              offeredSlots[offKey]=true;
+              saveOffered();
+              el2.classList.add('ofrecido');
+            }
           });
-        })(ds,item.tm,p);
+        })(el,ds,item.tm,p);
         col.appendChild(el);
 
       } else {
