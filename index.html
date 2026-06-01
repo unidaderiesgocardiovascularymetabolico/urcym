@@ -6762,11 +6762,10 @@ function renderGrid(){
       allItems.push({prof:t.prof,tm:tTime,startM:startM,endM:startM+dur,dur:dur,tipo:'turno',key:k,turno:t});
     });
 
-    // Paso 2: greedy column assignment — POR PROFESIONAL para que extras no creen columnas separadas
+    // Paso 2: por cada prof, ordenar items y recortar endM al inicio del siguiente
+    // Esto garantiza que nunca haya solapamiento y cada item ocupa exactamente su hueco
     allItems.sort(function(a,b){return a.startM-b.startM||(a.prof<b.prof?-1:1);});
-    var uLayout=[];
 
-    // Agrupar items por prof y calcular columnas dentro de cada grupo
     var profGroups={};
     allItems.forEach(function(item){
       if(!profGroups[item.prof])profGroups[item.prof]=[];
@@ -6774,47 +6773,34 @@ function renderGrid(){
     });
 
     Object.keys(profGroups).forEach(function(p){
-      var grupo=profGroups[p];
-      grupo.sort(function(a,b){return a.startM-b.startM;});
-      var layoutProf=[];
-      grupo.forEach(function(item){
-        var ov=layoutProf.filter(function(x){return x.endM>item.startM&&x.startM<item.endM;});
-        var used=ov.map(function(x){return x.col;});
-        var ci=0;
-        while(used.indexOf(ci)>=0)ci++;
-        var li={prof:item.prof,tm:item.tm,startM:item.startM,endM:item.endM,
-                dur:item.dur,tipo:item.tipo,key:item.key,turno:item.turno,col:ci};
-        layoutProf.push(li);
-        uLayout.push(li);
-      });
-      // totalCols dentro del grupo del prof
-      layoutProf.forEach(function(item){
-        var ov=layoutProf.filter(function(x){return x.endM>item.startM&&x.startM<item.endM;});
-        item.totalCols=Math.max.apply(null,ov.map(function(x){return x.col+1;}));
-      });
+      var g=profGroups[p];
+      g.sort(function(a,b){return a.startM-b.startM;});
+      // Recortar endM de cada item al startM del siguiente (sin solapamiento)
+      for(var i=0;i<g.length-1;i++){
+        if(g[i].endM>g[i+1].startM) g[i].endM=g[i+1].startM;
+      }
     });
 
-    // Paso 4: renderizar cada item en su columna
-    // Pre-calcular próximo ítem por prof para limitar altura de extras
-    var nextItemByProf={};
-    var sortedLayout=uLayout.slice().sort(function(a,b){return a.startM-b.startM;});
-    sortedLayout.forEach(function(item){
-      var key=item.prof;
-      if(!nextItemByProf[key])nextItemByProf[key]=[];
-      nextItemByProf[key].push(item.startM);
+    // Asignar columna fija por prof (orden: BG=0, OB=1, LA=2, SA=3 — solo profs presentes)
+    var profsPresentes=[];
+    allItems.forEach(function(item){
+      if(profsPresentes.indexOf(item.prof)<0)profsPresentes.push(item.prof);
+    });
+    profsPresentes.sort(function(a,b){return ALL_PROFS.indexOf(a)-ALL_PROFS.indexOf(b);});
+    var totalProfs=profsPresentes.length||1;
+
+    var uLayout=[];
+    allItems.forEach(function(item){
+      var profCol=profsPresentes.indexOf(item.prof);
+      uLayout.push({prof:item.prof,tm:item.tm,startM:item.startM,endM:item.endM,
+                    dur:item.endM-item.startM,tipo:item.tipo,key:item.key,turno:item.turno,
+                    col:profCol,totalCols:totalProfs});
     });
 
+    // Paso 4: renderizar
     uLayout.forEach(function(item){
       var topPx=topOf(item.tm);
-      var durPx=item.dur*PX_PER_MIN-2;
-      // Para extras: altura = hueco hasta el próximo ítem del mismo prof
-      if(item.turno&&item.turno.extra){
-        var lista=nextItemByProf[item.prof]||[];
-        var nextStart=null;
-        for(var ii=0;ii<lista.length;ii++){if(lista[ii]>item.startM){nextStart=lista[ii];break;}}
-        if(nextStart!==null) durPx=Math.max(20,(nextStart-item.startM)*PX_PER_MIN-2);
-      }
-      var hPx=Math.max(20,durPx);
+      var hPx=Math.max(20,item.dur*PX_PER_MIN-2);
       var wPct=Math.floor(100/item.totalCols);
       var leftPct=item.col*wPct;
       var p=item.prof;
