@@ -689,6 +689,10 @@
 .ag-wapp-form-row input:focus{outline:none;border-color:#25D366;}
 .ag-wapp-form-row button{background:#128C7E;color:#fff;border:none;border-radius:8px;padding:6px 14px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;}
 .ag-wapp-empty{text-align:center;padding:24px 12px;color:#9ca3af;font-size:12px;}
+.ag-wapp-search{width:100%;border:1.5px solid #e2e8f0;border-radius:20px;padding:7px 14px;font-size:12px;font-family:inherit;box-sizing:border-box;transition:border-color .15s;}
+.ag-wapp-search:focus{outline:none;border-color:#25D366;}
+.ag-wapp-card-editing{background:#fffbeb !important;border-color:#fde68a !important;}
+.ag-wapp-card-editing:hover{background:#fef9c3 !important;}
 .ag-wapp-copy-toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#128C7E;color:#fff;border-radius:20px;padding:8px 20px;font-size:13px;font-weight:600;z-index:99999;pointer-events:none;opacity:0;transition:opacity .3s;}
 .ag-wapp-copy-toast.show{opacity:1;}
 .ag-wapp-del-btn{position:absolute;bottom:8px;right:8px;background:none;border:none;font-size:13px;cursor:pointer;color:#d1d5db;opacity:0;transition:opacity .15s;padding:2px 4px;}
@@ -6776,7 +6780,7 @@ function renderGrid(){
   var TOTAL_H=TOTAL_MIN*PX_PER_MIN;
 
   var days=[];for(var i=0;i<6;i++)days.push(addDays(currentMonday,i));
-  var visProfs=pf?[pf]:ALL_PROFS;
+  var visProfs=(typeof profFilter!=='undefined'&&profFilter.length>0)?profFilter:(pf&&pf.indexOf(',')>=0?pf.split(','):(pf?[pf]:ALL_PROFS));
 
   // Header row
   var blank=document.createElement('div');
@@ -7049,7 +7053,8 @@ function renderGrid(){
         var t2=(hh<10?'0':'')+hh+':'+(mm<10?'0':'')+mm;
         // FIX: si hay filtro activo, usar ese prof; si no, no asumir un prof — abrir con BG pero mostrar el selector
         var pf2=document.getElementById('ag-prof-filter').value;
-        openModal(ds2,t2,null,pf2||'BG');
+        var pf2single=(typeof profFilter!=='undefined'&&profFilter.length===1)?profFilter[0]:(pf2&&pf2.indexOf(',')<0?pf2:'');
+        openModal(ds2,t2,null,pf2single||'BG');
       });
     })(ds);
 
@@ -7248,7 +7253,9 @@ function openModal(ds,time,key,forcedProf){
     prof=forcedProf;
   } else {
     var pf=document.getElementById('ag-prof-filter').value;
-    prof=pf||'BG';
+    // Multi-select: si hay un filtro múltiple, usar el primero; si hay uno solo, usar ese
+    var pfSingle=(typeof profFilter!=='undefined'&&profFilter.length===1)?profFilter[0]:(pf&&pf.indexOf(',')<0?pf:'');
+    prof=pfSingle||'BG';
   }
   document.getElementById('ag-modal-title').textContent=key?'Editar turno':'Nuevo turno';
   document.getElementById('ag-btn-delete').style.display=key?'inline-flex':'none';
@@ -7694,46 +7701,66 @@ document.getElementById('ag-inst-save').addEventListener('click',function(){
 document.getElementById('ag-prev').addEventListener('click',function(){currentMonday=addDays(currentMonday,-7);renderGrid();});
 document.getElementById('ag-next').addEventListener('click',function(){currentMonday=addDays(currentMonday,7);renderGrid();});
 document.getElementById('ag-today-btn').addEventListener('click',function(){currentMonday=getMonday(new Date());renderGrid();});
-// Pills filtro profesional (multi/solo/todos)
-var profFilter=''; // '' = todos, 'BG' etc = solo uno, array = múltiples
+// Pills filtro profesional — multi-select
+var profFilter=[]; // [] = todos, ['BG','OB'] = esos dos, etc.
+function getProfFilterStr(){
+  // Para compatibilidad con código que usa .value (string simple)
+  if(profFilter.length===0)return '';
+  if(profFilter.length===1)return profFilter[0];
+  return profFilter.join(','); // señal de múltiples
+}
+function syncPillsUI(){
+  document.querySelectorAll('#ag-prof-pills .ag-pill').forEach(function(pill){
+    var p=pill.dataset.prof;
+    if(p===''){
+      pill.classList.toggle('active',profFilter.length===0);
+    } else {
+      pill.classList.toggle('active',profFilter.indexOf(p)>=0);
+    }
+  });
+}
 document.querySelectorAll('#ag-prof-pills .ag-pill').forEach(function(pill){
   pill.addEventListener('click',function(){
     var p=this.dataset.prof;
     if(p===''){
-      // Todos
-      profFilter='';
-      document.querySelectorAll('#ag-prof-pills .ag-pill').forEach(function(x){x.classList.remove('active');});
-      document.querySelector('#ag-prof-pills .ag-pill-all').classList.add('active');
+      profFilter=[];
     } else {
-      var allBtn=document.querySelector('#ag-prof-pills .ag-pill-all');
-      if(profFilter===p){
-        // Deseleccionar → volver a todos
-        profFilter='';
-        document.querySelectorAll('#ag-prof-pills .ag-pill').forEach(function(x){x.classList.remove('active');});
-        allBtn.classList.add('active');
+      var idx=profFilter.indexOf(p);
+      if(idx>=0){
+        profFilter.splice(idx,1);
       } else {
-        // Seleccionar solo este
-        profFilter=p;
-        document.querySelectorAll('#ag-prof-pills .ag-pill').forEach(function(x){x.classList.remove('active');});
-        this.classList.add('active');
+        profFilter.push(p);
       }
     }
+    syncPillsUI();
     renderGrid();
   });
 });
-// Compatibilidad: ag-prof-filter virtual (para el resto del código que lo usa)
-var _agProfFilterEl={value:''};
-Object.defineProperty(_agProfFilterEl,'value',{get:function(){return profFilter;},set:function(v){profFilter=v;}});
-// Reemplazar getElementById para ag-prof-filter
-var _origGetEl=document.getElementById.bind(document);
-// No sobreescribir getElementById, en su lugar parchear el renderGrid directamente:
-// El código usa: var pf=document.getElementById('ag-prof-filter').value;
-// Vamos a crear un elemento oculto para mantener compatibilidad
+// Compatibilidad: ag-prof-filter virtual
 var _hiddenProfFilter=document.createElement('select');
 _hiddenProfFilter.id='ag-prof-filter';
 _hiddenProfFilter.style.display='none';
 document.body.appendChild(_hiddenProfFilter);
-Object.defineProperty(_hiddenProfFilter,'value',{get:function(){return profFilter;},set:function(v){profFilter=v;}});
+Object.defineProperty(_hiddenProfFilter,'value',{
+  get:function(){return getProfFilterStr();},
+  set:function(v){profFilter=v?[v]:[];}
+});
+// Parchear renderGrid para que visProfs entienda multi-select
+var _origRenderGrid=renderGrid;
+renderGrid=function(){
+  // Sobreescribir temporalmente getElementById para ag-prof-filter
+  _origRenderGrid();
+};
+// Parchear visProfs dentro de renderGrid: el código hace var pf=...value; var visProfs=pf?[pf]:ALL_PROFS;
+// Con multi, pf = 'BG,OB' → visProfs debe ser ['BG','OB']
+// Hacemos esto al vuelo redefiniendo después:
+var _realRenderGrid=renderGrid;
+renderGrid=function(){
+  // Guardar profFilter actual y fabricar un valor compatible
+  _realRenderGrid();
+};
+// La verdadera solución: parchear después del IIFE para visProfs multi
+// Se hace en el patch de abajo.
 
 function saveLocal(){
   try{localStorage.setItem(LS_T,JSON.stringify(turnos));}catch(e){}
@@ -7770,10 +7797,14 @@ function loadWapp(){
 }
 function saveWapp(){try{localStorage.setItem(LS_WAPP,JSON.stringify(wappTemplates));}catch(e){}}
 var wappCurrentTab='general';
+var wappSearch='';
+var wappEditIdx=-1; // índice de la plantilla que se está editando (-1 = ninguna)
 
 function renderWappPanel(){
   var c=document.getElementById('ag-wapp-content');
   if(!c)return;
+
+  // TABS
   var tabs='<div class="ag-wapp-tabs">';
   tabs+='<button class="ag-wapp-tab'+(wappCurrentTab==='general'?' active':'')+'" data-tab="general">General</button>';
   ['BG','OB','LA','SA'].forEach(function(p){
@@ -7781,83 +7812,184 @@ function renderWappPanel(){
   });
   tabs+='</div>';
 
+  // BUSCADOR
+  var search='<div style="padding:10px 12px 0;">';
+  search+='<input class="ag-wapp-search" id="ag-wapp-search" type="text" placeholder="🔍 Buscar en todos los mensajes..." value="'+escHtml(wappSearch)+'" />';
+  search+='</div>';
+
   var list=wappTemplates[wappCurrentTab]||[];
-  var cards='';
-  if(list.length===0){
-    cards='<div class="ag-wapp-empty">No hay plantillas aún.<br>Agregá una abajo.</div>';
-  } else {
-    // Ordenar por uso (más usados primero)
-    var sorted=list.slice().sort(function(a,b){return (b.uses||0)-(a.uses||0);});
-    sorted.forEach(function(tpl,idx){
-      var origIdx=list.indexOf(tpl);
-      cards+='<div class="ag-wapp-card" data-idx="'+origIdx+'">';
-      cards+='<div class="ag-wapp-card-name">'+escHtml(tpl.name)+'</div>';
-      cards+='<div class="ag-wapp-card-text">'+escHtml(tpl.text)+'</div>';
-      if(tpl.uses>0)cards+='<div class="ag-wapp-card-count">📊 Usado '+tpl.uses+' vez'+(tpl.uses!==1?'es':'')+'</div>';
-      cards+='<button class="ag-wapp-copy-btn">Copiar</button>';
-      cards+='<button class="ag-wapp-del-btn" title="Eliminar">🗑</button>';
-      cards+='</div>';
+  // Si hay búsqueda, mostrar resultados de TODAS las pestañas
+  var searchMode=wappSearch.trim().length>0;
+  var allForSearch=[];
+  if(searchMode){
+    var q=wappSearch.trim().toLowerCase();
+    ['general','BG','OB','LA','SA'].forEach(function(tab){
+      (wappTemplates[tab]||[]).forEach(function(tpl,i){
+        if(tpl.name.toLowerCase().indexOf(q)>=0||tpl.text.toLowerCase().indexOf(q)>=0){
+          allForSearch.push({tpl:tpl,tab:tab,idx:i});
+        }
+      });
     });
   }
 
+  var cards='';
+  var renderList=searchMode?allForSearch:list.slice().map(function(t,i){return{tpl:t,tab:wappCurrentTab,idx:i};}).sort(function(a,b){return(b.tpl.uses||0)-(a.tpl.uses||0);});
+
+  if(searchMode&&allForSearch.length===0){
+    cards='<div class="ag-wapp-empty">Sin resultados para "<b>'+escHtml(wappSearch)+'</b>"</div>';
+  } else if(!searchMode&&list.length===0){
+    cards='<div class="ag-wapp-empty">No hay plantillas aún.<br>Agregá una abajo.</div>';
+  } else {
+    renderList.forEach(function(item){
+      var tpl=item.tpl, tab=item.tab, origIdx=item.idx;
+      var tabLabel=tab==='general'?'General':PROF_LABELS[tab];
+      var isEditing=(wappEditIdx===origIdx&&tab===wappCurrentTab&&!searchMode);
+      if(isEditing){
+        cards+='<div class="ag-wapp-card ag-wapp-card-editing">';
+        cards+='<div class="ag-wapp-card-name" style="margin-bottom:6px;">✏️ Editando</div>';
+        cards+='<input class="ag-wapp-edit-name" type="text" value="'+escHtml(tpl.name)+'" placeholder="Nombre" style="width:100%;border:1.5px solid #25D366;border-radius:7px;padding:6px 9px;font-size:12px;font-family:inherit;box-sizing:border-box;margin-bottom:6px;" />';
+        cards+='<textarea class="ag-wapp-edit-txt" placeholder="Texto..." style="width:100%;border:1.5px solid #25D366;border-radius:7px;padding:7px 9px;font-size:12px;font-family:inherit;resize:vertical;min-height:80px;box-sizing:border-box;">'+escHtml(tpl.text)+'</textarea>';
+        cards+='<div style="display:flex;gap:6px;margin-top:7px;justify-content:flex-end;">';
+        cards+='<button class="ag-wapp-edit-cancel-btn" data-idx="'+origIdx+'" data-tab="'+tab+'" style="border:1.5px solid #e2e8f0;border-radius:7px;padding:5px 12px;font-size:12px;background:#fff;cursor:pointer;font-family:inherit;">Cancelar</button>';
+        cards+='<button class="ag-wapp-edit-save-btn" data-idx="'+origIdx+'" data-tab="'+tab+'" style="background:#128C7E;color:#fff;border:none;border-radius:7px;padding:5px 14px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">Guardar</button>';
+        cards+='</div>';
+        cards+='</div>';
+      } else {
+        cards+='<div class="ag-wapp-card" data-idx="'+origIdx+'" data-tab="'+tab+'">';
+        if(searchMode) cards+='<div style="font-size:10px;color:#9ca3af;margin-bottom:3px;">📂 '+tabLabel+'</div>';
+        cards+='<div class="ag-wapp-card-name">'+escHtml(tpl.name)+'</div>';
+        cards+='<div class="ag-wapp-card-text">'+escHtml(tpl.text)+'</div>';
+        if(tpl.uses>0)cards+='<div class="ag-wapp-card-count">📊 '+tpl.uses+' vez'+(tpl.uses!==1?'es':'')+'</div>';
+        cards+='<button class="ag-wapp-copy-btn">Copiar</button>';
+        cards+='<button class="ag-wapp-edit-btn" title="Editar" style="position:absolute;top:8px;right:64px;background:none;border:none;font-size:13px;cursor:pointer;color:#d1d5db;opacity:0;transition:opacity .15s;padding:2px 4px;">✏️</button>';
+        cards+='<button class="ag-wapp-del-btn" title="Eliminar">🗑</button>';
+        cards+='</div>';
+      }
+    });
+  }
+
+  // FORMULARIO NUEVO
   var form='<div class="ag-wapp-form" id="ag-wapp-new-form">';
-  form+='<div style="font-size:11px;font-weight:700;color:#6b7280;margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em;">Nueva plantilla</div>';
-  form+='<textarea id="ag-wapp-txt" placeholder="Escribí el texto del mensaje... (se respetan emojis ✅)"></textarea>';
+  form+='<div style="font-size:11px;font-weight:700;color:#6b7280;margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em;">Nueva plantilla '+(wappCurrentTab==='general'?'general':'para '+PROF_LABELS[wappCurrentTab])+'</div>';
+  form+='<textarea id="ag-wapp-txt" placeholder="Escribí el texto... (emojis incluidos ✅📅)"></textarea>';
   form+='<div class="ag-wapp-form-row">';
-  form+='<input id="ag-wapp-name" type="text" placeholder="Nombre (ej: Confirmación turno)" />';
+  form+='<input id="ag-wapp-name" type="text" placeholder="Nombre corto (ej: Confirmación turno)" />';
   form+='<button id="ag-wapp-save-btn">Guardar</button>';
   form+='</div></div>';
 
-  c.innerHTML=tabs+'<div class="ag-wapp-body">'+cards+form+'</div>';
+  c.innerHTML=tabs+search+'<div class="ag-wapp-body">'+cards+form+'</div>';
 
-  // Event: tabs
+  // Tabs
   c.querySelectorAll('.ag-wapp-tab').forEach(function(tb){
     tb.addEventListener('click',function(){
       wappCurrentTab=this.dataset.tab;
+      wappEditIdx=-1;
       renderWappPanel();
     });
   });
 
-  // Event: copy buttons
-  c.querySelectorAll('.ag-wapp-card').forEach(function(card){
+  // Buscador
+  var searchEl=document.getElementById('ag-wapp-search');
+  if(searchEl){
+    searchEl.addEventListener('input',function(){
+      wappSearch=this.value;
+      wappEditIdx=-1;
+      renderWappPanel();
+      // Mantener foco y cursor
+      var el=document.getElementById('ag-wapp-search');
+      if(el){el.focus();var v=el.value;el.value='';el.value=v;}
+    });
+  }
+
+  // Cards: copy, edit, delete
+  c.querySelectorAll('.ag-wapp-card[data-idx]').forEach(function(card){
     var idx=parseInt(card.dataset.idx);
-    var tpl=wappTemplates[wappCurrentTab][idx];
-    card.querySelector('.ag-wapp-copy-btn').addEventListener('click',function(e){
-      e.stopPropagation();
-      copyToClipboard(tpl.text);
-      tpl.uses=(tpl.uses||0)+1;
-      saveWapp();
-      showWappToast('¡Copiado!');
-      setTimeout(renderWappPanel,300);
-    });
-    card.querySelector('.ag-wapp-del-btn').addEventListener('click',function(e){
-      e.stopPropagation();
-      if(confirm('¿Eliminar plantilla "'+tpl.name+'"?')){
-        wappTemplates[wappCurrentTab].splice(idx,1);
-        saveWapp();
+    var tab=card.dataset.tab;
+    var tpl=wappTemplates[tab][idx];
+    if(!tpl)return;
+
+    // Hover edit button visibility
+    var editBtn=card.querySelector('.ag-wapp-edit-btn');
+    if(editBtn){
+      card.addEventListener('mouseenter',function(){if(editBtn)editBtn.style.opacity='1';});
+      card.addEventListener('mouseleave',function(){if(editBtn)editBtn.style.opacity='0';});
+      editBtn.addEventListener('click',function(e){
+        e.stopPropagation();
+        wappCurrentTab=tab;
+        wappEditIdx=idx;
+        wappSearch='';
         renderWappPanel();
-      }
-    });
+      });
+    }
+
+    var copyBtn=card.querySelector('.ag-wapp-copy-btn');
+    if(copyBtn){
+      copyBtn.addEventListener('click',function(e){
+        e.stopPropagation();
+        copyToClipboard(tpl.text);
+        tpl.uses=(tpl.uses||0)+1;
+        saveWapp();
+        showWappToast('¡Copiado al portapapeles!');
+        setTimeout(renderWappPanel,400);
+      });
+    }
+
+    var delBtn=card.querySelector('.ag-wapp-del-btn');
+    if(delBtn){
+      delBtn.addEventListener('click',function(e){
+        e.stopPropagation();
+        if(confirm('¿Eliminar "'+tpl.name+'"?')){
+          wappTemplates[tab].splice(idx,1);
+          saveWapp();
+          renderWappPanel();
+        }
+      });
+    }
+
     // Click en card = copiar
-    card.addEventListener('click',function(){
+    card.addEventListener('click',function(e){
+      if(e.target.tagName==='BUTTON')return;
       copyToClipboard(tpl.text);
       tpl.uses=(tpl.uses||0)+1;
       saveWapp();
-      showWappToast('¡Copiado!');
-      setTimeout(renderWappPanel,300);
+      showWappToast('¡Copiado al portapapeles!');
+      setTimeout(renderWappPanel,400);
     });
   });
 
-  // Event: save new
-  document.getElementById('ag-wapp-save-btn').addEventListener('click',function(){
-    var txt=document.getElementById('ag-wapp-txt').value.trim();
-    var name=document.getElementById('ag-wapp-name').value.trim();
-    if(!txt){alert('Escribí el texto del mensaje.');return;}
-    if(!name)name='Plantilla '+(wappTemplates[wappCurrentTab].length+1);
-    wappTemplates[wappCurrentTab].push({name:name,text:txt,uses:0});
-    saveWapp();
-    renderWappPanel();
+  // Edit save/cancel
+  c.querySelectorAll('.ag-wapp-edit-save-btn').forEach(function(btn){
+    btn.addEventListener('click',function(){
+      var idx=parseInt(this.dataset.idx);
+      var tab=this.dataset.tab;
+      var card=this.closest('.ag-wapp-card-editing');
+      var newName=card.querySelector('.ag-wapp-edit-name').value.trim();
+      var newText=card.querySelector('.ag-wapp-edit-txt').value;
+      if(!newText.trim()){alert('El texto no puede estar vacío.');return;}
+      wappTemplates[tab][idx].name=newName||wappTemplates[tab][idx].name;
+      wappTemplates[tab][idx].text=newText;
+      saveWapp();
+      wappEditIdx=-1;
+      renderWappPanel();
+    });
   });
+  c.querySelectorAll('.ag-wapp-edit-cancel-btn').forEach(function(btn){
+    btn.addEventListener('click',function(){wappEditIdx=-1;renderWappPanel();});
+  });
+
+  // Save new
+  var saveBtn=document.getElementById('ag-wapp-save-btn');
+  if(saveBtn){
+    saveBtn.addEventListener('click',function(){
+      var txt=document.getElementById('ag-wapp-txt').value;
+      var name=document.getElementById('ag-wapp-name').value.trim();
+      if(!txt.trim()){alert('Escribí el texto del mensaje.');return;}
+      if(!name)name='Plantilla '+(wappTemplates[wappCurrentTab].length+1);
+      wappTemplates[wappCurrentTab].push({name:name,text:txt,uses:0});
+      saveWapp();
+      renderWappPanel();
+    });
+  }
 }
 
 function escHtml(s){
