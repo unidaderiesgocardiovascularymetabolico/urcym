@@ -6689,6 +6689,18 @@ function renderGrid(){
     // ── Layout unificado: slots libres + turnos asignados comparten columnas ──
     var allItems=[];
 
+    // Pre-calcular turnos por prof para poder filtrar solapamientos con extras
+    var turnosPorProf={};
+    Object.keys(turnos).forEach(function(k){
+      var parts=k.split('_');
+      var tDate=parts[0],tTime=parts[1];
+      if(tDate!==ds)return;
+      var t=turnos[k];
+      if(!turnosPorProf[t.prof])turnosPorProf[t.prof]=[];
+      turnosPorProf[t.prof].push(t2m(tTime));
+    });
+    Object.keys(turnosPorProf).forEach(function(p){turnosPorProf[p].sort(function(a,b){return a-b;});});
+
     // Items libres (sin turno asignado para ese prof)
     visProfs.forEach(function(p){
       // Usar duración del bloque de disponibilidad si existe
@@ -6722,23 +6734,29 @@ function renderGrid(){
         // FIX: verificar con nuevo formato prof-aware Y formato legacy
         var tkProf=ds+'_'+tm+'_'+p;
         if((turnos[tkProf]&&turnos[tkProf].prof===p)||(turnos[tk]&&turnos[tk].prof===p))return;
+        // Excluir slot si un turno extra del mismo prof lo solapa temporalmente
+        var solapaExtra=Object.keys(turnos).some(function(k){
+          var kp=k.split('_');
+          if(kp[0]!==ds)return false;
+          var t=turnos[k];
+          if(t.prof!==p||!t.extra)return false;
+          var eStart=t2m(kp[1]);
+          // calcular duración del extra: distancia al próximo turno del prof
+          var lista=(turnosPorProf[p]||[]);
+          var next=null;
+          for(var ii=0;ii<lista.length;ii++){if(lista[ii]>eStart){next=lista[ii];break;}}
+          var defaultDur=PROF_45.indexOf(p)>=0?45:30;
+          var eDur=next!==null?Math.max(15,next-eStart):defaultDur;
+          var eEnd=eStart+eDur;
+          // solapamiento: el slot regular se superpone con el turno extra
+          return startM<eEnd&&endM>eStart;
+        });
+        if(solapaExtra)return;
         allItems.push({prof:p,tm:tm,startM:startM,endM:endM,dur:dur,tipo:'free'});
       });
     });
 
     // Items ocupados (turnos asignados)
-    // Pre-calcular próximos turnos por prof para duración de extras
-    var turnosPorProf={};
-    Object.keys(turnos).forEach(function(k){
-      var parts=k.split('_');
-      var tDate=parts[0],tTime=parts[1];
-      if(tDate!==ds)return;
-      var t=turnos[k];
-      if(!turnosPorProf[t.prof])turnosPorProf[t.prof]=[];
-      turnosPorProf[t.prof].push(t2m(tTime));
-    });
-    Object.keys(turnosPorProf).forEach(function(p){turnosPorProf[p].sort(function(a,b){return a-b;});});
-
     Object.keys(turnos).forEach(function(k){
       var parts=k.split('_');
       var tDate=parts[0];
