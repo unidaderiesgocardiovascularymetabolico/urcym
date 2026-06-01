@@ -5832,253 +5832,251 @@ document.getElementById('modal_historial_ant').addEventListener('click', functio
   if(e.target===this) cerrarHistorialAnt();
 });
 
-// ===== SISTEMA DE VACUNACIÓN =====
-// Calendario Nacional de Vacunación Argentina (2024)
-// Estructura: { id, nombre, grupo, descripcion, edades, antecedentes }
-// edades: array de { label, desde_meses, hasta_meses } — null = sin límite
-// antecedentes: array de condiciones que agregan la vacuna (ej: diabéticos, embarazadas)
+// ===== VACUNACIÓN — CALENDARIO NACIONAL ARGENTINO =====
 
+// Definición del calendario nacional (por categoría)
 const CALENDARIO_VAC = [
-  // ── UNIVERSALES POR EDAD ──
-  {id:'bcg', nombre:'BCG', grupo:'Recién nacido', desc:'Tuberculosis', edades:[{label:'Al nacer',desde:0,hasta:1}], universales:true},
-  {id:'hepb_rn', nombre:'Hepatitis B (RN)', grupo:'Recién nacido', desc:'Hepatitis B — primera dosis', edades:[{label:'Al nacer',desde:0,hasta:1}], universales:true},
-  {id:'hexa_1', nombre:'Hexavalente (1ª)', grupo:'2 meses', desc:'DTP-Hib-HB-Polio (IPV)', edades:[{label:'2 meses',desde:2,hasta:3}], universales:true},
-  {id:'rotavirus_1', nombre:'Rotavirus (1ª)', grupo:'2 meses', desc:'Gastroenteritis por rotavirus', edades:[{label:'2 meses',desde:2,hasta:3}], universales:true},
-  {id:'neumococo_1', nombre:'Neumococo 13V (1ª)', grupo:'2 meses', desc:'Enfermedad neumocócica', edades:[{label:'2 meses',desde:2,hasta:3}], universales:true},
-  {id:'men_c_1', nombre:'Meningo C (1ª)', grupo:'3 meses', desc:'Meningococo C', edades:[{label:'3 meses',desde:3,hasta:4}], universales:true},
-  {id:'hexa_2', nombre:'Hexavalente (2ª)', grupo:'4 meses', desc:'DTP-Hib-HB-Polio (IPV)', edades:[{label:'4 meses',desde:4,hasta:5}], universales:true},
-  {id:'rotavirus_2', nombre:'Rotavirus (2ª)', grupo:'4 meses', desc:'Gastroenteritis por rotavirus', edades:[{label:'4 meses',desde:4,hasta:5}], universales:true},
-  {id:'neumococo_2', nombre:'Neumococo 13V (2ª)', grupo:'4 meses', desc:'Enfermedad neumocócica', edades:[{label:'4 meses',desde:4,hasta:5}], universales:true},
-  {id:'men_c_2', nombre:'Meningo C (2ª)', grupo:'5 meses', desc:'Meningococo C', edades:[{label:'5 meses',desde:5,hasta:6}], universales:true},
-  {id:'hexa_3', nombre:'Hexavalente (3ª)', grupo:'6 meses', desc:'DTP-Hib-HB-Polio (IPV)', edades:[{label:'6 meses',desde:6,hasta:7}], universales:true},
-  {id:'influenza_6m', nombre:'Influenza (6 m-2 años)', grupo:'6-24 meses', desc:'Influenza — anual', edades:[{label:'6m–24m',desde:6,hasta:24}], universales:true},
-  {id:'triple_viral_1', nombre:'Triple Viral (1ª)', grupo:'12 meses', desc:'Sarampión-Rubéola-Parotiditis', edades:[{label:'12 meses',desde:12,hasta:13}], universales:true},
-  {id:'neumococo_ref', nombre:'Neumococo 13V (refuerzo)', grupo:'12 meses', desc:'Refuerzo', edades:[{label:'12 meses',desde:12,hasta:13}], universales:true},
-  {id:'men_c_ref', nombre:'Meningo C (refuerzo)', grupo:'12 meses', desc:'Refuerzo meningococo C', edades:[{label:'12 meses',desde:12,hasta:13}], universales:true},
-  {id:'hepA_1', nombre:'Hepatitis A (1ª)', grupo:'12 meses', desc:'Hepatitis A', edades:[{label:'12 meses',desde:12,hasta:13}], universales:true},
-  {id:'varicela_1', nombre:'Varicela (1ª)', grupo:'15 meses', desc:'Varicela', edades:[{label:'15 meses',desde:15,hasta:16}], universales:true},
-  {id:'dpt_ref', nombre:'DPT (refuerzo)', grupo:'18 meses', desc:'Difteria-Pertussis-Tétanos', edades:[{label:'18 meses',desde:18,hasta:19}], universales:true},
-  {id:'ipv_ref', nombre:'IPV (refuerzo)', grupo:'18 meses', desc:'Polio inactivada', edades:[{label:'18 meses',desde:18,hasta:19}], universales:true},
-  {id:'hepA_2', nombre:'Hepatitis A (2ª)', grupo:'18-24 meses', desc:'Hepatitis A', edades:[{label:'18-24 meses',desde:18,hasta:24}], universales:true},
-  {id:'triple_viral_2', nombre:'Triple Viral (2ª)', grupo:'5-6 años', desc:'Sarampión-Rubéola-Parotiditis', edades:[{label:'5-6 años',desde:60,hasta:84}], universales:true},
-  {id:'varicela_2', nombre:'Varicela (2ª)', grupo:'5-6 años', desc:'2ª dosis varicela', edades:[{label:'5-6 años',desde:60,hasta:84}], universales:true},
-  {id:'dpt_5a', nombre:'Cuádruple/DPT (5 años)', grupo:'5-6 años', desc:'Refuerzo', edades:[{label:'5-6 años',desde:60,hasta:84}], universales:true},
-  {id:'vph_11a', nombre:'VPH (11 años)', grupo:'11 años', desc:'Virus papiloma humano — 2 dosis', edades:[{label:'11 años',desde:132,hasta:144}], universales:true},
-  {id:'men_acwy', nombre:'Meningo ACWY (11 años)', grupo:'11 años', desc:'Meningococo cuadrivalente', edades:[{label:'11 años',desde:132,hasta:144}], universales:true},
-  {id:'hepB_11a', nombre:'Hepatitis B (11 años)', grupo:'11 años', desc:'3 dosis si no tiene esquema previo', edades:[{label:'11 años',desde:132,hasta:144}], universales:true},
-  {id:'triple_bact_11a', nombre:'Triple bacteriana (11 años)', grupo:'11 años', desc:'dTpa', edades:[{label:'11 años',desde:132,hasta:144}], universales:true},
-  {id:'dtpa_adulto', nombre:'dTpa (adultos)', grupo:'Adultos', desc:'Cada 10 años (o dT cada 10)', edades:[{label:'≥ 18 años',desde:216,hasta:null}], universales:true},
-  {id:'influenza_adulto', nombre:'Influenza (adultos ≥65)', grupo:'Adultos ≥65', desc:'Anual obligatoria', edades:[{label:'≥ 65 años',desde:780,hasta:null}], universales:true},
-  {id:'neumo23_65', nombre:'Neumococo 23V (≥65)', grupo:'Adultos ≥65', desc:'1 dosis', edades:[{label:'≥ 65 años',desde:780,hasta:null}], universales:true},
-  {id:'herpes_zoster', nombre:'Herpes Zóster (≥70)', grupo:'Adultos ≥70', desc:'2 dosis — calendario 2024', edades:[{label:'≥ 70 años',desde:840,hasta:null}], universales:true},
-  // ── GRUPOS DE RIESGO / ANTECEDENTES ──
-  {id:'influenza_riesgo', nombre:'Influenza (riesgo)', grupo:'Grupos de riesgo', desc:'Anual: embarazo, cardiopatía, DBT, EPOC, IRC, inmunocomp.', edades:[], universales:false, ant:['embarazo','cardiopatia','diabetes','epoc','irc','inmunocomprometido','obesidad']},
-  {id:'neumococo_riesgo', nombre:'Neumococo (riesgo)', grupo:'Grupos de riesgo', desc:'Asplenia, IRC, inmunosupresión, DM, cardiopatía, EPOC', edades:[], universales:false, ant:['cardiopatia','diabetes','epoc','irc','inmunocomprometido','asplenia']},
-  {id:'dtpa_embarazo', nombre:'dTpa (embarazo)', grupo:'Embarazo', desc:'Cada embarazo 20-22 sem', edades:[], universales:false, ant:['embarazo']},
-  {id:'hepB_riesgo', nombre:'Hepatitis B (adulto riesgo)', grupo:'Grupos de riesgo', desc:'Personal salud, HSH, paciente IRC', edades:[], universales:false, ant:['saludpersonal','hsh','irc']},
-  {id:'vph_riesgo', nombre:'VPH (≥ 26 años)', grupo:'Grupos de riesgo', desc:'HSH, VIH, inmunocomprometidos', edades:[], universales:false, ant:['hsh','inmunocomprometido','vih']},
-  {id:'meningococo_riesgo', nombre:'Meningococo (riesgo)', grupo:'Grupos de riesgo', desc:'Asplenia, complemento, viajeros', edades:[], universales:false, ant:['asplenia','inmunocomprometido']},
-  {id:'fiebre_amarilla', nombre:'Fiebre Amarilla', grupo:'Viajeros', desc:'Zonas endémicas / viaje', edades:[], universales:false, ant:['viajero']},
+  // ── ADULTOS (todas las edades ≥18)
+  { id:'influenza', nombre:'Influenza estacional', frecuencia:'Anual', indicacion:'Todos los adultos', grupo:'adultos',
+    antecedentes:[] },
+  { id:'covid19', nombre:'COVID-19', frecuencia:'Según esquema vigente', indicacion:'Todos los adultos', grupo:'adultos',
+    antecedentes:[] },
+  { id:'neumo23', nombre:'Neumococo 23V (PPSV23)', frecuencia:'1 dosis (refuerzo a los 5 años en riesgo)', indicacion:'>65 años o factores de riesgo', grupo:'adultos',
+    antecedentes:['mayores65','epoc','asma_severo','card_cronica','renal_cronica','hepatica_cronica','diabetes','inmunosupresion','tabaquismo'] },
+  { id:'neumo13', nombre:'Neumococo 13V (PCV13)', frecuencia:'1 dosis', indicacion:'Inmunocomprometidos, enf. crónicas', grupo:'adultos',
+    antecedentes:['inmunosupresion','epoc','card_cronica','renal_cronica'] },
+  { id:'dt_adulto', nombre:'dT (doble adulto — Difteria/Tétanos)', frecuencia:'Cada 10 años', indicacion:'Todos los adultos', grupo:'adultos',
+    antecedentes:[] },
+  { id:'dtpa', nombre:'dTpa (triple acelular — Difteria/Tétanos/Pertussis)', frecuencia:'1 dosis (adultos), cada embarazo', indicacion:'Adultos sin refuerzo, embarazadas ≥20 semanas', grupo:'adultos',
+    antecedentes:['embarazo'] },
+  { id:'hbv', nombre:'Hepatitis B', frecuencia:'3 dosis (0-1-6 meses)', indicacion:'No vacunados o sin serología', grupo:'adultos',
+    antecedentes:[] },
+  { id:'hav', nombre:'Hepatitis A', frecuencia:'2 dosis (0-6 meses)', indicacion:'No vacunados, hepatopatías, HSH', grupo:'adultos',
+    antecedentes:['hepatica_cronica','riesgo_hav'] },
+  { id:'varicela', nombre:'Varicela', frecuencia:'2 dosis (si susceptible)', indicacion:'Sin antecedente de varicela ni vacuna', grupo:'adultos',
+    antecedentes:['susceptible_varicela'] },
+  { id:'herpes_zoster', nombre:'Herpes Zóster (RZV)', frecuencia:'2 dosis (0 y 2-6 meses)', indicacion:'≥50 años', grupo:'mayores50',
+    antecedentes:[] },
+  { id:'fiebre_amarilla', nombre:'Fiebre Amarilla', frecuencia:'1 dosis (de por vida)', indicacion:'Viajeros a zonas endémicas, residentes', grupo:'adultos',
+    antecedentes:['riesgo_fa'] },
+  { id:'meningococo', nombre:'Meningococo conjugado (MenACWY)', frecuencia:'1-2 dosis', indicacion:'Asplenia, inmunocomprometidos, viajeros', grupo:'adultos',
+    antecedentes:['inmunosupresion','asplenia','riesgo_meningococo'] },
+  { id:'hpv', nombre:'HPV (Papilomavirus)', frecuencia:'2-3 dosis', indicacion:'Hasta 26 años (extendido hasta 45 en grupos de riesgo)', grupo:'adultos',
+    antecedentes:['hasta45_hpv'] },
+  // ── EMBARAZO
+  { id:'rubeolatosf', nombre:'Triple viral (MMR) — pre-concepcional', frecuencia:'Pre-concepcional si no vacunada', indicacion:'Mujeres en edad fértil sin vacuna', grupo:'embarazo',
+    antecedentes:['embarazo','susceptible_mmr'] },
+  // ── OCUPACIONAL / RIESGO
+  { id:'rabia', nombre:'Rabia pre-exposición', frecuencia:'Esquema según riesgo', indicacion:'Veterinarios, trabajadores de salud, viajeros', grupo:'riesgo',
+    antecedentes:['riesgo_rabia'] },
+  { id:'fiebre_tifoidea', nombre:'Fiebre Tifoidea', frecuencia:'1 dosis (oral) o inyectable', indicacion:'Viajeros a zonas endémicas', grupo:'riesgo',
+    antecedentes:['riesgo_tifoidea'] },
 ];
 
-const ANTECEDENTES_VAC = [
-  {id:'embarazo', label:'Embarazo actual'},
-  {id:'cardiopatia', label:'Cardiopatía'},
-  {id:'diabetes', label:'Diabetes'},
-  {id:'epoc', label:'EPOC / asma'},
-  {id:'irc', label:'Insuf. renal crónica'},
-  {id:'inmunocomprometido', label:'Inmunocompromiso'},
-  {id:'asplenia', label:'Asplenia / esplenectomía'},
-  {id:'obesidad', label:'Obesidad'},
-  {id:'vih', label:'VIH'},
-  {id:'hsh', label:'HSH'},
-  {id:'saludpersonal', label:'Personal de salud'},
-  {id:'viajero', label:'Viajero a zona endémica'},
+// Antecedentes relevantes que pueden marcar el médico
+const VAC_ANTECEDENTES = [
+  { id:'mayores65', label:'≥ 65 años (auto)' },
+  { id:'mayores50', label:'≥ 50 años (auto)' },
+  { id:'embarazo', label:'Embarazo' },
+  { id:'diabetes', label:'Diabetes' },
+  { id:'epoc', label:'EPOC / Asma severo' },
+  { id:'card_cronica', label:'Enfermedad cardíaca crónica' },
+  { id:'renal_cronica', label:'Enfermedad renal crónica' },
+  { id:'hepatica_cronica', label:'Enfermedad hepática crónica' },
+  { id:'inmunosupresion', label:'Inmunosupresión / HIV' },
+  { id:'asplenia', label:'Asplenia funcional o anatómica' },
+  { id:'tabaquismo', label:'Tabaquismo' },
+  { id:'susceptible_varicela', label:'Sin varicela ni vacuna previa' },
+  { id:'susceptible_mmr', label:'Sin triple viral (MMR)' },
+  { id:'riesgo_hav', label:'Riesgo Hepatitis A (hepatopatía, HSH, viaje)' },
+  { id:'riesgo_fa', label:'Riesgo Fiebre Amarilla (zona endémica/viaje)' },
+  { id:'riesgo_meningococo', label:'Riesgo meningococo' },
+  { id:'riesgo_rabia', label:'Riesgo rabia (vet, salud, viaje)' },
+  { id:'riesgo_tifoidea', label:'Viaje zona tifoidea' },
+  { id:'hasta45_hpv', label:'HPV hasta 45 años (grupo riesgo)' },
 ];
 
-let vacDatos = { tildadas: {}, esquema_previo: {}, antecedentes: [] };
-
-async function cargarVacDatos(dni) {
-  if(!dni) return;
-  const { data } = await sb.from('paciente_tablas').select('datos').eq('dni_paciente', dni).eq('tipo','vacunacion').maybeSingle();
-  if(data) {
-    try { vacDatos = JSON.parse(data.datos); } catch(e) { vacDatos = {tildadas:{},esquema_previo:{},antecedentes:[]}; }
-  } else {
-    vacDatos = {tildadas:{},esquema_previo:{},antecedentes:[]};
-  }
-  if(!vacDatos.tildadas) vacDatos.tildadas = {};
-  if(!vacDatos.esquema_previo) vacDatos.esquema_previo = {};
-  if(!vacDatos.antecedentes) vacDatos.antecedentes = [];
-}
-
-async function guardarVacDatos() {
-  const dni = pacienteActual?.dni; if(!dni) return;
-  await sb.from('paciente_tablas').upsert(
-    {dni_paciente:dni, tipo:'vacunacion', datos:JSON.stringify(vacDatos)},
-    {onConflict:'dni_paciente,tipo'}
-  );
-}
-
-function edadEnMeses(fnac) {
-  if(!fnac) return null;
+function calcularEdad(fechaNac) {
+  if(!fechaNac) return null;
   const hoy = new Date();
-  const nac = new Date(fnac+'T12:00:00');
-  return (hoy.getFullYear() - nac.getFullYear()) * 12 + (hoy.getMonth() - nac.getMonth());
+  const nac = new Date(fechaNac);
+  let edad = hoy.getFullYear() - nac.getFullYear();
+  const m = hoy.getMonth() - nac.getMonth();
+  if(m < 0 || (m === 0 && hoy.getDate() < nac.getDate())) edad--;
+  return edad;
 }
 
 function renderVacunacion() {
-  const cont = document.getElementById('vac_content'); if(!cont) return;
-  const p = pacienteActual; if(!p) { cont.innerHTML='<div class="loading">Sin paciente activo.</div>'; return; }
-  const edadM = edadEnMeses(p.fecha_nacimiento);
-  const antAct = vacDatos.antecedentes || [];
+  const panel = document.getElementById('vac_panel');
+  if(!panel) return;
+  const p = pacienteActual;
+  const edad = calcularEdad(p?.fecha_nacimiento);
 
-  // Filtrar vacunas aplicables
-  const aplicables = CALENDARIO_VAC.filter(v => {
-    if(v.universales) {
-      if(!v.edades || v.edades.length===0) return true;
-      return v.edades.some(e => {
-        const ok_desde = edadM === null || e.desde === null || edadM >= e.desde;
-        const ok_hasta = e.hasta === null || edadM < e.hasta + 60; // mostrar hasta 5 años después del máximo
-        return ok_desde && ok_hasta;
-      });
-    } else {
-      return v.ant && v.ant.some(a => antAct.includes(a));
+  // Auto-antecedentes por edad
+  const autoAnt = new Set(vacDatos.antecedentes || []);
+  if(edad !== null && edad >= 65) autoAnt.add('mayores65');
+  else autoAnt.delete('mayores65');
+  if(edad !== null && edad >= 50) autoAnt.add('mayores50');
+  else autoAnt.delete('mayores50');
+  vacDatos.antecedentes = [...autoAnt];
+
+  // Filtrar vacunas relevantes
+  const vacRelevantes = CALENDARIO_VAC.filter(v => {
+    if(v.grupo === 'mayores50') return autoAnt.has('mayores50');
+    if(v.antecedentes.length === 0) return true; // para todos
+    return v.antecedentes.some(a => autoAnt.has(a));
+  });
+
+  panel.innerHTML = `
+    <!-- Antecedentes clínicos relevantes -->
+    <div style="background:var(--gray);border-radius:12px;padding:14px 18px;margin-bottom:18px">
+      <div style="font-size:12px;font-weight:700;color:var(--text-soft);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">Factores de riesgo / indicaciones especiales</div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px">
+        ${VAC_ANTECEDENTES.filter(a => !['mayores65','mayores50'].includes(a.id)).map(a => `
+          <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;padding:4px 10px;background:white;border-radius:20px;border:1.5px solid ${autoAnt.has(a.id)?'var(--blue)':'var(--border)'};color:${autoAnt.has(a.id)?'var(--blue)':'var(--text)'}">
+            <input type="checkbox" ${autoAnt.has(a.id)?'checked':''} onchange="toggleVacAnt('${a.id}',this.checked)" style="accent-color:var(--blue)">
+            ${a.label}
+          </label>
+        `).join('')}
+      </div>
+      ${edad!==null?`<div style="margin-top:8px;font-size:11px;color:var(--text-soft)">Edad detectada: <b>${edad} años</b>${edad>=65?' — Aplica neumococo, zóster':''}${edad>=50&&edad<65?' — Aplica zóster':''}</div>`:''}
+    </div>
+
+    <!-- Tabla de vacunas -->
+    <div style="border-radius:12px;overflow:hidden;border:1px solid var(--border)">
+      <table style="width:100%;border-collapse:collapse;font-size:12px">
+        <thead>
+          <tr style="background:var(--blue);color:white">
+            <th style="padding:10px 14px;text-align:left;font-weight:700">Vacuna</th>
+            <th style="padding:10px 14px;text-align:left;font-weight:700">Indicación</th>
+            <th style="padding:10px 14px;text-align:left;font-weight:700">Frecuencia</th>
+            <th style="padding:10px 10px;text-align:center;font-weight:700;white-space:nowrap">Estado</th>
+            <th style="padding:10px 14px;text-align:left;font-weight:700">Fecha / Notas</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${vacRelevantes.map((v, i) => {
+            const est = (vacDatos.aplicadas||{})[v.id] || 'pendiente';
+            const nota = (vacDatos.notas||{})[v.id] || '';
+            const bg = i%2===0 ? 'white' : '#f8fafc';
+            const colorEst = est==='completa'?'#16a34a':est==='parcial'?'#ca8a04':'#6b7280';
+            const emojiEst = est==='completa'?'✅':est==='parcial'?'⚠️':'⬜';
+            return `<tr style="background:${bg};border-bottom:1px solid var(--border)">
+              <td style="padding:10px 14px;font-weight:600;color:var(--text)">${v.nombre}</td>
+              <td style="padding:10px 14px;color:var(--text-soft)">${v.indicacion}</td>
+              <td style="padding:10px 14px;color:var(--text-soft)">${v.frecuencia}</td>
+              <td style="padding:10px;text-align:center">
+                <select onchange="setVacEstado('${v.id}',this.value)" style="border:1.5px solid ${colorEst};border-radius:6px;padding:3px 6px;font-size:11px;color:${colorEst};background:white;font-family:var(--font-main);font-weight:600;cursor:pointer">
+                  <option value="pendiente" ${est==='pendiente'?'selected':''}>⬜ Pendiente</option>
+                  <option value="parcial"   ${est==='parcial'  ?'selected':''}>⚠️ Parcial</option>
+                  <option value="completa"  ${est==='completa' ?'selected':''}>✅ Completa</option>
+                </select>
+              </td>
+              <td style="padding:6px 10px">
+                <input type="text" value="${nota}" placeholder="Ej: 02/2024, lote XX"
+                  onchange="setVacNota('${v.id}',this.value)"
+                  style="width:100%;border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-size:11px;font-family:var(--font-main);color:var(--text)">
+              </td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>
+
+    ${vacRelevantes.length===0?`<div style="text-align:center;padding:40px;color:var(--text-soft)">Completá los antecedentes para ver las vacunas indicadas</div>`:''}
+  `;
+}
+
+function toggleVacAnt(id, checked) {
+  if(!vacDatos.antecedentes) vacDatos.antecedentes = [];
+  if(checked) { if(!vacDatos.antecedentes.includes(id)) vacDatos.antecedentes.push(id); }
+  else { vacDatos.antecedentes = vacDatos.antecedentes.filter(a => a !== id); }
+  renderVacunacion();
+}
+
+function setVacEstado(id, val) {
+  if(!vacDatos.aplicadas) vacDatos.aplicadas = {};
+  vacDatos.aplicadas[id] = val;
+}
+
+function setVacNota(id, val) {
+  if(!vacDatos.notas) vacDatos.notas = {};
+  vacDatos.notas[id] = val;
+}
+
+async function cargarVacunacion(dni) {
+  vacDatos = { aplicadas: {}, notas: {}, antecedentes: [] };
+  try {
+    const { data } = await sb.from('paciente_tablas')
+      .select('datos').eq('dni_paciente', dni).eq('tipo', 'vac').maybeSingle();
+    if(data?.datos) vacDatos = JSON.parse(data.datos);
+  } catch(e) {}
+}
+
+async function guardarVacunacion() {
+  const dni = pacienteActual?.dni;
+  if(!dni) return;
+  // Leer estado/notas actuales del DOM antes de guardar
+  document.querySelectorAll('#vac_panel select').forEach(sel => {
+    const id = sel.getAttribute('onchange').match(/'([^']+)'/)[1];
+    setVacEstado(id, sel.value);
+  });
+  document.querySelectorAll('#vac_panel input[type=text]').forEach(inp => {
+    const id = inp.getAttribute('onchange').match(/'([^']+)'/)[1];
+    setVacNota(id, inp.value);
+  });
+  const { error } = await sb.from('paciente_tablas').upsert({
+    dni_paciente: dni, tipo: 'vac', datos: JSON.stringify(vacDatos)
+  }, { onConflict: 'dni_paciente,tipo' });
+  if(!error) {
+    const btn = document.querySelector('#pmain-vac button[onclick="guardarVacunacion()"]');
+    if(btn) { btn.textContent='✅ Guardado'; setTimeout(()=>btn.textContent='💾 Guardar',1800); }
+  }
+}
+
+// Modal para cargar esquema previo
+function abrirCargaEsquemaPrevio() {
+  const vacs = CALENDARIO_VAC.map(v => `<div style="padding:6px 0;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px">
+    <input type="checkbox" id="ep_${v.id}" style="accent-color:var(--blue)">
+    <label for="ep_${v.id}" style="font-size:12px;cursor:pointer"><b>${v.nombre}</b></label>
+    <input type="text" id="epn_${v.id}" placeholder="Fecha / notas" style="flex:1;border:1px solid var(--border);border-radius:5px;padding:3px 8px;font-size:11px">
+  </div>`).join('');
+
+  const modal = document.createElement('div');
+  modal.id = 'modal_esquema_previo';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px';
+  modal.innerHTML = `
+    <div style="background:white;border-radius:16px;width:100%;max-width:640px;max-height:85vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.25)">
+      <div style="position:sticky;top:0;background:white;padding:16px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;border-radius:16px 16px 0 0;z-index:2">
+        <div style="font-family:var(--font-display);font-size:15px;font-weight:700">📋 Cargar esquema de vacunación previo</div>
+        <button onclick="document.getElementById('modal_esquema_previo').remove()" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--text-soft)">✕</button>
+      </div>
+      <div style="padding:16px 20px">
+        <p style="font-size:12px;color:var(--text-soft);margin-bottom:12px">Tildá las vacunas que el paciente ya tiene y agregá fecha/lote si disponés.</p>
+        ${vacs}
+        <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:16px;padding-top:12px;border-top:1px solid var(--border)">
+          <button onclick="document.getElementById('modal_esquema_previo').remove()" style="padding:8px 18px;border:1.5px solid var(--border);border-radius:8px;background:white;font-size:12px;cursor:pointer">Cancelar</button>
+          <button onclick="aplicarEsquemaPrevio()" style="padding:8px 22px;border:none;border-radius:8px;background:var(--blue);color:white;font-size:12px;cursor:pointer;font-weight:700">✅ Aplicar</button>
+        </div>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+}
+
+function aplicarEsquemaPrevio() {
+  CALENDARIO_VAC.forEach(v => {
+    const cb = document.getElementById('ep_'+v.id);
+    const nota = document.getElementById('epn_'+v.id);
+    if(cb?.checked) {
+      if(!vacDatos.aplicadas) vacDatos.aplicadas = {};
+      if(!vacDatos.notas) vacDatos.notas = {};
+      vacDatos.aplicadas[v.id] = 'completa';
+      if(nota?.value) vacDatos.notas[v.id] = nota.value;
     }
   });
-
-  // Agrupar
-  const grupos = {};
-  aplicables.forEach(v => {
-    if(!grupos[v.grupo]) grupos[v.grupo] = [];
-    grupos[v.grupo].push(v);
-  });
-
-  let html = `
-  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">
-    <div>
-      <div style="font-family:var(--font-display);font-size:18px;font-weight:700;color:var(--text)">💉 Calendario de Vacunación</div>
-      <div style="font-size:12px;color:var(--text-soft);margin-top:2px">Calendario Nacional Argentina 2024 · ${p.apellido}, ${p.nombre} · ${edadM!==null ? Math.floor(edadM/12)+' años' : 'edad desconocida'}</div>
-    </div>
-    <button onclick="guardarVacDatos()" style="padding:8px 20px;border:none;border-radius:9px;background:var(--teal);color:white;font-size:13px;cursor:pointer;font-family:var(--font-main);font-weight:600;box-shadow:0 2px 8px rgba(77,188,190,.25)">💾 Guardar</button>
-  </div>
-
-  <!-- ANTECEDENTES -->
-  <div style="background:var(--gray);border-radius:12px;padding:14px 16px;margin-bottom:20px">
-    <div style="font-size:11px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--text-soft);margin-bottom:10px">Antecedentes / grupos de riesgo</div>
-    <div style="display:flex;flex-wrap:wrap;gap:8px">
-      ${ANTECEDENTES_VAC.map(a => `
-        <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;background:${antAct.includes(a.id)?'var(--blue-light)':'white'};border:1.5px solid ${antAct.includes(a.id)?'var(--blue)':'var(--border)'};border-radius:8px;padding:4px 10px;transition:all .15s">
-          <input type="checkbox" ${antAct.includes(a.id)?'checked':''} onchange="toggleAntVac('${a.id}',this.checked)" style="accent-color:var(--blue);width:13px;height:13px"/>
-          ${a.label}
-        </label>`).join('')}
-    </div>
-  </div>
-
-  <!-- CARGA DE ESQUEMA PREVIO -->
-  <div style="background:#fff8e6;border:1.5px solid #f0c040;border-radius:12px;padding:14px 16px;margin-bottom:20px">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-      <div style="font-size:11px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:#a07000">📋 Esquema previo declarado</div>
-      <button onclick="toggleEsquemaPrevio()" id="btn_toggle_esquema" style="padding:4px 12px;border:1.5px solid #f0c040;border-radius:7px;font-size:11px;background:white;cursor:pointer;font-family:var(--font-main)">+ Cargar esquema</button>
-    </div>
-    <div id="esquema_previo_form" style="display:none">
-      <div style="font-size:11px;color:#a07000;margin-bottom:8px">Indicá vacunas recibidas antes de este sistema:</div>
-      <div style="display:flex;flex-wrap:wrap;gap:6px">
-        ${CALENDARIO_VAC.map(v => `
-          <label style="display:flex;align-items:center;gap:4px;font-size:11px;cursor:pointer;background:${vacDatos.esquema_previo[v.id]?'#fff0c0':'white'};border:1px solid ${vacDatos.esquema_previo[v.id]?'#d4a000':'var(--border)'};border-radius:6px;padding:3px 8px">
-            <input type="checkbox" ${vacDatos.esquema_previo[v.id]?'checked':''} onchange="toggleEsquemaPrevioVac('${v.id}',this.checked)" style="accent-color:#d4a000;width:12px;height:12px"/>
-            ${v.nombre}
-          </label>`).join('')}
-      </div>
-    </div>
-  </div>
-
-  <!-- TABLA DE VACUNAS -->
-  <div style="background:white;border-radius:14px;border:1px solid var(--border);overflow:hidden">`;
-
-  const gruposOrden = ['Recién nacido','2 meses','3 meses','4 meses','5 meses','6 meses','6-24 meses','12 meses','15 meses','18 meses','18-24 meses','5-6 años','11 años','Adultos','Adultos ≥65','Adultos ≥70','Embarazo','Grupos de riesgo','Viajeros'];
-  const gruposPresentes = gruposOrden.filter(g => grupos[g]);
-  // add any remaining groups not in order
-  Object.keys(grupos).forEach(g => { if(!gruposPresentes.includes(g)) gruposPresentes.push(g); });
-
-  gruposPresentes.forEach(grupo => {
-    const lista = grupos[grupo]; if(!lista) return;
-    html += `<div style="border-bottom:1px solid var(--border)">
-      <div style="background:var(--blue);color:white;padding:8px 16px;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase">${grupo}</div>`;
-    lista.forEach(v => {
-      const tildada = !!vacDatos.tildadas[v.id];
-      const previo = !!vacDatos.esquema_previo[v.id];
-      const estado = tildada ? 'completada' : previo ? 'previo' : 'pendiente';
-      const bg = tildada ? '#e8f5e9' : previo ? '#fff8e6' : '';
-      const icono = tildada ? '✅' : previo ? '📋' : '⬜';
-      const edadLabel = v.edades && v.edades.length>0 ? v.edades.map(e=>e.label).join(', ') : (v.ant ? 'Grupo de riesgo' : '');
-      html += `<div style="display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid var(--border);background:${bg};transition:background .15s" onmouseover="this.style.background='#f0fdf4'" onmouseout="this.style.background='${bg}'">
-        <span style="font-size:18px;cursor:pointer" onclick="toggleVacTildada('${v.id}')" title="${estado}">${icono}</span>
-        <div style="flex:1;min-width:0">
-          <div style="font-size:13px;font-weight:600;color:var(--text)">${v.nombre}</div>
-          <div style="font-size:11px;color:var(--text-soft)">${v.desc}${edadLabel ? ' · '+edadLabel : ''}</div>
-        </div>
-        <div style="display:flex;gap:6px;align-items:center;flex-shrink:0">
-          ${tildada ? '<span style="font-size:10px;background:#e8f5e9;color:#2e7d32;border:1px solid #a5d6a7;border-radius:10px;padding:2px 8px;font-weight:600">Aplicada</span>' : ''}
-          ${previo && !tildada ? '<span style="font-size:10px;background:#fff8e6;color:#a07000;border:1px solid #f0c040;border-radius:10px;padding:2px 8px;font-weight:600">Esquema previo</span>' : ''}
-          <input type="date" id="vac_fecha_${v.id}" value="${vacDatos.tildadas[v.id]?.fecha||''}" onchange="actualizarFechaVac('${v.id}',this.value)" style="padding:3px 6px;border:1.5px solid var(--border);border-radius:6px;font-size:11px;font-family:var(--font-main);opacity:${tildada?1:.4}" title="Fecha de aplicación"/>
-          <textarea id="vac_obs_${v.id}" placeholder="Obs." rows="1" onchange="actualizarObsVac('${v.id}',this.value)" style="padding:3px 6px;border:1.5px solid var(--border);border-radius:6px;font-size:11px;font-family:var(--font-main);width:120px;resize:none;opacity:${tildada?1:.4}" title="Observaciones">${vacDatos.tildadas[v.id]?.obs||''}</textarea>
-        </div>
-      </div>`;
-    });
-    html += '</div>';
-  });
-
-  html += '</div>'; // tabla
-  cont.innerHTML = html;
-}
-
-function toggleVacTildada(id) {
-  if(vacDatos.tildadas[id]) {
-    delete vacDatos.tildadas[id];
-  } else {
-    vacDatos.tildadas[id] = {fecha: fechaHoy(), obs:''};
-  }
-  guardarVacDatos();
+  document.getElementById('modal_esquema_previo')?.remove();
   renderVacunacion();
 }
-
-function actualizarFechaVac(id, fecha) {
-  if(!vacDatos.tildadas[id]) vacDatos.tildadas[id] = {fecha:'', obs:''};
-  vacDatos.tildadas[id].fecha = fecha;
-  guardarVacDatos();
-}
-
-function actualizarObsVac(id, obs) {
-  if(!vacDatos.tildadas[id]) vacDatos.tildadas[id] = {fecha:'', obs:''};
-  vacDatos.tildadas[id].obs = obs;
-  guardarVacDatos();
-}
-
-function toggleAntVac(id, checked) {
-  if(checked) {
-    if(!vacDatos.antecedentes.includes(id)) vacDatos.antecedentes.push(id);
-  } else {
-    vacDatos.antecedentes = vacDatos.antecedentes.filter(a => a !== id);
-  }
-  guardarVacDatos();
-  renderVacunacion();
-}
-
-function toggleEsquemaPrevioVac(id, checked) {
-  vacDatos.esquema_previo[id] = checked;
-  guardarVacDatos();
-}
-
-function toggleEsquemaPrevio() {
-  const f = document.getElementById('esquema_previo_form');
-  const btn = document.getElementById('btn_toggle_esquema');
-  if(f) {
-    const open = f.style.display !== 'none';
-    f.style.display = open ? 'none' : 'block';
-    if(btn) btn.textContent = open ? '+ Cargar esquema' : '− Cerrar';
-  }
-}
-
 
 
 function abrirCargaEvolucionHistorica() {
