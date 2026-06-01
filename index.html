@@ -6964,18 +6964,29 @@ document.getElementById('ag-f-sena').addEventListener('input',function(){
   }
 });
 
+// Genera slots dinámicos según bloques de disponibilidad del prof
+function getSlotsForProf(prof){
+  var profDisp=dispBlocks.filter(function(b){return b.prof===prof;});
+  if(!profDisp.length) return PROF_45.indexOf(prof)>=0?SLOTS_45:SLOTS_30;
+  var set={};
+  profDisp.forEach(function(b){
+    var d=b.dur||(PROF_45.indexOf(prof)>=0?45:30);
+    makeSlotsForDur(b.from,b.to,d).forEach(function(s){set[s]=true;});
+  });
+  return Object.keys(set).sort();
+}
+
 // Poblar select de fechas disponibles para un prof dado (próximas 8 semanas)
 function buildDateOptions(prof,selectedDate){
-  var slots=PROF_45.indexOf(prof)>=0?SLOTS_45:SLOTS_30;
+  var slots=getSlotsForProf(prof);
   var sel=document.getElementById('ag-f-date');
   sel.innerHTML='';
-  var seen={};
   var base=getMonday(new Date());
   for(var w=0;w<8;w++){
     for(var di=0;di<6;di++){
       var d=addDays(base,w*7+di);
       var ds=kd(d);
-      // Verificar si hay al menos un bloque de disp para este prof en este día
+      // Verificar si hay al menos un slot disponible para este prof en este día
       var hasDisp=slots.some(function(t){return getBlocksAt(dispBlocks,ds,t,prof).length>0;});
       if(!hasDisp)continue;
       var opt=document.createElement('option');
@@ -6986,7 +6997,7 @@ function buildDateOptions(prof,selectedDate){
       sel.appendChild(opt);
     }
   }
-  // Si la fecha seleccionada no está en las opciones (turno pasado), agregarla igual
+  // Si la fecha seleccionada no está en las opciones (turno pasado o editando), agregarla igual
   if(selectedDate&&!sel.querySelector('option[value="'+selectedDate+'"]')){
     var pd2=parseLocalDate(selectedDate);
     var dw=pd2.getDay();var di2=dw===0?6:dw-1;
@@ -6999,14 +7010,14 @@ function buildDateOptions(prof,selectedDate){
 }
 
 function buildTimeOptions(prof,ds,selectedTime){
-  var slots=PROF_45.indexOf(prof)>=0?SLOTS_45:SLOTS_30;
+  var slots=getSlotsForProf(prof);
   var sel=document.getElementById('ag-f-time');
   sel.innerHTML='';
-  // Filtrar slots dentro de bloques de disp para esa fecha
+  // Solo slots que caen dentro de un bloque de disp activo ese día
   var available=slots.filter(function(t){
     return getBlocksAt(dispBlocks,ds,t,prof).length>0;
   });
-  // Si no hay disp cargada, mostrar todos los slots del prof
+  // Si no hay disp cargada aún, mostrar todos los slots del prof
   if(!available.length)available=slots;
   available.forEach(function(t){
     var opt=document.createElement('option');
@@ -7238,10 +7249,11 @@ document.getElementById('ag-btn-save').addEventListener('click',function(){
   if(isExtra){
     newTime=exTm&&exTm.value?exTm.value:(document.getElementById('ag-f-time').value||pendingTime);
     if(!newTime){alert('Ingresá el horario del turno extra.');return;}
-  } else if(isVideo3){
-    newTime=vidTm3&&vidTm3.value?vidTm3.value:(document.getElementById('ag-f-time').value||pendingTime);
-    if(!newTime){alert('Ingresá el horario de la videollamada.');return;}
+  } else if(isVideo3&&vidTm3&&vidTm3.value){
+    // Video con horario libre explícito
+    newTime=vidTm3.value;
   } else {
+    // Turno normal O video sobre slot del bloque
     newTime=document.getElementById('ag-f-time').value||pendingTime;
   }
   var profVal=document.getElementById('ag-f-prof').value;
@@ -7253,7 +7265,8 @@ document.getElementById('ag-btn-save').addEventListener('click',function(){
   if(oldKey&&oldKey!==newKey){delete turnos[oldKey];}
   // Validar disponibilidad solo si NO es turno extra
   var ds=newDate;
-  if(!isExtra&&!isVideo3){
+  var videoLibre=isVideo3&&vidTm3&&vidTm3.value;
+  if(!isExtra&&!videoLibre){
     var inDisp=dispBlocks.some(function(b){
       return b.prof===profVal&&isBlockActiveOnDate(b,ds)&&t2m(b.from)<=t2m(newTime)&&t2m(newTime)<t2m(b.to);
     });
