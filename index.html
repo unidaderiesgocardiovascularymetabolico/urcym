@@ -1009,7 +1009,14 @@
               <option value="atendido">Atendido</option>
             </select>
           </div>
-          <div class="ag-form-row-2">
+          <div class="ag-form-row" style="margin-bottom:8px">
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:600;">
+              <input type="checkbox" id="ag-f-osde" style="width:15px;height:15px;accent-color:#00a651;cursor:pointer;">
+              <span style="color:#00a651;">OSDE</span>
+              <span style="font-size:11px;color:#9ca3af;font-weight:400;">(no requiere seña ni pago)</span>
+            </label>
+          </div>
+          <div class="ag-form-row-2" id="ag-pago-row">
             <div class="ag-form-row" style="margin-bottom:0"><label>Seña ($)</label><input type="number" id="ag-f-sena" placeholder="0" min="0"></div>
             <div class="ag-form-row" style="margin-bottom:0"><label>Estado de pago</label>
               <select id="ag-f-pago">
@@ -6914,14 +6921,11 @@ function renderGrid(){
           });
           el2.addEventListener('contextmenu',function(e){
             e.preventDefault();e.stopPropagation();
-            if(offeredSlots[offKey]){
-              delete offeredSlots[offKey];
-              el2.classList.remove('ofrecido');
-            } else {
+            if(!offeredSlots[offKey]){
               offeredSlots[offKey]=true;
               el2.classList.add('ofrecido');
+              saveOffered();
             }
-            saveOffered();
           });
         })(el,ds,item.tm,p);
         col.appendChild(el);
@@ -7044,6 +7048,9 @@ document.getElementById('ag-f-sena').addEventListener('input',function(){
   } else {
     if(pagoSel.value==='señado')pagoSel.value='sin-seña';
   }
+});
+document.getElementById('ag-f-osde').addEventListener('change',function(){
+  document.getElementById('ag-pago-row').style.display=this.checked?'none':'';
 });
 
 // Genera slots dinámicos según bloques de disponibilidad del prof
@@ -7170,16 +7177,19 @@ function openModal(ds,time,key,forcedProf){
     document.getElementById('ag-f-prof').value=t.prof||'BG';
     document.getElementById('ag-f-estado').value=t.estado||'';
     document.getElementById('ag-f-sena').value=t.sena||'';
-    document.getElementById('ag-f-pago').value=t.pago||'sin-seña';
+    document.getElementById('ag-f-pago').value=t.pago==='osde'?'sin-seña':(t.pago||'sin-seña');
     document.getElementById('ag-f-notas').value=t.notas||'';
+    document.getElementById('ag-f-osde').checked=t.osde?true:false;
+    document.getElementById('ag-pago-row').style.display=t.osde?'none':'';
   }else{
     document.getElementById('ag-f-paciente').value='';
-    // FIX: asignar el prof del bloque clickeado ANTES de que el usuario pueda ver el form
     document.getElementById('ag-f-prof').value=prof;
     document.getElementById('ag-f-estado').value='';
     document.getElementById('ag-f-sena').value='';
     document.getElementById('ag-f-pago').value='sin-seña';
     document.getElementById('ag-f-notas').value='';
+    document.getElementById('ag-f-osde').checked=false;
+    document.getElementById('ag-pago-row').style.display='';
   }
   // Mostrar selector de profesional con valor correcto
   var profSel=document.getElementById('ag-f-prof');
@@ -7361,16 +7371,18 @@ document.getElementById('ag-btn-save').addEventListener('click',function(){
   var pagoVal=document.getElementById('ag-f-pago').value;
   if(senaVal&&pagoVal==='sin-seña')pagoVal='señado';
   if(!senaVal&&pagoVal==='señado')pagoVal='sin-seña';
+  var osdeVal=document.getElementById('ag-f-osde').checked;
   turnos[newKey]={
     paciente:document.getElementById('ag-f-paciente').value.trim(),
     prof:profVal,
     estado:document.getElementById('ag-f-estado').value,
-    sena:senaVal,
-    pago:pagoVal,
+    sena:osdeVal?'':senaVal,
+    pago:osdeVal?'osde':pagoVal,
     notas:document.getElementById('ag-f-notas').value,
     asistencia:prevAsist,
     extra:isExtra?true:undefined,
-    video:isVideo3?true:undefined
+    video:isVideo3?true:undefined,
+    osde:osdeVal?true:undefined
   };
   saveLocal();document.getElementById('ag-modal-bg').style.display='none';editKey=null;renderGrid();
 });
