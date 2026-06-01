@@ -581,6 +581,7 @@
 #agenda-app .ag-turno.sa .ag-badge{background:#FAC775;color:#412402;}
 #agenda-app .ag-turno.cancelado{opacity:.55;text-decoration:line-through;}
 #agenda-app .ag-turno.ag-turno-extra{border:1.5px dashed #E59500 !important;box-shadow:inset 2px 0 0 #E59500;}
+#agenda-app .ag-turno.ag-turno-video{border:1.5px dashed #7B3FC4 !important;box-shadow:inset 2px 0 0 #7B3FC4;}
 /* Leyenda */
 #agenda-app .ag-legend{display:flex;gap:12px;margin-bottom:10px;flex-wrap:wrap;align-items:center;}
 #agenda-app .ag-legend-item{display:flex;align-items:center;gap:5px;font-size:11px;color:#6b7280;}
@@ -914,6 +915,10 @@
               <input type="checkbox" id="ag-f-extra" style="width:14px;height:14px;accent-color:#E59500;cursor:pointer;">
               <label for="ag-f-extra" style="font-size:11px;color:#6b7280;cursor:pointer;margin:0;">Turno extra — horario libre:</label>
               <input type="time" id="ag-f-extra-time" style="border:1px solid #d1d5db;border-radius:6px;padding:4px 7px;font-size:13px;display:none;width:100px;border-color:#E59500;">
+              <span style="margin-left:12px;display:inline-flex;align-items:center;gap:4px;">
+                <input type="checkbox" id="ag-f-video" style="width:14px;height:14px;accent-color:#7B3FC4;cursor:pointer;">
+                <label for="ag-f-video" style="font-size:11px;color:#6b7280;cursor:pointer;margin:0;">📹 Videollamada</label>
+              </span>
             </div>
           </div>
           <div class="ag-form-row" style="position:relative">
@@ -6820,10 +6825,13 @@ function renderGrid(){
         tl.className='ag-slot-time';
         tl.textContent=item.tm;
         el.appendChild(tl);
-        var pl=document.createElement('span');
-        pl.className='ag-slot-prof';
-        pl.textContent=PROF_LBL[p]||p;
-        el.appendChild(pl);
+        // Ocultar nombre del prof si el slot es muy chico
+        if(hPx>=28&&wPct>=40){
+          var pl=document.createElement('span');
+          pl.className='ag-slot-prof';
+          pl.textContent=PROF_LBL[p]||p;
+          el.appendChild(pl);
+        }
         (function(ds2,tm2,prof2){
           el.addEventListener('click',function(e){
             e.stopPropagation();
@@ -6867,7 +6875,7 @@ function renderGrid(){
 function makeTurnoEl(t,key,hPx){
   var el=document.createElement('div');
   var pc=PROF_CLS[t.prof]||'bg';
-  el.className='ag-turno '+pc+(t.estado==='cancelado'?' cancelado':'')+(t.extra?' ag-turno-extra':'');
+  el.className='ag-turno '+pc+(t.estado==='cancelado'?' cancelado':'')+(t.extra?' ag-turno-extra':'')+(t.video?' ag-turno-video':'');
   var dc=t.pago||'sin-seña';
 
   var nameColor='';
@@ -6883,6 +6891,7 @@ function makeTurnoEl(t,key,hPx){
   var profShort=(PROF_LBL[t.prof]||'').split(' ').pop()||'';
 
   var estBadge=t.estado?'<span class="ag-badge">'+(EST_L[t.estado]||'')+'</span>':'';
+  var videoBadge=t.video?'<span style="font-size:10px;line-height:1;">📹</span>':'';
 
   // Nombre del paciente — si la altura es muy chica, usar solo apellido (primer fragmento)
   var paciente=t.paciente||'—';
@@ -6897,17 +6906,17 @@ function makeTurnoEl(t,key,hPx){
       +'<span style="font-size:9px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:inline;margin-left:3px;'+nameColor+'">'+esc(paciente)+'</span>'
       +'</div>'
       +'<div class="ag-turno-right">'
-      +estBadge
+      +videoBadge+estBadge
       +'<div class="ag-dot '+dc+'"></div>'
       +'</div>';
   } else {
     el.innerHTML='<div class="ag-turno-body">'
       +'<span class="ag-turno-time">'+esc(timeRange)+'</span>'
       +'<strong class="ag-turno-name" style="'+nameColor+'">'+esc(paciente)+'</strong>'
-      +'<span class="ag-turno-prof">'+esc(profShort)+'</span>'
+      +(hPx>=32?'<span class="ag-turno-prof">'+esc(profShort)+'</span>':'')
       +'</div>'
       +'<div class="ag-turno-right">'
-      +estBadge
+      +videoBadge+estBadge
       +'<div class="ag-dot '+dc+'"></div>'
       +'</div>';
   }
@@ -7020,6 +7029,8 @@ function openModal(ds,time,key,forcedProf){
     exTm.style.display=isExtra?'inline-block':'none';
     exTm.value=isExtra?(pendingTime||''):'';
   }
+  var vidCb=document.getElementById('ag-f-video');
+  if(vidCb) vidCb.checked=!!(key&&turnos[key]&&turnos[key].video);
   // FIX: el prof se determina en este orden estricto:
   //   1. turno existente (edición)
   //   2. forcedProf (bloque clickeado — NUNCA sobreescribir con filtro global)
@@ -7237,6 +7248,8 @@ document.getElementById('ag-btn-save').addEventListener('click',function(){
   var pagoVal=document.getElementById('ag-f-pago').value;
   if(senaVal&&pagoVal==='sin-seña')pagoVal='señado';
   if(!senaVal&&pagoVal==='señado')pagoVal='sin-seña';
+  var vidCb2=document.getElementById('ag-f-video');
+  var isVideo=vidCb2&&vidCb2.checked;
   turnos[newKey]={
     paciente:document.getElementById('ag-f-paciente').value.trim(),
     prof:profVal,
@@ -7245,7 +7258,8 @@ document.getElementById('ag-btn-save').addEventListener('click',function(){
     pago:pagoVal,
     notas:document.getElementById('ag-f-notas').value,
     asistencia:prevAsist,
-    extra:isExtra?true:undefined
+    extra:isExtra?true:undefined,
+    video:isVideo?true:undefined
   };
   saveLocal();document.getElementById('ag-modal-bg').style.display='none';editKey=null;renderGrid();
 });
