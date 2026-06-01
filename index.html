@@ -3314,8 +3314,7 @@ function _pdfHeader(doc, u, PW, ML) {
 function _pdfPatientBar(doc, p, fechaStr, PW, ML, MR) {
   const W = PW - ML - MR, bY = 55, bH = 10;
 
-  doc.setFillColor(236, 247, 253);
-  doc.roundedRect(ML, bY, W, bH, 2, 2, 'F');
+  // Sin recuadro de relleno celeste
   doc.setDrawColor(..._C.gris); doc.setLineWidth(0.2);
   doc.roundedRect(ML, bY, W, bH, 2, 2, 'S');
 
@@ -3341,9 +3340,10 @@ function _pdfPatientBar(doc, p, fechaStr, PW, ML, MR) {
 /*  FIRMA Y SELLO                                      */
 /* ─────────────────────────────────────────────────── */
 function _pdfFirma(doc, u, PW, PH, ML) {
-  const MR = 12, FW = 22;   // más pequeño
+  const MR = 12, FW = 22;
   const FX = PW - MR - FW;
-  const FY = PH - 46;   // más arriba para caber sobre el footer
+  // Footer empieza en PH-20; la firma ocupa ~36mm => FY = PH - 20 - 36 = PH - 56
+  const FY = PH - 56;
 
   const fb = (selectedUser === 'barbara') ? firmaBarbaraB64 : firmaOmarB64;
   if (fb) {
@@ -3353,21 +3353,21 @@ function _pdfFirma(doc, u, PW, PH, ML) {
     } catch(e) {}
   }
 
-  // Línea de firma
+  // Línea de firma — justo debajo de la imagen (~22mm de alto)
   doc.setDrawColor(..._C.gris); doc.setLineWidth(0.3);
-  doc.line(FX, FY + 24, FX + FW, FY + 24);
+  doc.line(FX, FY + 23, FX + FW, FY + 23);
 
-  // Nombre, matrícula, etiqueta — compactos
+  // Nombre pegado a la línea
   doc.setFont('helvetica', 'bold'); doc.setFontSize(6.5);
   doc.setTextColor(..._C.oscuro);
-  doc.text(u.titulo || u.name || '', FX + FW / 2, FY + 27, { align: 'center' });
+  doc.text(u.titulo || u.name || '', FX + FW / 2, FY + 26, { align: 'center' });
 
   doc.setFont('helvetica', 'normal'); doc.setFontSize(6);
   doc.setTextColor(..._C.suave);
-  doc.text(u.mp || '', FX + FW / 2, FY + 30, { align: 'center' });
+  doc.text(u.mp || '', FX + FW / 2, FY + 29, { align: 'center' });
 
   doc.setFont('helvetica', 'italic'); doc.setFontSize(5.5);
-  doc.text('Firma y Sello', FX + FW / 2, FY + 33, { align: 'center' });
+  doc.text('Firma y Sello', FX + FW / 2, FY + 32, { align: 'center' });
 }
 
 /* ─────────────────────────────────────────────────── */
@@ -3456,9 +3456,8 @@ function generarPDF(tipo) {
     { day: '2-digit', month: '2-digit', year: 'numeric' });
   const cY = p ? _pdfPatientBar(doc, p, hoy, PW, ML, MR) : headerEndY;
 
-  // Zona disponible para contenido (hasta el footer y la firma)
-  const footerH = 20, firmaH = 38;
-  const contentMaxY = PH - footerH - firmaH - 4;
+  // Zona disponible para contenido (hasta la firma, que empieza en PH-56)
+  const contentMaxY = PH - 56 - 2;
   const contentH = contentMaxY - cY;
 
   if (tipo === 'receta') {
@@ -4762,7 +4761,7 @@ function _crearPDFIndicacionesEvol(txt) {
   curY += 7;
 
   // Zona disponible hasta la firma (más compacta ahora)
-  const firmaZoneTop = PH - 20 - 38 - 2;  // footer + firma compacta
+  const firmaZoneTop = PH - 56 - 2;  // firma empieza en PH-56
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(10);
   doc.setTextColor(35, 35, 35);
