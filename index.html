@@ -635,7 +635,7 @@
 .ag-cfg-v2-body-head{display:flex;align-items:center;gap:8px;margin-bottom:10px;}
 .ag-cfg-v2-add-btn{margin-left:auto;background:none;border:1px dashed #d1d5db;border-radius:7px;padding:4px 12px;font-size:12px;color:#6b7280;cursor:pointer;font-family:inherit;white-space:nowrap;}
 .ag-cfg-v2-add-btn:hover{background:#f3f4f6;border-color:#9ca3af;}
-.ag-cfg-v2-col-hd{display:grid;grid-template-columns:70px 72px 72px 1fr 90px 28px;gap:6px;font-size:10px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#9ca3af;padding:0 4px;margin-bottom:5px;}
+.ag-cfg-v2-col-hd{display:grid;grid-template-columns:70px 72px 72px 1fr 75px 75px 28px;gap:6px;font-size:10px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#9ca3af;padding:0 4px;margin-bottom:5px;}
 .ag-cfg-v2-col-hd-nl{grid-template-columns:65px 68px 68px 1fr 90px 100px 28px;}
 .ag-cfg-v2-col-hd-inst{grid-template-columns:65px 68px 68px 1fr 90px 100px 28px;}
 #agenda-app .ag-btn-inst{background:none;border:1px solid #9ca3af;border-radius:6px;padding:5px 10px;font-size:12px;color:#4b5563;cursor:pointer;font-family:inherit;}
@@ -667,7 +667,7 @@
 .ag-task-item:hover .ag-task-check{border-color:#185FA5;}
 .ag-task-text{flex:1;color:#374151;}
 .ag-tasks-empty{font-size:12px;color:#9ca3af;text-align:center;padding:10px 0;}
-.ag-cfg-v2-row{display:grid;grid-template-columns:70px 72px 72px 1fr 90px 28px;gap:6px;align-items:center;background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:7px 8px;margin-bottom:5px;}
+.ag-cfg-v2-row{display:grid;grid-template-columns:70px 72px 72px 1fr 75px 75px 28px;gap:6px;align-items:center;background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:7px 8px;margin-bottom:5px;}
 .ag-cfg-v2-row-nl{grid-template-columns:65px 68px 68px 1fr 90px 100px 28px;}
 .ag-cfg-v2-row-inst{grid-template-columns:65px 68px 68px 1fr 90px 100px 28px;}
 .ag-cfg-v2-row select,.ag-cfg-v2-row input[type=time],.ag-cfg-v2-row input[type=text]{padding:4px 6px;font-size:12px;border:1px solid #e5e7eb;border-radius:6px;background:#fff;color:#374151;width:100%;font-family:inherit;}
@@ -6401,7 +6401,19 @@ var DIAS_FULL=['lunes','martes','miércoles','jueves','viernes','sábado'];
 var MONTHS=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
 
 // Slots base (LA, SA): cada 30 min
-var SLOTS_30=['08:00','08:30','09:00','09:30','10:00','10:30','11:00','11:30','12:00','12:30','13:00','13:30','14:00','14:30','15:00','15:30','16:00','16:30','17:00','17:30'];
+var SLOTS_30=['08:00','08:30','09:00','09:30','10:00','10:30','11:00','11:30','12:00','12:30','13:00','13:30','14:00','14:30','15:00','15:30','16:00','16:30','17:00','17:30','18:00','18:30','19:00','19:30','20:00','20:30'];
+// Genera slots cada N minutos entre dos horarios
+function makeSlotsForDur(from,to,dur){
+  var res=[];
+  var fm=from.split(':');var tm=to.split(':');
+  var start=parseInt(fm[0])*60+parseInt(fm[1]);
+  var end=parseInt(tm[0])*60+parseInt(tm[1]);
+  for(var m=start;m<end;m+=dur){
+    var hh=Math.floor(m/60),mm=m%60;
+    res.push((hh<10?'0':'')+hh+':'+(mm<10?'0':'')+mm);
+  }
+  return res;
+}
 // Slots BG/OB: cada 45 min
 var SLOTS_45=['08:00','08:45','09:30','10:15','11:00','11:45','12:30','13:15','14:00','14:45','15:30','16:15','17:00','17:45'];
 // Union ordenada para el grid
@@ -6471,6 +6483,7 @@ function openCtxMenu(e,key){
 
   var pago=t.pago==='pagado';
   var ausente=t.asistencia==='ausente';
+  var sinCargo=t.sinCargo===true;
 
   function mkItem(label,color,handler){
     var li=document.createElement('div');
@@ -6486,6 +6499,11 @@ function openCtxMenu(e,key){
     (pago?'<span style="color:#1D9E75">✓</span> ':'<span style="opacity:.3">○</span> ')+'Pagó total',
     pago?'#1D9E75':'#374151',
     function(){turnos[key].pago=pago?'sin-seña':'pagado';saveLocal();renderGrid();}
+  ));
+  menu.appendChild(mkItem(
+    (sinCargo?'<span style="color:#185FA5">✓</span> ':'<span style="opacity:.3">○</span> ')+'Sin cargo',
+    sinCargo?'#185FA5':'#374151',
+    function(){turnos[key].sinCargo=!sinCargo;saveLocal();renderGrid();}
   ));
   menu.appendChild(mkItem(
     (ausente?'<span style="color:#E24B4A">✕</span> ':'<span style="opacity:.3">○</span> ')+'Ausente',
@@ -6665,8 +6683,17 @@ function renderGrid(){
 
     // Items libres (sin turno asignado para ese prof)
     visProfs.forEach(function(p){
-      var profSlots=PROF_45.indexOf(p)>=0?SLOTS_45:SLOTS_30;
-      var dur=PROF_45.indexOf(p)>=0?45:30;
+      // Usar duración del bloque de disponibilidad si existe
+      // Generar slots según duración del bloque de disponibilidad
+      var _profDispBlocks=dispBlocks.filter(function(b){return b.prof===p;});
+      var _slotsSet={};
+      _profDispBlocks.forEach(function(b){
+        var d=b.dur||( PROF_45.indexOf(p)>=0?45:30 );
+        makeSlotsForDur(b.from,b.to,d).forEach(function(s){_slotsSet[s]=true;});
+      });
+      var profSlots=Object.keys(_slotsSet).sort();
+      if(!profSlots.length) profSlots=PROF_45.indexOf(p)>=0?SLOTS_45:SLOTS_30;
+      var dur=_profDispBlocks.length&&_profDispBlocks[0].dur?_profDispBlocks[0].dur:(PROF_45.indexOf(p)>=0?45:30);
       profSlots.forEach(function(tm){
         var startM=t2m(tm);
         var endM=startM+dur;
@@ -6797,7 +6824,8 @@ function makeTurnoEl(t,key,hPx){
   var dc=t.pago||'sin-seña';
 
   var nameColor='';
-  if(t.asistencia==='asistio')nameColor='color:#1D9E75;';
+  if(t.sinCargo)nameColor='color:#185FA5;';
+  else if(t.asistencia==='asistio')nameColor='color:#1D9E75;';
   else if(t.asistencia==='ausente')nameColor='color:#E24B4A;';
 
   var tTime=key.split('_')[1]||'';
@@ -6995,7 +7023,15 @@ function openModal(ds,time,key,forcedProf){
 function openReprog(key){
   var t=turnos[key];if(!t)return;
   var prof=t.prof;
-  var slots=PROF_45.indexOf(prof)>=0?SLOTS_45:SLOTS_30;
+  // Slots dinámicos según duración del bloque de disponibilidad
+  var _rDispBlocks=dispBlocks.filter(function(b){return b.prof===prof;});
+  var _rSlotsSet={};
+  _rDispBlocks.forEach(function(b){
+    var d=b.dur||(PROF_45.indexOf(prof)>=0?45:30);
+    makeSlotsForDur(b.from,b.to,d).forEach(function(s){_rSlotsSet[s]=true;});
+  });
+  var slots=Object.keys(_rSlotsSet).sort();
+  if(!slots.length) slots=PROF_45.indexOf(prof)>=0?SLOTS_45:SLOTS_30;
 
   document.getElementById('ag-reprog-info').textContent=
     'Turno de '+PROF_LBL[prof]+' — '+(t.paciente||'Paciente')+'. Elegí el nuevo horario:';
@@ -7198,11 +7234,13 @@ function initCfgV2(modalId,pillsId,listId,profSet,tmpArr,defaultProf){
       row.className='ag-cfg-v2-row'+(isNL?' ag-cfg-v2-row-nl':'');
       var dayOpts=DIAS.map(function(dn,di){return'<option value="'+di+'"'+(b.day===di?' selected':'')+'>'+dn+'</option>';}).join('');
       var freqOpts=FREQ_OPTS.map(function(f){return'<option value="'+f+'"'+((b.freq||'semanal')===f?' selected':'')+'>'+FREQ_LBL[f]+'</option>';}).join('');
+      var durOpts=[20,30,40,45,60].map(function(m){var sel=(b.dur||0)===m?' selected':'';return'<option value="'+m+'"'+sel+'>'+m+' min</option>';}).join('');
       var html=''
         +'<select data-ri="'+ri+'" data-f="day">'+dayOpts+'</select>'
         +'<input type="time" data-ri="'+ri+'" data-f="from" value="'+b.from+'">'
         +'<input type="time" data-ri="'+ri+'" data-f="to" value="'+b.to+'">'
         +'<input type="text" data-ri="'+ri+'" data-f="label" value="'+esc(b.label||'')+'" placeholder="Etiqueta">'
+        +(isNL?'':'<select data-ri="'+ri+'" data-f="dur" title="Duración por turno">'+durOpts+'</select>')
         +'<select data-ri="'+ri+'" data-f="freq">'+freqOpts+'</select>';
       // Mostrar fecha para NL e inst; para 'unico' es el día exacto, para otros es inicio de frecuencia
       var dateTitle=(b.freq==='unico'?'Fecha del bloque':'Fecha de inicio de la frecuencia');
@@ -7216,7 +7254,7 @@ function initCfgV2(modalId,pillsId,listId,profSet,tmpArr,defaultProf){
     list.querySelectorAll('select[data-ri],input[data-ri]').forEach(function(el){
       el.addEventListener('change',function(){
         var ri=parseInt(this.dataset.ri),f=this.dataset.f;
-        tmpArr[ri][f]=f==='day'?parseInt(this.value):this.value;
+        tmpArr[ri][f]=(f==='day'||f==='dur')?parseInt(this.value):this.value;
       });
     });
     list.querySelectorAll('.ag-cfg-v2-del').forEach(function(btn){
@@ -7237,7 +7275,7 @@ function initCfgV2(modalId,pillsId,listId,profSet,tmpArr,defaultProf){
   var newAdd=addBtn.cloneNode(true);
   addBtn.parentNode.replaceChild(newAdd,addBtn);
   newAdd.addEventListener('click',function(){
-    tmpArr.push({prof:selectedProf,day:0,from:'09:00',to:'12:00',label:'',freq:'semanal',startDate:''});
+    tmpArr.push({prof:selectedProf,day:0,from:'09:00',to:'12:00',label:'',freq:'semanal',startDate:'',dur:30});
     renderRows();
   });
 }
