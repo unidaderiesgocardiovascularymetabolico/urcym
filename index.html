@@ -6780,22 +6780,36 @@ function renderGrid(){
       allItems.push({prof:t.prof,tm:tTime,startM:startM,endM:startM+dur,dur:dur,tipo:'turno',key:k,turno:t});
     });
 
-    // Paso 2: greedy column assignment por solapamiento temporal
+    // Paso 2: greedy column assignment — POR PROFESIONAL para que extras no creen columnas separadas
     allItems.sort(function(a,b){return a.startM-b.startM||(a.prof<b.prof?-1:1);});
     var uLayout=[];
+
+    // Agrupar items por prof y calcular columnas dentro de cada grupo
+    var profGroups={};
     allItems.forEach(function(item){
-      var ov=uLayout.filter(function(x){return x.endM>item.startM&&x.startM<item.endM;});
-      var used=ov.map(function(x){return x.col;});
-      var ci=0;
-      while(used.indexOf(ci)>=0)ci++;
-      uLayout.push({prof:item.prof,tm:item.tm,startM:item.startM,endM:item.endM,
-                    dur:item.dur,tipo:item.tipo,key:item.key,turno:item.turno,col:ci});
+      if(!profGroups[item.prof])profGroups[item.prof]=[];
+      profGroups[item.prof].push(item);
     });
 
-    // Paso 3: totalCols por grupo de solapamiento
-    uLayout.forEach(function(item){
-      var ov=uLayout.filter(function(x){return x.endM>item.startM&&x.startM<item.endM;});
-      item.totalCols=Math.max.apply(null,ov.map(function(x){return x.col+1;}));
+    Object.keys(profGroups).forEach(function(p){
+      var grupo=profGroups[p];
+      grupo.sort(function(a,b){return a.startM-b.startM;});
+      var layoutProf=[];
+      grupo.forEach(function(item){
+        var ov=layoutProf.filter(function(x){return x.endM>item.startM&&x.startM<item.endM;});
+        var used=ov.map(function(x){return x.col;});
+        var ci=0;
+        while(used.indexOf(ci)>=0)ci++;
+        var li={prof:item.prof,tm:item.tm,startM:item.startM,endM:item.endM,
+                dur:item.dur,tipo:item.tipo,key:item.key,turno:item.turno,col:ci};
+        layoutProf.push(li);
+        uLayout.push(li);
+      });
+      // totalCols dentro del grupo del prof
+      layoutProf.forEach(function(item){
+        var ov=layoutProf.filter(function(x){return x.endM>item.startM&&x.startM<item.endM;});
+        item.totalCols=Math.max.apply(null,ov.map(function(x){return x.col+1;}));
+      });
     });
 
     // Paso 4: renderizar cada item en su columna
