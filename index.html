@@ -6504,9 +6504,13 @@ var todayStr=kd(new Date());
 
 // ── Slots ofrecidos ────────────────────────────────────────────────────────
 var LS_OFFERED='urcym_ag_offered';
+var LS_BLOCKED='urcym_ag_blocked';
+var blockedSlots={};
 var offeredSlots={};  // { "2026-06-01_09:00_BG": true, ... }
 function loadOffered(){try{var s=localStorage.getItem(LS_OFFERED);if(s)offeredSlots=JSON.parse(s);}catch(e){}}
 function saveOffered(){try{localStorage.setItem(LS_OFFERED,JSON.stringify(offeredSlots));}catch(e){}}
+function loadBlocked(){try{var s=localStorage.getItem(LS_BLOCKED);if(s)blockedSlots=JSON.parse(s);}catch(e){}}
+function saveBlocked(){try{localStorage.setItem(LS_BLOCKED,JSON.stringify(blockedSlots));}catch(e){}}
 loadOffered();
 
 var _offeredPopup=null;
@@ -6810,6 +6814,9 @@ function renderGrid(){
           return isBlockActiveOnDate(b,ds)&&t2m(b.from)<=startM&&startM<t2m(b.to);
         });
         if(inInst)return;
+        // Bloqueo manual (click derecho)
+        var manualKey=ds+'_'+tm+'_'+p;
+        if(blockedSlots[manualKey])return;
         var tk=ds+'_'+tm;
         // FIX: verificar con nuevo formato prof-aware Y formato legacy
         var tkProf=ds+'_'+tm+'_'+p;
@@ -6905,11 +6912,22 @@ function renderGrid(){
           pl.textContent=PROF_LBL[p]||p;
           el.appendChild(pl);
         }
-        // ── 1 click = abrir popup para agregar turno ──
+        // ── click izq = agregar turno | click der = bloquear/desbloquear ──
         (function(el2,ds2,tm2,prof2){
           el2.addEventListener('click',function(e){
             e.stopPropagation();
             openModal(ds2,tm2,null,prof2);
+          });
+          el2.addEventListener('contextmenu',function(e){
+            e.preventDefault();e.stopPropagation();
+            var bk=ds2+'_'+tm2+'_'+prof2;
+            if(blockedSlots[bk]){
+              delete blockedSlots[bk];
+            } else {
+              blockedSlots[bk]=true;
+            }
+            saveBlocked();
+            renderGrid();
           });
         })(el,ds,item.tm,p);
         col.appendChild(el);
@@ -7592,6 +7610,7 @@ function loadLocal(){
   try{var ri2=localStorage.getItem(LS_INST);instBlocks=ri2?JSON.parse(ri2):[];}catch(e){instBlocks=[];}
   renderGrid();
 }
+loadBlocked();
 loadLocal();
 })();
 
