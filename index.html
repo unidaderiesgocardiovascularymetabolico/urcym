@@ -1857,6 +1857,20 @@
       <label>Rp: (Medicamentos, dosis y posología)</label>
       <textarea id="rec_contenido" placeholder="Ej: Enalapril 10mg - 1 comprimido cada 12 hs&#10;Losartán 50mg - 1 comprimido por día"></textarea>
     </div>
+    <div style="background:#f0f4f9;border-radius:10px;padding:10px 14px;margin-bottom:12px">
+      <div style="font-size:12px;font-weight:700;color:#6b7a8d;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Firma / Sello</div>
+      <div style="display:flex;gap:12px;flex-wrap:wrap">
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px">
+          <input type="radio" name="firma_receta" value="ninguna" checked style="accent-color:#3089ca"> Sin firma
+        </label>
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px">
+          <input type="radio" name="firma_receta" value="barbara" style="accent-color:#3089ca"> Dra. Bárbara Guerrero
+        </label>
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px">
+          <input type="radio" name="firma_receta" value="omar" style="accent-color:#3089ca"> Dr. Omar Bertani
+        </label>
+      </div>
+    </div>
     <div class="form-actions" style="flex-wrap:wrap;gap:8px">
       <button class="btn btn-secondary" style="flex:1;min-width:120px" onclick="cerrarModal('modalReceta')">Cancelar</button>
       <button class="btn btn-teal" style="flex:1;min-width:120px" onclick="generarPDF('receta')">📄 Descargar PDF</button>
@@ -1887,6 +1901,20 @@
     <div class="form-group">
       <label>Indicaciones / Plan terapéutico</label>
       <textarea id="ind_contenido" placeholder="Ej: Plan alimentario&#10;- Reducir ingesta de sodio&#10;- Actividad física 30 min/día&#10;&#10;Controles&#10;- Tensión arterial cada 15 días"></textarea>
+    </div>
+    <div style="background:#f0f4f9;border-radius:10px;padding:10px 14px;margin-bottom:12px">
+      <div style="font-size:12px;font-weight:700;color:#6b7a8d;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Firma / Sello</div>
+      <div style="display:flex;gap:12px;flex-wrap:wrap">
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px">
+          <input type="radio" name="firma_ind" value="ninguna" checked style="accent-color:#3089ca"> Sin firma
+        </label>
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px">
+          <input type="radio" name="firma_ind" value="barbara" style="accent-color:#3089ca"> Dra. Bárbara Guerrero
+        </label>
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px">
+          <input type="radio" name="firma_ind" value="omar" style="accent-color:#3089ca"> Dr. Omar Bertani
+        </label>
+      </div>
     </div>
     <div class="form-actions" style="flex-wrap:wrap;gap:8px">
       <button class="btn btn-secondary" style="flex:1;min-width:120px" onclick="cerrarModal('modalIndicaciones')">Cancelar</button>
@@ -3435,7 +3463,7 @@ function _icon(doc, tipo, x, y, col) {
 function _pdfHeader(doc, u, PW, ML) {
   const MR = 12, W = PW - ML - MR;
   const HY = 8, HH = 40;
-  const lSz = 34, lX = ML + 4, lY = HY + 3;  // más grande para llenar el encabezado
+  const lSz = 24, lX = ML + 5, lY = HY + (HH - lSz) / 2;  // logo más pequeño y centrado verticalmente
 
   // Fondo igual al footer
   doc.setFillColor(..._C.footer);
@@ -3514,15 +3542,31 @@ function _pdfPatientBar(doc, p, fechaStr, PW, ML, MR) {
 /* ─────────────────────────────────────────────────── */
 /*  FIRMA Y SELLO                                      */
 /* ─────────────────────────────────────────────────── */
-function _pdfFirma(doc, u, PW, PH, ML) {
-  const MR = 12, FW = 22;
+function _pdfFirma(doc, u, PW, PH, ML, firmaKey) {
+  const MR = 12, FW = 48;
   const FX = PW - MR - FW;
   // Footer empieza en PH-20; la firma ocupa ~36mm => FY = PH - 20 - 36 = PH - 56
   const FY = PH - 56;
 
-  // Solo línea de firma (sin imagen)
-  doc.setDrawColor(..._C.gris); doc.setLineWidth(0.3);
-  doc.line(FX, FY + 10, FX + FW, FY + 10);
+  // Imagen de firma si fue seleccionada
+  let firmaB64 = null;
+  if (firmaKey === 'barbara') firmaB64 = firmaBarbaraB64;
+  else if (firmaKey === 'omar') firmaB64 = firmaOmarB64;
+
+  if (firmaB64) {
+    try {
+      // Imagen de firma: ancho 48mm, alto proporcional (aprox 36mm)
+      doc.addImage(firmaB64, 'JPEG', FX, FY, FW, 34, '', 'NONE', 0);
+    } catch(e) {
+      // fallback: solo línea
+      doc.setDrawColor(..._C.gris); doc.setLineWidth(0.3);
+      doc.line(FX, FY + 30, FX + FW, FY + 30);
+    }
+  } else {
+    // Solo línea de firma (sin imagen)
+    doc.setDrawColor(..._C.gris); doc.setLineWidth(0.3);
+    doc.line(FX, FY + 10, FX + FW, FY + 10);
+  }
 }
 
 /* ─────────────────────────────────────────────────── */
@@ -3587,6 +3631,11 @@ function generarPDF(tipo) {
   const doc = new jsPDF({ unit: 'mm', format: 'a5', orientation: 'portrait' });
   const PW = 148, PH = 210, ML = 12, MR = 12, W = PW - ML - MR;
 
+  // Leer firma seleccionada
+  const firmaRadioName = tipo === 'receta' ? 'firma_receta' : 'firma_ind';
+  const firmaRadioEl = document.querySelector(`input[name="${firmaRadioName}"]:checked`);
+  const firmaKey = firmaRadioEl ? firmaRadioEl.value : 'ninguna';
+
   const headerEndY = _pdfHeader(doc, u, PW, ML);
   const hoy = new Date().toLocaleDateString('es-AR',
     { day: '2-digit', month: '2-digit', year: 'numeric' });
@@ -3639,7 +3688,7 @@ function generarPDF(tipo) {
     }
   }
 
-  _pdfFirma(doc, u, PW, PH, ML);
+  _pdfFirma(doc, u, PW, PH, ML, firmaKey);
   _pdfFooter(doc, PW, PH);
 
   const np = p ? (p.apellido || p.nombre || 'doc').replace(/\s+/g, '_') : 'doc';
@@ -4955,7 +5004,7 @@ function _crearPDFIndicacionesEvol(txt) {
     curY += 1;
   });
 
-  _pdfFirma(doc, u, PW, PH, ML);
+  _pdfFirma(doc, u, PW, PH, ML, 'ninguna');
   _pdfFooter(doc, PW, PH);
 
   return { doc, filename, hoy };
