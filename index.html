@@ -1294,6 +1294,7 @@
           <span id="evol_os" style="font-size:11px;background:var(--blue-light);color:var(--blue);padding:2px 8px;border-radius:10px"></span>
         </div>
         <div style="display:flex;gap:8px;align-items:center">
+          <button class="btn-previas" onclick="abrirHistClinicaRO()">📖 Hist. Clínica</button>
           <button class="btn-previas" onclick="abrirCargaEvolucionHistorica()">📅 Cargar evolución histórica</button>
           <button class="btn-previas" onclick="abrirPrevias()">📋 Previas</button>
           <button class="btn btn-teal" id="btnGuardarEvol" onclick="guardarEvolucion()" style="width:auto;margin:0;padding:9px 22px;font-size:13px">💾 Guardar</button>
@@ -1309,10 +1310,6 @@
         <div class="evh-section">
           <div class="evh-title">Medicación actual <button class="btn-hx-mini" onclick="abrirHistorialMed()" title="Historial medicación">🕐</button></div>
           <div id="evh_med" class="evh-meds" style="display:flex;flex-wrap:wrap;gap:5px;margin-top:4px"></div>
-        </div>
-        <div class="evh-section">
-          <div class="evh-title" style="color:#166534">Otra medicación</div>
-          <div id="evh_other_med" style="display:flex;flex-wrap:wrap;gap:5px;margin-top:4px"></div>
         </div>
         <div class="evh-section evh-section-small">
           <div class="evh-title">Hábitos</div>
@@ -3983,11 +3980,7 @@ async function actualizarEncabezadoVariable(dni) {
     Object.entries(FAM_L).forEach(([k,v])=>{if(c[k])dxHtml+='<span class="evh-tag-green">'+v+'</span>';});
   }
   document.getElementById('evh_dx').innerHTML=dxHtml||'<span style="font-size:11px;color:var(--text-soft)">Sin diagnósticos</span>';
-  const medsActual = meds.filter(m => m.grupo !== 'Otro');
-  const medsOtro   = meds.filter(m => m.grupo === 'Otro');
-  document.getElementById('evh_med').innerHTML=medsActual.length?medsActual.map(m=>'<span class="evh-med-item">'+m.farmaco+' '+m.dosis+'</span>').join(''):'<span style="font-size:11px;color:var(--text-soft)">Sin medicación</span>';
-  const otroEl = document.getElementById('evh_other_med');
-  if(otroEl) otroEl.innerHTML=medsOtro.length?medsOtro.map(m=>'<span class="evh-med-item" style="background:#dcfce7;color:#166534">'+m.farmaco+' '+m.dosis+'</span>').join(''):'<span style="font-size:11px;color:var(--text-soft)">—</span>';
+  document.getElementById('evh_med').innerHTML=meds.length?meds.map(m=>'<span class="evh-med-item">'+m.farmaco+' '+m.dosis+'</span>').join(''):'<span style="font-size:11px;color:var(--text-soft)">Sin medicación</span>';
   if(c){
     const py=((c.cigarrillos_dia||0)*(c.anios_fumando||0)/20).toFixed(1);
     const t=c.tabaquismo==='nunca'?'<span class="evh-habito-bien">No fumador</span>':c.tabaquismo==='actual'?'<span class="evh-habito-malo">Fumador ('+py+' PA)</span>':'<span style="color:#e08c3a;font-weight:600">Ex fumador ('+py+' PA)</span>';
@@ -3997,6 +3990,68 @@ async function actualizarEncabezadoVariable(dni) {
     const act=c.actividad_fisica==='sedentarismo'?'<span class="evh-habito-malo">Sedentario</span>':'<span class="evh-habito-bien">'+c.actividad_fisica+'</span>';
     document.getElementById('evh_habitos').innerHTML=t+'<br>'+a+'<br>'+act;
   }
+}
+
+async function abrirHistClinicaRO() {
+  if(!pacienteActual) return;
+  const modal = document.getElementById('modalHistClinicaRO');
+  modal.classList.add('open');
+  document.getElementById('histro_nombre').textContent = pacienteActual.apellido + ', ' + pacienteActual.nombre + '  ·  DNI: ' + pacienteActual.dni;
+  ['histro_filtro_prof','histro_filtro_desde','histro_filtro_hasta','histro_filtro_kw'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  document.getElementById('histro_filtro_count').textContent = '';
+  const cont = document.getElementById('histro_lista');
+  cont.innerHTML = '<div class="loading">Cargando historia clínica...</div>';
+  const { data } = await sb.from('evoluciones').select('*').eq('dni_paciente', pacienteActual.dni).order('fecha_hora', {ascending:false});
+  _histroData = data || [];
+  renderHistRO(_histroData);
+}
+
+let _histroData = [];
+
+function renderHistRO(data) {
+  const cont = document.getElementById('histro_lista');
+  if(!cont) return;
+  const countEl = document.getElementById('histro_filtro_count');
+  if(!data.length) {
+    cont.innerHTML = '<div class="empty-state"><div>📋</div><p>No hay evoluciones registradas.</p></div>';
+    if(countEl) countEl.textContent = '';
+    return;
+  }
+  if(countEl) countEl.textContent = data.length + ' evolución' + (data.length!==1?'es':'');
+  cont.innerHTML = data.map(e => {
+    const fh = new Date(e.fecha_hora);
+    const fechaStr = fh.toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'});
+    const horaStr  = fh.toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'});
+    const mClase   = medicoAClase(e.medico);
+    return '<div class="hc-entrada">' +
+      '<div class="hc-header '+mClase+'" style="display:flex;align-items:center;flex-wrap:wrap;gap:6px">' +
+        '<span class="hc-fecha">'+fechaStr+' '+horaStr+'</span>' +
+        '<span class="hc-medico">'+(e.medico||'')+'</span>' +
+        (e.ta_promedio?'<span class="hc-badge-ta">TA: '+e.ta_promedio+'</span>':'') +
+        (e.fc_promedio?'<span class="hc-badge-fc">FC: '+e.fc_promedio+' lpm</span>':'') +
+        (e.peso?'<span class="hc-badge-peso">Peso: '+e.peso+' kg</span>':'') +
+      '</div>' +
+      '<div class="hc-cuerpo">'+(e.contenido_html||'')+'</div>' +
+    '</div>';
+  }).join('');
+}
+
+function filtrarHistRO() {
+  const prof  = document.getElementById('histro_filtro_prof')?.value || '';
+  const desde = document.getElementById('histro_filtro_desde')?.value || '';
+  const hasta = document.getElementById('histro_filtro_hasta')?.value || '';
+  const kw    = (document.getElementById('histro_filtro_kw')?.value || '').toLowerCase().trim();
+  let res = _histroData;
+  if(prof)  res = res.filter(e => (e.medico||'').toLowerCase().includes(prof));
+  if(desde) res = res.filter(e => e.fecha_hora >= desde);
+  if(hasta) res = res.filter(e => e.fecha_hora.slice(0,10) <= hasta);
+  if(kw)    res = res.filter(e => (e.contenido_html||'').toLowerCase().includes(kw) || (e.medico||'').toLowerCase().includes(kw));
+  renderHistRO(res);
+}
+
+function limpiarFiltrosHistRO() {
+  ['histro_filtro_prof','histro_filtro_desde','histro_filtro_hasta','histro_filtro_kw'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  renderHistRO(_histroData);
 }
 
 // ===== NUEVA cargarDatosClinica CON GINECO Y FAM =====
@@ -4048,7 +4103,7 @@ async function cargarDatosClinica(dni) {
   await cargarMedicacion(dni);
 }
 
-['modalPaciente','modalReceta','modalIndicaciones','modalHistorialDx','modalHistorialMed','modalLabRO','modalEditarEvolucion'].forEach(id=>{
+['modalPaciente','modalReceta','modalIndicaciones','modalHistorialDx','modalHistorialMed','modalLabRO','modalEditarEvolucion','modalHistClinicaRO'].forEach(id=>{
   document.getElementById(id).addEventListener('click',function(e){
     if(e.target===this) cerrarModal(id);
   });
@@ -6494,7 +6549,50 @@ document.getElementById('modal_evol_historica').addEventListener('click', functi
   </div>
 </div>
 
-<div class="modal-overlay" id="modalHistorialDx">
+<div class="modal-overlay" id="modalHistClinicaRO">
+  <div class="modal" style="max-width:860px;width:95%;max-height:90vh;display:flex;flex-direction:column">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;flex-shrink:0">
+      <div>
+        <div class="modal-title" style="margin:0">📖 Historia Clínica</div>
+        <div id="histro_nombre" style="font-size:13px;color:var(--text-soft);margin-top:3px"></div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <div style="font-size:11px;color:var(--text-soft);font-style:italic;background:var(--gray);padding:3px 10px;border-radius:20px">👁 Solo lectura</div>
+        <button onclick="cerrarModal('modalHistClinicaRO')" style="background:none;border:none;font-size:22px;cursor:pointer;color:var(--text-soft);line-height:1">✕</button>
+      </div>
+    </div>
+    <!-- Filtros -->
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:14px;padding:12px 14px;background:var(--gray);border-radius:10px;border:1px solid var(--border);flex-shrink:0">
+      <div style="display:flex;flex-direction:column;gap:4px">
+        <label style="font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--text-soft)">Profesional</label>
+        <select id="histro_filtro_prof" style="padding:6px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;font-family:var(--font-main);background:white;color:var(--text);min-width:180px">
+          <option value="">Todos</option>
+          <option value="barbara">Dra. Bárbara Guerrero</option>
+          <option value="omar">Dr. Omar Bertani</option>
+        </select>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:4px">
+        <label style="font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--text-soft)">Desde</label>
+        <input type="date" id="histro_filtro_desde" style="padding:6px 8px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;font-family:var(--font-main)"/>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:4px">
+        <label style="font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--text-soft)">Hasta</label>
+        <input type="date" id="histro_filtro_hasta" style="padding:6px 8px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;font-family:var(--font-main)"/>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:4px;flex:1;min-width:150px">
+        <label style="font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--text-soft)">Palabra clave</label>
+        <input type="text" id="histro_filtro_kw" placeholder="Buscar en el texto..." style="width:100%;padding:6px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;font-family:var(--font-main)" onkeydown="if(event.key==='Enter') filtrarHistRO()"/>
+      </div>
+      <div style="display:flex;gap:6px;align-items:flex-end;padding-bottom:1px">
+        <button onclick="filtrarHistRO()" style="padding:6px 14px;border:none;border-radius:8px;background:var(--teal);color:white;font-size:12px;font-family:var(--font-main);font-weight:600;cursor:pointer">🔍 Buscar</button>
+        <button onclick="limpiarFiltrosHistRO()" style="padding:6px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;font-family:var(--font-main);background:white;cursor:pointer;color:var(--text-soft)">✕</button>
+        <span id="histro_filtro_count" style="font-size:11px;color:var(--text-soft);white-space:nowrap;align-self:center"></span>
+      </div>
+    </div>
+    <!-- Lista evoluciones -->
+    <div id="histro_lista" style="overflow-y:auto;flex:1"></div>
+  </div>
+</div>
   <div class="modal" style="max-width:600px;max-height:80vh;overflow-y:auto">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
       <div class="modal-title" style="margin:0">Historial de diagnósticos</div>
