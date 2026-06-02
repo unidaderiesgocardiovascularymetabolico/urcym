@@ -143,6 +143,11 @@
     .empty-state div { font-size:40px; margin-bottom:12px; }
     .empty-state p { font-size:14px; }
 
+    .nav-tab.evol-pac-tab { display:flex; align-items:center; gap:6px; padding-right:8px; }
+    .nav-tab.evol-pac-tab .evol-tab-close { display:inline-flex; align-items:center; justify-content:center; width:16px; height:16px; border-radius:50%; font-size:11px; line-height:1; color:var(--text-soft); transition:all .15s; margin-left:2px; }
+    .nav-tab.evol-pac-tab:hover .evol-tab-close, .nav-tab.evol-pac-tab.active .evol-tab-close { color:var(--blue); }
+    .nav-tab.evol-pac-tab .evol-tab-close:hover { background:var(--red-light); color:var(--red) !important; }
+
     /* MODAL */
     .modal-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,.35); z-index:200; align-items:center; justify-content:center; padding:20px; }
     .modal-overlay.open { display:flex; }
@@ -842,6 +847,7 @@
     <div class="nav-tab" onclick="showPage('pacientes')">Pacientes</div>
     <div class="nav-tab" onclick="showPage('agenda')">Agenda</div>
     <div class="nav-tab" onclick="showPage('finanzas')">Finanzas</div>
+    <div id="evol-tabs" style="display:contents"></div>
   </div>
   <div class="content">
 
@@ -3216,16 +3222,7 @@ function doLogin() {
     document.getElementById('app').style.display = 'block';
     document.getElementById('topbarUser').textContent = currentUser.titulo + ' · ' + currentUser.mp;
     document.getElementById('dashWelcome').textContent = 'Hola, ' + currentUser.name;
-    cargarPacientes().then(() => {
-      // Si la URL tiene ?evolucion=DNI, abrir directamente en esta pestaña
-      const params = new URLSearchParams(window.location.search);
-      const dniParam = params.get('evolucion');
-      const apellidoParam = params.get('pac');
-      if(dniParam) {
-        if(apellidoParam) document.title = decodeURIComponent(apellidoParam) + ' — URCyM';
-        abrirEvolucion(decodeURIComponent(dniParam));
-      }
-    });
+    cargarPacientes();
   } else {
     document.getElementById('errorMsg').classList.add('visible');
   }
@@ -3455,7 +3452,7 @@ function renderTabla(data, evolMap) {
         '<td>' + (p.obra_social?'<span class="badge badge-blue">'+p.obra_social+'</span>':'-') + '</td>' +
         '<td id="uc-' + p.dni + '" style="font-size:12px;color:var(--text-soft)">' + (evolMap ? fechaEvol : 'cargando...') + '</td>' +
         '<td><div class="acciones">' +
-          '<button class="btn-accion evolucionar" onclick="abrirEvolucionNuevaPestana(\'' + p.dni + '\')">✚ Evolucionar</button>' +
+          '<button class="btn-accion evolucionar" onclick="abrirEvolucion(\'' + p.dni + '\')">✚ Evolucionar</button>' +
           '<button class="btn-accion ver-hc" onclick="abrirHistoriaClinica(\'' + p.dni + '\')">📖 Hist. Clínica</button>' +
           '<button class="btn-accion" style="border-color:#8b5cf6;color:#8b5cf6" onclick="abrirHistoriaPaciente(\'' + p.dni + '\')">🧪 Lab/Estudios</button>' +
           '<button class="btn-accion receta" onclick="abrirDocumento(\'receta\',\'' + p.dni + '\')">💊 Receta</button>' +
@@ -3493,15 +3490,6 @@ function filtrarPacientes() {
 function evolucionarPaciente(dni) {
   const p = pacientesData.find(x=>x.dni===dni);
   alert('Historia clínica de ' + p.apellido + ', ' + p.nombre + '\n\nEste módulo estará disponible próximamente.');
-}
-
-// Abrir evolución en nueva pestaña con apellido del paciente en el título
-function abrirEvolucionNuevaPestana(dni) {
-  const p = pacientesData.find(x=>x.dni===dni);
-  const apellido = p ? p.apellido.toUpperCase() : dni;
-  const url = window.location.pathname + '?evolucion=' + encodeURIComponent(dni) + '&pac=' + encodeURIComponent(apellido);
-  const tab = window.open(url, '_blank');
-  if(tab) tab.focus();
 }
 
 function abrirHistoriaClinica(dni) {
@@ -4620,9 +4608,15 @@ async function guardarAntYVolver() {
 async function abrirEvolucion(dni) {
   const p = pacientesData.find(x=>x.dni===dni);
   if(!p) return;
+
+  // Si ya existe una pestaña para este paciente, activarla
+  const existingTab = document.querySelector('.evol-pac-tab[data-evol-dni="'+dni+'"]');
+  if(existingTab) {
+    activarEvolTab(dni);
+    return;
+  }
+
   pacienteActual = p;
-  // Actualizar título de la pestaña con el apellido del paciente
-  document.title = p.apellido.toUpperCase() + ' — URCyM';
   document.getElementById('evol_nombre').textContent = p.apellido + ', ' + p.nombre;
   document.getElementById('evol_dni').textContent = 'DNI: ' + p.dni;
   document.getElementById('evol_fnac').textContent = 'F. Nac: ' + formatFecha(p.fecha_nacimiento);
@@ -4645,12 +4639,83 @@ async function abrirEvolucion(dni) {
   _savedCols.lab.clear(); _savedCols.ant.clear(); _savedCols.est.clear();
   await cargarDatosTablasEvol(p.dni);
   await restaurarBorradorEvol(p.dni);
-  showPage('evolucion');
+  // Crear pestaña en la nav bar
+  crearEvolTab(p);
+  activarEvolTab(dni);
   switchPacMainTab('evol');
   actualizarEncabezadoVariable(p.dni);
   cargarSnapshotInicial(p.dni);
   // Precargar PREVENT con datos disponibles del paciente
   setTimeout(precargarPREVENT, 800);
+}
+
+// ===== PESTAÑAS DINÁMICAS DE PACIENTES =====
+function crearEvolTab(p) {
+  const container = document.getElementById('evol-tabs');
+  if(!container) return;
+  // Evitar duplicados
+  if(container.querySelector('[data-evol-dni="'+p.dni+'"]')) return;
+  const tab = document.createElement('div');
+  tab.className = 'nav-tab evol-pac-tab';
+  tab.dataset.evolDni = p.dni;
+  tab.innerHTML = '<span class="evol-tab-label">' + p.apellido + '</span>' +
+    '<span class="evol-tab-close" title="Cerrar">✕</span>';
+  tab.querySelector('.evol-tab-label').addEventListener('click', () => activarEvolTab(p.dni));
+  tab.querySelector('.evol-tab-close').addEventListener('click', (e) => {
+    e.stopPropagation();
+    cerrarEvolTab(p.dni);
+  });
+  container.appendChild(tab);
+}
+
+function activarEvolTab(dni) {
+  const p = pacientesData.find(x=>x.dni===dni);
+  if(!p) return;
+  // Desactivar todas las nav-tabs
+  document.querySelectorAll('.nav-tab').forEach(t=>t.classList.remove('active'));
+  // Activar la pestaña de este paciente
+  const tab = document.querySelector('.evol-pac-tab[data-evol-dni="'+dni+'"]');
+  if(tab) tab.classList.add('active');
+  // Mostrar la página de evolución con los datos de este paciente
+  pacienteActual = p;
+  document.getElementById('evol_nombre').textContent = p.apellido + ', ' + p.nombre;
+  document.getElementById('evol_dni').textContent = 'DNI: ' + p.dni;
+  document.getElementById('evol_fnac').textContent = 'F. Nac: ' + formatFecha(p.fecha_nacimiento);
+  document.getElementById('evol_edad').textContent = edadDesde(p.fecha_nacimiento) + ' años';
+  document.getElementById('evol_os').textContent = p.obra_social || 'Sin obra social';
+  // Mostrar/ocultar páginas
+  document.querySelectorAll('.page').forEach(pg => {
+    pg.classList.remove('active');
+    if(pg.id !== 'page-evolucion') pg.style.display = '';
+  });
+  const evolPage = document.getElementById('page-evolucion');
+  if(evolPage) evolPage.style.display = 'block';
+  actualizarEncabezadoVariable(dni);
+}
+
+async function cerrarEvolTab(dni) {
+  // Verificar cambios sin guardar
+  const hayDirtyTablas = _dirty.lab || _dirty.ant || _dirty.est;
+  const editorConTexto = !!document.getElementById('evol_editor').innerText.trim();
+  const hayDirtyEvol = _dirty.evol || editorConTexto;
+  if(pacienteActual && pacienteActual.dni === dni && (hayDirtyTablas || hayDirtyEvol)) {
+    const accion = await mostrarGuardModal('La evolución no fue guardada. ¿Qué querés hacer?');
+    if(accion === 'cancelar') return;
+    if(accion === 'guardar') { await guardarEvolucion(); return; }
+    if(_dirty.lab && labDatos.columnas && labDatos.columnas.length) await guardarDatosPac('lab_tabla_wrap');
+    if(_dirty.ant && antDatos.columnas && antDatos.columnas.length) await guardarDatosPac('ant_tabla_wrap');
+    if(_dirty.est && estDatos.columnas && estDatos.columnas.length) await guardarDatosPac('est_tabla_wrap');
+  }
+  // Quitar la pestaña del DOM
+  const tab = document.querySelector('.evol-pac-tab[data-evol-dni="'+dni+'"]');
+  if(tab) tab.remove();
+  // Si era la pestaña activa, volver a pacientes
+  const evolPage = document.getElementById('page-evolucion');
+  if(evolPage && evolPage.style.display !== 'none' && (!pacienteActual || pacienteActual.dni === dni)) {
+    showPage('pacientes');
+  }
+  if(pacienteActual && pacienteActual.dni === dni) pacienteActual = null;
+  limpiarDirty('evol'); limpiarDirty('lab'); limpiarDirty('ant'); limpiarDirty('est');
 }
 
 function verHistoria(dni) {
@@ -4759,27 +4824,8 @@ function limpiarFiltrosHistoria() {
 }
 
 async function volverDesdeEvolucion() {
-  document.title = 'URCyM — Sistema de Historia Clínica';
-  const hayDirtyTablas = _dirty.lab || _dirty.ant || _dirty.est;
-  const editorConTexto = !!document.getElementById('evol_editor').innerText.trim();
-  const hayDirtyEvol = _dirty.evol || editorConTexto;
-
-  if(hayDirtyTablas || hayDirtyEvol) {
-    let msg = 'Tenés cambios sin guardar. ¿Qué querés hacer antes de salir?';
-    if(hayDirtyTablas && !hayDirtyEvol) msg = 'Hay datos de tablas sin guardar. ¿Qué querés hacer?';
-    if(!hayDirtyTablas && hayDirtyEvol) msg = 'La evolución no fue guardada. ¿Qué querés hacer?';
-    const accion = await mostrarGuardModal(msg);
-    if(accion === 'cancelar') return;
-    if(accion === 'guardar') {
-      await guardarEvolucion();
-      return;
-    }
-    // Descartar: guardar de todas formas las tablas con cambios para no perder datos
-    if(_dirty.lab && labDatos.columnas && labDatos.columnas.length) await guardarDatosPac('lab_tabla_wrap');
-    if(_dirty.ant && antDatos.columnas && antDatos.columnas.length) await guardarDatosPac('ant_tabla_wrap');
-    if(_dirty.est && estDatos.columnas && estDatos.columnas.length) await guardarDatosPac('est_tabla_wrap');
-  }
-  showPage('pacientes');
+  if(pacienteActual) await cerrarEvolTab(pacienteActual.dni);
+  else showPage('pacientes');
 }
 
 async function guardarEvolucion() {
@@ -4834,6 +4880,10 @@ async function guardarEvolucion() {
   setTimeout(() => {
     btnGuardar.disabled = false;
     btnGuardar.textContent = '💾 Guardar evolución';
+    // Cerrar la pestaña del paciente y volver a pacientes
+    const dniGuardado = p.dni;
+    const tab = document.querySelector('.evol-pac-tab[data-evol-dni="'+dniGuardado+'"]');
+    if(tab) tab.remove();
     showPage('pacientes');
     cargarPacientes();
   }, 1500);
