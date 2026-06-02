@@ -6946,21 +6946,8 @@ function renderGrid(){
       });
     });
 
-    // Institutional blocks (close entire consultorio)
-    instBlocks.filter(function(b){return isBlockActiveOnDate(b,ds);}).forEach(function(b){
-      var el=document.createElement('div');
-      el.className='ag-nl-inst';
-      el.style.top=topOf(b.from)+'px';
-      el.style.height=heightOf(b.from,b.to)+'px';
-      var icon=document.createElement('span');
-      icon.className='ag-nl-inst-icon';
-      icon.textContent='🏛';
-      el.appendChild(icon);
-      var txt=document.createElement('span');
-      txt.textContent=b.label||'Cierre institucional';
-      el.appendChild(txt);
-      col.appendChild(el);
-    });
+    // Institutional blocks — deferred until after layout so we know totalProfs
+    var pendingInstBlocks=instBlocks.filter(function(b){return isBlockActiveOnDate(b,ds);});
 
     // ── Layout unificado: slots libres + turnos asignados comparten columnas ──
     var allItems=[];
@@ -7024,7 +7011,7 @@ function renderGrid(){
       var tTime=parts[1];
       if(tDate!==ds)return;
       var t=turnos[k];
-      if(pf&&t.prof!==pf)return;
+      if(visProfs.indexOf(t.prof)<0)return;
       var defaultDur=PROF_45.indexOf(t.prof)>=0?45:30;
       var startM=t2m(tTime);
       var dur=defaultDur;
@@ -7072,6 +7059,24 @@ function renderGrid(){
       uLayout.push({prof:item.prof,tm:item.tm,startM:item.startM,endM:item.endM,
                     dur:item.endM-item.startM,tipo:item.tipo,key:item.key,turno:item.turno,
                     col:profCol,totalCols:totalProfs});
+    });
+
+    // Render institutional blocks now that totalProfs is known — spans full column width
+    pendingInstBlocks.forEach(function(b){
+      var el=document.createElement('div');
+      el.className='ag-nl-inst';
+      el.style.top=topOf(b.from)+'px';
+      el.style.height=heightOf(b.from,b.to)+'px';
+      el.style.left='0';
+      el.style.right='0';
+      var icon=document.createElement('span');
+      icon.className='ag-nl-inst-icon';
+      icon.textContent='🏛';
+      el.appendChild(icon);
+      var txt=document.createElement('span');
+      txt.textContent=b.label||'Cierre institucional';
+      el.appendChild(txt);
+      col.appendChild(el);
     });
 
     // Paso 4: renderizar
