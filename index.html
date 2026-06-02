@@ -3435,7 +3435,9 @@ const _C = {
   oscuro: [26,37,53],    suave:  [107,122,141],
   gris:   [200,215,228], blanco: [255,255,255],
   hdrBg:  [248,252,255], rpBg:   [243,249,254],
-  footer: [26,65,100],
+  footer: [48,137,202],   // #3089ca
+  acento: [219,203,190],  // #dbcbbe
+  azulTxt:[48,137,202],
 };
 
 /* ── Íconos para el pie (dibujados con jsPDF) ─────── */
@@ -3461,50 +3463,53 @@ function _icon(doc, tipo, x, y, col) {
 /*  ENCABEZADO                                         */
 /* ─────────────────────────────────────────────────── */
 function _pdfHeader(doc, u, PW, ML) {
-  const HH = 36;
-  const lSz = 15, lX = 5, lY = (HH - lSz) / 2;
+  const HH = 32;
+  const lSz = 13, lX = 9, lY = (HH - lSz) / 2;
 
-  // Fondo azul institucional — ancho completo sin márgenes
-  doc.setFillColor(..._C.footer);
+  // Fondo blanco — ancho completo
+  doc.setFillColor(..._C.blanco);
   doc.rect(0, 0, PW, HH, 'F');
 
-  // Acento teal izquierdo
-  doc.setFillColor(..._C.teal);
-  doc.rect(0, 0, 2.5, HH, 'F');
+  // Barra de acento izquierda — color #dbcbbe
+  doc.setFillColor(..._C.acento);
+  doc.rect(0, 0, 3, HH, 'F');
 
-  // Logo (más chico)
+  // Logo
   if (_logoPNGcache) {
     try {
       doc.addImage(_logoPNGcache, 'PNG', lX, lY, lSz, lSz, '', 'NONE', 0);
     } catch(e) {}
   }
 
-  // Separador vertical logo / texto
-  const sepX = lX + lSz + 3;
-  doc.setDrawColor(77, 188, 190); doc.setLineWidth(0.2);
-  doc.line(sepX, 5, sepX, HH - 5);
+  // Separador vertical fino — color acento
+  const sepX = lX + lSz + 4;
+  doc.setDrawColor(..._C.acento); doc.setLineWidth(0.3);
+  doc.line(sepX, 4, sepX, HH - 4);
 
   // Bloque de texto
-  const tX = sepX + 5; let tY = 10;
+  const tX = sepX + 5; let tY = 9;
 
+  // Nombre profesional — azul #3089ca
   doc.setFont('helvetica', 'bold'); doc.setFontSize(9);
-  doc.setTextColor(..._C.blanco);
+  doc.setTextColor(..._C.azulTxt);
   doc.text(u.titulo || u.name || '', tX, tY); tY += 4.5;
 
-  doc.setFont('helvetica', 'bold'); doc.setFontSize(8.5);
-  doc.setTextColor(160, 210, 230);
-  doc.text(u.mp || '', tX, tY); tY += 4.5;
+  // Matrícula — #dbcbbe
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(8);
+  doc.setTextColor(..._C.acento);
+  doc.text(u.mp || '', tX, tY); tY += 4.2;
 
+  // Especialidades — negro/oscuro
   const specs = Array.isArray(u.especialidades)
     ? u.especialidades
     : (u.role || '').split(/[·|\/]/).map(s => s.trim()).filter(Boolean);
-  doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5);
-  doc.setTextColor(..._C.blanco);
-  specs.forEach(s => { if (tY < HH - 2) { doc.text(s, tX, tY); tY += 4.2; } });
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5);
+  doc.setTextColor(..._C.oscuro);
+  specs.forEach(s => { if (tY < HH - 1) { doc.text(s, tX, tY); tY += 3.8; } });
 
-  // Línea teal de cierre — ancho completo
-  doc.setDrawColor(..._C.teal); doc.setLineWidth(0.5);
-  doc.line(0, HH + 2, PW, HH + 2);
+  // Línea inferior — color acento, ancho completo
+  doc.setDrawColor(..._C.acento); doc.setLineWidth(0.6);
+  doc.line(0, HH, PW, HH);
   return HH + 5;
 }
 
@@ -3512,9 +3517,8 @@ function _pdfHeader(doc, u, PW, ML) {
 /*  BARRA DE PACIENTE                                  */
 /* ─────────────────────────────────────────────────── */
 function _pdfPatientBar(doc, p, fechaStr, PW, ML, MR) {
-  const W = PW - ML - MR, bY = 55, bH = 10;
-
-  // Sin recuadro
+  // Posicionado justo debajo del header (headerEndY ya se suma antes, pero aquí usamos offset fijo)
+  const bY = 38, bH = 10;
 
   const nombre = ((p.apellido ? p.apellido.toUpperCase() + ', ' : '') + (p.nombre || '')).trim();
   doc.setFont('helvetica', 'bold'); doc.setFontSize(8.5);
@@ -3531,7 +3535,7 @@ function _pdfPatientBar(doc, p, fechaStr, PW, ML, MR) {
   doc.setTextColor(..._C.suave);
   doc.text(fechaStr, PW - MR - 3, bY + 6.2, { align: 'right' });
 
-  return bY + bH + 4;   // ← Y donde empieza el contenido
+  return bY + bH + 3;   // ← Y donde empieza el contenido
 }
 
 /* ─────────────────────────────────────────────────── */
@@ -3568,23 +3572,23 @@ function _pdfFirma(doc, u, PW, PH, ML, firmaKey) {
 /*  PIE DE PÁGINA                                      */
 /* ─────────────────────────────────────────────────── */
 function _pdfFooter(doc, PW, PH) {
-  const FH = 20, FY = PH - FH;
+  const FH = 18, FY = PH - FH;
 
-  // Fondo azul institucional — ancho completo sin márgenes
+  // Fondo #3089ca — ancho completo
   doc.setFillColor(..._C.footer);
   doc.rect(0, FY, PW, FH, 'F');
 
   // Nombre institucional centrado
-  doc.setFont('helvetica', 'bold'); doc.setFontSize(7);
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(6.5);
   doc.setTextColor(..._C.blanco);
   doc.text('UNIDAD DE RIESGO CARDIOVASCULAR Y METABÓLICO',
-           PW / 2, FY + 5.5, { align: 'center' });
+           PW / 2, FY + 5, { align: 'center' });
 
-  // Línea divisora teal
-  doc.setDrawColor(77, 188, 190); doc.setLineWidth(0.2);
-  doc.line(8, FY + 7.5, PW - 8, FY + 7.5);
+  // Línea divisora — color #dbcbbe
+  doc.setDrawColor(..._C.acento); doc.setLineWidth(0.3);
+  doc.line(0, FY + 6.8, PW, FY + 6.8);
 
-  const ic = [160, 210, 230], ty = FY + 14.5;
+  const ic = _C.acento, ty = FY + 13.5;
 
   // Email
   const ex = 8, ey = ty - 3.2, ew = 4, eh = 2.8;
