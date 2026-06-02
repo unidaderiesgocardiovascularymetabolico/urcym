@@ -3216,7 +3216,16 @@ function doLogin() {
     document.getElementById('app').style.display = 'block';
     document.getElementById('topbarUser').textContent = currentUser.titulo + ' · ' + currentUser.mp;
     document.getElementById('dashWelcome').textContent = 'Hola, ' + currentUser.name;
-    cargarPacientes();
+    cargarPacientes().then(() => {
+      // Si la URL tiene ?evolucion=DNI, abrir directamente en esta pestaña
+      const params = new URLSearchParams(window.location.search);
+      const dniParam = params.get('evolucion');
+      const apellidoParam = params.get('pac');
+      if(dniParam) {
+        if(apellidoParam) document.title = decodeURIComponent(apellidoParam) + ' — URCyM';
+        abrirEvolucion(decodeURIComponent(dniParam));
+      }
+    });
   } else {
     document.getElementById('errorMsg').classList.add('visible');
   }
@@ -3446,7 +3455,7 @@ function renderTabla(data, evolMap) {
         '<td>' + (p.obra_social?'<span class="badge badge-blue">'+p.obra_social+'</span>':'-') + '</td>' +
         '<td id="uc-' + p.dni + '" style="font-size:12px;color:var(--text-soft)">' + (evolMap ? fechaEvol : 'cargando...') + '</td>' +
         '<td><div class="acciones">' +
-          '<button class="btn-accion evolucionar" onclick="abrirEvolucion(\'' + p.dni + '\')">✚ Evolucionar</button>' +
+          '<button class="btn-accion evolucionar" onclick="abrirEvolucionNuevaPestana(\'' + p.dni + '\')">✚ Evolucionar</button>' +
           '<button class="btn-accion ver-hc" onclick="abrirHistoriaClinica(\'' + p.dni + '\')">📖 Hist. Clínica</button>' +
           '<button class="btn-accion" style="border-color:#8b5cf6;color:#8b5cf6" onclick="abrirHistoriaPaciente(\'' + p.dni + '\')">🧪 Lab/Estudios</button>' +
           '<button class="btn-accion receta" onclick="abrirDocumento(\'receta\',\'' + p.dni + '\')">💊 Receta</button>' +
@@ -3484,6 +3493,15 @@ function filtrarPacientes() {
 function evolucionarPaciente(dni) {
   const p = pacientesData.find(x=>x.dni===dni);
   alert('Historia clínica de ' + p.apellido + ', ' + p.nombre + '\n\nEste módulo estará disponible próximamente.');
+}
+
+// Abrir evolución en nueva pestaña con apellido del paciente en el título
+function abrirEvolucionNuevaPestana(dni) {
+  const p = pacientesData.find(x=>x.dni===dni);
+  const apellido = p ? p.apellido.toUpperCase() : dni;
+  const url = window.location.pathname + '?evolucion=' + encodeURIComponent(dni) + '&pac=' + encodeURIComponent(apellido);
+  const tab = window.open(url, '_blank');
+  if(tab) tab.focus();
 }
 
 function abrirHistoriaClinica(dni) {
@@ -4296,14 +4314,19 @@ async function actualizarEncabezadoVariable(dni) {
   document.getElementById('evh_med').innerHTML=meds.length?meds.map(m=>'<span class="evh-med-item">'+m.farmaco+' '+m.dosis+(m.frecuencia?' <span style="font-size:10px;opacity:.75">'+m.frecuencia+'</span>':'')+'</span>').join(''):'<span style="font-size:11px;color:var(--text-soft)">Sin medicación</span>';
   const otherEl = document.getElementById('evh_other_med');
   if(otherEl) otherEl.innerHTML = otraMeds.length ? otraMeds.map(m=>'<span class="evh-other-med-item">'+m.farmaco+(m.dosis?' '+m.dosis:'')+(m.frecuencia?' <span style="font-size:10px;opacity:.75">'+m.frecuencia+'</span>':'')+'</span>').join('') : '<span style="font-size:11px;color:#86efac">—</span>';
-  if(c){
-    const py=((c.cigarrillos_dia||0)*(c.anios_fumando||0)/20).toFixed(1);
-    const t=c.tabaquismo==='nunca'?'<span class="evh-habito-bien">No fumador</span>':c.tabaquismo==='actual'?'<span class="evh-habito-malo">Fumador ('+py+' PA)</span>':'<span style="color:#e08c3a;font-weight:600">Ex fumador ('+py+' PA)</span>';
-    const gr=Math.round((c.alcohol_cerveza||0)*13+(c.alcohol_vino||0)*14+(c.alcohol_fernet||0)*22+(c.alcohol_blanca||0)*14+(c.alcohol_whisky||0)*14);
-    const lim=pacienteActual?.sexo==='Femenino'?98:196;
-    const a=!c.alcohol?'<span class="evh-habito-bien">No alcohol</span>':'<span class="'+(gr>lim?'evh-habito-malo':'evh-habito-bien')+'">Alcohol '+gr+'g/sem</span>';
-    const act=c.actividad_fisica==='sedentarismo'?'<span class="evh-habito-malo">Sedentario</span>':'<span class="evh-habito-bien">'+c.actividad_fisica+'</span>';
-    document.getElementById('evh_habitos').innerHTML=t+'<br>'+a+'<br>'+act;
+  const evhHabEl = document.getElementById('evh_habitos');
+  if(evhHabEl) {
+    if(c){
+      const py=((c.cigarrillos_dia||0)*(c.anios_fumando||0)/20).toFixed(1);
+      const t=c.tabaquismo==='nunca'?'<span class="evh-habito-bien">No fumador</span>':c.tabaquismo==='actual'?'<span class="evh-habito-malo">Fumador ('+py+' PA)</span>':'<span style="color:#e08c3a;font-weight:600">Ex fumador ('+py+' PA)</span>';
+      const gr=Math.round((c.alcohol_cerveza||0)*13+(c.alcohol_vino||0)*14+(c.alcohol_fernet||0)*22+(c.alcohol_blanca||0)*14+(c.alcohol_whisky||0)*14);
+      const lim=pacienteActual?.sexo==='Femenino'?98:196;
+      const a=!c.alcohol?'<span class="evh-habito-bien">No alcohol</span>':'<span class="'+(gr>lim?'evh-habito-malo':'evh-habito-bien')+'">Alcohol '+gr+'g/sem</span>';
+      const act=c.actividad_fisica==='sedentarismo'?'<span class="evh-habito-malo">Sedentario</span>':'<span class="evh-habito-bien">'+(c.actividad_fisica||'—')+'</span>';
+      evhHabEl.innerHTML=t+'<br>'+a+'<br>'+act;
+    } else {
+      evhHabEl.innerHTML='<span style="font-size:11px;color:var(--text-soft)">Sin datos</span>';
+    }
   }
 }
 
@@ -4598,6 +4621,8 @@ async function abrirEvolucion(dni) {
   const p = pacientesData.find(x=>x.dni===dni);
   if(!p) return;
   pacienteActual = p;
+  // Actualizar título de la pestaña con el apellido del paciente
+  document.title = p.apellido.toUpperCase() + ' — URCyM';
   document.getElementById('evol_nombre').textContent = p.apellido + ', ' + p.nombre;
   document.getElementById('evol_dni').textContent = 'DNI: ' + p.dni;
   document.getElementById('evol_fnac').textContent = 'F. Nac: ' + formatFecha(p.fecha_nacimiento);
@@ -4734,6 +4759,7 @@ function limpiarFiltrosHistoria() {
 }
 
 async function volverDesdeEvolucion() {
+  document.title = 'URCyM — Sistema de Historia Clínica';
   const hayDirtyTablas = _dirty.lab || _dirty.ant || _dirty.est;
   const editorConTexto = !!document.getElementById('evol_editor').innerText.trim();
   const hayDirtyEvol = _dirty.evol || editorConTexto;
