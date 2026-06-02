@@ -6544,12 +6544,26 @@ function finGetTurnos() {
     var raw = localStorage.getItem('urcym_ag_turnos');
     if(!raw) return [];
     var obj = JSON.parse(raw);
-    return Object.entries(obj).map(function(e){
+    // Protección: si por algún motivo quedó guardado como array, lo ignoramos
+    if(Array.isArray(obj) || typeof obj !== 'object' || obj === null) return [];
+    return Object.entries(obj).reduce(function(acc, e){
       var key = e[0], t = e[1];
-      // key = fecha_hora o fecha_hora_prof
-      var parts = key.split('_');
-      return Object.assign({}, t, { _key: key, _fecha: parts[0], _hora: parts[1] });
-    });
+      // Ignorar entradas nulas o no-objeto
+      if(!t || typeof t !== 'object') return acc;
+      // key formato: "2025-06-02_09:30_BG" o viejo "2025-06-02_09:30"
+      // La fecha tiene el formato YYYY-MM-DD (contiene guiones), separada por "_"
+      // Buscamos el primer "_" que separa fecha de hora
+      var firstUnderscore = key.indexOf('_');
+      if(firstUnderscore < 0) return acc; // key inválida
+      var fecha = key.slice(0, firstUnderscore);
+      var resto = key.slice(firstUnderscore + 1);
+      var secondUnderscore = resto.indexOf('_');
+      var hora = secondUnderscore >= 0 ? resto.slice(0, secondUnderscore) : resto;
+      // Validar que la fecha tenga formato YYYY-MM-DD
+      if(!/^\d{4}-\d{2}-\d{2}$/.test(fecha)) return acc;
+      acc.push(Object.assign({}, t, { _key: key, _fecha: fecha, _hora: hora }));
+      return acc;
+    }, []);
   } catch(e){ return []; }
 }
 
@@ -6599,6 +6613,7 @@ function finFmtPeso(n) {
 }
 
 function renderFinanzas() {
+  try {
   finInitMeses();
   var mes = (document.getElementById('fin-mes')||{}).value || finMesActual();
   var profFiltro = (document.getElementById('fin-prof')||{}).value || '';
@@ -6765,6 +6780,11 @@ function renderFinanzas() {
 
   // ---- Tabla consultas ----
   renderTablaConsultas();
+  } catch(err) {
+    console.error('Error en renderFinanzas:', err);
+    var kpis = document.getElementById('fin-kpis');
+    if(kpis) kpis.innerHTML = '<div style="padding:20px;color:#e25247;font-size:13px;background:#fdecea;border-radius:12px;grid-column:1/-1">⚠️ Error al cargar el módulo de finanzas. Revisá la consola del navegador para más detalles.<br><small style="color:#888">'+err.message+'</small></div>';
+  }
 }
 
 function renderTablaConsultas() {
