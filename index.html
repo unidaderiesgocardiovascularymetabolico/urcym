@@ -1858,18 +1858,10 @@
       <textarea id="rec_contenido" placeholder="Ej: Enalapril 10mg - 1 comprimido cada 12 hs&#10;Losartán 50mg - 1 comprimido por día"></textarea>
     </div>
     <div style="background:#f0f4f9;border-radius:10px;padding:10px 14px;margin-bottom:12px">
-      <div style="font-size:12px;font-weight:700;color:#6b7a8d;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Firma / Sello</div>
-      <div style="display:flex;gap:12px;flex-wrap:wrap">
-        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px">
-          <input type="radio" name="firma_receta" value="ninguna" checked style="accent-color:#3089ca"> Sin firma
-        </label>
-        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px">
-          <input type="radio" name="firma_receta" value="barbara" style="accent-color:#3089ca"> Dra. Bárbara Guerrero
-        </label>
-        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px">
-          <input type="radio" name="firma_receta" value="omar" style="accent-color:#3089ca"> Dr. Omar Bertani
-        </label>
-      </div>
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;font-weight:600;color:#374151">
+        <input type="checkbox" id="firma_receta_check" style="accent-color:#3089ca;width:15px;height:15px">
+        Incluir firma
+      </label>
     </div>
     <div class="form-actions" style="flex-wrap:wrap;gap:8px">
       <button class="btn btn-secondary" style="flex:1;min-width:120px" onclick="cerrarModal('modalReceta')">Cancelar</button>
@@ -1903,18 +1895,10 @@
       <textarea id="ind_contenido" placeholder="Ej: Plan alimentario&#10;- Reducir ingesta de sodio&#10;- Actividad física 30 min/día&#10;&#10;Controles&#10;- Tensión arterial cada 15 días"></textarea>
     </div>
     <div style="background:#f0f4f9;border-radius:10px;padding:10px 14px;margin-bottom:12px">
-      <div style="font-size:12px;font-weight:700;color:#6b7a8d;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Firma / Sello</div>
-      <div style="display:flex;gap:12px;flex-wrap:wrap">
-        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px">
-          <input type="radio" name="firma_ind" value="ninguna" checked style="accent-color:#3089ca"> Sin firma
-        </label>
-        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px">
-          <input type="radio" name="firma_ind" value="barbara" style="accent-color:#3089ca"> Dra. Bárbara Guerrero
-        </label>
-        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px">
-          <input type="radio" name="firma_ind" value="omar" style="accent-color:#3089ca"> Dr. Omar Bertani
-        </label>
-      </div>
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;font-weight:600;color:#374151">
+        <input type="checkbox" id="firma_ind_check" style="accent-color:#3089ca;width:15px;height:15px">
+        Incluir firma
+      </label>
     </div>
     <div class="form-actions" style="flex-wrap:wrap;gap:8px">
       <button class="btn btn-secondary" style="flex:1;min-width:120px" onclick="cerrarModal('modalIndicaciones')">Cancelar</button>
@@ -3436,7 +3420,7 @@ const _C = {
   gris:   [200,215,228], blanco: [255,255,255],
   hdrBg:  [248,252,255], rpBg:   [243,249,254],
   footer: [48,137,202],   // #3089ca
-  acento: [219,203,190],  // #dbcbbe
+  acento: [77,188,190],   // #4dbcbe (teal)
   azulTxt:[48,137,202],
 };
 
@@ -3470,7 +3454,7 @@ function _pdfHeader(doc, u, PW, ML) {
   doc.setFillColor(..._C.blanco);
   doc.rect(0, 0, PW, HH, 'F');
 
-  // Barra de acento izquierda — color #dbcbbe
+  // Barra de acento izquierda — color #4dbcbe
   doc.setFillColor(..._C.acento);
   doc.rect(0, 0, 3, HH, 'F');
 
@@ -3494,7 +3478,7 @@ function _pdfHeader(doc, u, PW, ML) {
   doc.setTextColor(..._C.azulTxt);
   doc.text(u.titulo || u.name || '', tX, tY); tY += 4.5;
 
-  // Matrícula — #dbcbbe
+  // Matrícula — #4dbcbe
   doc.setFont('helvetica', 'bold'); doc.setFontSize(8);
   doc.setTextColor(..._C.acento);
   doc.text(u.mp || '', tX, tY); tY += 4.2;
@@ -3518,7 +3502,7 @@ function _pdfHeader(doc, u, PW, ML) {
 /* ─────────────────────────────────────────────────── */
 function _pdfPatientBar(doc, p, fechaStr, PW, ML, MR) {
   // Posicionado justo debajo del header (headerEndY ya se suma antes, pero aquí usamos offset fijo)
-  const bY = 38, bH = 10;
+  const bY = 34, bH = 10;
 
   const nombre = ((p.apellido ? p.apellido.toUpperCase() + ', ' : '') + (p.nombre || '')).trim();
   doc.setFont('helvetica', 'bold'); doc.setFontSize(8.5);
@@ -3542,30 +3526,19 @@ function _pdfPatientBar(doc, p, fechaStr, PW, ML, MR) {
 /*  FIRMA Y SELLO                                      */
 /* ─────────────────────────────────────────────────── */
 function _pdfFirma(doc, u, PW, PH, ML, firmaKey) {
+  // Solo muestra la firma del profesional logueado si eligió incluirla
+  if (!firmaKey || firmaKey === 'ninguna') return;
   const MR = 12, FW = 48;
   const FX = PW - MR - FW;
-  // Footer empieza en PH-20; la firma ocupa ~36mm => FY = PH - 20 - 36 = PH - 56
   const FY = PH - 56;
-
-  // Imagen de firma si fue seleccionada
-  let firmaB64 = null;
-  if (firmaKey === 'barbara') firmaB64 = firmaBarbaraB64;
-  else if (firmaKey === 'omar') firmaB64 = firmaOmarB64;
-
+  // Usar solo la firma del usuario actual
+  const firmaB64 = (firmaKey === 'barbara') ? firmaBarbaraB64
+                 : (firmaKey === 'omar')    ? firmaOmarB64
+                 : null;
   if (firmaB64) {
-    try {
-      // Imagen de firma: ancho 48mm, alto proporcional (aprox 36mm)
-      doc.addImage(firmaB64, 'JPEG', FX, FY, FW, 34, '', 'NONE', 0);
-    } catch(e) {
-      // fallback: solo línea
-      doc.setDrawColor(..._C.gris); doc.setLineWidth(0.3);
-      doc.line(FX, FY + 30, FX + FW, FY + 30);
-    }
-  } else {
-    // Solo línea de firma (sin imagen)
-    doc.setDrawColor(..._C.gris); doc.setLineWidth(0.3);
-    doc.line(FX, FY + 10, FX + FW, FY + 10);
+    try { doc.addImage(firmaB64, 'JPEG', FX, FY, FW, 34, '', 'NONE', 0); } catch(e) {}
   }
+  // Sin línea de firma — nunca
 }
 
 /* ─────────────────────────────────────────────────── */
@@ -3584,7 +3557,7 @@ function _pdfFooter(doc, PW, PH) {
   doc.text('UNIDAD DE RIESGO CARDIOVASCULAR Y METABÓLICO',
            PW / 2, FY + 5, { align: 'center' });
 
-  // Línea divisora — color #dbcbbe
+  // Línea divisora — color #4dbcbe
   doc.setDrawColor(..._C.acento); doc.setLineWidth(0.3);
   doc.line(0, FY + 6.8, PW, FY + 6.8);
 
@@ -3630,10 +3603,12 @@ function generarPDF(tipo) {
   const doc = new jsPDF({ unit: 'mm', format: 'a5', orientation: 'portrait' });
   const PW = 148, PH = 210, ML = 12, MR = 12, W = PW - ML - MR;
 
-  // Leer firma seleccionada
-  const firmaRadioName = tipo === 'receta' ? 'firma_receta' : 'firma_ind';
-  const firmaRadioEl = document.querySelector(`input[name="${firmaRadioName}"]:checked`);
-  const firmaKey = firmaRadioEl ? firmaRadioEl.value : 'ninguna';
+  // Leer firma: checkbox sí/no, firma siempre del usuario logueado
+  const firmaCheckId = tipo === 'receta' ? 'firma_receta_check' : 'firma_ind_check';
+  const firmaChecked = document.getElementById(firmaCheckId) && document.getElementById(firmaCheckId).checked;
+  const _uname = (u && (u.id || u.name || '')).toLowerCase();
+  const _autoKey = _uname.includes('omar') || _uname === 'ob' ? 'omar' : 'barbara';
+  const firmaKey = firmaChecked ? _autoKey : 'ninguna';
 
   const headerEndY = _pdfHeader(doc, u, PW, ML);
   const hoy = new Date().toLocaleDateString('es-AR',
