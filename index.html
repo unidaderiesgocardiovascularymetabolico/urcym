@@ -2199,6 +2199,7 @@ let antDatos = { columnas:[], filas:[] };
 let vacDatos = { aplicadas:{}, notas:{}, antecedentes:[] };
 let _historialData = []; // cache para filtrado en memoria
 let _historialActivo = null;
+let _historiaSoloLectura = false; // modo solo lectura para historia clínica desde tabla pacientes
 let _chartInstances = {};
 let pacHistoriaDni = null;
 let _cargaHistoricaTipo = null;
@@ -3509,6 +3510,7 @@ function abrirHistoriaClinica(dni) {
   const p = pacientesData.find(x=>x.dni===dni);
   if(!p) return;
   pacienteActual = p;
+  _historiaSoloLectura = true; // viene desde tabla de pacientes → solo lectura
   document.getElementById('hc_nombre').textContent = p.apellido + ', ' + p.nombre;
   document.getElementById('hc_dni').textContent = 'DNI: ' + p.dni;
   document.getElementById('hc_edad').textContent = edadDesde(p.fecha_nacimiento) + ' años';
@@ -4738,6 +4740,7 @@ function verHistoria(dni) {
   const p = pacientesData.find(x=>x.dni===dni);
   if(!p) return;
   pacienteActual = p;
+  _historiaSoloLectura = false; // desde evolución: puede editar
   document.getElementById('hc_nombre').textContent = p.apellido + ', ' + p.nombre;
   document.getElementById('hc_dni').textContent = 'DNI: ' + p.dni;
   document.getElementById('hc_edad').textContent = edadDesde(p.fecha_nacimiento) + ' años';
@@ -4788,8 +4791,8 @@ function renderHistoria(data, mostrarContador) {
     const fechaStr = fh.toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'});
     const horaStr = fh.toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'});
     const mClase = medicoAClase(e.medico);
-    const editBtn = '<button class="hc-edit-btn" style="display:inline-flex" onclick="abrirEditarEvolucion(\''+e.id+'\')">✏️ Editar</button>';
-    const delBtn  = '<button class="hc-del-btn" onclick="eliminarEvolucion(\''+e.id+'\')">🗑️</button>';
+    const editBtn = _historiaSoloLectura ? '' : '<button class="hc-edit-btn" style="display:inline-flex" onclick="abrirEditarEvolucion(\''+e.id+'\')">✏️ Editar</button>';
+    const delBtn  = _historiaSoloLectura ? '' : '<button class="hc-del-btn" onclick="eliminarEvolucion(\''+e.id+'\')">🗑️</button>';
     return '<div class="hc-entrada" data-evol-id="'+e.id+'">' +
       '<div class="hc-header '+mClase+'" style="display:flex;align-items:center;flex-wrap:wrap;gap:6px">' +
         '<span class="hc-fecha">' + fechaStr + ' ' + horaStr + '</span>' +
