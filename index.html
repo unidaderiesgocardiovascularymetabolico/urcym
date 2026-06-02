@@ -3303,6 +3303,7 @@ function showPage(page) {
   const map = {dashboard:0,pacientes:1,agenda:2,finanzas:3};
   if(map[page]!==undefined && tabs[map[page]]) tabs[map[page]].classList.add('active');
   if(page==='pacientes') cargarPacientes();
+  if(page==='finanzas' && typeof finInitMeses==='function'){ finInitMeses(); renderFinanzas(); }
 }
 
 // ===== OBRAS SOCIALES =====
@@ -6567,12 +6568,17 @@ function finInitMeses() {
   gastos.forEach(function(g){
     if(g.fecha) mesesSet[g.fecha.slice(0,7)] = true;
   });
-  // Agregar mes actual siempre
-  mesesSet[finMesActual()] = true;
+  // Siempre incluir los últimos 6 meses
+  var hoy = new Date();
+  for(var i=0; i<6; i++){
+    var d = new Date(hoy.getFullYear(), hoy.getMonth()-i, 1);
+    var key = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
+    mesesSet[key] = true;
+  }
   var meses = Object.keys(mesesSet).sort().reverse();
   var sel = document.getElementById('fin-mes');
   if(!sel) return;
-  var cur = sel.value;
+  var cur = sel.value || finMesActual();
   sel.innerHTML = '';
   var MONTHS_ES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
   meses.forEach(function(m){
@@ -6581,7 +6587,7 @@ function finInitMeses() {
     var opt = document.createElement('option');
     opt.value = m;
     opt.textContent = label;
-    if(m === (cur || finMesActual())) opt.selected = true;
+    if(m === cur) opt.selected = true;
     sel.appendChild(opt);
   });
   if(!sel.value && meses.length) sel.value = meses[0];
@@ -6884,16 +6890,13 @@ function guardarPreciosFin() {
   renderFinanzas();
 }
 
-// Cerrar modales finanzas al click fuera
-document.getElementById('modal-gasto-fin').addEventListener('click', function(e){ if(e.target===this) this.style.display='none'; });
-document.getElementById('modal-precio-fin').addEventListener('click', function(e){ if(e.target===this) this.style.display='none'; });
-
-// Inicializar finanzas cuando se navega a la sección
-var _origShowPage = showPage;
-showPage = function(page) {
-  _origShowPage(page);
-  if(page === 'finanzas') { finInitMeses(); renderFinanzas(); }
-};
+// Cerrar modales finanzas al click fuera — diferido hasta que el DOM esté listo
+document.addEventListener('DOMContentLoaded', function(){
+  var mg = document.getElementById('modal-gasto-fin');
+  var mp = document.getElementById('modal-precio-fin');
+  if(mg) mg.addEventListener('click', function(e){ if(e.target===this) this.style.display='none'; });
+  if(mp) mp.addEventListener('click', function(e){ if(e.target===this) this.style.display='none'; });
+});
 
 </script>
 
