@@ -3803,19 +3803,17 @@ async function guardarClinica() {
   const dxData = {}; dxAll.forEach(d=>{dxData['dx_'+d]=document.getElementById('dx_'+d)?.checked||false;});
   const famAll = ['hta','dbt','obe','dis','iam','acv','erc','ms'];
   famAll.forEach(d=>{dxData['fam_'+d]=document.getElementById('fam_'+d)?.checked||false;});
-  const clinicaData = {
+  const alcVal = document.getElementById('hab_alcohol').value;
+  // Campos base: existen siempre en la tabla
+  const clinicaBase = {
     dni_paciente:dni,...dxData,
     tabaquismo:document.getElementById('hab_tabaquismo').value,
     cigarrillos_dia:document.getElementById('hab_cig_dia').value||null,
     anios_fumando:document.getElementById('hab_anios').value||null,
-    gpac_g:document.getElementById('gpac_g')?.value||null,
-    gpac_p:document.getElementById('gpac_p')?.value||null,
-    gpac_a:document.getElementById('gpac_a')?.value||null,
-    gpac_c:document.getElementById('gpac_c')?.value||null,
-    dx_acv_subtipos:JSON.stringify({isq:document.getElementById('dx_acv_isq')?.checked||false,hem:document.getElementById('dx_acv_hem')?.checked||false,ait:document.getElementById('dx_acv_ait')?.checked||false}),
+    dx_acv_subtipos:{isq:document.getElementById('dx_acv_isq')?.checked||false,hem:document.getElementById('dx_acv_hem')?.checked||false,ait:document.getElementById('dx_acv_ait')?.checked||false},
     dx_acv_fecha:document.getElementById('dx_acv_fecha')?.value||null,
     dx_acv_nota:document.getElementById('dx_acv_nota')?.value||null,
-    dx_iam_subtipos:JSON.stringify({stemi:document.getElementById('dx_iam_stemi')?.checked||false,nstemi:document.getElementById('dx_iam_nstemi')?.checked||false,angiop:document.getElementById('dx_iam_angiop')?.checked||false,by:document.getElementById('dx_iam_by')?.checked||false}),
+    dx_iam_subtipos:{stemi:document.getElementById('dx_iam_stemi')?.checked||false,nstemi:document.getElementById('dx_iam_nstemi')?.checked||false,angiop:document.getElementById('dx_iam_angiop')?.checked||false,by:document.getElementById('dx_iam_by')?.checked||false},
     dx_iam_fecha:document.getElementById('dx_iam_fecha')?.value||null,
     dx_iam_nota:document.getElementById('dx_iam_nota')?.value||null,
     dx_hta_fecha:document.getElementById('dx_hta_fecha')?.value||null,
@@ -3824,15 +3822,23 @@ async function guardarClinica() {
     dx_obe_nota:document.getElementById('dx_obe_nota')?.value||null,
     dx_menopausia_edad:document.getElementById('dx_menopausia_edad')?.value||null,
     dx_menopausia_nota:document.getElementById('dx_menopausia_nota')?.value||null,
-    alcohol:['si','social'].includes(document.getElementById('hab_alcohol').value),
-    alcohol_social:document.getElementById('hab_alcohol').value==='social',
+    alcohol:['si','social'].includes(alcVal),
+    actividad_fisica:document.getElementById('hab_actividad').value,
+    alimentacion:document.getElementById('hab_alimentacion').value
+  };
+  // Campos extendidos: columnas nuevas que pueden no existir aún en Supabase
+  const clinicaExt = {
+    dni_paciente:dni,
+    alcohol_social:alcVal==='social',
     alcohol_cerveza:parseFloat(document.getElementById('alc_cerveza').value)||0,
     alcohol_vino:parseFloat(document.getElementById('alc_vino').value)||0,
     alcohol_fernet:parseFloat(document.getElementById('alc_fernet').value)||0,
     alcohol_blanca:parseFloat(document.getElementById('alc_blanca').value)||0,
     alcohol_whisky:parseFloat(document.getElementById('alc_whisky').value)||0,
-    actividad_fisica:document.getElementById('hab_actividad').value,
-    alimentacion:document.getElementById('hab_alimentacion').value,
+    gpac_g:document.getElementById('gpac_g')?.value||null,
+    gpac_p:document.getElementById('gpac_p')?.value||null,
+    gpac_a:document.getElementById('gpac_a')?.value||null,
+    gpac_c:document.getElementById('gpac_c')?.value||null,
     nota_cardio:document.getElementById('nota_cardio')?.value||null,
     nota_gineco:document.getElementById('nota_gineco')?.value||null,
     nota_fam:document.getElementById('nota_fam')?.value||null,
@@ -3840,8 +3846,13 @@ async function guardarClinica() {
     nota_hab:document.getElementById('nota_hab')?.value||null,
     actualizado_en:new Date().toISOString()
   };
-  const { error: upsertErr } = await sb.from('paciente_clinica').upsert(clinicaData);
-  if(upsertErr) { console.error('Error guardando clinica:', upsertErr); alert('Error al guardar datos clínicos: ' + upsertErr.message); return; }
+  // Upsert base (obligatorio — falla visible si hay error)
+  const { error: upsertErr } = await sb.from('paciente_clinica').upsert(clinicaBase);
+  if(upsertErr) { console.error('Error guardando clinica (base):', upsertErr); alert('Error al guardar datos clínicos: ' + upsertErr.message); return; }
+  // Upsert extendido (silencioso — solo falla en consola si faltan columnas)
+  const { error: extErr } = await sb.from('paciente_clinica').upsert(clinicaExt);
+  if(extErr) console.warn('Campos extendidos no guardados (agregar columnas en Supabase):', extErr.message);
+  const clinicaData = { ...clinicaBase, ...clinicaExt };
   await sb.from('medicacion').update({activo:false}).eq('dni_paciente',dni);
   const meds = [];
   for(const fila of document.querySelectorAll('#med_filas > div')) {
