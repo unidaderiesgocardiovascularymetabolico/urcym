@@ -380,6 +380,29 @@
     /* Botón historial mini en encabezado variable */
     .btn-hx-mini { background:none; border:none; font-size:12px; cursor:pointer; opacity:.6; vertical-align:middle; padding:0 2px; }
     .btn-hx-mini:hover { opacity:1; }
+
+    /* Botones editar/borrar columna en lab/ant/est */
+    .col-btn-edit, .col-btn-del {
+      display:inline-flex; align-items:center; justify-content:center;
+      width:22px; height:22px; border-radius:6px; cursor:pointer;
+      font-size:12px; border:none; transition:all .15s;
+    }
+    .col-btn-edit { background:rgba(255,255,255,.25); color:white; }
+    .col-btn-edit:hover { background:rgba(255,255,255,.55); color:#1a5a8a; }
+    .col-btn-del { background:rgba(255,80,80,.18); color:rgba(255,255,255,.9); }
+    .col-btn-del:hover { background:rgba(220,50,50,.45); color:white; }
+
+    /* Botones editar/eliminar en entradas de evolución */
+    .hc-entry-actions { display:flex; gap:5px; margin-left:auto; flex-shrink:0; }
+    .hc-btn-edit, .hc-btn-del {
+      display:inline-flex; align-items:center; gap:4px;
+      padding:3px 10px; border-radius:7px; font-size:11px; font-weight:600;
+      cursor:pointer; font-family:var(--font-main); transition:all .15s; white-space:nowrap;
+    }
+    .hc-btn-edit { border:1.5px solid var(--blue); background:var(--blue-light); color:var(--blue); }
+    .hc-btn-edit:hover { background:var(--blue); color:white; }
+    .hc-btn-del { border:1.5px solid var(--red); background:var(--red-light); color:var(--red); }
+    .hc-btn-del:hover { background:var(--red); color:white; }
     /* Pestañas paciente (lab, estudios, antrop) */
     .pac-tabs { display:flex; gap:4px; border-bottom:2px solid var(--border); margin-bottom:16px; }
     .pac-tab { padding:8px 16px; border:none; background:none; cursor:pointer; font-family:var(--font-main); font-size:13px; font-weight:500; color:var(--text-soft); border-bottom:2px solid transparent; margin-bottom:-2px; transition:all .2s; }
@@ -3764,6 +3787,7 @@ function renderSnapshotCompacto(snapshotJson) {
 
 // ===== VER PREVIAS =====
 let _previaEditandoId = null;
+let _hcEditandoId = null;
 
 async function abrirPrevias() {
   if(!pacienteActual) return;
@@ -3781,7 +3805,10 @@ async function renderPreviasList() {
     const fh = new Date(e.fecha_hora);
     const mClase = medicoAClase(e.medico);
     const editable = true; // todas las evoluciones son editables
-    const editBtn = `<button onclick="editarPrevia(${e.id})" style="margin-left:auto;padding:3px 10px;border:1.5px solid var(--blue);border-radius:7px;background:var(--blue-light);color:var(--blue);font-size:11px;font-weight:600;cursor:pointer;font-family:var(--font-main)">✏️ Editar</button>`;
+    const editBtn = `<div class="hc-entry-actions">
+      <button class="hc-btn-edit" onclick="editarPrevia(${e.id})">✏️ Editar</button>
+      <button class="hc-btn-del" onclick="eliminarPrevia(${e.id}, '${fh.toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'})}')">🗑 Eliminar</button>
+    </div>`;
     if(_previaEditandoId === e.id) {
       return `<div class="hc-entrada" id="previa_entry_${e.id}">
         <div class="hc-header ${mClase}" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
@@ -3833,6 +3860,13 @@ async function guardarEditarPrevia(id) {
   const { error } = await sb.from('evoluciones').update({ contenido_html: contenido }).eq('id', id);
   if(error) { alert('Error al guardar: ' + error.message); return; }
   _previaEditandoId = null;
+  await renderPreviasList();
+}
+
+async function eliminarPrevia(id, fechaStr) {
+  if(!confirm('¿Eliminar la evolución del ' + fechaStr + '?\nEsta acción no se puede deshacer.')) return;
+  const { error } = await sb.from('evoluciones').delete().eq('id', id);
+  if(error) { alert('Error al eliminar: ' + error.message); return; }
   await renderPreviasList();
 }
 
@@ -4366,16 +4400,40 @@ function renderHistoria(data, mostrarContador) {
     const fechaStr = fh.toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'});
     const horaStr = fh.toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'});
     const mClase = medicoAClase(e.medico);
-    return '<div class="hc-entrada">' +
-      '<div class="hc-header '+mClase+'">' +
-        '<span class="hc-fecha">' + fechaStr + ' ' + horaStr + '</span>' +
-        '<span class="hc-medico">' + (e.medico||'') + '</span>' +
-        (e.ta_promedio ? '<span class="hc-badge-ta">TA: '+e.ta_promedio+'</span>' : '') +
-        (e.fc_promedio ? '<span class="hc-badge-fc">FC: '+e.fc_promedio+' lpm</span>' : '') +
-        (e.peso ? '<span class="hc-badge-peso">Peso: '+e.peso+' kg</span>' : '') +
-      '</div>' +
-      '<div class="hc-cuerpo">' + (e.contenido_html || '') + '</div>' +
-    '</div>';
+    if(_hcEditandoId === e.id) {
+      return `<div class="hc-entrada" id="hc_entry_${e.id}">
+        <div class="hc-header ${mClase}" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <span class="hc-fecha">${fechaStr} ${horaStr}</span>
+          <span class="hc-medico">${e.medico||''}</span>
+          ${e.ta_promedio?`<span class="hc-badge-ta">TA: ${e.ta_promedio}</span>`:''}
+          ${e.fc_promedio?`<span class="hc-badge-fc">FC: ${e.fc_promedio} lpm</span>`:''}
+          ${e.peso?`<span class="hc-badge-peso">Peso: ${e.peso} kg</span>`:''}
+        </div>
+        <div style="padding:10px 14px">
+          <div id="hc_editor_${e.id}" contenteditable="true" spellcheck="true"
+            style="border:1.5px solid var(--blue);border-radius:10px;padding:14px;min-height:100px;font-family:var(--font-main);font-size:13px;line-height:1.7;outline:none;background:#fafeff"
+            onkeydown="if(event.key==='Enter'){event.stopPropagation();}">${e.contenido_html||''}</div>
+          <div style="display:flex;gap:8px;margin-top:8px;justify-content:flex-end">
+            <button onclick="_hcCancelarEditar()" style="padding:5px 14px;border:1.5px solid var(--border);border-radius:8px;background:white;font-size:12px;cursor:pointer;font-family:var(--font-main)">Cancelar</button>
+            <button onclick="_hcGuardarEditar(${e.id})" style="padding:5px 14px;border:none;border-radius:8px;background:var(--blue);color:white;font-size:12px;font-weight:600;cursor:pointer;font-family:var(--font-main)">💾 Guardar cambios</button>
+          </div>
+        </div>
+      </div>`;
+    }
+    return `<div class="hc-entrada" id="hc_entry_${e.id}">
+      <div class="hc-header ${mClase}" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <span class="hc-fecha">${fechaStr} ${horaStr}</span>
+        <span class="hc-medico">${e.medico||''}</span>
+        ${e.ta_promedio?`<span class="hc-badge-ta">TA: ${e.ta_promedio}</span>`:''}
+        ${e.fc_promedio?`<span class="hc-badge-fc">FC: ${e.fc_promedio} lpm</span>`:''}
+        ${e.peso?`<span class="hc-badge-peso">Peso: ${e.peso} kg</span>`:''}
+        <div class="hc-entry-actions">
+          <button class="hc-btn-edit" onclick="_hcEditarEntrada(${e.id})">✏️ Editar</button>
+          <button class="hc-btn-del" onclick="_hcEliminarEntrada(${e.id}, '${fechaStr}')">🗑 Eliminar</button>
+        </div>
+      </div>
+      <div class="hc-cuerpo">${e.contenido_html||''}</div>
+    </div>`;
   }).join('');
 }
 
@@ -4411,6 +4469,34 @@ function limpiarFiltrosHistoria() {
   });
   const countEl = document.getElementById('hc_filtro_count');
   if(countEl) countEl.textContent = '';
+  renderHistoria(_historialData, false);
+}
+
+// ===== Historia clínica: editar y eliminar evoluciones =====
+function _hcEditarEntrada(id) {
+  _hcEditandoId = id;
+  renderHistoria(_historialData, false);
+}
+function _hcCancelarEditar() {
+  _hcEditandoId = null;
+  renderHistoria(_historialData, false);
+}
+async function _hcGuardarEditar(id) {
+  const editor = document.getElementById('hc_editor_' + id);
+  if(!editor) return;
+  const contenido = editor.innerHTML;
+  const { error } = await sb.from('evoluciones').update({ contenido_html: contenido }).eq('id', id);
+  if(error) { alert('Error al guardar: ' + error.message); return; }
+  const idx = _historialData.findIndex(e => e.id === id);
+  if(idx !== -1) _historialData[idx].contenido_html = contenido;
+  _hcEditandoId = null;
+  renderHistoria(_historialData, false);
+}
+async function _hcEliminarEntrada(id, fechaStr) {
+  if(!confirm('¿Eliminar la evolución del ' + fechaStr + '?\nEsta acción no se puede deshacer.')) return;
+  const { error } = await sb.from('evoluciones').delete().eq('id', id);
+  if(error) { alert('Error al eliminar: ' + error.message); return; }
+  _historialData = _historialData.filter(e => e.id !== id);
   renderHistoria(_historialData, false);
 }
 
@@ -9018,8 +9104,8 @@ loadLocal();
       var th=ths[ci+1]; if(!th || th.querySelector('.col-actions-urcym')) return;
       var d=document.createElement('div');
       d.className='col-actions-urcym';
-      d.style.cssText='display:flex;gap:4px;justify-content:center;margin-top:4px';
-      d.innerHTML='<button type="button" title="Editar columna" onclick="editarColumnaTabla(\''+tipo+'\','+ci+')" style="border:1px solid rgba(255,255,255,.8);background:rgba(255,255,255,.18);color:white;border-radius:5px;font-size:10px;padding:1px 5px;cursor:pointer">✏️</button><button type="button" title="Borrar columna" onclick="borrarColumnaTabla(\''+tipo+'\','+ci+')" style="border:1px solid rgba(255,255,255,.8);background:rgba(255,255,255,.18);color:white;border-radius:5px;font-size:10px;padding:1px 5px;cursor:pointer">🗑</button>';
+      d.style.cssText='display:flex;gap:3px;justify-content:center;margin-top:5px';
+      d.innerHTML='<button type="button" class="col-btn-edit" title="Editar fecha" onclick="editarColumnaTabla(\''+tipo+'\','+ci+')">✏️</button><button type="button" class="col-btn-del" title="Borrar columna" onclick="borrarColumnaTabla(\''+tipo+'\','+ci+')">🗑</button>';
       th.appendChild(d);
     });
   };
