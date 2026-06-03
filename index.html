@@ -87,6 +87,10 @@
 
     /* NAV */
     .nav-tabs { background:white; border-bottom:1px solid var(--border); padding:0 28px; display:flex; gap:4px; overflow-x:auto; position:sticky; top:56px; z-index:95; }
+    .nav-tab-paciente { padding:8px 14px; border:none; background:var(--blue-light); color:var(--blue); font-size:12px; font-weight:600; cursor:pointer; font-family:var(--font-main); border-bottom:2px solid transparent; display:flex; align-items:center; gap:6px; white-space:nowrap; transition:all .2s; border-radius:8px 8px 0 0; }
+    .nav-tab-paciente.active { background:var(--blue); color:white; }
+    .nav-tab-paciente .tab-close { font-size:14px; line-height:1; opacity:.7; margin-left:2px; padding:0 2px; }
+    .nav-tab-paciente .tab-close:hover { opacity:1; }
     .nav-tab { padding:12px 18px; font-size:13px; font-weight:500; color:var(--text-soft); cursor:pointer; border-bottom:2px solid transparent; white-space:nowrap; transition:all .2s; }
     .nav-tab:hover { color:var(--blue); }
     .nav-tab.active { color:var(--blue); border-bottom-color:var(--blue); }
@@ -788,6 +792,7 @@
     <div class="nav-tab" onclick="showPage('pacientes')">Pacientes</div>
     <div class="nav-tab" onclick="showPage('agenda')">Agenda</div>
     <div class="nav-tab" onclick="showPage('finanzas')">Finanzas</div>
+    <div id="nav-tabs-pacientes" style="display:flex;gap:4px;margin-left:8px;border-left:1px solid var(--border);padding-left:8px;align-items:center;flex-wrap:nowrap"></div>
   </div>
   <div class="content">
 
@@ -2937,6 +2942,64 @@ document.getElementById('password').addEventListener('input', e => {
 document.getElementById('password').addEventListener('keydown',e=>{ if(e.key==='Enter') doLogin(); });
 
 // ===== NAVEGACIÓN =====
+// ===== SISTEMA DE TABS DE PACIENTES =====
+const pacientesTabs = []; // [{dni, nombre, snapshot}]
+let tabActivaDni = null;
+
+function crearTabPaciente(p) {
+  // Si ya existe, solo activar
+  const existe = pacientesTabs.find(t => t.dni === p.dni);
+  if(existe) {
+    activarTabPaciente(p.dni);
+    return;
+  }
+  pacientesTabs.push({dni: p.dni, nombre: p.apellido + ', ' + p.nombre});
+  renderizarTabsPacientes();
+}
+
+function cerrarTabPaciente(dni, event) {
+  if(event) event.stopPropagation();
+  const idx = pacientesTabs.findIndex(t => t.dni === dni);
+  if(idx === -1) return;
+  // Guardar borrador si es la tab activa
+  if(tabActivaDni === dni) guardarBorradorEvol(dni);
+  pacientesTabs.splice(idx, 1);
+  renderizarTabsPacientes();
+  // Si era la activa, activar otra o volver a pacientes
+  if(tabActivaDni === dni) {
+    tabActivaDni = null;
+    if(pacientesTabs.length > 0) {
+      activarTabPaciente(pacientesTabs[Math.min(idx, pacientesTabs.length-1)].dni);
+    } else {
+      showPage('pacientes');
+    }
+  }
+}
+
+function renderizarTabsPacientes() {
+  const container = document.getElementById('nav-tabs-pacientes');
+  if(!container) return;
+  container.innerHTML = pacientesTabs.map(t =>
+    `<div class="nav-tab-paciente${tabActivaDni===t.dni?' active':''}" onclick="activarTabPaciente('${t.dni}')">
+      ${t.nombre}
+      <span class="tab-close" onclick="cerrarTabPaciente('${t.dni}', event)">✕</span>
+    </div>`
+  ).join('');
+}
+
+async function activarTabPaciente(dni) {
+  // Guardar borrador del paciente actual antes de cambiar
+  if(tabActivaDni && tabActivaDni !== dni) {
+    await guardarBorradorEvol(tabActivaDni);
+  }
+  tabActivaDni = dni;
+  renderizarTabsPacientes();
+  const p = pacientesData.find(x => x.dni === dni);
+  if(!p) return;
+  // Abrir la evolución de este paciente (sin crear nueva tab)
+  await abrirEvolucionDirecta(p);
+}
+
 function showPage(page) {
   // Ocultar todas las páginas dentro de .content
   document.querySelectorAll('.page').forEach(p => {
@@ -3855,9 +3918,19 @@ async function guardarClinica() {
   const clinicaData = { ...clinicaBase, ...clinicaExt };
   await sb.from('medicacion').update({activo:false}).eq('dni_paciente',dni);
   const meds = [];
+  // Medicación cardiometabólica
   for(const fila of document.querySelectorAll('#med_filas > div')) {
     const farmaco=fila.querySelector('.med-farmaco').value; if(!farmaco) continue;
     const medData={dni_paciente:dni,grupo:fila.querySelector('.med-grupo').value,farmaco,dosis:fila.querySelector('.med-dosis').value,frecuencia:fila.querySelector('.med-frecuencia').value,activo:true,fecha_inicio:fechaHoy()};
+    const mid=fila.dataset.medId;
+    if(mid) await sb.from('medicacion').update(medData).eq('id',mid);
+    else await sb.from('medicacion').insert(medData);
+    meds.push(medData);
+  }
+  // Otros fármacos
+  for(const fila of document.querySelectorAll('#med_otros_filas > div')) {
+    const farmaco=fila.querySelector('.med-otros-farmaco').value.trim(); if(!farmaco) continue;
+    const medData={dni_paciente:dni,grupo:'Otros',farmaco,dosis:fila.querySelector('.med-otros-dosis').value.trim(),frecuencia:fila.querySelector('.med-otros-frecuencia').value.trim(),activo:true,fecha_inicio:fechaHoy()};
     const mid=fila.dataset.medId;
     if(mid) await sb.from('medicacion').update(medData).eq('id',mid);
     else await sb.from('medicacion').insert(medData);
@@ -3891,7 +3964,15 @@ function renderEncabezadoVariable(c, meds) {
     Object.entries(FAM_L).forEach(([k,v])=>{if(c[k])dxHtml+='<span class="evh-tag-green">'+v+'</span>';});
   }
   document.getElementById('evh_dx').innerHTML=dxHtml||'<span style="font-size:11px;color:var(--text-soft)">Sin diagnósticos</span>';
-  document.getElementById('evh_med').innerHTML=meds.length?meds.map(m=>'<span class="evh-med-item">'+m.farmaco+' '+m.dosis+'</span>').join(''):'<span style="font-size:11px;color:var(--text-soft)">Sin medicación</span>';
+  const medsCardio = meds.filter(m=>m.grupo!=='Otros');
+  const medsOtros = meds.filter(m=>m.grupo==='Otros');
+  let medHtml = '';
+  if(medsCardio.length) medHtml += medsCardio.map(m=>'<span class="evh-med-item">'+m.farmaco+(m.dosis?' '+m.dosis:'')+'</span>').join('');
+  if(medsOtros.length) {
+    if(medHtml) medHtml += '<span style="font-size:10px;color:var(--text-soft);margin:0 4px">·</span>';
+    medHtml += '<span style="font-size:10px;color:var(--text-soft);font-style:italic">otros: </span>'+medsOtros.map(m=>'<span class="evh-med-item" style="background:var(--bg-card);border:1px solid var(--border)">'+m.farmaco+(m.dosis?' '+m.dosis:'')+'</span>').join('');
+  }
+  document.getElementById('evh_med').innerHTML=medHtml||'<span style="font-size:11px;color:var(--text-soft)">Sin medicación</span>';
   if(c){
     const py=((c.cigarrillos_dia||0)*(c.anios_fumando||0)/20).toFixed(1);
     const t=c.tabaquismo==='nunca'?'<span class="evh-habito-bien">No fumador</span>':c.tabaquismo==='actual'?'<span class="evh-habito-malo">Fumador ('+py+' PA)</span>':c.tabaquismo==='social'?'<span style="color:#e08c3a;font-weight:600">Fumador social</span>':'<span style="color:#e08c3a;font-weight:600">Ex fumador ('+py+' PA)</span>';
@@ -3917,11 +3998,22 @@ async function actualizarEncabezadoVariable(dni) {
 // ===== NUEVA cargarDatosClinica CON GINECO Y FAM =====
 async function cargarMedicacion(dni) {
   const cont = document.getElementById('med_filas');
+  const contOtros = document.getElementById('med_otros_filas');
   if(!cont) return;
   cont.innerHTML = '';
+  if(contOtros) contOtros.innerHTML = '';
   const { data } = await sb.from('medicacion').select('*').eq('dni_paciente', dni).eq('activo', true).order('grupo');
   if(!data || !data.length) { agregarFilaMed(); return; }
-  data.forEach(m => agregarFilaMed(m));
+  let tieneCardio = false;
+  data.forEach(m => {
+    if(m.grupo === 'Otros') {
+      agregarFilaMedOtros(m);
+    } else {
+      agregarFilaMed(m);
+      tieneCardio = true;
+    }
+  });
+  if(!tieneCardio) agregarFilaMed();
 }
 
 async function cargarDatosClinica(dni) {
@@ -4203,6 +4295,15 @@ async function guardarAntYVolver() {
 async function abrirEvolucion(dni) {
   const p = pacientesData.find(x=>x.dni===dni);
   if(!p) return;
+  // Crear tab (si ya existe, solo la activa)
+  crearTabPaciente(p);
+  // Si la tab ya existía y ya estaba activa, el estado ya está cargado
+  if(tabActivaDni === dni && pacienteActual && pacienteActual.dni === dni) return;
+  tabActivaDni = dni;
+  await abrirEvolucionDirecta(p);
+}
+
+async function abrirEvolucionDirecta(p) {
   pacienteActual = p;
   document.getElementById('evol_nombre').textContent = p.apellido + ', ' + p.nombre;
   document.getElementById('evol_dni').textContent = 'DNI: ' + p.dni;
@@ -4222,7 +4323,6 @@ async function abrirEvolucion(dni) {
   actualizarPromedios();
   actualizarIMC();
   evolClinicaSnapshot = null;
-  // IMPORTANTE: cargar datos históricos PRIMERO, luego mostrar la página
   _savedCols.lab.clear(); _savedCols.ant.clear(); _savedCols.est.clear();
   await cargarDatosTablasEvol(p.dni);
   await restaurarBorradorEvol(p.dni);
@@ -4230,7 +4330,6 @@ async function abrirEvolucion(dni) {
   switchPacMainTab('evol');
   await actualizarEncabezadoVariable(p.dni);
   cargarSnapshotInicial(p.dni);
-  // Precargar PREVENT con datos disponibles del paciente
   setTimeout(precargarPREVENT, 800);
 }
 
@@ -4360,7 +4459,12 @@ async function volverDesdeEvolucion() {
     if(_dirty.ant && antDatos.columnas && antDatos.columnas.length) await guardarDatosPac('ant_tabla_wrap');
     if(_dirty.est && estDatos.columnas && estDatos.columnas.length) await guardarDatosPac('est_tabla_wrap');
   }
-  showPage('pacientes');
+  // Cerrar la tab de este paciente (guarda borrador y activa otra o va a pacientes)
+  if(tabActivaDni) {
+    cerrarTabPaciente(tabActivaDni, null);
+  } else {
+    showPage('pacientes');
+  }
 }
 
 async function guardarEvolucion() {
@@ -4960,6 +5064,23 @@ function agregarFilaMed(data) {
   const selDosis = div.querySelector('.med-dosis');
   poblarFarmacos(div.querySelector('.med-grupo').value, selFarm, data?data.farmaco:'');
   if(data && data.farmaco) poblarDosisMedEl(selDosis, data.farmaco, data.dosis||'');
+}
+
+function agregarFilaMedOtros(data) {
+  const cont = document.getElementById('med_otros_filas');
+  const div = document.createElement('div');
+  div.style.cssText = 'display:grid;grid-template-columns:1fr 1fr 1fr 28px;gap:6px;margin-bottom:6px;align-items:center';
+  div.dataset.medId = data ? (data.id||'') : '';
+  div.dataset.medOtros = 'true';
+  const farmaco = data ? (data.farmaco||'') : '';
+  const dosis = data ? (data.dosis||'') : '';
+  const frecuencia = data ? (data.frecuencia||'') : '';
+  div.innerHTML =
+    '<input class="med-otros-farmaco" placeholder="Nombre del fármaco" value="'+farmaco+'" style="padding:5px 8px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;width:100%;font-family:var(--font-main)">'+
+    '<input class="med-otros-dosis" placeholder="Dosis" value="'+dosis+'" style="padding:5px 8px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;width:100%;font-family:var(--font-main)">'+
+    '<input class="med-otros-frecuencia" placeholder="Frecuencia" value="'+frecuencia+'" style="padding:5px 8px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;width:100%;font-family:var(--font-main)">'+
+    '<button onclick="this.parentElement.remove()" style="background:var(--red-light);color:var(--red);border:none;border-radius:6px;width:26px;height:26px;cursor:pointer;font-size:16px;line-height:1">×</button>';
+  cont.appendChild(div);
 }
 
 function actualizarFarmacos(el) {
@@ -6352,6 +6473,16 @@ document.getElementById('modal_evol_historica').addEventListener('click', functi
           <div>Grupo</div><div>Fármaco</div><div>Dosis</div><div>Frecuencia</div><div></div>
         </div>
         <div id="med_filas"></div>
+        <div style="margin-top:16px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+            <h4 style="margin:0">Otros fármacos</h4>
+            <button onclick="agregarFilaMedOtros()" style="background:var(--blue);color:white;border:none;border-radius:8px;padding:5px 12px;font-size:12px;cursor:pointer">+ Agregar</button>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr 28px;gap:6px;margin-bottom:6px;font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--text-soft)">
+            <div>Fármaco</div><div>Dosis</div><div>Frecuencia</div><div></div>
+          </div>
+          <div id="med_otros_filas"></div>
+        </div>
         <div style="margin-top:12px">
           <label style="font-size:12px;font-weight:600;color:var(--text-soft);text-transform:uppercase;letter-spacing:.05em">Notas de medicación (se vuelcan a la evolución)</label>
           <textarea id="nota_med" rows="3" placeholder="Observaciones sobre la medicación, adherencia, efectos adversos..." style="width:100%;margin-top:6px;padding:8px 10px;border:1.5px solid var(--border);border-radius:10px;font-family:var(--font-main);font-size:13px;resize:vertical"></textarea>
