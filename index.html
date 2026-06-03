@@ -2530,17 +2530,12 @@ function renderTablaGenerica(datos, filas, wrapId, newColIdx) {
   h += '<th style="background:var(--blue);color:white;padding:8px 14px;text-align:left;font-size:11px;font-weight:700;white-space:nowrap;position:sticky;left:0;z-index:3;min-width:180px;width:180px;border-right:2px solid rgba(255,255,255,.3)">Parámetro</th>';
   datos.columnas.forEach((c,ci) => {
     const isActive = ci === activeCI;
-    const isSaved = hasHistory && ci !== activeCI;
-    const thBg = isActive ? '#1a9e6e' : (isSaved ? '#1a6fad' : 'var(--blue)');
-    const thColor = 'white';
-    const fechaLabel = new Date(c+'T12:00:00').toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'});
-    h += '<th style="background:'+thBg+';color:'+thColor+';padding:4px 6px;text-align:center;width:90px;min-width:90px;border-left:1px solid rgba(255,255,255,.25);font-weight:600">';
-    if(isActive) {
-      h += '<div style="font-size:10px;font-weight:700;margin-bottom:1px;opacity:.85">Nueva carga</div>';
-      h += '<div style="font-size:11px;font-weight:700">'+fechaLabel+'</div>';
-    } else {
-      h += '<div style="font-size:11px;font-weight:700">'+fechaLabel+'</div>';
-    }
+    const thBg = isActive ? '#1a9e6e' : '#1a6fad';
+    h += '<th style="background:'+thBg+';color:white;padding:4px 6px;text-align:center;width:110px;min-width:110px;border-left:1px solid rgba(255,255,255,.25);font-weight:600">';
+    if(isActive) h += '<div style="font-size:10px;font-weight:700;margin-bottom:2px;opacity:.85">✏️ Nueva carga</div>';
+    // Todas las columnas tienen input de fecha editable
+    h += '<input type="date" value="'+c+'" data-ci="'+ci+'" data-wrap="'+wrapId+'" onchange="actualizarFechaCol(this)"';
+    h += ' style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.5);color:white;border-radius:5px;font-size:10px;padding:2px 4px;width:106px;color-scheme:dark"/>';
     h += '</th>';
   });
   h += '</tr></thead>';
@@ -2567,10 +2562,8 @@ function renderTablaGenerica(datos, filas, wrapId, newColIdx) {
     datos.columnas.forEach((_,ci) => {
       const val = (datos.filas[fi]||[])[ci]||'';
       const isActive = ci === activeCI;
-      const isEditable = !isCalc && isActive;
-      const isLocked = hasHistory && ci !== activeCI;
+      const isEditable = !isCalc;
       const esAlerta = val && f.ref && f.ref(val, sexoPac, storedU);
-      // Celda amarilla: solo si está vacía Y no es calc Y no es alerta
       const celdaVacia = !isCalc && !val.trim();
       const refTxtSexo = esAlerta && f.refTxt ? (() => {
         const t = f.refTxt;
@@ -2578,22 +2571,20 @@ function renderTablaGenerica(datos, filas, wrapId, newColIdx) {
         if(sexoPac==='H' && t.includes('(H)')) return t.split('/').filter(p=>p.includes('(H)')).join('').trim().replace('(H)','').trim() || t;
         return t;
       })() : '';
-      // Fondo de celda: alerta > vacío en col nueva (verde) > vacío en col histórica (amarillo) > guardado (gris) > blanco
-      const cellBg = esAlerta ? '#fff0f0' : (celdaVacia && isActive) ? '#e8faf2' : (celdaVacia && !isActive) ? '#fffbea' : (isLocked ? '#fafafa' : 'white');
+      const cellBg = esAlerta ? '#fff0f0' : (celdaVacia && isActive) ? '#e8faf2' : (celdaVacia && !isActive) ? '#fffbea' : 'white';
       const valColor = esAlerta ? 'var(--red)' : 'var(--text)';
       const valFw = esAlerta ? '700' : '400';
 
-      h += '<td style="padding:3px 4px;border:1px solid var(--border);background:'+cellBg+';text-align:center;vertical-align:middle;width:90px;min-width:90px"'+(esAlerta&&refTxtSexo?' title="Ref: '+refTxtSexo+'"':'')+'>';
+      h += '<td style="padding:3px 4px;border:1px solid var(--border);background:'+cellBg+';text-align:center;vertical-align:middle;width:110px;min-width:110px"'+(esAlerta&&refTxtSexo?' title="Ref: '+refTxtSexo+'"':'')+'>';
 
       if(isCalc) {
         h += '<div style="font-size:12px;font-weight:'+valFw+';color:'+valColor+';padding:3px 2px"'+(esAlerta&&refTxtSexo?' title="Ref: '+refTxtSexo+'"':'')+'>'+val+'</div>';
         if(val && storedU) h += '<div style="font-size:10px;color:var(--text-soft);margin-top:1px">'+storedU+'</div>';
-      } else if(isLocked) {
-        h += '<div style="font-size:13px;font-weight:'+valFw+';color:'+valColor+';padding:4px 2px">'+val+'</div>';
-        if(storedU) h += '<div style="font-size:10px;color:var(--text-soft)">'+storedU+'</div>';
       } else {
+        // Todas las celdas no-calc son editables
+        const borderCol = esAlerta ? 'var(--red)' : isActive ? '#1a9e6e' : 'var(--border)';
         h += '<input type="text" value="'+val+'" data-fi="'+fi+'" data-ci="'+ci+'" data-wrap="'+wrapId+'" oninput="actualizarCelda(this)" onfocus="destacarFila(this,true)" onblur="destacarFila(this,false)"';
-        h += ' style="display:block;width:90%;margin:0 auto 2px;border:none;border-bottom:1.5px solid '+(esAlerta?'var(--red)':isActive?'#1a9e6e':'var(--border)')+';background:transparent;font-size:13px;text-align:center;font-family:var(--font-main);outline:none;color:'+valColor+';font-weight:'+valFw+';padding:2px 0"/>';
+        h += ' style="display:block;width:90%;margin:0 auto 2px;border:none;border-bottom:1.5px solid '+borderCol+';background:transparent;font-size:13px;text-align:center;font-family:var(--font-main);outline:none;color:'+valColor+';font-weight:'+valFw+';padding:2px 0"/>';
         if(uns.length > 1) {
           h += '<select data-key="'+f.key+'" data-wrap="'+wrapId+'" onchange="actualizarUnidad(this)" style="display:block;width:96%;margin:0 auto;font-size:10px;padding:1px 2px;border:1px solid var(--border);border-radius:4px;background:#e0f7fa;color:var(--text-soft)">';
           uns.forEach(u => { h += '<option value="'+u+'"'+(u===storedU?' selected':'')+'>'+u+'</option>'; });
@@ -9098,17 +9089,13 @@ loadLocal();
     var wrap=el(wrapId); if(!wrap || !datos || !datos.columnas) return;
     var tipo=tablaTipoPorWrap(wrapId);
     var ths=wrap.querySelectorAll('thead th');
-    // activeCI: columna editable (misma lógica que renderTablaGenerica)
-    var activeCI = newColIdx !== undefined ? newColIdx : (datos.columnas.length > 0 ? datos.columnas.length - 1 : 0);
+    // Todas las columnas tienen botón eliminar (la fecha ya es editable inline)
     datos.columnas.forEach(function(c,ci){
       var th=ths[ci+1]; if(!th || th.querySelector('.col-actions-urcym')) return;
-      var isActive = ci === activeCI;
-      if(isActive) return; // columna activa: los valores ya son editables, sin botones extra
-      // Columnas guardadas: solo botón borrar
       var d=document.createElement('div');
       d.className='col-actions-urcym';
       d.style.cssText='display:flex;gap:3px;justify-content:center;margin-top:4px';
-      d.innerHTML='<button type="button" class="col-btn-del" title="Borrar columna" onclick="borrarColumnaTabla(\''+tipo+'\','+ci+')">🗑</button>';
+      d.innerHTML='<button type="button" class="col-btn-del" title="Eliminar columna" onclick="borrarColumnaTabla(\''+tipo+'\','+ci+')">🗑</button>';
       th.appendChild(d);
     });
   };
