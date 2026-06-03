@@ -4304,10 +4304,17 @@ async function actualizarEncabezadoVariable(dni) {
     Object.entries(GIN_L).forEach(([k,v])=>{if(c[k])dxHtml+='<span class="evh-tag-pink">'+v+'</span>';});
     Object.entries(FAM_L).forEach(([k,v])=>{if(c[k])dxHtml+='<span class="evh-tag-green">'+v+'</span>';});
   }
-  document.getElementById('evh_dx').innerHTML=dxHtml||'<span style="font-size:11px;color:var(--text-soft)">Sin diagnósticos</span>';
-  document.getElementById('evh_med').innerHTML=meds.length?meds.map(m=>'<span class="evh-med-item">'+m.farmaco+' '+m.dosis+(m.frecuencia?' <span style="font-size:10px;opacity:.75">'+m.frecuencia+'</span>':'')+'</span>').join(''):'<span style="font-size:11px;color:var(--text-soft)">Sin medicación</span>';
-  const otherEl = document.getElementById('evh_other_med');
-  if(otherEl) otherEl.innerHTML = otraMeds.length ? otraMeds.map(m=>'<span class="evh-other-med-item">'+m.farmaco+(m.dosis?' '+m.dosis:'')+(m.frecuencia?' <span style="font-size:10px;opacity:.75">'+m.frecuencia+'</span>':'')+'</span>').join('') : '<span style="font-size:11px;color:#86efac">—</span>';
+  const dxFallback = '<span style="font-size:11px;color:var(--text-soft)">Sin diagnósticos</span>';
+  const medHtml = meds.length ? meds.map(m=>'<span class="evh-med-item">'+m.farmaco+' '+m.dosis+(m.frecuencia?' <span style="font-size:10px;opacity:.75">'+m.frecuencia+'</span>':'')+'</span>').join('') : '<span style="font-size:11px;color:var(--text-soft)">Sin medicación</span>';
+  const otherHtml = otraMeds.length ? otraMeds.map(m=>'<span class="evh-other-med-item">'+m.farmaco+(m.dosis?' '+m.dosis:'')+(m.frecuencia?' <span style="font-size:10px;opacity:.75">'+m.frecuencia+'</span>':'')+'</span>').join('') : '<span style="font-size:11px;color:#86efac">—</span>';
+  // Actualizar encabezado de Evolución
+  const evhDx = document.getElementById('evh_dx'); if(evhDx) evhDx.innerHTML = dxHtml||dxFallback;
+  const evhMed = document.getElementById('evh_med'); if(evhMed) evhMed.innerHTML = medHtml;
+  const otherEl = document.getElementById('evh_other_med'); if(otherEl) otherEl.innerHTML = otherHtml;
+  // Sincronizar también el encabezado de Historia Clínica (hc_*)
+  const hcDx = document.getElementById('hc_evh_dx'); if(hcDx) hcDx.innerHTML = dxHtml||dxFallback;
+  const hcMed = document.getElementById('hc_evh_med'); if(hcMed) hcMed.innerHTML = medHtml;
+  const hcOther = document.getElementById('hc_evh_other_med'); if(hcOther) hcOther.innerHTML = otherHtml;
   const habEl = document.getElementById('evh_habitos');
   if(habEl) {
     if(c) {
@@ -4325,8 +4332,10 @@ async function actualizarEncabezadoVariable(dni) {
                 : actVal==='sedentarismo' ? '<span class="evh-habito-malo">Sedentario</span>'
                 : '<span class="evh-habito-bien">'+actVal+'</span>';
       habEl.innerHTML = t+'<br>'+a+'<br>'+act;
+      const hcHab = document.getElementById('hc_evh_habitos'); if(hcHab) hcHab.innerHTML = t+'<br>'+a+'<br>'+act;
     } else {
       habEl.innerHTML = '<span style="font-size:11px;color:var(--text-soft)">Sin datos cargados</span>';
+      const hcHab = document.getElementById('hc_evh_habitos'); if(hcHab) hcHab.innerHTML = '<span style="font-size:11px;color:var(--text-soft)">Sin datos</span>';
     }
   }
 }
@@ -4878,6 +4887,8 @@ async function guardarEvolucion() {
     return;
   }
   limpiarDirty('evol');
+  // Actualizar encabezado variable inmediatamente tras guardar
+  if(p && p.dni) { actualizarEncabezadoVariable(p.dni); }
   // Auto-guardar laboratorio solo si tiene cambios
   if(_dirty.lab && labDatos.columnas && labDatos.columnas.length) {
     await guardarDatosPac('lab_tabla_wrap');
