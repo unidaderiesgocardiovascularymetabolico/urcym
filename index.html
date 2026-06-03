@@ -660,6 +660,10 @@
 #agenda-app .ag-btn-inst:hover{background:#f3f4f6;}
 #agenda-app .ag-btn-tasks{background:none;border:1px solid #059669;border-radius:6px;padding:5px 10px;font-size:12px;color:#059669;cursor:pointer;font-family:inherit;}
 #agenda-app .ag-btn-tasks:hover{background:#ecfdf5;}
+#agenda-app .ag-btn-backup{background:none;border:1px solid #7C3AED;border-radius:6px;padding:5px 10px;font-size:12px;color:#7C3AED;cursor:pointer;font-family:inherit;}
+#agenda-app .ag-btn-backup:hover{background:#f5f3ff;}
+#agenda-app .ag-btn-restore{background:none;border:1px solid #D97706;border-radius:6px;padding:5px 10px;font-size:12px;color:#D97706;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;}
+#agenda-app .ag-btn-restore:hover{background:#fffbeb;}
 /* ── Pills filtro profesional ── */
 #agenda-app .ag-pill{cursor:pointer;font-family:inherit;font-size:12px;font-weight:600;border-radius:20px;padding:5px 13px;border:1.5px solid #e5e7eb;background:#fff;color:#374151;transition:all .15s;}
 #agenda-app .ag-pill:hover{border-color:#9ca3af;}
@@ -960,6 +964,8 @@
           <button class="ag-btn-disp" id="ag-btn-disp">&#128197; Disponibilidad</button>
           <button class="ag-btn-inst" id="ag-btn-inst">&#127970; Institucional</button>
           <button class="ag-btn-tasks" id="ag-btn-tasks" title="Tareas por profesional">&#9989; Tareas</button>
+          <button class="ag-btn-backup" id="ag-btn-backup" title="Guardar copia de seguridad">&#128190; Guardar copia</button>
+          <label class="ag-btn-restore" title="Restaurar copia de seguridad" style="cursor:pointer">&#128228; Restaurar copia<input type="file" id="ag-restore-input" accept=".json" style="display:none"></label>
         </div>
         <div class="ag-legend">
           <div class="ag-legend-item"><div class="ag-legend-bar" style="background:#7F77DD"></div>Guerrero</div>
@@ -8628,6 +8634,63 @@ renderGrid=function(){
 // La verdadera solución: parchear después del IIFE para visProfs multi
 // Se hace en el patch de abajo.
 
+
+// ===== BACKUP / RESTORE =====
+function exportBackup(){
+  var data={
+    version:2,
+    fecha: new Date().toISOString(),
+    turnos: turnos,
+    nlBlocks: nlBlocks,
+    dispBlocks: dispBlocks,
+    instBlocks: instBlocks,
+    offeredSlots: offeredSlots,
+    blockedSlots: blockedSlots,
+    wappTemplates: wappTemplates
+  };
+  var blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json"});
+  var url=URL.createObjectURL(blob);
+  var a=document.createElement("a");
+  var d=new Date();
+  var ds=d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+  a.href=url; a.download="urcym_backup_"+ds+".json"; a.click();
+  URL.revokeObjectURL(url);
+  localStorage.setItem('urcym_last_backup', Date.now());
+  showToastBackup("✅ Copia guardada correctamente");
+}
+function importBackup(file){
+  if(!file)return;
+  var reader=new FileReader();
+  reader.onload=function(e){
+    try{
+      var data=JSON.parse(e.target.result);
+      if(!data.turnos){alert("Archivo inválido.");return;}
+      if(!confirm("⚠️ Esto va a reemplazar todos los turnos y plantillas actuales con la copia del "+data.fecha.slice(0,10)+". ¿Continuar?"))return;
+      turnos=data.turnos||{};
+      nlBlocks=data.nlBlocks||DEFAULT_NL.slice();
+      dispBlocks=data.dispBlocks||DEFAULT_DISP.slice();
+      instBlocks=data.instBlocks||[];
+      offeredSlots=data.offeredSlots||{};
+      blockedSlots=data.blockedSlots||{};
+      wappTemplates=data.wappTemplates||{general:[],BG:[],OB:[],LA:[],SA:[]};
+      saveLocal();
+      saveOffered();
+      saveBlocked();
+      saveWapp();
+      renderGrid();
+      showToastBackup("✅ Copia restaurada correctamente");
+    }catch(ex){alert("Error al leer el archivo: "+ex.message);}
+  };
+  reader.readAsText(file);
+}
+function showToastBackup(msg){
+  var t=document.getElementById("urcym-toast-backup");
+  if(!t){t=document.createElement("div");t.id="urcym-toast-backup";t.style.cssText="position:fixed;bottom:30px;left:50%;transform:translateX(-50%);background:#1e293b;color:#fff;padding:12px 24px;border-radius:10px;font-size:14px;z-index:99999;box-shadow:0 4px 20px rgba(0,0,0,.3);transition:opacity .4s";document.body.appendChild(t);}
+  t.textContent=msg;t.style.opacity="1";
+  clearTimeout(t._to);t._to=setTimeout(function(){t.style.opacity="0";},3000);
+}
+// ===== FIN BACKUP / RESTORE =====
+
 function saveLocal(){
   try{localStorage.setItem(LS_T,JSON.stringify(turnos));}catch(e){}
   try{localStorage.setItem(LS_NL,JSON.stringify(nlBlocks));}catch(e){}
@@ -8897,6 +8960,17 @@ loadWapp();
 
 loadBlocked();
 loadLocal();
+document.getElementById('ag-restore-input').addEventListener('change',function(e){importBackup(e.target.files[0]);this.value='';});
+// Recordatorio de backup cada 7 días
+(function(){
+  var last=localStorage.getItem('urcym_last_backup');
+  var now=Date.now();
+  if(!last||now-parseInt(last)>7*24*60*60*1000){
+    setTimeout(function(){
+      showToastBackup('💡 Recordatorio: guardá una copia de seguridad (botón Guardar copia)');
+    },3000);
+  }
+})();
 })();
 
 // ═══ AUTOCOMPLETE PACIENTE EN AGENDA ═══
@@ -9184,6 +9258,7 @@ loadLocal();
   // Delegación global
   document.addEventListener('click', function(e){
     if(e.target.closest('#ag-btn-tasks')){ openTasksPanel(); return; }
+    if(e.target.closest('#ag-btn-backup')){ exportBackup(); return; }
     if(e.target.closest('#ag-tasks-close')){
       var bg=document.getElementById('ag-tasks-bg');
       if(bg) bg.style.display='none';
