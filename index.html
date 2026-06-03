@@ -3804,12 +3804,19 @@ async function guardarClinica() {
   const famAll = ['hta','dbt','obe','dis','iam','acv','erc','ms'];
   famAll.forEach(d=>{dxData['fam_'+d]=document.getElementById('fam_'+d)?.checked||false;});
   const alcVal = document.getElementById('hab_alcohol').value;
-  // Campos base: existen siempre en la tabla
+  // Campos BASE: solo los que existen en la tabla original de Supabase
   const clinicaBase = {
     dni_paciente:dni,...dxData,
     tabaquismo:document.getElementById('hab_tabaquismo').value,
     cigarrillos_dia:document.getElementById('hab_cig_dia').value||null,
     anios_fumando:document.getElementById('hab_anios').value||null,
+    alcohol:['si','social'].includes(alcVal),
+    actividad_fisica:document.getElementById('hab_actividad').value,
+    alimentacion:document.getElementById('hab_alimentacion').value
+  };
+  // Campos EXTENDIDOS: columnas nuevas, fallan silenciosamente si no existen en Supabase
+  const clinicaExt = {
+    dni_paciente:dni,
     dx_acv_subtipos:{isq:document.getElementById('dx_acv_isq')?.checked||false,hem:document.getElementById('dx_acv_hem')?.checked||false,ait:document.getElementById('dx_acv_ait')?.checked||false},
     dx_acv_fecha:document.getElementById('dx_acv_fecha')?.value||null,
     dx_acv_nota:document.getElementById('dx_acv_nota')?.value||null,
@@ -3822,13 +3829,6 @@ async function guardarClinica() {
     dx_obe_nota:document.getElementById('dx_obe_nota')?.value||null,
     dx_menopausia_edad:document.getElementById('dx_menopausia_edad')?.value||null,
     dx_menopausia_nota:document.getElementById('dx_menopausia_nota')?.value||null,
-    alcohol:['si','social'].includes(alcVal),
-    actividad_fisica:document.getElementById('hab_actividad').value,
-    alimentacion:document.getElementById('hab_alimentacion').value
-  };
-  // Campos extendidos: columnas nuevas que pueden no existir aún en Supabase
-  const clinicaExt = {
-    dni_paciente:dni,
     alcohol_social:alcVal==='social',
     alcohol_cerveza:parseFloat(document.getElementById('alc_cerveza').value)||0,
     alcohol_vino:parseFloat(document.getElementById('alc_vino').value)||0,
@@ -3846,12 +3846,12 @@ async function guardarClinica() {
     nota_hab:document.getElementById('nota_hab')?.value||null,
     actualizado_en:new Date().toISOString()
   };
-  // Upsert base (obligatorio — falla visible si hay error)
+  // Upsert base (obligatorio)
   const { error: upsertErr } = await sb.from('paciente_clinica').upsert(clinicaBase);
   if(upsertErr) { console.error('Error guardando clinica (base):', upsertErr); alert('Error al guardar datos clínicos: ' + upsertErr.message); return; }
-  // Upsert extendido (silencioso — solo falla en consola si faltan columnas)
+  // Upsert extendido (silencioso si faltan columnas)
   const { error: extErr } = await sb.from('paciente_clinica').upsert(clinicaExt);
-  if(extErr) console.warn('Campos extendidos no guardados (agregar columnas en Supabase):', extErr.message);
+  if(extErr) console.warn('Campos extendidos no guardados (faltan columnas en Supabase):', extErr.message);
   const clinicaData = { ...clinicaBase, ...clinicaExt };
   await sb.from('medicacion').update({activo:false}).eq('dni_paciente',dni);
   const meds = [];
