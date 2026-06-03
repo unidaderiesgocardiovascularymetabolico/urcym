@@ -3092,7 +3092,15 @@ function showPage(page) {
   });
   // page-evolucion está fuera de .content — manejarla explícitamente
   const evolPage = document.getElementById('page-evolucion');
-  if(evolPage) evolPage.style.display = page === 'evolucion' ? 'block' : 'none';
+  if(evolPage) {
+    if(page === 'evolucion') {
+      evolPage.style.display = 'block';
+      evolPage.classList.add('active');
+    } else {
+      evolPage.style.display = 'none';
+      evolPage.classList.remove('active');
+    }
+  }
 
   document.querySelectorAll('.nav-tab').forEach(t=>t.classList.remove('active'));
   const el = document.getElementById('page-'+page);
@@ -3927,7 +3935,7 @@ async function guardarClinica() {
     gineco_notas:document.getElementById('gineco_notas_generales')?.value||null,
     actualizado_en:new Date().toISOString()
   };
-  await sb.from('paciente_clinica').upsert(clinicaData);
+  await sb.from('paciente_clinica').upsert(clinicaData, {onConflict:'dni_paciente'});
   await sb.from('medicacion').update({activo:false}).eq('dni_paciente',dni);
   const meds = [];
   for(const fila of document.querySelectorAll('#med_filas > div')) {
@@ -4269,7 +4277,7 @@ async function guardarAntYVolver() {
 
 // ===== EVOLUCION =====
 async function abrirEvolucion(dni) {
-  const p = pacientesData.find(x=>x.dni===dni);
+  const p = pacientesData.find(x=>String(x.dni)===String(dni));
   if(!p) return;
   pacienteActual = p;
   abrirTabPaciente(p);
@@ -8579,7 +8587,7 @@ loadLocal();
       alcohol:['si','social'].includes(document.getElementById('hab_alcohol')?.value),alcohol_social:document.getElementById('hab_alcohol')?.value==='social',
       alcohol_cerveza:parseFloat(document.getElementById('alc_cerveza')?.value)||0,alcohol_vino:parseFloat(document.getElementById('alc_vino')?.value)||0,alcohol_fernet:parseFloat(document.getElementById('alc_fernet')?.value)||0,alcohol_blanca:parseFloat(document.getElementById('alc_blanca')?.value)||0,alcohol_whisky:parseFloat(document.getElementById('alc_whisky')?.value)||0,
       actividad_fisica:document.getElementById('hab_actividad')?.value||null,alimentacion:document.getElementById('hab_alimentacion')?.value||null,cardio_notas:document.getElementById('cardio_notas_generales')?.value||null,gineco_notas:document.getElementById('gineco_notas_generales')?.value||null,actualizado_en:new Date().toISOString()};
-    await sb.from('paciente_clinica').upsert(clinicaData);
+    await sb.from('paciente_clinica').upsert(clinicaData, {onConflict:'dni_paciente'});
     await sb.from('medicacion').update({activo:false}).eq('dni_paciente',dni);
     var meds=[];
     for(const fila of document.querySelectorAll('#med_filas > div')){var farm=fila.querySelector('.med-farmaco')?.value;if(!farm)continue;var medData={dni_paciente:dni,grupo:fila.querySelector('.med-grupo')?.value||'',farmaco:farm,dosis:fila.querySelector('.med-dosis')?.value||'',frecuencia:fila.querySelector('.med-frecuencia')?.value||'',activo:true,fecha_inicio:fechaHoy()};var mid=fila.dataset.medId;if(mid)await sb.from('medicacion').update(medData).eq('id',mid);else await sb.from('medicacion').insert(medData);meds.push(medData);}
@@ -8948,8 +8956,8 @@ loadLocal();
     var dni=window.pacienteActual?.dni;
     if(oldGuardarClinica) await oldGuardarClinica();
     if(dni){
-      var notas=await guardarNotasHabitos(dni);
-      volcarNotasHabitosAlEditor(notas);
+      await guardarNotasHabitos(dni);
+      // encabezado ya se actualiza dentro de oldGuardarClinica, pero lo refrescamos por si acaso
       await window.actualizarEncabezadoVariable(dni);
     }
   };
