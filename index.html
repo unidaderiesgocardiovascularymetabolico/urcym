@@ -3810,7 +3810,8 @@ function generarTextoClinico(c, meds) {
     if(d==='iam'&&c.dx_iam_fecha){const diff=Math.floor((Date.now()-new Date(c.dx_iam_fecha).getTime())/86400000);const y=Math.floor(diff/365);const m=Math.floor((diff%365)/30);txt+=' (hace '+(y>0?y+' año'+(y>1?'s':'')+(m>0?' y '+m+' mes'+(m>1?'es':''):''):m>0?m+' mes'+(m>1?'es':''):diff+' días')+')';}
     if(d==='hta'&&c.dx_hta_fecha){const diff=Math.floor((Date.now()-new Date(c.dx_hta_fecha).getTime())/86400000);const y=Math.floor(diff/365);txt+=' (hace '+(y>0?y+' año'+(y>1?'s':''):Math.floor(diff/30)+' meses')+')';}
     if(d==='obe'&&c.dx_obe_fecha){const diff=Math.floor((Date.now()-new Date(c.dx_obe_fecha).getTime())/86400000);const y=Math.floor(diff/365);txt+=' (hace '+(y>0?y+' año'+(y>1?'s':''):Math.floor(diff/30)+' meses')+')';}
-    if(d==='menopausia'&&c.dx_menopausia_edad)txt+=' (edad diagnóstico: '+c.dx_menopausia_edad+' años)';
+    if((d==='dbt1'||d==='dbt2'||d==='dbt_otro'||d==='predbt')&&c['dx_'+d+'_fecha']){const anio=parseInt(c['dx_'+d+'_fecha']);const hoy=new Date().getFullYear();const diff=hoy-anio;if(diff>=0)txt+=' (desde '+anio+(diff===0?', este año':diff===1?', hace 1 año':', hace '+diff+' años')+')';}
+    if(d==='menopausia'){if(c.dx_menopausia_edad)txt+=' (edad diagnóstico: '+c.dx_menopausia_edad+' años)';if(c.dx_menopausia_fecha){const anio=parseInt(c.dx_menopausia_fecha);const hoy=new Date().getFullYear();const diff=hoy-anio;if(diff>=0)txt+=', desde '+anio;}}
     return txt;
   });
   if(dxList.length) lines.push('ANTECEDENTES: '+dxList.join(' · '));
@@ -3819,6 +3820,9 @@ function generarTextoClinico(c, meds) {
   if(c.dx_iam&&c.dx_iam_nota) lines.push('IAM: '+c.dx_iam_nota);
   if(c.dx_hta&&c.dx_hta_nota) lines.push('HTA: '+c.dx_hta_nota);
   if(c.dx_obe&&c.dx_obe_nota) lines.push('Obesidad: '+c.dx_obe_nota);
+  if(c.dx_dbt1&&c.dx_dbt1_nota) lines.push('DBT 1: '+c.dx_dbt1_nota);
+  if(c.dx_dbt2&&c.dx_dbt2_nota) lines.push('DBT 2: '+c.dx_dbt2_nota);
+  if(c.dx_dbt_otro&&c.dx_dbt_otro_nota) lines.push('DBT Otro: '+c.dx_dbt_otro_nota);
   if(c.dx_menopausia&&c.dx_menopausia_nota) lines.push('Menopausia: '+c.dx_menopausia_nota);
   const ginList = Object.keys(GINECO_NAMES).filter(d=>c['dx_'+d]).map(d=>GINECO_NAMES[d]);
   const gpac = [c.gpac_g,c.gpac_p,c.gpac_a,c.gpac_c].filter(v=>v!=null&&v!=='');
@@ -3890,6 +3894,14 @@ async function guardarClinica() {
     dx_hta_nota:document.getElementById('dx_hta_nota')?.value||null,
     dx_obe_fecha:document.getElementById('dx_obe_fecha')?.value||null,
     dx_obe_nota:document.getElementById('dx_obe_nota')?.value||null,
+    dx_dbt1_fecha:document.getElementById('dx_dbt1_fecha')?.value||null,
+    dx_dbt1_nota:document.getElementById('dx_dbt1_nota')?.value||null,
+    dx_dbt2_fecha:document.getElementById('dx_dbt2_fecha')?.value||null,
+    dx_dbt2_nota:document.getElementById('dx_dbt2_nota')?.value||null,
+    dx_dbt_otro_fecha:document.getElementById('dx_dbt_otro_fecha')?.value||null,
+    dx_dbt_otro_nota:document.getElementById('dx_dbt_otro_nota')?.value||null,
+    dx_predbt_fecha:document.getElementById('dx_predbt_fecha')?.value||null,
+    dx_menopausia_fecha:document.getElementById('dx_menopausia_fecha')?.value||null,
     dx_menopausia_edad:document.getElementById('dx_menopausia_edad')?.value||null,
     dx_menopausia_nota:document.getElementById('dx_menopausia_nota')?.value||null,
     alcohol_social:alcVal==='social',
@@ -6342,6 +6354,7 @@ document.getElementById('modal_evol_historica').addEventListener('click', functi
           <label>Año diagnóstico:<br><input type="number" id="dx_dbt1_fecha" min="1940" max="2099" placeholder="Ej: 2012" style="width:90px;margin-top:4px;padding:4px 8px;border:1.5px solid var(--border);border-radius:8px;font-size:12px" oninput="calcDxTiempo('dbt1')"></label>
           <span id="dx_dbt1_tiempo" style="color:var(--blue);font-weight:600"></span>
         </div>
+        <div style="margin-top:8px"><label>Nota (se vuelca a HC):<br><textarea id="dx_dbt1_nota" rows="2" style="width:100%;margin-top:4px;padding:6px 8px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;resize:vertical"></textarea></label></div>
       </div>
       <!-- Extras: DBT 2 -->
       <div id="dx_extra_dbt2" style="display:none;background:#f0f4fa;border-radius:10px;padding:10px 14px;margin-top:10px;font-size:12px">
@@ -6350,6 +6363,7 @@ document.getElementById('modal_evol_historica').addEventListener('click', functi
           <label>Año diagnóstico:<br><input type="number" id="dx_dbt2_fecha" min="1940" max="2099" placeholder="Ej: 2012" style="width:90px;margin-top:4px;padding:4px 8px;border:1.5px solid var(--border);border-radius:8px;font-size:12px" oninput="calcDxTiempo('dbt2')"></label>
           <span id="dx_dbt2_tiempo" style="color:var(--blue);font-weight:600"></span>
         </div>
+        <div style="margin-top:8px"><label>Nota (se vuelca a HC):<br><textarea id="dx_dbt2_nota" rows="2" style="width:100%;margin-top:4px;padding:6px 8px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;resize:vertical"></textarea></label></div>
       </div>
       <!-- Extras: DBT Otro -->
       <div id="dx_extra_dbt_otro" style="display:none;background:#f0f4fa;border-radius:10px;padding:10px 14px;margin-top:10px;font-size:12px">
@@ -6358,6 +6372,7 @@ document.getElementById('modal_evol_historica').addEventListener('click', functi
           <label>Año diagnóstico:<br><input type="number" id="dx_dbt_otro_fecha" min="1940" max="2099" placeholder="Ej: 2012" style="width:90px;margin-top:4px;padding:4px 8px;border:1.5px solid var(--border);border-radius:8px;font-size:12px" oninput="calcDxTiempo('dbt_otro')"></label>
           <span id="dx_dbt_otro_tiempo" style="color:var(--blue);font-weight:600"></span>
         </div>
+        <div style="margin-top:8px"><label>Nota (se vuelca a HC):<br><textarea id="dx_dbt_otro_nota" rows="2" style="width:100%;margin-top:4px;padding:6px 8px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;resize:vertical"></textarea></label></div>
       </div>
       <!-- Extras: PreDBT -->
       <div id="dx_extra_predbt" style="display:none;background:#f0f4fa;border-radius:10px;padding:10px 14px;margin-top:10px;font-size:12px">
