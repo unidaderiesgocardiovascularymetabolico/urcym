@@ -2437,7 +2437,10 @@ function renderTablaGenerica(datos, filas, wrapId, newColIdx) {
       h += ' style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.5);color:white;border-radius:5px;font-size:10px;padding:2px 4px;width:108px;color-scheme:dark"/>';
     } else {
       h += '<div style="font-size:12px;font-weight:700">'+fechaLabel+'</div>';
-      if(isSaved) h += '<div style="font-size:9px;opacity:.75;margin-top:2px">🔒 guardado</div>';
+      if(isSaved && !isEst) h += '<div style="font-size:9px;opacity:.75;margin-top:2px">🔒 guardado</div>';
+    }
+    if(isEst) {
+      h += '<button onclick="eliminarColumna('+ci+',\''+wrapId+'\')" title="Eliminar columna" style="margin-top:4px;background:rgba(255,255,255,.18);border:1px solid rgba(255,255,255,.4);border-radius:4px;color:white;font-size:10px;cursor:pointer;padding:1px 6px;font-family:var(--font-main)">🗑 Borrar</button>';
     }
     h += '</th>';
   });
@@ -2465,8 +2468,8 @@ function renderTablaGenerica(datos, filas, wrapId, newColIdx) {
     datos.columnas.forEach((_,ci) => {
       const val = (datos.filas[fi]||[])[ci]||'';
       const isActive = ci === activeCI;
-      const isEditable = !isCalc && isActive;
-      const isLocked = hasHistory && ci !== activeCI;
+      const isEditable = !isCalc && (isActive || isEst);
+      const isLocked = hasHistory && ci !== activeCI && !isEst;
       const esAlerta = val && f.ref && f.ref(val, sexoPac, storedU);
       // Celda amarilla: solo si está vacía Y no es calc Y no es alerta
       const celdaVacia = !isCalc && !val.trim();
@@ -2477,7 +2480,7 @@ function renderTablaGenerica(datos, filas, wrapId, newColIdx) {
         return t;
       })() : '';
       // Fondo de celda: alerta > vacío en col nueva (verde) > vacío en col histórica (amarillo) > guardado (gris) > blanco
-      const cellBg = esAlerta ? '#fff0f0' : (celdaVacia && isActive) ? '#e8faf2' : (celdaVacia && !isActive) ? '#fffbea' : (isLocked ? '#fafafa' : 'white');
+      const cellBg = esAlerta ? '#fff0f0' : (celdaVacia && isActive) ? '#e8faf2' : (celdaVacia && !isActive && !isEst) ? '#fffbea' : (isLocked ? '#fafafa' : 'white');
       const valColor = esAlerta ? 'var(--red)' : 'var(--text)';
       const valFw = esAlerta ? '700' : '400';
 
@@ -2536,6 +2539,19 @@ function renderTablaGenerica(datos, filas, wrapId, newColIdx) {
   }
 }
 
+
+function eliminarColumna(ci, wrapId) {
+  if(!confirm("¿Eliminar esta columna y todos sus datos?")) return;
+  const datos = ["evest_wrap","est_tabla_wrap"].includes(wrapId) ? estDatos : antDatos;
+  const filas = ["evest_wrap","est_tabla_wrap"].includes(wrapId) ? EST_FILAS : ANT_FILAS;
+  datos.columnas.splice(ci, 1);
+  if(datos.filas) {
+    datos.filas = datos.filas.map(row => { if(!row) return row; const r = [...row]; r.splice(ci, 1); return r; });
+  }
+  const saveWrap = ["evest_wrap","est_tabla_wrap"].includes(wrapId) ? "est_tabla_wrap" : "ant_tabla_wrap";
+  guardarDatosPac(saveWrap);
+  renderTablaGenerica(datos, filas, wrapId, Math.max(0, datos.columnas.length - 1));
+}
 function agregarFilaExtra(wrapId) {
   const input = document.getElementById('new_row_input_'+wrapId);
   if(!input || !input.value.trim()) return;
