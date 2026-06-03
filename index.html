@@ -3560,10 +3560,12 @@ function cerrarModal(id) { document.getElementById(id).classList.remove('open');
 
 // ===== EDITAR EVOLUCIÓN (48h) =====
 let _editEvolId = null;
+let _editEvolSource = null;
 function abrirEditarEvolucion(evolId) {
   const evol = _historialData.find(e=>String(e.id)===String(evolId));
   if(!evol) return;
   _editEvolId = evolId;
+  _editEvolSource = 'historia';
   const fh = new Date(evol.fecha_hora);
   document.getElementById('edit_evol_info').textContent =
     fh.toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'}) + ' ' +
@@ -3582,10 +3584,20 @@ async function guardarEdicionEvolucion() {
   const { error } = await sb.from('evoluciones').update({contenido_html: html}).eq('id', _editEvolId);
   btn.textContent = '💾 Guardar cambios'; btn.disabled = false;
   if(!error) {
-    const idx = _historialData.findIndex(e=>String(e.id)===String(_editEvolId));
-    if(idx>=0) _historialData[idx].contenido_html = html;
-    renderHistoria(_historialData, false);
+    // Actualizar en previas
+    const ip = _previasData.findIndex(e=>String(e.id)===String(_editEvolId));
+    if(ip>=0) _previasData[ip].contenido_html = html;
+    // Actualizar en historial (historia clínica)
+    const ih = (_historialData||[]).findIndex(e=>String(e.id)===String(_editEvolId));
+    if(ih>=0) _historialData[ih].contenido_html = html;
+    // Re-renderizar la fuente correcta
+    if(_editEvolSource === 'previas') {
+      renderPrevias();
+    } else {
+      renderHistoria(_historialData, false);
+    }
     cerrarModal('modalEditarEvolucion');
+    _editEvolSource = null;
   } else { alert('Error al guardar: '+error.message); }
 }
 
@@ -3803,6 +3815,8 @@ function renderSnapshotCompacto(snapshotJson) {
 }
 
 // ===== VER PREVIAS =====
+let _previasData = [];
+
 async function abrirPrevias() {
   if(!pacienteActual) return;
   document.getElementById('modalPrevias').classList.add('open');
@@ -3810,11 +3824,48 @@ async function abrirPrevias() {
   cont.innerHTML = '<div class="loading">Cargando...</div>';
   const { data } = await sb.from('evoluciones').select('*').eq('dni_paciente', pacienteActual.dni).order('fecha_hora', {ascending:false}).limit(20);
   if(!data || !data.length) { cont.innerHTML='<div class="empty-state"><div>📋</div><p>No hay evoluciones previas.</p></div>'; return; }
-  cont.innerHTML = data.map(e => {
+  _previasData = data;
+  renderPrevias();
+}
+
+function renderPrevias() {
+  const cont = document.getElementById('previas_lista');
+  if(!cont) return;
+  if(!_previasData.length) { cont.innerHTML='<div class="empty-state"><div>📋</div><p>No hay evoluciones previas.</p></div>'; return; }
+  cont.innerHTML = _previasData.map(e => {
     const fh=new Date(e.fecha_hora);
     const mClase = medicoAClase(e.medico);
-    return '<div class="hc-entrada"><div class="hc-header '+mClase+'"><span class="hc-fecha">'+fh.toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'})+' '+fh.toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'})+'</span><span class="hc-medico">'+(e.medico||'')+'</span>'+(e.ta_promedio?'<span class="hc-badge-ta">TA: '+e.ta_promedio+'</span>':'')+(e.fc_promedio?'<span class="hc-badge-fc">FC: '+e.fc_promedio+' lpm</span>':'')+(e.peso?'<span class="hc-badge-peso">'+e.peso+' kg</span>':'')+'</div><div class="hc-cuerpo">'+(e.contenido_html||'')+'</div></div>';
+    return '<div class="hc-entrada" data-evol-id="'+e.id+'"><div class="hc-header '+mClase+'" style="display:flex;align-items:center;flex-wrap:wrap;gap:6px"><span class="hc-fecha">'+fh.toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'})+' '+fh.toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'})+'</span><span class="hc-medico">'+(e.medico||'')+'</span>'+(e.ta_promedio?'<span class="hc-badge-ta">TA: '+e.ta_promedio+'</span>':'')+(e.fc_promedio?'<span class="hc-badge-fc">FC: '+e.fc_promedio+' lpm</span>':'')+(e.peso?'<span class="hc-badge-peso">'+e.peso+' kg</span>':'')+'<div style="margin-left:auto;display:flex;gap:6px"><button class="hc-edit-btn" style="display:inline-flex" onclick="editarPreviaEvol(''+e.id+'')">✏️ Editar</button><button onclick="borrarPreviaEvol(''+e.id+'')" style="display:inline-flex;align-items:center;gap:4px;background:#fdecea;color:var(--red);border:1.5px solid #f8d0d0;border-radius:8px;padding:3px 10px;font-size:11px;cursor:pointer;font-weight:600">🗑 Borrar</button></div></div><div class="hc-cuerpo">'+(e.contenido_html||'')+'</div></div>';
   }).join('');
+}
+
+function editarPreviaEvol(evolId) {
+  const evol = _previasData.find(e=>String(e.id)===String(evolId));
+  if(!evol) return;
+  _editEvolId = evolId;
+  _editEvolSource = 'previas';
+  const fh = new Date(evol.fecha_hora);
+  document.getElementById('edit_evol_info').textContent =
+    fh.toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'}) + ' ' +
+    fh.toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'}) +
+    ' — ' + (evol.medico||'');
+  const editor = document.getElementById('edit_evol_editor');
+  editor.innerHTML = evol.contenido_html || '';
+  document.getElementById('modalEditarEvolucion').classList.add('open');
+  setTimeout(()=>{ editor.focus(); moveCursorToEnd(editor); }, 100);
+}
+
+async function borrarPreviaEvol(evolId) {
+  if(!confirm('¿Eliminar esta evolución? Esta acción no se puede deshacer.')) return;
+  const { error } = await sb.from('evoluciones').delete().eq('id', evolId);
+  if(error) { alert('Error al eliminar: '+error.message); return; }
+  _previasData = _previasData.filter(e=>String(e.id)!==String(evolId));
+  renderPrevias();
+  // Actualizar historial si está abierto
+  if(_historialData) {
+    _historialData = _historialData.filter(e=>String(e.id)!==String(evolId));
+    renderHistoria(_historialData, false);
+  }
 }
 
 // ===== VOLCADO CLINICO AL EDITOR =====
