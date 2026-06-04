@@ -2027,7 +2027,6 @@ const { createClient } = supabase;
 const sb = createClient(
   'https://qdjzetylyojfjdottjrk.supabase.co',
   'sb_publishable_qe6L1Uc7mRwsen7lzZlllw_DzOXonwL'
-  'sb_publishable_qe6L1Uc7mRwsen7lzZlllw_DzOXonwL'
 );
 window.sb = sb;
 
@@ -3362,25 +3361,26 @@ async function cargarPacientes() {
   renderTabla(pacientesData);
 }
 
-// Precarga masiva de última evolución para ordenar antes de renderizar
+// Precarga masiva de última evolución — UNA sola query para todos los pacientes
 async function precargarUltimasEvoluciones(listaPacientes) {
   ultimaEvolucionMap = {};
-  // Hacer las consultas en paralelo (máx 10 simultáneas para no saturar)
-  const CHUNK = 10;
-  for(let i = 0; i < listaPacientes.length; i += CHUNK) {
-    const chunk = listaPacientes.slice(i, i + CHUNK);
-    await Promise.all(chunk.map(async function(p) {
-      try {
-        const { data: evols } = await sb.from('evoluciones')
-          .select('fecha_hora')
-          .eq('dni_paciente', p.dni)
-          .order('fecha_hora', {ascending: false})
-          .limit(1);
-        ultimaEvolucionMap[p.dni] = (evols && evols.length) ? evols[0].fecha_hora : null;
-      } catch(e) {
-        ultimaEvolucionMap[p.dni] = null;
+  if (!listaPacientes.length) return;
+  try {
+    const dnis = listaPacientes.map(p => p.dni);
+    const { data: evols } = await sb
+      .from('evoluciones')
+      .select('dni_paciente, fecha_hora')
+      .in('dni_paciente', dnis)
+      .order('fecha_hora', { ascending: false });
+    // Quedarse con la más reciente por paciente (el resultado ya viene ordenado desc)
+    (evols || []).forEach(e => {
+      const k = e.dni_paciente;
+      if (!ultimaEvolucionMap[k]) {
+        ultimaEvolucionMap[k] = e.fecha_hora;
       }
-    }));
+    });
+  } catch(e) {
+    console.warn('[precargarUltimasEvoluciones] error:', e);
   }
 }
 
