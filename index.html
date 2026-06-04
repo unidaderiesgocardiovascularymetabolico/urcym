@@ -3931,6 +3931,8 @@ async function cargarSnapshotInicial(dni) {
 // ===== NUEVA guardarClinica CON VOLCADO =====
 async function guardarClinica() {
   if(!pacienteActual) return;
+  // Asegurar que la UI del modal esté lista
+  if(typeof window.asegurarUIClinica === 'function') window.asegurarUIClinica();
   const dni = pacienteActual.dni;
   const dxAll = ['hta','hta2','dis','erc','obe','sob','masld','dbt2','dbt1','dbt_otro','predbt','hiperu','atero_subcl','eap','iam','acv','fa','sahos','epoc','icc','hvi','albuminuria','rp_dbt','neu_dbt','ms','pe','rciu','ppt','sop','dbtg','htag','ms_gineco','menopausia'];
   const dxData = {}; dxAll.forEach(d=>{dxData['dx_'+d]=document.getElementById('dx_'+d)?.checked||false;});
@@ -3970,33 +3972,43 @@ async function guardarClinica() {
     gineco_notas:document.getElementById('gineco_notas_generales')?.value||null,
     actualizado_en:new Date().toISOString()
   };
-  await sb.from('paciente_clinica').upsert(clinicaData, {onConflict:'dni_paciente'});
-  await sb.from('medicacion').update({activo:false}).eq('dni_paciente',dni);
-  const meds = [];
-  for(const fila of document.querySelectorAll('#med_filas > div')) {
-    const farmaco=fila.querySelector('.med-farmaco').value; if(!farmaco) continue;
-    const medData={dni_paciente:dni,grupo:fila.querySelector('.med-grupo').value,farmaco,dosis:fila.querySelector('.med-dosis').value,frecuencia:fila.querySelector('.med-frecuencia').value,activo:true,fecha_inicio:fechaHoy()};
-    const mid=fila.dataset.medId;
-    if(mid) await sb.from('medicacion').update(medData).eq('id',mid);
-    else await sb.from('medicacion').insert(medData);
-    meds.push(medData);
+  try {
+    await sb.from('paciente_clinica').upsert(clinicaData, {onConflict:'dni_paciente'});
+    await sb.from('medicacion').update({activo:false}).eq('dni_paciente',dni);
+    const meds = [];
+    for(const fila of document.querySelectorAll('#med_filas > div')) {
+      const farmaco=fila.querySelector('.med-farmaco')?.value; if(!farmaco) continue;
+      const medData={dni_paciente:dni,grupo:fila.querySelector('.med-grupo')?.value||'',farmaco,dosis:fila.querySelector('.med-dosis')?.value||'',frecuencia:fila.querySelector('.med-frecuencia')?.value||'',activo:true,fecha_inicio:fechaHoy()};
+      const mid=fila.dataset.medId;
+      if(mid) await sb.from('medicacion').update(medData).eq('id',mid);
+      else await sb.from('medicacion').insert(medData);
+      meds.push(medData);
+    }
+    for(const fila of document.querySelectorAll('#otros_med_filas .otro-med-row')) {
+      const farmaco=fila.querySelector('.otro-farmaco')?.value?.trim(); if(!farmaco) continue;
+      const medData={dni_paciente:dni,grupo:'otros',farmaco,dosis:fila.querySelector('.otro-dosis')?.value||'',frecuencia:fila.querySelector('.otro-frecuencia')?.value||'',activo:true,fecha_inicio:fechaHoy()};
+      const mid=fila.dataset.medId;
+      if(mid) await sb.from('medicacion').update(medData).eq('id',mid);
+      else await sb.from('medicacion').insert(medData);
+      meds.push(medData);
+    }
+    try {
+      const texto = generarTextoClinico(clinicaData, meds);
+      if(texto) {
+        const editor = document.getElementById('evol_editor');
+        const prev = editor?.querySelector('.bloque-clinico'); if(prev) prev.remove();
+        const tmp = document.createElement('div'); tmp.innerHTML = texto;
+        if(editor) editor.insertBefore(tmp.firstChild, editor.firstChild);
+      }
+    } catch(e) { console.warn('generarTextoClinico:', e); }
+    evolClinicaSnapshot = { clinica: clinicaData, medicacion: meds };
+    cerrarModal('modalClinica');
+    window.actualizarEncabezadoVariable(evolClinicaSnapshot);
+    try { switchPacMainTab('evol'); } catch(e) {}
+  } catch(err) {
+    console.error('[guardarClinica] ERROR:', err);
+    alert('Error al guardar: ' + (err.message || String(err)));
   }
-  // Volcar al editor
-  const texto = generarTextoClinico(clinicaData, meds);
-  if(texto) {
-    const editor = document.getElementById('evol_editor');
-    const prev = editor.querySelector('.bloque-clinico'); if(prev) prev.remove();
-    const tmp = document.createElement('div'); tmp.innerHTML = texto;
-    editor.insertBefore(tmp.firstChild, editor.firstChild);
-  }
-  // Actualizar snapshot de la evolución en curso
-  evolClinicaSnapshot = { clinica: clinicaData, medicacion: meds };
-  cerrarModal('modalClinica');
-
-  // Llamar al encabezado con los datos recién guardados (sin fetch)
-  window.actualizarEncabezadoVariable(evolClinicaSnapshot);
-  // Si estábamos en lab/ant/est, volver a evolución
-  switchPacMainTab('evol');
 }
 
 // ===== NUEVA cargarDatosClinica CON GINECO Y FAM =====
@@ -8701,108 +8713,93 @@ loadLocal();
     if (!window.pacienteActual) return;
     var dni = window.pacienteActual.dni;
 
-    // Deshabilitar botón mientras guarda
-    var btnGuardar = document.querySelector('#modalClinica .btn:not(.btn-secondary)');
-    if (btnGuardar) { btnGuardar.disabled = true; btnGuardar.textContent = 'Guardando...'; }
+    // Leer checkboxes y campos del modal
+    var dxAll = ['hta','hta2','dis','erc','obe','sob','masld','dbt2','dbt1','dbt_otro','predbt','hiperu',
+                 'atero_subcl','eap','iam','acv','fa','sahos','epoc','icc','hvi','albuminuria','rp_dbt',
+                 'neu_dbt','ms','pe','rciu','ppt','sop','dbtg','htag','ms_gineco','menopausia'];
+    var dxData = {};
+    dxAll.forEach(function (d) { dxData['dx_' + d] = document.getElementById('dx_' + d)?.checked || false; });
+    ['hta','dbt','obe','dis','iam','acv','erc','ms'].forEach(function (d) {
+      dxData['fam_' + d] = document.getElementById('fam_' + d)?.checked || false;
+    });
 
-    try {
-      // Leer checkboxes y campos del modal
-      var dxAll = ['hta','hta2','dis','erc','obe','sob','masld','dbt2','dbt1','dbt_otro','predbt','hiperu',
-                   'atero_subcl','eap','iam','acv','fa','sahos','epoc','icc','hvi','albuminuria','rp_dbt',
-                   'neu_dbt','ms','pe','rciu','ppt','sop','dbtg','htag','ms_gineco','menopausia'];
-      var dxData = {};
-      dxAll.forEach(function (d) { dxData['dx_' + d] = document.getElementById('dx_' + d)?.checked || false; });
-      ['hta','dbt','obe','dis','iam','acv','erc','ms'].forEach(function (d) {
-        dxData['fam_' + d] = document.getElementById('fam_' + d)?.checked || false;
-      });
+    function g(id) { var el = document.getElementById(id); return el ? el.value || null : null; }
+    function gf(id) { return parseFloat(document.getElementById(id)?.value) || 0; }
+    function gc(id) { return document.getElementById(id)?.checked || false; }
 
-      function g(id) { var el = document.getElementById(id); return el ? el.value || null : null; }
-      function gf(id) { return parseFloat(document.getElementById(id)?.value) || 0; }
-      function gc(id) { return document.getElementById(id)?.checked || false; }
+    var clinicaData = Object.assign({ dni_paciente: dni, actualizado_en: new Date().toISOString() }, dxData, {
+      tabaquismo:         g('hab_tabaquismo') || 'nunca',
+      cigarrillos_dia:    g('hab_cig_dia'),
+      anios_fumando:      g('hab_anios'),
+      gpac_g: g('gpac_g'), gpac_p: g('gpac_p'), gpac_a: g('gpac_a'), gpac_c: g('gpac_c'),
+      dx_acv_subtipos: { isq: gc('dx_acv_isq'), hem: gc('dx_acv_hem'), ait: gc('dx_acv_ait') },
+      dx_acv_fecha:    g('dx_acv_fecha'),    dx_acv_nota:    g('dx_acv_nota'),
+      dx_iam_subtipos: { stemi: gc('dx_iam_stemi'), nstemi: gc('dx_iam_nstemi'), angiop: gc('dx_iam_angiop'), by: gc('dx_iam_by') },
+      dx_iam_fecha:    g('dx_iam_fecha'),    dx_iam_nota:    g('dx_iam_nota'),
+      dx_hta_fecha:    g('dx_hta_fecha'),    dx_hta_nota:    g('dx_hta_nota'),
+      dx_obe_fecha:    g('dx_obe_fecha'),    dx_obe_nota:    g('dx_obe_nota'),
+      dx_dbt2_fecha:   g('dx_dbt2_fecha'),
+      dx_dbt_otro_fecha: g('dx_dbt_otro_fecha'), dx_dbt_otro_nota: g('dx_dbt_otro_nota'),
+      dx_menopausia_edad: g('dx_menopausia_edad'), dx_menopausia_nota: g('dx_menopausia_nota'),
+      alcohol:        ['si','social'].includes(g('hab_alcohol')),
+      alcohol_social: g('hab_alcohol') === 'social',
+      alcohol_cerveza: gf('alc_cerveza'), alcohol_vino:   gf('alc_vino'),
+      alcohol_fernet:  gf('alc_fernet'), alcohol_blanca: gf('alc_blanca'), alcohol_whisky: gf('alc_whisky'),
+      actividad_fisica: g('hab_actividad'),
+      alimentacion:     g('hab_alimentacion'),
+      cardio_notas:     g('cardio_notas_generales'),
+      gineco_notas:     g('gineco_notas_generales'),
+    });
 
-      var clinicaData = Object.assign({ dni_paciente: dni, actualizado_en: new Date().toISOString() }, dxData, {
-        tabaquismo:         g('hab_tabaquismo') || 'nunca',
-        cigarrillos_dia:    g('hab_cig_dia'),
-        anios_fumando:      g('hab_anios'),
-        gpac_g: g('gpac_g'), gpac_p: g('gpac_p'), gpac_a: g('gpac_a'), gpac_c: g('gpac_c'),
-        dx_acv_subtipos: { isq: gc('dx_acv_isq'), hem: gc('dx_acv_hem'), ait: gc('dx_acv_ait') },
-        dx_acv_fecha:    g('dx_acv_fecha'),    dx_acv_nota:    g('dx_acv_nota'),
-        dx_iam_subtipos: { stemi: gc('dx_iam_stemi'), nstemi: gc('dx_iam_nstemi'), angiop: gc('dx_iam_angiop'), by: gc('dx_iam_by') },
-        dx_iam_fecha:    g('dx_iam_fecha'),    dx_iam_nota:    g('dx_iam_nota'),
-        dx_hta_fecha:    g('dx_hta_fecha'),    dx_hta_nota:    g('dx_hta_nota'),
-        dx_obe_fecha:    g('dx_obe_fecha'),    dx_obe_nota:    g('dx_obe_nota'),
-        dx_dbt2_fecha:   g('dx_dbt2_fecha'),
-        dx_dbt_otro_fecha: g('dx_dbt_otro_fecha'), dx_dbt_otro_nota: g('dx_dbt_otro_nota'),
-        dx_menopausia_edad: g('dx_menopausia_edad'), dx_menopausia_nota: g('dx_menopausia_nota'),
-        alcohol:        ['si','social'].includes(g('hab_alcohol')),
-        alcohol_social: g('hab_alcohol') === 'social',
-        alcohol_cerveza: gf('alc_cerveza'), alcohol_vino:   gf('alc_vino'),
-        alcohol_fernet:  gf('alc_fernet'), alcohol_blanca: gf('alc_blanca'), alcohol_whisky: gf('alc_whisky'),
-        actividad_fisica: g('hab_actividad'),
-        alimentacion:     g('hab_alimentacion'),
-        cardio_notas:     g('cardio_notas_generales'),
-        gineco_notas:     g('gineco_notas_generales'),
-      });
+    // Guardar en Supabase
+    await sb.from('paciente_clinica').upsert(clinicaData, { onConflict: 'dni_paciente' });
+    await sb.from('medicacion').update({ activo: false }).eq('dni_paciente', dni);
 
-      // Guardar en Supabase
-      var r1 = await sb.from('paciente_clinica').upsert(clinicaData, { onConflict: 'dni_paciente' });
-      if (r1.error) throw new Error('paciente_clinica: ' + r1.error.message);
-
-      await sb.from('medicacion').update({ activo: false }).eq('dni_paciente', dni);
-
-      var meds = [];
-      // Medicación cardiometabólica
-      for (var fila of document.querySelectorAll('#med_filas > div')) {
-        var farm = fila.querySelector('.med-farmaco')?.value; if (!farm) continue;
-        var md = { dni_paciente: dni, grupo: fila.querySelector('.med-grupo')?.value || '',
-                   farmaco: farm, dosis: fila.querySelector('.med-dosis')?.value || '',
-                   frecuencia: fila.querySelector('.med-frecuencia')?.value || '',
-                   activo: true, fecha_inicio: fechaHoy() };
-        var mid = fila.dataset.medId;
-        var rm = mid ? await sb.from('medicacion').update(md).eq('id', mid)
-                     : await sb.from('medicacion').insert(md);
-        if (rm.error) console.warn('medicacion error:', rm.error.message);
-        else meds.push(md);
-      }
-      // Otros fármacos
-      for (var fila2 of document.querySelectorAll('#otros_med_filas .otro-med-row')) {
-        var farm2 = fila2.querySelector('.otro-farmaco')?.value?.trim(); if (!farm2) continue;
-        var md2 = { dni_paciente: dni, grupo: 'otros', farmaco: farm2,
-                    dosis: fila2.querySelector('.otro-dosis')?.value || '',
-                    frecuencia: fila2.querySelector('.otro-frecuencia')?.value || '',
-                    activo: true, fecha_inicio: fechaHoy() };
-        var mid2 = fila2.dataset.medId;
-        var rm2 = mid2 ? await sb.from('medicacion').update(md2).eq('id', mid2)
-                       : await sb.from('medicacion').insert(md2);
-        if (rm2.error) console.warn('otros_med error:', rm2.error.message);
-        else meds.push(md2);
-      }
-
-      // Volcar texto clínico al editor
-      try {
-        var texto = generarTextoClinico(clinicaData, meds);
-        if (texto) {
-          var editor = document.getElementById('evol_editor');
-          var prev = editor && editor.querySelector('.bloque-clinico');
-          if (prev) prev.remove();
-          var tmp = document.createElement('div'); tmp.innerHTML = texto;
-          if (editor) editor.insertBefore(tmp.firstChild, editor.firstChild);
-        }
-      } catch (e) { console.warn('generarTextoClinico error:', e); }
-
-      // ── Fuente de verdad: setear snapshot y renderizar encabezado ──
-      var snap = { clinica: clinicaData, medicacion: meds };
-      window.evolClinicaSnapshot = snap;
-      actualizarEncabezadoVariable(snap);
-
-      cerrarModal('modalClinica');
-      try { switchPacMainTab('evol'); } catch (e) {}
-
-    } catch (err) {
-      console.error('[guardarClinica] ERROR:', err);
-      alert('Error al guardar: ' + (err.message || err));
-      if (btnGuardar) { btnGuardar.disabled = false; btnGuardar.textContent = 'Guardar cambios'; }
+    var meds = [];
+    // Medicación cardiometabólica
+    for (var fila of document.querySelectorAll('#med_filas > div')) {
+      var farm = fila.querySelector('.med-farmaco')?.value; if (!farm) continue;
+      var md = { dni_paciente: dni, grupo: fila.querySelector('.med-grupo')?.value || '',
+                 farmaco: farm, dosis: fila.querySelector('.med-dosis')?.value || '',
+                 frecuencia: fila.querySelector('.med-frecuencia')?.value || '',
+                 activo: true, fecha_inicio: fechaHoy() };
+      var mid = fila.dataset.medId;
+      if (mid) await sb.from('medicacion').update(md).eq('id', mid);
+      else     await sb.from('medicacion').insert(md);
+      meds.push(md);
     }
+    // Otros fármacos
+    for (var fila2 of document.querySelectorAll('#otros_med_filas .otro-med-row')) {
+      var farm2 = fila2.querySelector('.otro-farmaco')?.value?.trim(); if (!farm2) continue;
+      var md2 = { dni_paciente: dni, grupo: 'otros', farmaco: farm2,
+                  dosis: fila2.querySelector('.otro-dosis')?.value || '',
+                  frecuencia: fila2.querySelector('.otro-frecuencia')?.value || '',
+                  activo: true, fecha_inicio: fechaHoy() };
+      var mid2 = fila2.dataset.medId;
+      if (mid2) await sb.from('medicacion').update(md2).eq('id', mid2);
+      else      await sb.from('medicacion').insert(md2);
+      meds.push(md2);
+    }
+
+    // Volcar texto clínico al editor
+    try {
+      var texto = generarTextoClinico(clinicaData, meds);
+      if (texto) {
+        var editor = document.getElementById('evol_editor');
+        var prev   = editor && editor.querySelector('.bloque-clinico');
+        if (prev) prev.remove();
+        var tmp = document.createElement('div'); tmp.innerHTML = texto;
+        if (editor) editor.insertBefore(tmp.firstChild, editor.firstChild);
+      }
+    } catch (e) {}
+
+    // ── Fuente de verdad: setear snapshot y renderizar encabezado ──
+    var snap = { clinica: clinicaData, medicacion: meds };
+    window.evolClinicaSnapshot = snap;
+    actualizarEncabezadoVariable(snap);
+
+    cerrarModal('modalClinica');
+    try { switchPacMainTab('evol'); } catch (e) {}
   };
 
 })();
