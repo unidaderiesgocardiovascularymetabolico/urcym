@@ -6872,9 +6872,15 @@ var LS_BLOCKED='urcym_ag_blocked';
 var blockedSlots={};
 var offeredSlots={};  // { "2026-06-01_09:00_BG": true, ... }
 function loadOffered(){try{var s=localStorage.getItem(LS_OFFERED);if(s)offeredSlots=JSON.parse(s);}catch(e){}}
-function saveOffered(){try{localStorage.setItem(LS_OFFERED,JSON.stringify(offeredSlots));}catch(e){}}
+function saveOffered(){
+  try{localStorage.setItem(LS_OFFERED,JSON.stringify(offeredSlots));}catch(e){}
+  sb.from('urcym_agenda_config').upsert({key:'offered_slots',value:JSON.stringify(offeredSlots)},{onConflict:'key'}).catch(function(e){console.warn('[URCyM] saveOffered error',e);});
+}
 function loadBlocked(){try{var s=localStorage.getItem(LS_BLOCKED);if(s)blockedSlots=JSON.parse(s);}catch(e){}}
-function saveBlocked(){try{localStorage.setItem(LS_BLOCKED,JSON.stringify(blockedSlots));}catch(e){}}
+function saveBlocked(){
+  try{localStorage.setItem(LS_BLOCKED,JSON.stringify(blockedSlots));}catch(e){}
+  sb.from('urcym_agenda_config').upsert({key:'blocked_slots',value:JSON.stringify(blockedSlots)},{onConflict:'key'}).catch(function(e){console.warn('[URCyM] saveBlocked error',e);});
+}
 loadOffered();
 
 var _offeredPopup=null;
@@ -8038,14 +8044,69 @@ renderGrid=function(){
 // La verdadera solución: parchear después del IIFE para visProfs multi
 // Se hace en el patch de abajo.
 
+// ── Helpers Supabase para agenda ──────────────────────────────────────────
+async function sbUpsertAgendaConfig(key, value){
+  try{
+    await sb.from('urcym_agenda_config').upsert({key:key, value:JSON.stringify(value)},{onConflict:'key'});
+  }catch(e){console.warn('[URCyM] sbUpsertAgendaConfig error',e);}
+}
+async function sbGetAgendaConfig(key){
+  try{
+    var r=await sb.from('urcym_agenda_config').select('value').eq('key',key).maybeSingle();
+    if(r.data&&r.data.value)return JSON.parse(r.data.value);
+  }catch(e){console.warn('[URCyM] sbGetAgendaConfig error',e);}
+  return null;
+}
+async function sbSaveTurnos(){
+  try{
+    await sb.from('urcym_agenda_config').upsert({key:'turnos',value:JSON.stringify(turnos)},{onConflict:'key'});
+    // también caché local
+    try{localStorage.setItem(LS_T,JSON.stringify(turnos));}catch(e){}
+  }catch(e){
+    // fallback a localStorage si falla Supabase
+    try{localStorage.setItem(LS_T,JSON.stringify(turnos));}catch(e2){}
+    console.warn('[URCyM] sbSaveTurnos error',e);
+  }
+}
+
 function saveLocal(){
-  try{localStorage.setItem(LS_T,JSON.stringify(turnos));}catch(e){}
+  // Guardar en Supabase (async) + caché local
+  sbSaveTurnos();
+  sbUpsertAgendaConfig('nl_blocks', nlBlocks);
+  sbUpsertAgendaConfig('disp_blocks', dispBlocks);
+  sbUpsertAgendaConfig('inst_blocks', instBlocks);
+  // caché local inmediata
   try{localStorage.setItem(LS_NL,JSON.stringify(nlBlocks));}catch(e){}
   try{localStorage.setItem(LS_D,JSON.stringify(dispBlocks));}catch(e){}
   try{localStorage.setItem(LS_INST,JSON.stringify(instBlocks));}catch(e){}
 }
-function loadLocal(){
-  try{var r=localStorage.getItem(LS_T);if(r)turnos=JSON.parse(r);}catch(e){}
+
+async function loadLocal(){
+  // Cargar desde Supabase, con fallback a localStorage
+  var turnosDB=null, nlDB=null, dispDB=null, instDB=null;
+  try{
+    var rows=await sb.from('urcym_agenda_config').select('key,value').in('key',['turnos','nl_blocks','disp_blocks','inst_blocks','offered_slots','blocked_slots']);
+    if(rows.data){
+      rows.data.forEach(function(row){
+        try{
+          if(row.key==='turnos')     turnosDB=JSON.parse(row.value);
+          if(row.key==='nl_blocks')  nlDB=JSON.parse(row.value);
+          if(row.key==='disp_blocks')dispDB=JSON.parse(row.value);
+          if(row.key==='inst_blocks')instDB=JSON.parse(row.value);
+          if(row.key==='offered_slots'){try{offeredSlots=JSON.parse(row.value);localStorage.setItem(LS_OFFERED,row.value);}catch(e){}}
+          if(row.key==='blocked_slots'){try{blockedSlots=JSON.parse(row.value);localStorage.setItem(LS_BLOCKED,row.value);}catch(e){}}
+
+        }catch(e){}
+      });
+    }
+  }catch(e){console.warn('[URCyM] loadLocal Supabase error, usando localStorage',e);}
+
+  // Turnos: usar DB si existe, sino localStorage
+  if(turnosDB){
+    turnos=turnosDB;
+  } else {
+    try{var r=localStorage.getItem(LS_T);if(r)turnos=JSON.parse(r);}catch(e){}
+  }
   // FIX: migrar keys viejas formato "fecha_hora" al nuevo "fecha_hora_PROF"
   var keysToMigrate=Object.keys(turnos).filter(function(k){return k.split('_').length===2;});
   keysToMigrate.forEach(function(k){
@@ -8056,22 +8117,57 @@ function loadLocal(){
       delete turnos[k];
     }
   });
-  if(keysToMigrate.length)try{localStorage.setItem(LS_T,JSON.stringify(turnos));}catch(e){}
-  try{var rn=localStorage.getItem(LS_NL);nlBlocks=rn?JSON.parse(rn):DEFAULT_NL.slice();}catch(e){nlBlocks=DEFAULT_NL.slice();}
-  try{var rd=localStorage.getItem(LS_D);dispBlocks=rd?JSON.parse(rd):DEFAULT_DISP.slice();}catch(e){dispBlocks=DEFAULT_DISP.slice();}
-  try{var ri2=localStorage.getItem(LS_INST);instBlocks=ri2?JSON.parse(ri2):[];}catch(e){instBlocks=[];}
+  if(keysToMigrate.length)saveLocal();
+
+  // NL Blocks
+  if(nlDB){nlBlocks=nlDB;}
+  else{try{var rn=localStorage.getItem(LS_NL);nlBlocks=rn?JSON.parse(rn):DEFAULT_NL.slice();}catch(e){nlBlocks=DEFAULT_NL.slice();}}
+
+  // Disp Blocks
+  if(dispDB){dispBlocks=dispDB;}
+  else{try{var rd=localStorage.getItem(LS_D);dispBlocks=rd?JSON.parse(rd):DEFAULT_DISP.slice();}catch(e){dispBlocks=DEFAULT_DISP.slice();}}
+
+  // Inst Blocks
+  if(instDB){instBlocks=instDB;}
+  else{try{var ri2=localStorage.getItem(LS_INST);instBlocks=ri2?JSON.parse(ri2):[];}catch(e){instBlocks=[];}}
+
+  // Actualizar caché local con lo que vino de DB
+  if(turnosDB)try{localStorage.setItem(LS_T,JSON.stringify(turnos));}catch(e){}
+  if(nlDB)try{localStorage.setItem(LS_NL,JSON.stringify(nlBlocks));}catch(e){}
+  if(dispDB)try{localStorage.setItem(LS_D,JSON.stringify(dispBlocks));}catch(e){}
+  if(instDB)try{localStorage.setItem(LS_INST,JSON.stringify(instBlocks));}catch(e){}
+
   renderGrid();
 }
 // ===== PLANTILLAS WHATSAPP =====
 var LS_WAPP='urcym_wapp_templates';
 var PROF_LABELS={'BG':'Guerrero','OB':'Bertani','LA':'López A.','SA':'Saracho'};
 var wappTemplates={general:[],BG:[],OB:[],LA:[],SA:[]};
-function loadWapp(){
-  try{var r=localStorage.getItem(LS_WAPP);if(r)wappTemplates=JSON.parse(r);}catch(e){}
+async function loadWapp(){
+  try{
+    var row=await sb.from('urcym_agenda_config').select('value').eq('key','wapp_templates').maybeSingle();
+    if(row.data&&row.data.value){
+      wappTemplates=JSON.parse(row.data.value);
+      try{localStorage.setItem(LS_WAPP,JSON.stringify(wappTemplates));}catch(e){}
+    } else {
+      try{var r=localStorage.getItem(LS_WAPP);if(r)wappTemplates=JSON.parse(r);}catch(e){}
+    }
+  }catch(e){
+    console.warn('[URCyM] loadWapp Supabase error, usando localStorage',e);
+    try{var r2=localStorage.getItem(LS_WAPP);if(r2)wappTemplates=JSON.parse(r2);}catch(e2){}
+  }
   if(!wappTemplates.general)wappTemplates.general=[];
   ['BG','OB','LA','SA'].forEach(function(p){if(!wappTemplates[p])wappTemplates[p]=[];});
 }
-function saveWapp(){try{localStorage.setItem(LS_WAPP,JSON.stringify(wappTemplates));}catch(e){}}
+async function saveWapp(){
+  try{
+    await sb.from('urcym_agenda_config').upsert({key:'wapp_templates',value:JSON.stringify(wappTemplates)},{onConflict:'key'});
+    try{localStorage.setItem(LS_WAPP,JSON.stringify(wappTemplates));}catch(e){}
+  }catch(e){
+    console.warn('[URCyM] saveWapp Supabase error, guardando solo local',e);
+    try{localStorage.setItem(LS_WAPP,JSON.stringify(wappTemplates));}catch(e2){}
+  }
+}
 var wappCurrentTab='general';
 var wappSearch='';
 var wappEditIdx=-1; // índice de la plantilla que se está editando (-1 = ninguna)
@@ -8292,8 +8388,8 @@ function showWappToast(msg){
 }
 
 // Botón abrir panel wapp
-document.getElementById('ag-btn-wapp').addEventListener('click',function(){
-  loadWapp();
+document.getElementById('ag-btn-wapp').addEventListener('click',async function(){
+  await loadWapp();
   document.getElementById('ag-wapp-bg').style.display='flex';
   renderWappPanel();
 });
@@ -8303,10 +8399,10 @@ document.getElementById('ag-wapp-close').addEventListener('click',function(){
 document.getElementById('ag-wapp-bg').addEventListener('click',function(e){
   if(e.target===this)this.style.display='none';
 });
-loadWapp();
+loadWapp();  // async, carga en background
 
 loadBlocked();
-loadLocal();
+loadLocal();  // async, carga en background y llama renderGrid al final
 })();
 
 // ═══ AUTOCOMPLETE PACIENTE EN AGENDA ═══
@@ -8473,12 +8569,23 @@ loadLocal();
   var tasks = {};
   var openSections = {BG:true,OB:true,LA:true,SA:true};
 
-  function loadTasks(){
-    try{ var s=localStorage.getItem(LS_TASKS); if(s) tasks=JSON.parse(s); }catch(e){}
+  async function loadTasks(){
+    try{
+      var row=await sb.from('urcym_agenda_config').select('value').eq('key','tasks_v1').maybeSingle();
+      if(row.data&&row.data.value){
+        tasks=JSON.parse(row.data.value);
+        try{localStorage.setItem(LS_TASKS,JSON.stringify(tasks));}catch(e){}
+      } else {
+        try{ var s=localStorage.getItem(LS_TASKS); if(s) tasks=JSON.parse(s); }catch(e){}
+      }
+    }catch(e){
+      try{ var s2=localStorage.getItem(LS_TASKS); if(s2) tasks=JSON.parse(s2); }catch(e2){}
+    }
     T_PROFS.forEach(function(p){ if(!tasks[p]) tasks[p]=[]; });
   }
   function saveTasks(){
     try{ localStorage.setItem(LS_TASKS, JSON.stringify(tasks)); }catch(e){}
+    sb.from('urcym_agenda_config').upsert({key:'tasks_v1',value:JSON.stringify(tasks)},{onConflict:'key'}).catch(function(e){console.warn('[URCyM] saveTasks error',e);});
   }
   function pendingCount(p){ return (tasks[p]||[]).filter(function(t){return !t.done;}).length; }
 
