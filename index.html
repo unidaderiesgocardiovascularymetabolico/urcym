@@ -3291,10 +3291,13 @@ async function verLabReadonly(dni) {
   pacienteActual = prevPac;
 }
 
+// Mapa global: dni → fecha_hora de última evolución (string ISO o null)
+let ultimaEvolucionMap = {};
+
 async function cargarPacientes() {
   const cont = document.getElementById('tablePacientes');
+  cont.innerHTML = '<div class="loading">Cargando pacientes...</div>';
   let data, error;
-  // Ordenar por updated_at desc (últimos editados primero); fallbacks por robustez
   ({ data, error } = await sb.from('pacientes').select('*').order('updated_at', {ascending:false}));
   if(error) {
     console.warn('[cargarPacientes] order by updated_at falló, intentando por created_at:', error.message);
@@ -3314,12 +3317,44 @@ async function cargarPacientes() {
     return;
   }
   pacientesData = data || [];
-  // Ordenar en cliente por updated_at/created_at para garantizar orden correcto
+
+  // Cargar última evolución de TODOS los pacientes antes de renderizar
+  // para poder ordenar correctamente por fecha de última evolución
+  await precargarUltimasEvoluciones(pacientesData);
+
+  // Ordenar: primero los que tienen evolución (más reciente primero), luego los sin evolución
   pacientesData.sort(function(a, b) {
+    const fa = ultimaEvolucionMap[a.dni] ? Date.parse(ultimaEvolucionMap[a.dni]) : 0;
+    const fb = ultimaEvolucionMap[b.dni] ? Date.parse(ultimaEvolucionMap[b.dni]) : 0;
+    if(fb !== fa) return fb - fa;
+    // Desempate: por updated_at del paciente
     return (Date.parse(b.updated_at || b.created_at || 0) || 0) -
            (Date.parse(a.updated_at || a.created_at || 0) || 0);
   });
+
   renderTabla(pacientesData);
+}
+
+// Precarga masiva de última evolución para ordenar antes de renderizar
+async function precargarUltimasEvoluciones(listaPacientes) {
+  ultimaEvolucionMap = {};
+  // Hacer las consultas en paralelo (máx 10 simultáneas para no saturar)
+  const CHUNK = 10;
+  for(let i = 0; i < listaPacientes.length; i += CHUNK) {
+    const chunk = listaPacientes.slice(i, i + CHUNK);
+    await Promise.all(chunk.map(async function(p) {
+      try {
+        const { data: evols } = await sb.from('evoluciones')
+          .select('fecha_hora')
+          .eq('dni_paciente', p.dni)
+          .order('fecha_hora', {ascending: false})
+          .limit(1);
+        ultimaEvolucionMap[p.dni] = (evols && evols.length) ? evols[0].fecha_hora : null;
+      } catch(e) {
+        ultimaEvolucionMap[p.dni] = null;
+      }
+    }));
+  }
 }
 
 function edadDesde(fecha_nac) {
@@ -3336,8 +3371,11 @@ function renderTabla(data) {
     cont.innerHTML = '<div class="empty-state"><div>👤</div><p>No hay pacientes registrados todavía.<br>Hacé clic en "+ Nuevo paciente" para agregar el primero.</p></div>';
     return;
   }
-  // Ordenar siempre por último editado (updated_at) desc
+  // Ordenar por fecha de última evolución desc (primero los últimos evolucionados)
   const sorted = [...data].sort(function(a, b) {
+    const fa = ultimaEvolucionMap[a.dni] ? Date.parse(ultimaEvolucionMap[a.dni]) : 0;
+    const fb = ultimaEvolucionMap[b.dni] ? Date.parse(ultimaEvolucionMap[b.dni]) : 0;
+    if(fb !== fa) return fb - fa;
     return (Date.parse(b.updated_at || b.created_at || 0) || 0) -
            (Date.parse(a.updated_at || a.created_at || 0) || 0);
   });
@@ -3365,17 +3403,27 @@ function renderTabla(data) {
 }
 
 async function cargarUltimasEvoluciones(data) {
-  // Batch: fetch all DNIs at once
-  const dnis = data.map(p => p.dni);
-  for(const dni of dnis) {
-    const { data: evols } = await sb.from('evoluciones').select('fecha_hora').eq('dni_paciente', dni).order('fecha_hora', {ascending:false}).limit(1);
-    const el = document.getElementById('uc-' + dni);
+  // Usar el mapa precargado para mostrar las fechas sin consultas adicionales
+  for(const p of data) {
+    const el = document.getElementById('uc-' + p.dni);
     if(el) {
-      if(evols && evols.length) {
-        el.textContent = new Date(evols[0].fecha_hora).toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'});
-      } else {
+      const fechaISO = ultimaEvolucionMap[p.dni];
+      if(fechaISO) {
+        el.textContent = new Date(fechaISO).toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'});
+        el.style.color = '';
+      } else if(fechaISO === null) {
         el.textContent = '—';
         el.style.color = '#c0cad4';
+      } else {
+        // No precargado aún: consultar individualmente
+        const { data: evols } = await sb.from('evoluciones').select('fecha_hora').eq('dni_paciente', p.dni).order('fecha_hora', {ascending:false}).limit(1);
+        ultimaEvolucionMap[p.dni] = (evols && evols.length) ? evols[0].fecha_hora : null;
+        if(evols && evols.length) {
+          el.textContent = new Date(evols[0].fecha_hora).toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'});
+        } else {
+          el.textContent = '—';
+          el.style.color = '#c0cad4';
+        }
       }
     }
   }
@@ -4642,7 +4690,7 @@ async function guardarEvolucion() {
     tap_s: document.getElementById('evol_tap_s').value||null,
     tap_d: document.getElementById('evol_tap_d').value||null,
     tap_fc: document.getElementById('evol_tap_fc').value||null,
-    fecha_hora: new Date().toISOString(),
+    fecha_hora: (function(){ const now = new Date().toISOString(); ultimaEvolucionMap[p.dni] = now; return now; })(),
     clinica_snapshot: evolClinicaSnapshot ? JSON.stringify(evolClinicaSnapshot) : null,
     indicaciones: (document.getElementById('evol_indicaciones_editor')||{}).innerText||null
   });
