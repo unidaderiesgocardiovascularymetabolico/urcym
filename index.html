@@ -677,7 +677,7 @@
 .ag-cfg-v2-add-btn:hover{background:#f3f4f6;border-color:#9ca3af;}
 .ag-cfg-v2-col-hd{display:grid;grid-template-columns:70px 72px 72px 1fr 75px 75px 28px;gap:6px;font-size:10px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#9ca3af;padding:0 4px;margin-bottom:5px;}
 .ag-cfg-v2-col-hd-nl{grid-template-columns:65px 68px 68px 1fr 90px 100px 28px;}
-.ag-cfg-v2-col-hd-inst{grid-template-columns:65px 68px 68px 1fr 90px 100px 28px;}
+.ag-cfg-v2-col-hd-inst{grid-template-columns:110px 68px 68px 1fr 28px;}
 #agenda-app .ag-btn-inst{background:none;border:1px solid #9ca3af;border-radius:6px;padding:5px 10px;font-size:12px;color:#4b5563;cursor:pointer;font-family:inherit;}
 #agenda-app .ag-btn-inst:hover{background:#f3f4f6;}
 #agenda-app .ag-btn-tasks{background:none;border:1px solid #059669;border-radius:6px;padding:5px 10px;font-size:12px;color:#059669;cursor:pointer;font-family:inherit;}
@@ -755,7 +755,7 @@
 .ag-tasks-empty{font-size:12px;color:#9ca3af;text-align:center;padding:10px 0;}
 .ag-cfg-v2-row{display:grid;grid-template-columns:70px 72px 72px 1fr 75px 75px 28px;gap:6px;align-items:center;background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:7px 8px;margin-bottom:5px;}
 .ag-cfg-v2-row-nl{grid-template-columns:65px 68px 68px 1fr 90px 100px 28px;}
-.ag-cfg-v2-row-inst{grid-template-columns:65px 68px 68px 1fr 90px 100px 28px;}
+.ag-cfg-v2-row-inst{grid-template-columns:110px 68px 68px 1fr 28px;}
 .ag-cfg-v2-row select,.ag-cfg-v2-row input[type=time],.ag-cfg-v2-row input[type=text]{padding:4px 6px;font-size:12px;border:1px solid #e5e7eb;border-radius:6px;background:#fff;color:#374151;width:100%;font-family:inherit;}
 .ag-cfg-v2-row select:focus,.ag-cfg-v2-row input:focus{outline:none;border-color:#185FA5;}
 .ag-cfg-v2-del{padding:0;width:24px;height:24px;border:1px solid #e5e7eb;border-radius:6px;background:none;color:#9ca3af;cursor:pointer;font-size:13px;display:flex;align-items:center;justify-content:center;}
@@ -1215,7 +1215,7 @@
               <span class="ag-cfg-v2-step-lbl" style="color:#4b5563;">Bloques</span>
               <button class="ag-cfg-v2-add-btn" id="ag-inst-add">+ Agregar bloque</button>
             </div>
-            <div class="ag-cfg-v2-col-hd ag-cfg-v2-col-hd-inst"><span>Día</span><span>Desde</span><span>Hasta</span><span>Descripción</span><span>Frecuencia</span><span>Inicio</span><span></span></div>
+            <div class="ag-cfg-v2-col-hd ag-cfg-v2-col-hd-inst"><span>Fecha</span><span>Desde</span><span>Hasta</span><span>Descripción</span><span></span></div>
             <div id="ag-inst-list"></div>
           </div>
           <div class="ag-cfg-v2-footer">
@@ -7128,7 +7128,7 @@ function renderGrid(){
     });
 
     // Institutional blocks — deferred until after layout so we know totalProfs
-    var pendingInstBlocks=instBlocks.filter(function(b){return isBlockActiveOnDate(b,ds);});
+    var pendingInstBlocks=instBlocks.filter(function(b){return b.startDate===ds||isBlockActiveOnDate(b,ds);});
 
     // ── Layout unificado: slots libres + turnos asignados comparten columnas ──
     var allItems=[];
@@ -7937,22 +7937,18 @@ function renderInstList(){
   instTmp.forEach(function(b,ri){
     var row=document.createElement('div');
     row.className='ag-cfg-v2-row ag-cfg-v2-row-inst';
-    var dayOpts=DIAS.map(function(dn,di){return'<option value="'+di+'"'+(b.day===di?' selected':'')+'>'+dn+'</option>';}).join('');
-    var freqOpts=FREQ_OPTS.map(function(f){return'<option value="'+f+'"'+((b.freq||'semanal')===f?' selected':'')+'>'+FREQ_LBL[f]+'</option>';}).join('');
     row.innerHTML=''
-      +'<select data-ri="'+ri+'" data-f="day">'+dayOpts+'</select>'
+      +'<input type="date" data-ri="'+ri+'" data-f="startDate" value="'+(b.startDate||'')+'" style="font-size:12px;">'
       +'<input type="time" data-ri="'+ri+'" data-f="from" value="'+b.from+'">'
       +'<input type="time" data-ri="'+ri+'" data-f="to" value="'+b.to+'">'
       +'<input type="text" data-ri="'+ri+'" data-f="label" value="'+esc(b.label||'')+'" placeholder="Ej: Feriado, Capacitación">'
-      +'<select data-ri="'+ri+'" data-f="freq">'+freqOpts+'</select>'
-      +'<input type="date" data-ri="'+ri+'" data-f="startDate" value="'+(b.startDate||'')+'" title="Fecha de inicio" style="font-size:11px;">'
       +'<button class="ag-cfg-v2-del" data-ri="'+ri+'" title="Eliminar">&#10005;</button>';
     list.appendChild(row);
   });
   list.querySelectorAll('select[data-ri],input[data-ri]').forEach(function(el){
     el.addEventListener('change',function(){
       var ri=parseInt(this.dataset.ri),f=this.dataset.f;
-      instTmp[ri][f]=f==='day'?parseInt(this.value):this.value;
+      instTmp[ri][f]=this.value;
     });
   });
   list.querySelectorAll('.ag-cfg-v2-del').forEach(function(btn){
@@ -7964,18 +7960,18 @@ function renderInstList(){
 }
 
 document.getElementById('ag-btn-inst').addEventListener('click',function(){
-  instTmp=[{day:0,from:'08:00',to:'20:00',label:'',freq:'unico',startDate:''}];
+  instTmp=[{from:'08:00',to:'20:00',label:'',freq:'unico',startDate:new Date().toISOString().slice(0,10)}];
   renderInstList();
   document.getElementById('ag-inst-bg').style.display='flex';
 });
 document.getElementById('ag-inst-cancel').addEventListener('click',function(){document.getElementById('ag-inst-bg').style.display='none';});
 document.getElementById('ag-inst-bg').addEventListener('click',function(e){if(e.target===this)document.getElementById('ag-inst-bg').style.display='none';});
 document.getElementById('ag-inst-add').addEventListener('click',function(){
-  instTmp.push({day:0,from:'08:00',to:'20:00',label:'',freq:'semanal',startDate:''});
+  instTmp.push({from:'08:00',to:'20:00',label:'',freq:'unico',startDate:new Date().toISOString().slice(0,10)});
   renderInstList();
 });
 document.getElementById('ag-inst-save').addEventListener('click',function(){
-  instBlocks=instBlocks.concat(instTmp);saveLocal();document.getElementById('ag-inst-bg').style.display='none';renderGrid();
+  instBlocks=instBlocks.concat(instTmp.filter(function(b){return b.startDate;}));saveLocal();document.getElementById('ag-inst-bg').style.display='none';renderGrid();
 });
 
 document.getElementById('ag-prev').addEventListener('click',function(){currentMonday=addDays(currentMonday,-7);renderGrid();});
