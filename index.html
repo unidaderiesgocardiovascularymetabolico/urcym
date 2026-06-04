@@ -3209,10 +3209,14 @@ async function verLabReadonly(dni) {
 async function cargarPacientes() {
   const cont = document.getElementById('tablePacientes');
   let data, error;
-  // Intentar ordenar por id desc; si falla, cargar sin orden
-  ({ data, error } = await sb.from('pacientes').select('*').order('id', {ascending:false}));
+  // Intentar ordenar por created_at desc; si falla, intentar por dni; si falla, sin orden
+  ({ data, error } = await sb.from('pacientes').select('*').order('created_at', {ascending:false}));
   if(error) {
-    console.warn('[cargarPacientes] order by id falló, intentando sin orden:', error.message);
+    console.warn('[cargarPacientes] order by created_at falló, intentando por dni:', error.message);
+    ({ data, error } = await sb.from('pacientes').select('*').order('dni', {ascending:false}));
+  }
+  if(error) {
+    console.warn('[cargarPacientes] order by dni falló, cargando sin orden:', error.message);
     ({ data, error } = await sb.from('pacientes').select('*'));
   }
   if(error) {
@@ -6615,7 +6619,10 @@ document.getElementById('modal_evol_historica').addEventListener('click', functi
 
     <div class="form-actions" style="margin-top:20px">
       <button class="btn btn-secondary" onclick="cerrarModal('modalClinica')">Cancelar</button>
-      <button class="btn" onclick="guardarClinica()">Guardar cambios</button>
+      <button class="btn" id="btn-guardar-clinica" onclick="
+        var btn=this; btn.disabled=true; btn.textContent='Guardando...';
+        guardarClinica().finally(function(){ btn.disabled=false; btn.textContent='Guardar cambios'; });
+      ">Guardar cambios</button>
     </div>
   </div>
 </div>
@@ -8706,12 +8713,11 @@ loadLocal();
   window.cargarEncabezadoHC           = cargarEncabezadoDesdeDB;
 
   // ── Reemplazar guardarClinica para usar el nuevo flujo ────────────────────
-  // Espera al guardarClinica que ya existe (el de SCRIPT1 con otros_med_filas)
-  // y solo agrega: setear evolClinicaSnapshot y llamar actualizarEncabezadoVariable(snap)
   var _baseGuardar = window.guardarClinica;
   window.guardarClinica = async function () {
     if (!window.pacienteActual) return;
     var dni = window.pacienteActual.dni;
+    try {
 
     // Leer checkboxes y campos del modal
     var dxAll = ['hta','hta2','dis','erc','obe','sob','masld','dbt2','dbt1','dbt_otro','predbt','hiperu',
@@ -8793,13 +8799,17 @@ loadLocal();
       }
     } catch (e) {}
 
-    // ── Fuente de verdad: setear snapshot y renderizar encabezado ──
-    var snap = { clinica: clinicaData, medicacion: meds };
-    window.evolClinicaSnapshot = snap;
-    actualizarEncabezadoVariable(snap);
+      // ── Fuente de verdad: setear snapshot y renderizar encabezado ──
+      var snap = { clinica: clinicaData, medicacion: meds };
+      window.evolClinicaSnapshot = snap;
+      try { actualizarEncabezadoVariable(snap); } catch(e) { console.warn('[guardarClinica] encabezado:', e); }
 
-    cerrarModal('modalClinica');
-    try { switchPacMainTab('evol'); } catch (e) {}
+      cerrarModal('modalClinica');
+      try { switchPacMainTab('evol'); } catch (e) {}
+    } catch(err) {
+      console.error('[guardarClinica] ERROR:', err);
+      alert('Error al guardar datos clínicos: ' + (err.message || String(err)));
+    }
   };
 
 })();
