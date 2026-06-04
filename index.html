@@ -3955,8 +3955,26 @@ async function guardarClinica() {
     gineco_notas:document.getElementById('gineco_notas_generales')?.value||null,
     actualizado_en:new Date().toISOString()
   };
+  // ── Filtrar solo las columnas que existen en la tabla (evita errores por columnas nuevas no migradas) ──
+  async function upsertSafe(tabla, data, opts) {
+    // Intentamos el upsert completo primero
+    const r1 = await sb.from(tabla).upsert(data, opts);
+    if (!r1.error) return r1;
+    // Si falla por columna inexistente, detectamos cuáles existen y reintentamos
+    const missing = r1.error.message.match(/Could not find the '(.+?)' column/);
+    if (!missing) return r1; // otro error, devolver tal cual
+    // Obtener columnas reales haciendo select de 1 fila (o fila vacía)
+    const probe = await sb.from(tabla).select('*').limit(1);
+    if (probe.error || !probe.data) return r1;
+    const knownCols = probe.data.length > 0
+      ? Object.keys(probe.data[0])
+      : Object.keys(data); // si la tabla está vacía, no podemos filtrar — usar todo
+    const filtered = Object.fromEntries(Object.entries(data).filter(([k]) => knownCols.includes(k)));
+    return sb.from(tabla).upsert(filtered, opts);
+  }
+
   try {
-    const {error:upsertErr} = await sb.from('paciente_clinica').upsert(clinicaData, {onConflict:'dni_paciente'});
+    const {error:upsertErr} = await upsertSafe('paciente_clinica', clinicaData, {onConflict:'dni_paciente'});
     if(upsertErr) throw upsertErr;
     const {error:medErr} = await sb.from('medicacion').update({activo:false}).eq('dni_paciente',dni);
     if(medErr) throw medErr;
