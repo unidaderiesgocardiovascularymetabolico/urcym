@@ -1268,6 +1268,10 @@
         <div class="evh-section">
           <div class="evh-title">Diagnósticos</div>
           <div id="hc_evh_dx" class="evh-tags"><span style="font-size:11px;color:var(--text-soft)">Cargando...</span></div>
+          <div id="hc_evh_dx_gin_wrap" style="display:none;margin-top:4px">
+            <div style="font-size:9px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#c2185b;margin-bottom:3px">Ginecológicos</div>
+            <div id="hc_evh_dx_gin" class="evh-tags"></div>
+          </div>
         </div>
         <div class="evh-section">
           <div class="evh-title">Medicación actual</div>
@@ -1343,6 +1347,10 @@
         <div class="evh-section">
           <div class="evh-title">Diagnósticos <button class="btn-hx-mini" onclick="abrirHistorialDx()" title="Historial diagnósticos">🕐</button></div>
           <div id="evh_dx" class="evh-tags"></div>
+          <div id="evh_dx_gin_wrap" style="display:none;margin-top:4px">
+            <div style="font-size:9px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#c2185b;margin-bottom:3px">Ginecológicos</div>
+            <div id="evh_dx_gin" class="evh-tags"></div>
+          </div>
         </div>
         <div class="evh-section">
           <div class="evh-title">Medicación actual <button class="btn-hx-mini" onclick="abrirHistorialMed()" title="Historial medicación">🕐</button></div>
@@ -9169,8 +9177,10 @@ loadLocal();
       meds = mr.data || [];
     }catch(e){ meds = []; }
 
-    // Diagnósticos
-    var dxHtml = '';
+    // Diagnósticos — separados cardiometabólicos y ginecológicos
+    var cardioHtml = '';
+    var ginHtml = '';
+    var famHtml = '';
     if(c){
       Object.entries(DX).forEach(function(kv){
         if(!c[kv[0]]) return;
@@ -9179,14 +9189,28 @@ loadLocal();
         if(kv[0]==='dx_dbt_otro'){ if(c.dx_dbt_otro_fecha) extra+=' ('+esc(c.dx_dbt_otro_fecha)+')'; if(c.dx_dbt_otro_nota) extra+=' '+esc(c.dx_dbt_otro_nota); }
         if(kv[0]==='dx_hta'     && c.dx_hta_fecha)      extra+=' ('+esc(c.dx_hta_fecha)+')';
         if(kv[0]==='dx_obe'     && c.dx_obe_fecha)      extra+=' ('+esc(c.dx_obe_fecha)+')';
-        dxHtml += '<span class="evh-tag">'+kv[1]+extra+'</span>';
+        cardioHtml += '<span class="evh-tag">'+kv[1]+extra+'</span>';
       });
-      Object.entries(GIN).forEach(function(kv){ if(c[kv[0]]) dxHtml+='<span class="evh-tag-pink">'+kv[1]+'</span>'; });
-      Object.entries(FAM).forEach(function(kv){ if(c[kv[0]]) dxHtml+='<span class="evh-tag-green">'+kv[1]+'</span>'; });
+      Object.entries(GIN).forEach(function(kv){ if(c[kv[0]]) ginHtml+='<span class="evh-tag-pink">'+kv[1]+'</span>'; });
+      Object.entries(FAM).forEach(function(kv){ if(c[kv[0]]) famHtml+='<span class="evh-tag-green">'+kv[1]+'</span>'; });
     }
     var noDx = '<span style="font-size:11px;color:var(--text-soft)">Sin diagnósticos</span>';
-    $h('evh_dx',    dxHtml || noDx);
-    $h('hc_evh_dx', dxHtml || noDx);
+    $h('evh_dx',        cardioHtml || noDx);
+    $h('evh_dx_gin',    ginHtml);
+    $h('hc_evh_dx',     cardioHtml || noDx);
+    $h('hc_evh_dx_gin', ginHtml);
+    // Familiares: al final de la sección cardiometabólica
+    var evhDxEl = document.getElementById('evh_dx');
+    var hcEvhDxEl = document.getElementById('hc_evh_dx');
+    if(famHtml){
+      if(evhDxEl) evhDxEl.insertAdjacentHTML('beforeend', famHtml);
+      if(hcEvhDxEl) hcEvhDxEl.insertAdjacentHTML('beforeend', famHtml);
+    }
+    // Mostrar/ocultar sección ginecológica
+    var wGin = document.getElementById('evh_dx_gin_wrap');
+    var wHcGin = document.getElementById('hc_evh_dx_gin_wrap');
+    if(wGin) wGin.style.display = ginHtml ? '' : 'none';
+    if(wHcGin) wHcGin.style.display = ginHtml ? '' : 'none';
 
     // Medicación
     var otrosG = ['otros','otro','otros_farmacos','otros fármacos','otros farmacos'];
