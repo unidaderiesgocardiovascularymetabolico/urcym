@@ -9132,25 +9132,24 @@ loadLocal();
 </script>
 
 <script>
-// ===== URCyM DEFINITIVO — actualizarEncabezadoVariable robusta =====
-// Carga siempre desde Supabase con manejo de filas duplicadas.
-// Se define al final para ganar sobre todos los patches anteriores.
+// ===== URCyM DEFINITIVO — actualizarEncabezadoVariable =====
 (function(){
   function $h(id, html){ var x=document.getElementById(id); if(x) x.innerHTML=html; }
   function esc(v){ return String(v==null?'':v).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
 
-  async function traerClinicaRobusta(dni){
+  // Trae la fila más reciente de paciente_clinica sin forzar tipo
+  async function traerClinica(dni){
     try{
-      var r = await sb.from('paciente_clinica').select('*').eq('dni_paciente', String(dni));
-      var arr = (r.data||[]);
+      var r = await sb.from('paciente_clinica').select('*').eq('dni_paciente', dni);
+      var arr = r.data || [];
       if(!arr.length) return null;
       arr.sort(function(a,b){
-        var ta=Date.parse(a.actualizado_en||a.updated_at||a.created_at||'0')||Number(a.id||0)||0;
-        var tb=Date.parse(b.actualizado_en||b.updated_at||b.created_at||'0')||Number(b.id||0)||0;
+        var ta=Date.parse(a.actualizado_en||a.updated_at||a.created_at||'0')||0;
+        var tb=Date.parse(b.actualizado_en||b.updated_at||b.created_at||'0')||0;
         return tb-ta;
       });
       return arr[0];
-    }catch(e){ console.warn('[URCyM] traerClinicaRobusta:', e); return null; }
+    }catch(e){ console.error('[URCyM] traerClinica error:', e); return null; }
   }
 
   var DX={dx_acv:'ACV',dx_albuminuria:'AlbumINURIA',dx_atero_subcl:'Atero Subcl.',dx_dbt1:'DBT 1',dx_dbt2:'DBT 2',dx_dbt_otro:'DBT Otro',dx_dis:'Dislipemia',dx_eap:'EAP',dx_epoc:'EPOC',dx_erc:'ERC',dx_fa:'FA',dx_hiperu:'HiperU',dx_hta:'HTA',dx_hta2:'HTA 2',dx_hvi:'HVI',dx_iam:'IAM',dx_icc:'ICC',dx_masld:'MASLD',dx_ms:'S. Met.',dx_neu_dbt:'Neu DBT',dx_obe:'Obesidad',dx_predbt:'PreDBT',dx_rp_dbt:'RP DBT',dx_sahos:'SAHOS',dx_sob:'Sobrepeso'};
@@ -9158,27 +9157,28 @@ loadLocal();
   var FAM={fam_hta:'HTA-F',fam_dbt:'DBT-F',fam_obe:'OBE-F',fam_dis:'DIS-F',fam_iam:'IAM-F',fam_acv:'ACV-F',fam_erc:'ERC-F',fam_ms:'SM-F'};
 
   window.actualizarEncabezadoVariable = async function(dni){
-    if(!dni) dni = window.pacienteActual && window.pacienteActual.dni;
-    if(!dni) return;
-    dni = String(dni);
+    if(dni == null) dni = window.pacienteActual && window.pacienteActual.dni;
+    if(dni == null){ console.warn('[URCyM] actualizarEncabezadoVariable: dni es null'); return; }
+    console.log('[URCyM] actualizarEncabezadoVariable llamada con dni:', dni, typeof dni);
 
-    var c = await traerClinicaRobusta(dni);
+    var c = await traerClinica(dni);
+    console.log('[URCyM] traerClinica resultado:', c);
     var meds = [];
     try{
       var mr = await sb.from('medicacion').select('*').eq('dni_paciente', dni).eq('activo', true).order('grupo');
       meds = mr.data || [];
     }catch(e){ meds = []; }
 
-    // ── Diagnósticos ──────────────────────────────────────────────────────
+    // Diagnósticos
     var dxHtml = '';
     if(c){
       Object.entries(DX).forEach(function(kv){
         if(!c[kv[0]]) return;
         var extra = '';
-        if(kv[0]==='dx_dbt2'  && c.dx_dbt2_fecha)      extra=' ('+esc(c.dx_dbt2_fecha)+')';
+        if(kv[0]==='dx_dbt2'    && c.dx_dbt2_fecha)     extra=' ('+esc(c.dx_dbt2_fecha)+')';
         if(kv[0]==='dx_dbt_otro'){ if(c.dx_dbt_otro_fecha) extra+=' ('+esc(c.dx_dbt_otro_fecha)+')'; if(c.dx_dbt_otro_nota) extra+=' '+esc(c.dx_dbt_otro_nota); }
-        if(kv[0]==='dx_hta'   && c.dx_hta_fecha)        extra+=' ('+esc(c.dx_hta_fecha)+')';
-        if(kv[0]==='dx_obe'   && c.dx_obe_fecha)        extra+=' ('+esc(c.dx_obe_fecha)+')';
+        if(kv[0]==='dx_hta'     && c.dx_hta_fecha)      extra+=' ('+esc(c.dx_hta_fecha)+')';
+        if(kv[0]==='dx_obe'     && c.dx_obe_fecha)      extra+=' ('+esc(c.dx_obe_fecha)+')';
         dxHtml += '<span class="evh-tag">'+kv[1]+extra+'</span>';
       });
       Object.entries(GIN).forEach(function(kv){ if(c[kv[0]]) dxHtml+='<span class="evh-tag-pink">'+kv[1]+'</span>'; });
@@ -9188,7 +9188,7 @@ loadLocal();
     $h('evh_dx',    dxHtml || noDx);
     $h('hc_evh_dx', dxHtml || noDx);
 
-    // ── Medicación ────────────────────────────────────────────────────────
+    // Medicación
     var otrosG = ['otros','otro','otros_farmacos','otros fármacos','otros farmacos'];
     var cardiomet = meds.filter(function(m){ return !otrosG.includes(String(m.grupo||'').toLowerCase()); });
     var otros     = meds.filter(function(m){ return  otrosG.includes(String(m.grupo||'').toLowerCase()); });
@@ -9202,7 +9202,7 @@ loadLocal();
     $h('evh_med',    medHtml);
     $h('hc_evh_med', medHtml);
 
-    // ── Hábitos ───────────────────────────────────────────────────────────
+    // Hábitos
     var hab = '<span style="font-size:11px;color:var(--text-soft)">Sin datos</span>';
     if(c){
       var py = ((Number(c.cigarrillos_dia)||0)*(Number(c.anios_fumando)||0)/20).toFixed(1);
@@ -9225,7 +9225,6 @@ loadLocal();
     if(c) window.evolClinicaSnapshot = { clinica: c, medicacion: meds };
   };
 
-  // alias por si algo llama a cargarEncabezadoHC
   window.cargarEncabezadoHC = window.actualizarEncabezadoVariable;
 })();
 </script>
