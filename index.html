@@ -3209,8 +3209,12 @@ async function verLabReadonly(dni) {
 async function cargarPacientes() {
   const cont = document.getElementById('tablePacientes');
   let data, error;
-  // Intentar ordenar por created_at desc; si falla, intentar por dni; si falla, sin orden
-  ({ data, error } = await sb.from('pacientes').select('*').order('created_at', {ascending:false}));
+  // Ordenar por updated_at desc (últimos editados primero); fallbacks por robustez
+  ({ data, error } = await sb.from('pacientes').select('*').order('updated_at', {ascending:false}));
+  if(error) {
+    console.warn('[cargarPacientes] order by updated_at falló, intentando por created_at:', error.message);
+    ({ data, error } = await sb.from('pacientes').select('*').order('created_at', {ascending:false}));
+  }
   if(error) {
     console.warn('[cargarPacientes] order by created_at falló, intentando por dni:', error.message);
     ({ data, error } = await sb.from('pacientes').select('*').order('dni', {ascending:false}));
@@ -3225,13 +3229,11 @@ async function cargarPacientes() {
     return;
   }
   pacientesData = data || [];
-  // Siempre poner el último cargado/editado primero
-  if(ultimoDniCargado) {
-    pacientesData = [
-      ...pacientesData.filter(p => p.dni === ultimoDniCargado),
-      ...pacientesData.filter(p => p.dni !== ultimoDniCargado)
-    ];
-  }
+  // Ordenar en cliente por updated_at/created_at para garantizar orden correcto
+  pacientesData.sort(function(a, b) {
+    return (Date.parse(b.updated_at || b.created_at || 0) || 0) -
+           (Date.parse(a.updated_at || a.created_at || 0) || 0);
+  });
   renderTabla(pacientesData);
 }
 
@@ -3249,7 +3251,11 @@ function renderTabla(data) {
     cont.innerHTML = '<div class="empty-state"><div>👤</div><p>No hay pacientes registrados todavía.<br>Hacé clic en "+ Nuevo paciente" para agregar el primero.</p></div>';
     return;
   }
-  const sorted = data;
+  // Ordenar siempre por último editado (updated_at) desc
+  const sorted = [...data].sort(function(a, b) {
+    return (Date.parse(b.updated_at || b.created_at || 0) || 0) -
+           (Date.parse(a.updated_at || a.created_at || 0) || 0);
+  });
   cont.innerHTML = '<table><thead><tr><th>Apellido y nombre</th><th>DNI</th><th>Edad</th><th>Obra Social</th><th>Última evolución</th><th>Acciones</th></tr></thead><tbody>' +
     sorted.map((p,i) => {
       const esNuevo = p.dni === ultimoDniCargado;
@@ -3698,6 +3704,7 @@ async function guardarPaciente() {
     obra_social: document.getElementById('f_obra_social').value||null,
     numero_afiliado: document.getElementById('f_afiliado').value.trim()||null,
     ocupacion: document.getElementById('f_ocupacion').value.trim()||null,
+    updated_at: new Date().toISOString(),
   };
   let error;
   if(modoEdicion) {
