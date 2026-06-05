@@ -7,51 +7,13 @@
 
   <!-- PWA -->
   <link rel="manifest" href="manifest.json"/>
-  <link rel="icon" type="image/svg+xml" href="logo.svg" id="favicon-link"/>
+  <link rel="icon" type="image/svg+xml" href="logo.svg"/>
   <meta name="mobile-web-app-capable" content="yes"/>
   <meta name="apple-mobile-web-app-capable" content="yes"/>
   <meta name="apple-mobile-web-app-status-bar-style" content="default"/>
   <meta name="apple-mobile-web-app-title" content="URCyM"/>
   <meta name="theme-color" content="#3089ca"/>
   <link rel="apple-touch-icon" href="logo.svg"/>
-  <script>
-    // Recorta márgenes blancos del favicon cargando el SVG en canvas
-    (function(){
-      var img = new Image();
-      img.onload = function(){
-        var c = document.createElement('canvas');
-        c.width = 64; c.height = 64;
-        var ctx = c.getContext('2d');
-        // Detectar bounding box del contenido (recortar blancos)
-        var tmp = document.createElement('canvas');
-        tmp.width = img.width || 64; tmp.height = img.height || 64;
-        var tctx = tmp.getContext('2d');
-        tctx.drawImage(img, 0, 0);
-        var data = tctx.getImageData(0,0,tmp.width,tmp.height).data;
-        var minX=tmp.width,maxX=0,minY=tmp.height,maxY=0;
-        for(var y=0;y<tmp.height;y++){
-          for(var x=0;x<tmp.width;x++){
-            var i=(y*tmp.width+x)*4;
-            if(data[i+3]>20){
-              if(x<minX)minX=x; if(x>maxX)maxX=x;
-              if(y<minY)minY=y; if(y>maxY)maxY=y;
-            }
-          }
-        }
-        var pad=2;
-        minX=Math.max(0,minX-pad); minY=Math.max(0,minY-pad);
-        maxX=Math.min(tmp.width,maxX+pad); maxY=Math.min(tmp.height,maxY+pad);
-        var w=maxX-minX, h=maxY-minY;
-        if(w>0&&h>0){
-          ctx.drawImage(img, minX, minY, w, h, 0, 0, 64, 64);
-          var link=document.getElementById('favicon-link');
-          if(link) link.href=c.toDataURL('image/png');
-        }
-      };
-      img.onerror=function(){};
-      img.src='logo.svg';
-    })();
-  </script>
 
   <link href="https://fonts.googleapis.com/css2?family=Amiko:wght@400;600;700&family=Encode+Sans:wght@300;400;500;600;700&family=Encode+Sans+Condensed:wght@400;600&display=swap" rel="stylesheet"/>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -1437,7 +1399,7 @@
       <!-- ENCABEZADO VARIABLE sticky — entre topbar y tabs -->
       <div class="evol-header-var" id="evol_header_var">
         <!-- Nombre del paciente visible al hacer scroll -->
-        <div style="display:flex;flex-direction:column;justify-content:center;align-items:flex-start;min-width:140px;max-width:200px;padding-right:16px;border-right:2px solid var(--border);flex-shrink:0">
+        <div id="evh_nombre_wrap" style="display:none;flex-direction:column;justify-content:center;align-items:flex-start;min-width:140px;max-width:200px;padding-right:16px;border-right:2px solid var(--border);flex-shrink:0;transition:opacity .2s;opacity:0">
           <div style="font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--text-soft);margin-bottom:3px">Paciente</div>
           <div id="evh_nombre_paciente" style="font-family:var(--font-display);font-size:14px;font-weight:700;color:var(--blue);line-height:1.2;word-break:break-word"></div>
         </div>
@@ -9628,5 +9590,29 @@ window.cargarProxConsultas = cargarProxConsultas;
 })();
 </script>
 
+<script>
+// Mostrar nombre del paciente en el encabezado sticky solo al hacer scroll
+(function(){
+  var topbarHeight = 56 + 58; // topbar fija + evol-topbar
+  function updateNombreVisibility() {
+    var wrap = document.getElementById('evh_nombre_wrap');
+    if (!wrap) return;
+    // Solo aplica cuando la página de evolución está activa
+    var evolPage = document.getElementById('page-evolucion');
+    if (!evolPage || !evolPage.classList.contains('active')) return;
+    var scrolled = window.scrollY > topbarHeight;
+    if (scrolled) {
+      wrap.style.display = 'flex';
+      // Pequeño delay para que el display:flex tome efecto antes de la transición
+      requestAnimationFrame(function(){ wrap.style.opacity = '1'; });
+    } else {
+      wrap.style.opacity = '0';
+      // Esperar la transición antes de ocultar
+      setTimeout(function(){ if(parseFloat(wrap.style.opacity) < 0.1) wrap.style.display = 'none'; }, 200);
+    }
+  }
+  window.addEventListener('scroll', updateNombreVisibility, { passive: true });
+})();
+</script>
 </body>
 </html>
