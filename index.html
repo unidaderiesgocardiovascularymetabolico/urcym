@@ -4980,7 +4980,8 @@ async function abrirHistorialDx() {
   document.getElementById('modalHistorialDx').classList.add('open');
   const cont = document.getElementById('historial_dx_lista');
   cont.innerHTML = '<div class="loading">Cargando...</div>';
-  const { data } = await sb.from('evoluciones').select('fecha_hora,clinica_snapshot').eq('dni_paciente', pacienteActual.dni).order('fecha_hora', {ascending:false});
+  // ascending:true para procesar cronológicamente: el primero es el estado inicial
+  const { data } = await sb.from('evoluciones').select('fecha_hora,clinica_snapshot').eq('dni_paciente', pacienteActual.dni).order('fecha_hora', {ascending:true});
   if(!data || !data.length) { cont.innerHTML='<p style="color:var(--text-soft);font-size:13px">Sin historial registrado.</p>'; return; }
   const DX_L={dx_acv:'ACV',dx_albuminuria:'Albuminuria',dx_atero_subcl:'Atero Subcl.',dx_dbt1:'DBT 1',dx_dbt2:'DBT 2',dx_dbt_otro:'DBT Otro',dx_dis:'Dislipemia',dx_eap:'EAP',dx_epoc:'EPOC',dx_erc:'ERC',dx_fa:'FA',dx_hiperu:'HiperU',dx_hta:'HTA',dx_hta2:'HTA 2',dx_hvi:'HVI',dx_iam:'IAM',dx_icc:'ICC',dx_masld:'MASLD',dx_ms:'S. Met.',dx_neu_dbt:'Neu DBT',dx_obe:'Obesidad',dx_predbt:'PreDBT',dx_rp_dbt:'RP DBT',dx_sahos:'SAHOS',dx_sob:'Sobrepeso',dx_pe:'PE',dx_rciu:'RCIU',dx_ppt:'PPT',dx_sop:'SOP',dx_dbtg:'DBT-G',dx_htag:'HTA-G',dx_ms_gineco:'SM-G',dx_menopausia:'Menop.'};
   let prevSet = null;
@@ -4988,17 +4989,19 @@ async function abrirHistorialDx() {
     let snap; try{ snap=JSON.parse(e.clinica_snapshot); }catch(er){ return ''; }
     const c = snap.clinica; if(!c) return '';
     const curSet = new Set(Object.keys(DX_L).filter(k=>c[k]).map(k=>DX_L[k]));
+    const esInicial = prevSet === null;
     let agregados = [], quitados = [];
-    if(prevSet !== null) {
+    if(!esInicial) {
+      // curSet es más nuevo que prevSet: agregado = en cur pero no en prev
       curSet.forEach(v=>{ if(!prevSet.has(v)) agregados.push(v); });
       prevSet.forEach(v=>{ if(!curSet.has(v)) quitados.push(v); });
     }
-    const hayCambio = prevSet === null || agregados.length || quitados.length;
+    const hayCambio = esInicial || agregados.length || quitados.length;
     prevSet = curSet;
     if(!hayCambio) return '';
     const fecha = new Date(e.fecha_hora).toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'});
     let detalle = '';
-    if(prevSet === null || (agregados.length===0 && quitados.length===0)) {
+    if(esInicial) {
       detalle = 'Diagnósticos iniciales: '+([...curSet].join(', ')||'Ninguno');
     } else {
       if(agregados.length) detalle += '<span style="color:#27ae60;font-weight:600">+ '+agregados.join(', ')+'</span> ';
@@ -5006,7 +5009,8 @@ async function abrirHistorialDx() {
     }
     return '<div class="hx-entrada"><div class="hx-fecha">'+fecha+'</div><div class="hx-detalle">'+detalle+'</div></div>';
   }).filter(Boolean);
-  cont.innerHTML = items.length ? items.join('') : '<p style="color:var(--text-soft);font-size:13px">Sin cambios registrados.</p>';
+  // Mostrar del más reciente al más antiguo (invertir para display)
+  cont.innerHTML = items.length ? items.reverse().join('') : '<p style="color:var(--text-soft);font-size:13px">Sin cambios registrados.</p>';
 }
 
 // ===== HISTORIAL MEDICACIÓN =====
@@ -5015,7 +5019,8 @@ async function abrirHistorialMed() {
   document.getElementById('modalHistorialMed').classList.add('open');
   const cont = document.getElementById('historial_med_lista');
   cont.innerHTML = '<div class="loading">Cargando...</div>';
-  const { data } = await sb.from('evoluciones').select('fecha_hora,clinica_snapshot').eq('dni_paciente', pacienteActual.dni).order('fecha_hora', {ascending:false});
+  // ascending:true para procesar cronológicamente: el primero es el estado inicial
+  const { data } = await sb.from('evoluciones').select('fecha_hora,clinica_snapshot').eq('dni_paciente', pacienteActual.dni).order('fecha_hora', {ascending:true});
   if(!data || !data.length) { cont.innerHTML='<p style="color:var(--text-soft);font-size:13px">Sin historial registrado.</p>'; return; }
   let prevMedStr = null;
   const items = data.filter(e=>e.clinica_snapshot).map(e => {
@@ -5029,7 +5034,8 @@ async function abrirHistorialMed() {
     const tag = esInicial ? '' : ' <span style="color:var(--red);font-size:10px;font-weight:700">CAMBIO</span>';
     return '<div class="hx-entrada"><div class="hx-fecha">'+fecha+tag+'</div><div class="hx-detalle">'+medStr+'</div></div>';
   }).filter(Boolean);
-  cont.innerHTML = items.length ? items.join('') : '<p style="color:var(--text-soft);font-size:13px">Sin cambios registrados.</p>';
+  // Mostrar del más reciente al más antiguo (invertir para display)
+  cont.innerHTML = items.length ? items.reverse().join('') : '<p style="color:var(--text-soft);font-size:13px">Sin cambios registrados.</p>';
 }
 
 // ===== INDICACIONES EN EVOLUCIÓN =====
