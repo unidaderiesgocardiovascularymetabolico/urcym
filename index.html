@@ -8385,10 +8385,27 @@ renderGrid=function(){
 // Se hace en el patch de abajo.
 
 // ── Helpers Supabase para agenda ──────────────────────────────────────────
+
+// Muestra/oculta un banner rojo de error de guardado
+function _sbShowSaveError(show){
+  var el=document.getElementById('urcym-save-error-banner');
+  if(!el){
+    el=document.createElement('div');
+    el.id='urcym-save-error-banner';
+    el.style.cssText='position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:#dc2626;color:#fff;font-size:13px;font-weight:600;padding:10px 20px;border-radius:10px;z-index:99999;box-shadow:0 4px 16px rgba(0,0,0,.3);display:none;max-width:90vw;text-align:center;';
+    el.innerHTML='⚠️ Error al guardar en la nube. Los datos se guardaron localmente pero pueden perderse. Recargá la página e intentá de nuevo.';
+    document.body.appendChild(el);
+  }
+  el.style.display=show?'block':'none';
+}
+
 async function sbUpsertAgendaConfig(key, value){
   try{
-    await sb.from('urcym_agenda_config').upsert({key:key, value:JSON.stringify(value)},{onConflict:'key'});
-  }catch(e){console.warn('[URCyM] sbUpsertAgendaConfig error',e);}
+    var res=await sb.from('urcym_agenda_config').upsert({key:key, value:JSON.stringify(value)},{onConflict:'key'});
+    if(res&&res.error){console.warn('[URCyM] sbUpsertAgendaConfig error',res.error);_sbShowSaveError(true);return false;}
+    _sbShowSaveError(false);
+    return true;
+  }catch(e){console.warn('[URCyM] sbUpsertAgendaConfig error',e);_sbShowSaveError(true);return false;}
 }
 async function sbGetAgendaConfig(key){
   try{
@@ -8398,27 +8415,28 @@ async function sbGetAgendaConfig(key){
   return null;
 }
 async function sbSaveTurnos(){
+  // siempre guardar localStorage primero (inmediato)
+  try{localStorage.setItem(LS_T,JSON.stringify(turnos));}catch(e){}
   try{
-    await sb.from('urcym_agenda_config').upsert({key:'turnos',value:JSON.stringify(turnos)},{onConflict:'key'});
-    // también caché local
-    try{localStorage.setItem(LS_T,JSON.stringify(turnos));}catch(e){}
+    var res=await sb.from('urcym_agenda_config').upsert({key:'turnos',value:JSON.stringify(turnos)},{onConflict:'key'});
+    if(res&&res.error){console.warn('[URCyM] sbSaveTurnos error',res.error);_sbShowSaveError(true);return;}
+    _sbShowSaveError(false);
   }catch(e){
-    // fallback a localStorage si falla Supabase
-    try{localStorage.setItem(LS_T,JSON.stringify(turnos));}catch(e2){}
     console.warn('[URCyM] sbSaveTurnos error',e);
+    _sbShowSaveError(true);
   }
 }
 
 function saveLocal(){
-  // Guardar en Supabase (async) + caché local
+  // Guardar localStorage INMEDIATAMENTE (caché local)
+  try{localStorage.setItem(LS_NL,JSON.stringify(nlBlocks));}catch(e){}
+  try{localStorage.setItem(LS_D,JSON.stringify(dispBlocks));}catch(e){}
+  try{localStorage.setItem(LS_INST,JSON.stringify(instBlocks));}catch(e){}
+  // Guardar en Supabase (async)
   sbSaveTurnos();
   sbUpsertAgendaConfig('nl_blocks', nlBlocks);
   sbUpsertAgendaConfig('disp_blocks', dispBlocks);
   sbUpsertAgendaConfig('inst_blocks', instBlocks);
-  // caché local inmediata
-  try{localStorage.setItem(LS_NL,JSON.stringify(nlBlocks));}catch(e){}
-  try{localStorage.setItem(LS_D,JSON.stringify(dispBlocks));}catch(e){}
-  try{localStorage.setItem(LS_INST,JSON.stringify(instBlocks));}catch(e){}
 }
 
 async function loadLocal(){
@@ -9014,11 +9032,29 @@ loadLocal();  // async, carga en background y llama renderGrid al final
   var openSections = {BG:true,OB:true,LA:true,SA:true};
 
   function loadTasks(){
-    try{ var s=localStorage.getItem(LS_TASKS); if(s) tasks=JSON.parse(s); }catch(e){}
+    // Cargar desde Supabase primero, luego localStorage como fallback
+    sb.from('urcym_agenda_config').select('value').eq('key','tasks_v1').maybeSingle().then(function(r){
+      if(r&&r.data&&r.data.value){
+        try{
+          var t=JSON.parse(r.data.value);
+          T_PROFS.forEach(function(p){if(!t[p])t[p]=[];});
+          tasks=t;
+          try{localStorage.setItem(LS_TASKS,r.data.value);}catch(e){}
+          renderPanel();
+        }catch(e){}
+      } else {
+        try{var s=localStorage.getItem(LS_TASKS);if(s){tasks=JSON.parse(s);T_PROFS.forEach(function(p){if(!tasks[p])tasks[p]=[];});renderPanel();}}catch(e){}
+      }
+    }).catch(function(){
+      try{var s=localStorage.getItem(LS_TASKS);if(s){tasks=JSON.parse(s);T_PROFS.forEach(function(p){if(!tasks[p])tasks[p]=[];});renderPanel();}}catch(e){}
+    });
     T_PROFS.forEach(function(p){ if(!tasks[p]) tasks[p]=[]; });
   }
   function saveTasks(){
     try{ localStorage.setItem(LS_TASKS, JSON.stringify(tasks)); }catch(e){}
+    sb.from('urcym_agenda_config').upsert({key:'tasks_v1',value:JSON.stringify(tasks)},{onConflict:'key'}).then(function(r){
+      if(r&&r.error)console.warn('[URCyM] saveTasks error',r.error);
+    }).catch(function(e){console.warn('[URCyM] saveTasks error',e);});
   }
   function pendingCount(p){ return (tasks[p]||[]).filter(function(t){return !t.done;}).length; }
 
