@@ -2143,6 +2143,7 @@ let estDatos = { columnas:[], filas:[] };
 let antDatos = { columnas:[], filas:[] };
 let vacDatos = { aplicadas:{}, notas:{}, antecedentes:[] };
 let _historialData = []; // cache para filtrado en memoria
+let _hcSoloLectura = false; // true cuando se abre desde lista de pacientes (solo lectura)
 let _historialActivo = null;
 let _chartInstances = {};
 let pacHistoriaDni = null;
@@ -3505,6 +3506,7 @@ function abrirHistoriaClinica(dni) {
   const p = pacientesData.find(x=>x.dni===dni);
   if(!p) return;
   pacienteActual = p;
+  _hcSoloLectura = true;
   document.getElementById('hc_nombre').textContent = p.apellido + ', ' + p.nombre;
   document.getElementById('hc_dni').textContent = 'DNI: ' + p.dni;
   document.getElementById('hc_edad').textContent = edadDesde(p.fecha_nacimiento) + ' años';
@@ -4562,6 +4564,7 @@ function verHistoria(dni) {
   const p = pacientesData.find(x=>x.dni===dni);
   if(!p) return;
   pacienteActual = p;
+  _hcSoloLectura = false;
   document.getElementById('hc_nombre').textContent = p.apellido + ', ' + p.nombre;
   document.getElementById('hc_dni').textContent = 'DNI: ' + p.dni;
   document.getElementById('hc_edad').textContent = edadDesde(p.fecha_nacimiento) + ' años';
@@ -4597,7 +4600,8 @@ async function cargarHistoria(dni) {
   }
 }
 
-function renderHistoria(data, mostrarContador) {
+function renderHistoria(data, mostrarContador, soloLectura) {
+  if (soloLectura === undefined) soloLectura = _hcSoloLectura;
   const cont = document.getElementById('hc_evoluciones');
   if(!cont) return;
   const countEl = document.getElementById('hc_filtro_count');
@@ -4612,7 +4616,7 @@ function renderHistoria(data, mostrarContador) {
     const fechaStr = fh.toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'});
     const horaStr = fh.toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'});
     const mClase = medicoAClase(e.medico);
-    if(_hcEditandoId === e.id) {
+    if(!soloLectura && _hcEditandoId === e.id) {
       return `<div class="hc-entrada" id="hc_entry_${e.id}">
         <div class="hc-header ${mClase}" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
           <span class="hc-fecha">${fechaStr} ${horaStr}</span>
@@ -4640,10 +4644,10 @@ function renderHistoria(data, mostrarContador) {
         ${e.fc_promedio?`<span class="hc-badge-fc">FC: ${e.fc_promedio} lpm</span>`:''}
         ${e.peso?`<span class="hc-badge-peso">Peso: ${e.peso} kg</span>`:''}
         ${e.proxima_consulta_fecha?`<span style="background:#fef9c3;color:#92400e;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:600">📅 Próx: ${new Date(e.proxima_consulta_fecha+'T12:00:00').toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit'})}</span>`:''}
-        <div class="hc-entry-actions">
+        ${!soloLectura ? `<div class="hc-entry-actions">
           <button class="hc-btn-edit" onclick="_hcEditarEntrada(${e.id})">✏️ Editar</button>
           <button class="hc-btn-del" onclick="_hcEliminarEntrada(${e.id}, '${fechaStr}')">🗑 Eliminar</button>
-        </div>
+        </div>` : ''}
       </div>
       <div class="hc-cuerpo">${e.contenido_html||''}</div>
     </div>`;
