@@ -1050,6 +1050,7 @@
               <select id="ag-f-time" style="border:1px solid #d1d5db;border-radius:6px;padding:5px 8px;font-size:13px;color:#374151;background:#fff;width:110px;"></select>
               <input type="time" id="ag-f-free-time" style="border:1.5px solid #185FA5;border-radius:6px;padding:4px 7px;font-size:13px;display:none;width:110px;" title="Horario editable">
             </div>
+            <div id="ag-free-time-conflict" style="display:none;margin-top:6px;padding:7px 11px;border-radius:8px;font-size:12px;font-weight:600;background:#fef2f2;color:#dc2626;border:1px solid #fca5a5;"></div>
             <div style="display:flex;align-items:center;gap:6px;margin-top:6px;">
               <input type="checkbox" id="ag-f-extra" style="width:14px;height:14px;accent-color:#E59500;cursor:pointer;">
               <label for="ag-f-extra" style="font-size:11px;color:#6b7280;cursor:pointer;margin:0;">Turno extra — horario libre:</label>
@@ -7189,6 +7190,36 @@ function renderGrid(){
     var col=document.createElement('div');
     col.className='ag-day-col'+(ds===todayStr?' ag-today-col':'');
     col.style.height=TOTAL_H+'px';
+    col.style.cursor='crosshair';
+
+    // Indicador de posición al hacer hover
+    var hoverLine=document.createElement('div');
+    hoverLine.style.cssText='position:absolute;left:0;right:0;height:2px;background:rgba(24,95,165,0.35);pointer-events:none;display:none;z-index:5;';
+    var hoverLabel=document.createElement('div');
+    hoverLabel.style.cssText='position:absolute;right:3px;background:rgba(24,95,165,0.85);color:#fff;font-size:9px;font-weight:700;padding:1px 4px;border-radius:4px;pointer-events:none;display:none;z-index:6;white-space:nowrap;';
+    col.appendChild(hoverLine);
+    col.appendChild(hoverLabel);
+    (function(hLine,hLbl,PX_PER_MIN2,HOUR_START2){
+      col.addEventListener('mousemove',function(e){
+        if(e.target!==col&&!e.target.classList.contains('ag-hour-line'))return;
+        var rect=col.getBoundingClientRect();
+        var relY=e.clientY-rect.top;
+        var rawMins=relY/PX_PER_MIN2+HOUR_START2*60;
+        var mins=Math.round(rawMins/5)*5;
+        mins=Math.max(HOUR_START2*60,Math.min((HOUR_END*60)-5,mins));
+        var top2=(mins-HOUR_START2*60)*PX_PER_MIN2;
+        hLine.style.top=top2+'px';
+        hLine.style.display='block';
+        var hh=Math.floor(mins/60),mm=mins%60;
+        hLbl.textContent='+ '+(hh<10?'0':'')+hh+':'+(mm<10?'0':'')+mm;
+        hLbl.style.top=(top2-13)+'px';
+        hLbl.style.display='block';
+      });
+      col.addEventListener('mouseleave',function(){
+        hLine.style.display='none';
+        hLbl.style.display='none';
+      });
+    })(hoverLine,hoverLabel,PX_PER_MIN,HOUR_START);
 
     // Hour lines
     for(var hr=HOUR_START;hr<=HOUR_END;hr++){
@@ -7633,12 +7664,19 @@ function openModal(ds,time,key,forcedProf,freeTime){
   var freeTmEl=document.getElementById('ag-f-free-time');
   var timeSel=document.getElementById('ag-f-time');
   if(freeTime){
-    if(freeTmEl){freeTmEl.style.display='inline-block';freeTmEl.value=freeTime;}
+    if(freeTmEl){freeTmEl.style.display='inline-block';freeTmEl.value=freeTime;freeTmEl.style.border='1.5px solid #185FA5';freeTmEl.style.background='';}
     if(timeSel){timeSel.style.display='none';}
     pendingTime=freeTime;
+    var cfDivF=document.getElementById('ag-free-time-conflict');
+    if(cfDivF)cfDivF.style.display='none';
+    setTimeout(function(){if(typeof window._agUpdateConflictUI==='function')window._agUpdateConflictUI(freeTime);},80);
   } else {
-    if(freeTmEl){freeTmEl.style.display='none';freeTmEl.value='';}
+    if(freeTmEl){freeTmEl.style.display='none';freeTmEl.value='';freeTmEl.style.border='';freeTmEl.style.background='';}
     if(timeSel){timeSel.style.display='';}
+    var cfDivN=document.getElementById('ag-free-time-conflict');
+    if(cfDivN)cfDivN.style.display='none';
+    var saveBtnN=document.getElementById('ag-btn-save');
+    if(saveBtnN)saveBtnN.disabled=false;
   }
   // FIX: el prof se determina en este orden estricto:
   //   1. turno existente (edición)
@@ -9202,6 +9240,145 @@ async function cargarProxConsultas() {
 
 // También exponer para llamar manualmente si se necesita
 window.cargarProxConsultas = cargarProxConsultas;
+</script>
+
+<script>
+// ═══════════════════════════════════════════════════════
+// VALIDACIÓN EN TIEMPO REAL — horario libre al hacer click
+// en espacio vacío de la agenda
+// ═══════════════════════════════════════════════════════
+(function(){
+  'use strict';
+
+  // Devuelve un string de error si el horario entra en conflicto,
+  // o null si está libre.
+  function checkConflict(ds, timeStr, profVal, excludeKey) {
+    if (!ds || !timeStr || !profVal) return null;
+    var tm = t2m(timeStr);
+
+    // 1. Conflicto con bloques NO LABORABLES del prof
+    var inNL = nlBlocks.some(function(b) {
+      return b.prof === profVal
+        && isBlockActiveOnDate(b, ds)
+        && t2m(b.from) <= tm && tm < t2m(b.to);
+    });
+    if (inNL) return '⛔ Horario bloqueado: bloque no laborable de ' + (PROF_FULL[profVal] || profVal);
+
+    // 2. Conflicto con bloques institucionales
+    var inInst = instBlocks.some(function(b) {
+      return isBlockActiveOnDate(b, ds)
+        && t2m(b.from) <= tm && tm < t2m(b.to);
+    });
+    if (inInst) return '🏛 Horario bloqueado: cierre institucional';
+
+    // 3. Conflicto con turno ya existente del mismo prof
+    var profDur = (typeof PROF_45 !== 'undefined' && PROF_45.indexOf(profVal) >= 0) ? 45 : 30;
+    var tmEnd   = tm + profDur;
+
+    var conflict = null;
+    Object.keys(turnos).forEach(function(k) {
+      if (k === excludeKey) return;
+      var parts = k.split('_');
+      var tDate = parts[0], tTime = parts[1];
+      if (tDate !== ds) return;
+      var t = turnos[k];
+      if (t.prof !== profVal) return;
+      var otherStart = t2m(tTime);
+      var otherDur   = (typeof PROF_45 !== 'undefined' && PROF_45.indexOf(t.prof) >= 0) ? 45 : 30;
+      var otherEnd   = otherStart + otherDur;
+      // Solapamiento
+      if (tm < otherEnd && tmEnd > otherStart) {
+        conflict = '⚠️ Choca con turno existente de '
+          + (t.paciente || 'paciente') + ' a las ' + tTime;
+      }
+    });
+    if (conflict) return conflict;
+
+    return null; // sin conflicto
+  }
+
+  // Actualiza el indicador visual y devuelve true si hay conflicto
+  function updateConflictUI(timeStr) {
+    var cfDiv   = document.getElementById('ag-free-time-conflict');
+    var saveBtn = document.getElementById('ag-btn-save');
+    if (!cfDiv) return false;
+
+    var ds      = document.getElementById('ag-f-date')   ? document.getElementById('ag-f-date').value   : (typeof pendingDate !== 'undefined' ? pendingDate : '');
+    var profVal = document.getElementById('ag-f-prof')   ? document.getElementById('ag-f-prof').value   : 'BG';
+    var excKey  = (typeof editKey !== 'undefined') ? editKey : null;
+
+    var freeTmEl = document.getElementById('ag-f-free-time');
+    var isFreeMode = freeTmEl && freeTmEl.style.display !== 'none';
+    if (!isFreeMode) {
+      cfDiv.style.display = 'none';
+      if (saveBtn) saveBtn.disabled = false;
+      return false;
+    }
+
+    var err = checkConflict(ds, timeStr, profVal, excKey);
+    if (err) {
+      cfDiv.textContent  = err;
+      cfDiv.style.display = 'block';
+      if (freeTmEl) {
+        freeTmEl.style.border = '1.5px solid #dc2626';
+        freeTmEl.style.background = '#fff5f5';
+      }
+      if (saveBtn) saveBtn.disabled = true;
+      return true;
+    } else {
+      cfDiv.style.display = 'none';
+      if (freeTmEl) {
+        freeTmEl.style.border = '1.5px solid #185FA5';
+        freeTmEl.style.background = '';
+      }
+      if (saveBtn) saveBtn.disabled = false;
+      return false;
+    }
+  }
+
+  // Escuchar cambios en el input de horario libre
+  document.addEventListener('DOMContentLoaded', function() {
+    var freeTmEl = document.getElementById('ag-f-free-time');
+    if (freeTmEl) {
+      freeTmEl.addEventListener('input', function() {
+        updateConflictUI(this.value);
+      });
+      freeTmEl.addEventListener('change', function() {
+        updateConflictUI(this.value);
+      });
+    }
+
+    // Re-validar si cambia el profesional o la fecha mientras el modo libre esté activo
+    var profSel = document.getElementById('ag-f-prof');
+    var dateSel = document.getElementById('ag-f-date');
+    if (profSel) {
+      profSel.addEventListener('change', function() {
+        var freeTm = document.getElementById('ag-f-free-time');
+        if (freeTm && freeTm.style.display !== 'none') updateConflictUI(freeTm.value);
+      });
+    }
+    if (dateSel) {
+      dateSel.addEventListener('change', function() {
+        var freeTm = document.getElementById('ag-f-free-time');
+        if (freeTm && freeTm.style.display !== 'none') updateConflictUI(freeTm.value);
+      });
+    }
+  });
+
+  // También limpiar el indicador al cerrar el modal
+  var cancelBtn = document.getElementById('ag-btn-cancel');
+  if (cancelBtn) {
+    cancelBtn.addEventListener('click', function() {
+      var cfDiv = document.getElementById('ag-free-time-conflict');
+      if (cfDiv) cfDiv.style.display = 'none';
+      var saveBtn = document.getElementById('ag-btn-save');
+      if (saveBtn) saveBtn.disabled = false;
+    });
+  }
+
+  // Exponer para que openModal pueda disparar la validación al abrir
+  window._agUpdateConflictUI = updateConflictUI;
+})();
 </script>
 
 </body>
