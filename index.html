@@ -981,6 +981,7 @@
           <button class="ag-btn-disp" id="ag-btn-disp">&#128197; Disponibilidad</button>
           <button class="ag-btn-inst" id="ag-btn-inst">&#127970; Institucional</button>
           <button class="ag-btn-tasks" id="ag-btn-tasks" title="Tareas por profesional">&#9989; Tareas</button>
+          <button id="ag-btn-aranceles" style="background:none;border:1px solid #059669;border-radius:6px;padding:5px 10px;font-size:12px;color:#059669;cursor:pointer;font-family:inherit;" title="Configurar aranceles por consulta">💲 Aranceles</button>
         </div>
         <div class="ag-legend">
           <div class="ag-legend-item"><div class="ag-legend-bar" style="background:#7F77DD"></div>Guerrero</div>
@@ -1034,6 +1035,26 @@
             <button class="ag-tasks-close" id="ag-wapp-close">✕</button>
           </div>
           <div id="ag-wapp-content"><!-- renderizado por JS --></div>
+        </div>
+      </div>
+
+      <!-- Modal ARANCELES -->
+      <div id="ag-aran-bg" class="ag-modal-bg" style="display:none">
+        <div class="ag-cfg-modal" style="width:480px;max-width:96vw;padding:0;border-radius:16px;overflow:hidden;" role="dialog" aria-modal="true">
+          <div style="padding:18px 20px 14px;border-bottom:1px solid #f3f4f6;display:flex;align-items:center;gap:12px;">
+            <span style="font-size:22px">💲</span>
+            <div>
+              <h3 style="font-size:15px;font-weight:700;color:#111827;margin:0 0 2px">Aranceles por consulta</h3>
+              <p style="margin:0;font-size:11px;color:#9ca3af">Valor de la consulta por profesional. Se usa para autocompletar el monto al marcar como "Pagado".</p>
+            </div>
+          </div>
+          <div style="padding:18px 20px;" id="ag-aran-body">
+            <!-- renderizado por JS -->
+          </div>
+          <div style="padding:12px 20px;border-top:1px solid #f3f4f6;display:flex;justify-content:flex-end;gap:8px;">
+            <button class="ag-btn-ghost" id="ag-aran-cancel">Cancelar</button>
+            <button class="ag-btn-primary" id="ag-aran-save">Guardar aranceles</button>
+          </div>
         </div>
       </div>
 
@@ -1138,6 +1159,13 @@
                 <option value="pagado">Pagado</option>
               </select>
             </div>
+          </div>
+          <div class="ag-form-row" id="ag-monto-row" style="display:none">
+            <label style="display:flex;align-items:center;justify-content:space-between;">
+              <span>Monto total ($)</span>
+              <span id="ag-monto-hint" style="font-size:10px;color:#6b7280;font-weight:400;"></span>
+            </label>
+            <input type="number" id="ag-f-monto" placeholder="0" min="0" style="border:1.5px solid #1D9E75;">
           </div>
           <div class="ag-form-row"><label>Motivo de consulta</label>
             <select id="ag-f-notas">
@@ -7565,6 +7593,7 @@ function makeTurnoEl(t,key,hPx){
         +(turno.estado?'<div class="ag-tt-row"><span>Estado</span><span>'+esc(turno.estado)+'</span></div>':'')
         +(turno.sena?'<div class="ag-tt-row"><span>Seña</span><span>$'+Number(turno.sena).toLocaleString('es-AR')+'</span></div>':'')
         +'<div class="ag-tt-row"><span>Pago</span><span>'+(PAGO_L[turno.pago||'sin-seña']||'')+'</span></div>'
+        +(turno.monto?'<div class="ag-tt-row"><span>Monto total</span><span style="color:#1D9E75;font-weight:700;">$'+Number(turno.monto).toLocaleString('es-AR')+'</span></div>':'')
         +'<div class="ag-tt-row"><span>Asistencia</span><span>'+asistLabel+'</span></div>'
         +(turno.notas?'<div class="ag-tt-row" style="margin-top:5px;border-top:1px solid #e5e7eb;padding-top:5px;flex-direction:column;gap:2px;"><span>Notas</span><span style="font-size:11px;font-weight:400;white-space:pre-wrap">'+esc(turno.notas)+'</span></div>':'');
       tt.style.display='block';moveTT(e);
@@ -7588,8 +7617,53 @@ document.getElementById('ag-f-sena').addEventListener('input',function(){
     if(pagoSel.value==='señado')pagoSel.value='sin-seña';
   }
 });
-document.getElementById('ag-f-osde').addEventListener('change',function(){
+// ── Mostrar/ocultar campo Monto y autocompletar al cambiar estado de pago ──
+document.getElementById('ag-f-pago').addEventListener('change', function() {
+  var montoRow = document.getElementById('ag-monto-row');
+  var montoInp = document.getElementById('ag-f-monto');
+  var hint = document.getElementById('ag-monto-hint');
+  if (this.value === 'pagado') {
+    montoRow.style.display = '';
+    var prof = document.getElementById('ag-f-prof').value;
+    var arancel = getArancel(prof);
+    if (arancel > 0 && (!montoInp.value || montoInp.value === '0')) {
+      montoInp.value = arancel;
+    }
+    if (arancel > 0) {
+      var senaVal = parseFloat(document.getElementById('ag-f-sena').value) || 0;
+      if (senaVal > 0) {
+        hint.textContent = 'Arancel: $' + arancel.toLocaleString('es-AR') + ' · Seña: $' + senaVal.toLocaleString('es-AR');
+      } else {
+        hint.textContent = 'Arancel configurado: $' + arancel.toLocaleString('es-AR');
+      }
+    } else {
+      hint.textContent = '';
+    }
+  } else {
+    montoRow.style.display = 'none';
+  }
+});
+
+// Actualizar hint de monto si cambia el profesional mientras está en modo "pagado"
+document.getElementById('ag-f-prof').addEventListener('change', function() {
+  var pagoSel = document.getElementById('ag-f-pago');
+  if (pagoSel.value === 'pagado') {
+    var montoInp = document.getElementById('ag-f-monto');
+    var hint = document.getElementById('ag-monto-hint');
+    var arancel = getArancel(this.value);
+    if (arancel > 0) {
+      montoInp.value = arancel;
+      hint.textContent = 'Arancel configurado: $' + arancel.toLocaleString('es-AR');
+    }
+  }
+}, true); // capture para que corra antes del onchange de buildDateOptions
+
+document.getElementById('ag-f-osde').addEventListener('change', function(){
   document.getElementById('ag-pago-row').style.display=this.checked?'none':'';
+  if(this.checked){
+    document.getElementById('ag-monto-row').style.display='none';
+    document.getElementById('ag-f-monto').value='';
+  }
 });
 
 // Genera slots dinámicos según bloques de disponibilidad del prof
@@ -7741,6 +7815,19 @@ function openModal(ds,time,key,forcedProf,freeTime){
     document.getElementById('ag-f-notas').value=t.notas||'';
     document.getElementById('ag-f-osde').checked=t.osde?true:false;
     document.getElementById('ag-pago-row').style.display=t.osde?'none':'';
+    // Monto
+    var montoRowE=document.getElementById('ag-monto-row');
+    var montoInpE=document.getElementById('ag-f-monto');
+    if(t.pago==='pagado'&&!t.osde){
+      montoRowE.style.display='';
+      montoInpE.value=t.monto||'';
+      var hintE=document.getElementById('ag-monto-hint');
+      var arancelE=getArancel(t.prof||'BG');
+      hintE.textContent=arancelE>0?'Arancel: $'+arancelE.toLocaleString('es-AR'):'';
+    } else {
+      montoRowE.style.display='none';
+      montoInpE.value='';
+    }
   }else{
     document.getElementById('ag-f-paciente').value='';
     document.getElementById('ag-f-prof').value=prof;
@@ -7750,6 +7837,8 @@ function openModal(ds,time,key,forcedProf,freeTime){
     document.getElementById('ag-f-notas').value='';
     document.getElementById('ag-f-osde').checked=false;
     document.getElementById('ag-pago-row').style.display='';
+    document.getElementById('ag-monto-row').style.display='none';
+    document.getElementById('ag-f-monto').value='';
   }
   // Mostrar selector de profesional con valor correcto
   var profSel=document.getElementById('ag-f-prof');
@@ -7891,6 +7980,8 @@ document.getElementById('ag-btn-cancel').addEventListener('click',function(){
   if(freeTmEl){freeTmEl.style.display='none';freeTmEl.value='';}
   var timeSel=document.getElementById('ag-f-time');
   if(timeSel)timeSel.style.display='';
+  document.getElementById('ag-monto-row').style.display='none';
+  document.getElementById('ag-f-monto').value='';
   document.getElementById('ag-modal-bg').style.display='none';editKey=null;
 });
 document.getElementById('ag-modal-bg').addEventListener('click',function(e){
@@ -7899,6 +7990,8 @@ document.getElementById('ag-modal-bg').addEventListener('click',function(e){
     if(freeTmEl){freeTmEl.style.display='none';freeTmEl.value='';}
     var timeSel=document.getElementById('ag-f-time');
     if(timeSel)timeSel.style.display='';
+    document.getElementById('ag-monto-row').style.display='none';
+    document.getElementById('ag-f-monto').value='';
     document.getElementById('ag-modal-bg').style.display='none';editKey=null;
   }
 });
@@ -7985,12 +8078,19 @@ document.getElementById('ag-btn-save').addEventListener('click',function(){
   if(senaVal&&pagoVal==='sin-seña')pagoVal='señado';
   if(!senaVal&&pagoVal==='señado')pagoVal='sin-seña';
   var osdeVal=document.getElementById('ag-f-osde').checked;
+  var montoVal='';
+  if(!osdeVal && pagoVal==='pagado'){
+    montoVal=document.getElementById('ag-f-monto').value.trim()||'';
+    // Si no se ingresó monto y hay arancel configurado, usar el arancel
+    if(!montoVal){var _ar=getArancel(profVal);if(_ar>0)montoVal=String(_ar);}
+  }
   turnos[newKey]={
     paciente:document.getElementById('ag-f-paciente').value.trim(),
     prof:profVal,
     estado:document.getElementById('ag-f-estado').value,
     sena:osdeVal?'':senaVal,
     pago:osdeVal?'osde':pagoVal,
+    monto:montoVal||undefined,
     notas:document.getElementById('ag-f-notas').value,
     asistencia:prevAsist,
     extra:isExtra?true:undefined,
@@ -8002,6 +8102,8 @@ document.getElementById('ag-btn-save').addEventListener('click',function(){
   if(freeTmEl){freeTmEl.style.display='none';freeTmEl.value='';}
   var timeSel2=document.getElementById('ag-f-time');
   if(timeSel2)timeSel2.style.display='';
+  document.getElementById('ag-monto-row').style.display='none';
+  document.getElementById('ag-f-monto').value='';
   renderGrid();
 });
 // Turno extra: mostrar/ocultar input de horario libre
@@ -8630,6 +8732,93 @@ document.getElementById('ag-wapp-bg').addEventListener('click',function(e){
   if(e.target===this)this.style.display='none';
 });
 loadWapp();  // async, carga en background
+
+// ═══ ARANCELES POR PROFESIONAL ═══
+var LS_ARAN = 'urcym_ag_aranceles';
+var aranceles = {}; // { BG: 15000, OB: 12000, LA: 10000, SA: 10000, MA: 8000 }
+
+function loadAranceles() {
+  try {
+    var r = localStorage.getItem(LS_ARAN);
+    if (r) aranceles = JSON.parse(r);
+  } catch(e) {}
+  sb.from('urcym_agenda_config').select('value').eq('key', 'aranceles').maybeSingle()
+    .then(function(res) {
+      if (res.data && res.data.value) {
+        try { aranceles = JSON.parse(res.data.value); } catch(e) {}
+        try { localStorage.setItem(LS_ARAN, JSON.stringify(aranceles)); } catch(e) {}
+      }
+    }).catch(function() {});
+}
+
+function saveAranceles() {
+  try { localStorage.setItem(LS_ARAN, JSON.stringify(aranceles)); } catch(e) {}
+  sb.from('urcym_agenda_config').upsert({ key: 'aranceles', value: JSON.stringify(aranceles) }, { onConflict: 'key' })
+    .catch(function(e) { console.warn('[URCyM] saveAranceles error', e); });
+}
+
+function getArancel(prof) {
+  return aranceles[prof] ? Number(aranceles[prof]) : 0;
+}
+
+function renderAranBody() {
+  var profs = [
+    { key: 'BG', label: 'Dra. Bárbara Guerrero' },
+    { key: 'OB', label: 'Dr. Omar Bertani' },
+    { key: 'LA', label: 'Dra. López Armaretti' },
+    { key: 'SA', label: 'Dra. Saracho Ana' },
+    { key: 'MA', label: 'MAPA' }
+  ];
+  var html = '<div style="display:flex;flex-direction:column;gap:10px;">';
+  profs.forEach(function(p) {
+    var val = aranceles[p.key] || '';
+    html += '<div style="display:flex;align-items:center;gap:12px;">'
+      + '<span style="flex:1;font-size:13px;font-weight:500;color:#374151;">' + p.label + '</span>'
+      + '<div style="display:flex;align-items:center;gap:6px;">'
+      + '<span style="font-size:13px;color:#6b7280;">$</span>'
+      + '<input type="number" min="0" step="100" data-prof="' + p.key + '" value="' + val + '" placeholder="—" '
+      + 'style="width:120px;border:1.5px solid #e2e8f0;border-radius:8px;padding:7px 10px;font-size:13px;font-family:inherit;text-align:right;" '
+      + 'id="ag-aran-' + p.key + '">'
+      + '</div>'
+      + '</div>';
+  });
+  html += '</div>';
+  document.getElementById('ag-aran-body').innerHTML = html;
+}
+
+document.getElementById('ag-btn-aranceles').addEventListener('click', function() {
+  loadAranceles();
+  renderAranBody();
+  document.getElementById('ag-aran-bg').style.display = 'flex';
+});
+document.getElementById('ag-aran-cancel').addEventListener('click', function() {
+  document.getElementById('ag-aran-bg').style.display = 'none';
+});
+document.getElementById('ag-aran-bg').addEventListener('click', function(e) {
+  if (e.target === this) this.style.display = 'none';
+});
+document.getElementById('ag-aran-save').addEventListener('click', function() {
+  ['BG','OB','LA','SA','MA'].forEach(function(p) {
+    var inp = document.getElementById('ag-aran-' + p);
+    if (inp) {
+      var v = inp.value.trim();
+      if (v && !isNaN(Number(v)) && Number(v) > 0) aranceles[p] = Number(v);
+      else delete aranceles[p];
+    }
+  });
+  saveAranceles();
+  document.getElementById('ag-aran-bg').style.display = 'none';
+  // Toast de confirmación
+  var toast = document.createElement('div');
+  toast.style.cssText = 'position:fixed;bottom:24px;right:24px;background:#059669;color:white;padding:11px 18px;border-radius:10px;font-size:13px;font-weight:600;z-index:99999;box-shadow:0 4px 16px rgba(0,0,0,.2)';
+  toast.textContent = '✅ Aranceles guardados';
+  document.body.appendChild(toast);
+  setTimeout(function() { toast.remove(); }, 2500);
+});
+
+loadAranceles();
+
+// ═══ FIN ARANCELES ═══
 
 loadBlocked();
 loadLocal();  // async, carga en background y llama renderGrid al final
