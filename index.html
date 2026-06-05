@@ -7014,10 +7014,13 @@ function openOfferedPopup(e,ds,tm,prof){
   var btnLiberar=document.createElement('button');
   btnLiberar.className='ag-offered-popup-btn liberar';
   btnLiberar.innerHTML='✕ Liberar slot';
-  btnLiberar.onclick=function(){
+  btnLiberar.onclick=function(ev){
+    ev.stopPropagation();
     var key=ds+'_'+tm+'_'+prof;
     delete offeredSlots[key];
-    saveOffered();
+    // Guardar en localStorage de forma síncrona y en Supabase
+    try{localStorage.setItem(LS_OFFERED,JSON.stringify(offeredSlots));}catch(e){}
+    sb.from('urcym_agenda_config').upsert({key:'offered_slots',value:JSON.stringify(offeredSlots)},{onConflict:'key'}).catch(function(e){console.warn('[URCyM] saveOffered error',e);});
     closeOfferedPopup();
     renderGrid();
   };
@@ -7454,8 +7457,11 @@ function renderGrid(){
             if(!offeredSlots[offKey]){
               offeredSlots[offKey]=true;
               el2.classList.add('ofrecido');
-              saveOffered();
+            } else {
+              delete offeredSlots[offKey];
+              el2.classList.remove('ofrecido');
             }
+            saveOffered();
           });
         })(el,ds,item.tm,p);
         col.appendChild(el);
