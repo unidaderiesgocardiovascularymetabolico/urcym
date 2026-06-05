@@ -7405,7 +7405,10 @@ function renderGrid(){
     });
 
     // Institutional blocks — deferred until after layout so we know totalProfs
-    var pendingInstBlocks=instBlocks.filter(function(b){return b.startDate===ds||isBlockActiveOnDate(b,ds);});
+    var pendingInstBlocks=[];
+    instBlocks.forEach(function(b,realIdx){
+      if(b.startDate===ds||isBlockActiveOnDate(b,ds)) pendingInstBlocks.push({b:b,realIdx:realIdx});
+    });
 
     // ── Layout unificado: slots libres + turnos asignados comparten columnas ──
     var allItems=[];
@@ -7524,13 +7527,16 @@ function renderGrid(){
     });
 
     // Render institutional blocks now that totalProfs is known — spans full column width
-    pendingInstBlocks.forEach(function(b){
+    pendingInstBlocks.forEach(function(entry){
+      var b=entry.b, realIdx=entry.realIdx;
       var el=document.createElement('div');
       el.className='ag-nl-inst';
       el.style.top=topOf(b.from)+'px';
       el.style.height=heightOf(b.from,b.to)+'px';
       el.style.left='0';
       el.style.right='0';
+      el.style.cursor='pointer';
+      el.dataset.instIdx=realIdx;
       var icon=document.createElement('span');
       icon.className='ag-nl-inst-icon';
       icon.textContent='🏛';
@@ -7538,6 +7544,17 @@ function renderGrid(){
       var txt=document.createElement('span');
       txt.textContent=b.label||'Cierre institucional';
       el.appendChild(txt);
+      // Boton eliminar al hacer click
+      el.addEventListener('click',function(e){
+        e.stopPropagation();
+        var idx=parseInt(this.dataset.instIdx);
+        var lbl=(instBlocks[idx]&&instBlocks[idx].label)||'Cierre institucional';
+        if(confirm('¿Eliminar bloque institucional "'+lbl+'"?')){
+          instBlocks.splice(idx,1);
+          saveLocal();
+          renderGrid();
+        }
+      });
       col.appendChild(el);
     });
 
