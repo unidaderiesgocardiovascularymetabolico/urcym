@@ -1469,6 +1469,34 @@
       </div>
     </div>
 
+    <!-- MODAL OSDE TARIFAS -->
+    <div class="fin-modal-bg" id="fin-modal-osde-bg">
+      <div class="fin-modal">
+        <div class="fin-modal-title">🏥 Tarifas OSDE</div>
+        <p style="font-size:13px;color:var(--text-soft);margin-bottom:18px;line-height:1.5">
+          Configurá el valor que paga OSDE por consulta y por receta. El sistema contará automáticamente los turnos y recetas OSDE del mes y los sumará como ingreso.
+        </p>
+        <div class="fin-form-row">
+          <div class="fin-form-group">
+            <label>Valor consulta OSDE ($)</label>
+            <input type="number" id="fin-osde-consulta" placeholder="0" min="0" step="0.01"/>
+          </div>
+          <div class="fin-form-group">
+            <label>Valor receta OSDE ($)</label>
+            <input type="number" id="fin-osde-receta" placeholder="0" min="0" step="0.01"/>
+          </div>
+        </div>
+        <div id="fin-osde-preview" style="background:var(--gray);border-radius:10px;padding:12px 14px;margin-top:4px;font-size:13px;display:none;">
+          <div style="font-weight:600;color:var(--text);margin-bottom:6px">Este mes:</div>
+          <div id="fin-osde-preview-text" style="color:var(--text-soft);line-height:1.7"></div>
+        </div>
+        <div class="fin-form-actions">
+          <button class="fin-btn-cancel" onclick="finCerrarModalOsde()">Cancelar</button>
+          <button class="fin-btn-save" style="background:#00a651;" onclick="finGuardarTarifasOsde()">Guardar tarifas</button>
+        </div>
+      </div>
+    </div>
+
     <!-- HISTORIA CLINICA (LECTURA) -->
     <div class="page" id="page-historia_clinica">
       <div class="hc-topbar">
@@ -1636,6 +1664,7 @@
           <div class="page-subtitle">Ingresos, gastos y resumen del consultorio</div>
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="fin-btn-nuevo" style="background:#00a651;" onclick="finAbrirModalOsde()">🏥 Tarifas OSDE</button>
           <button class="fin-btn-nuevo teal" onclick="finAbrirModalIngreso()">+ Ingreso manual</button>
           <button class="fin-btn-nuevo red" onclick="finAbrirModalGasto()">+ Gasto</button>
         </div>
@@ -1667,6 +1696,7 @@
         <div class="fin-kpi"><div class="fin-kpi-label">Gastos del mes</div><div class="fin-kpi-val red" id="fin-kpi-gas">—</div><div class="fin-kpi-sub" id="fin-kpi-gas-sub">cargando...</div></div>
         <div class="fin-kpi"><div class="fin-kpi-label">Balance neto</div><div class="fin-kpi-val blue" id="fin-kpi-net">—</div><div class="fin-kpi-sub">ingresos − gastos</div></div>
         <div class="fin-kpi"><div class="fin-kpi-label">Recetas cobradas</div><div class="fin-kpi-val" id="fin-kpi-rec">—</div><div class="fin-kpi-sub" id="fin-kpi-rec-sub">cargando...</div></div>
+        <div class="fin-kpi" style="border-color:#00a651;"><div class="fin-kpi-label" style="color:#00a651;">OSDE del mes</div><div class="fin-kpi-val" id="fin-kpi-osde" style="color:#00a651;">—</div><div class="fin-kpi-sub" id="fin-kpi-osde-sub">configurar tarifas</div></div>
       </div>
 
       <!-- Contenido por tab -->
@@ -10418,11 +10448,24 @@ window.cargarProxConsultas = cargarProxConsultas;
       var gasRows = await sb.from('urcym_gastos').select('*').gte('fecha',desde).lte('fecha',hasta).order('fecha',{ascending:true});
       var gasList = (gasRows.data||[]);
 
+      // OSDE: contar turnos y recetas OSDE del mes
+      await finCargarTarifasOsde();
+      var countOsdeConsultas=0, countOsdeRecetas=0;
+      Object.keys(turnosData).forEach(function(key){
+        var parts=key.split('_'); if(parts.length<3) return;
+        var fecha=parts[0]; if(fecha<desde||fecha>hasta) return;
+        var t=turnosData[key];
+        if(t.osde===true||t.pago==='osde') countOsdeConsultas++;
+      });
+      var recOsdeRows=await sb.from('urcym_recetas').select('id').eq('tipo','osde').gte('fecha',desde).lte('fecha',hasta);
+      countOsdeRecetas=(recOsdeRows.data||[]).length;
+      var totalOsde=countOsdeConsultas*(finOsdeTarifas.consulta||0)+countOsdeRecetas*(finOsdeTarifas.receta||0);
+
       // KPIs
       var totalConsultas = turnosList.reduce(function(a,t){return a+t.monto;},0);
       var totalRecetas   = recList.reduce(function(a,r){return a+r.monto;},0);
       var totalIngManual = ingList.reduce(function(a,i){return a+i.monto;},0);
-      var totalIng       = totalConsultas + totalRecetas + totalIngManual;
+      var totalIng       = totalConsultas + totalRecetas + totalIngManual + totalOsde;
       var totalGas       = gasList.reduce(function(a,g){return a+Number(g.monto||0);},0);
       var balance        = totalIng - totalGas;
 
@@ -10431,6 +10474,9 @@ window.cargarProxConsultas = cargarProxConsultas;
       var kpiNet=$id('fin-kpi-net');
       if(kpiNet){ kpiNet.textContent=moneda(balance); kpiNet.className='fin-kpi-val '+(balance>=0?'green':'red'); }
       var kpiRec=$id('fin-kpi-rec'); if(kpiRec) kpiRec.textContent=moneda(totalRecetas);
+      var kpiOsde=$id('fin-kpi-osde'); if(kpiOsde) kpiOsde.textContent=moneda(totalOsde);
+      var kpiOsdeSub=$id('fin-kpi-osde-sub');
+      if(kpiOsdeSub) kpiOsdeSub.textContent=countOsdeConsultas+' consultas · '+countOsdeRecetas+' recetas';
       var kpiIngSub=$id('fin-kpi-ing-sub'); if(kpiIngSub) kpiIngSub.textContent=(turnosList.length+ingList.length)+' movimientos';
       var kpiGasSub=$id('fin-kpi-gas-sub'); if(kpiGasSub) kpiGasSub.textContent=gasList.length+' registros';
       var kpiRecSub=$id('fin-kpi-rec-sub'); if(kpiRecSub) kpiRecSub.textContent=recList.length+' recetas';
@@ -10440,10 +10486,11 @@ window.cargarProxConsultas = cargarProxConsultas;
       turnosList.forEach(function(t){ origenes['consulta']=(origenes['consulta']||0)+t.monto; });
       recList.forEach(function(r){ origenes[r.origen]=(origenes[r.origen]||0)+r.monto; });
       ingList.forEach(function(i){ origenes[i.categoria]=(origenes[i.categoria]||0)+i.monto; });
+      if(totalOsde>0) origenes['osde']=(origenes['osde']||0)+totalOsde;
 
       var resIngEl = $id('fin-res-ing-origen');
       if(resIngEl){
-        var lbl={consulta:'🩺 Consultas',receta_particular:'💊 Recetas particular',receta_osde:'🏥 Recetas OSDE',procedimiento:'🔬 Procedimientos',certificado:'📄 Certificados',otro:'📌 Otros',manual:'📌 Manual'};
+        var lbl={consulta:'🩺 Consultas',receta_particular:'💊 Recetas particular',receta_osde:'🏥 Recetas OSDE',osde:'🏥 OSDE',procedimiento:'🔬 Procedimientos',certificado:'📄 Certificados',otro:'📌 Otros',manual:'📌 Manual'};
         var rows=Object.keys(origenes).filter(function(k){return origenes[k]>0;}).map(function(k){
           return '<div class="fin-resumen-row"><span>'+(lbl[k]||k)+'</span><span class="fin-monto-pos">'+moneda(origenes[k])+'</span></div>';
         });
@@ -10594,6 +10641,83 @@ window.cargarProxConsultas = cargarProxConsultas;
     var el=$id(id);
     if(el) el.addEventListener('click',function(e){ if(e.target===el) finCerrarModals(); });
   });
+
+  // ── OSDE Tarifas
+  var finOsdeTarifas = {consulta:0, receta:0};
+
+  async function finCargarTarifasOsde(){
+    try {
+      var r = await sb.from('urcym_agenda_config').select('value').eq('key','fin_osde_tarifas').maybeSingle();
+      if(r.data && r.data.value) finOsdeTarifas = JSON.parse(r.data.value);
+    } catch(e){}
+    return finOsdeTarifas;
+  }
+
+  window.finAbrirModalOsde = async function(){
+    await finCargarTarifasOsde();
+    var ci=$id('fin-osde-consulta'); if(ci) ci.value=finOsdeTarifas.consulta||'';
+    var ri=$id('fin-osde-receta'); if(ri) ri.value=finOsdeTarifas.receta||'';
+    // Mostrar preview con conteo del mes actual
+    var prev=$id('fin-osde-preview');
+    var prevTxt=$id('fin-osde-preview-text');
+    if(prev && prevTxt){
+      var counts = await finContarOsdeMes();
+      prevTxt.innerHTML = 
+        '🩺 Turnos OSDE este mes: <b>'+counts.consultas+'</b> × $'+moneda(finOsdeTarifas.consulta||0)+' = <b class="fin-monto-pos">'+moneda(counts.consultas*(finOsdeTarifas.consulta||0))+'</b><br>'+
+        '💊 Recetas OSDE este mes: <b>'+counts.recetas+'</b> × $'+moneda(finOsdeTarifas.receta||0)+' = <b class="fin-monto-pos">'+moneda(counts.recetas*(finOsdeTarifas.receta||0))+'</b>';
+      prev.style.display='block';
+    }
+    var bg=$id('fin-modal-osde-bg'); if(bg) bg.className='fin-modal-bg open';
+  };
+
+  window.finCerrarModalOsde = function(){
+    var bg=$id('fin-modal-osde-bg'); if(bg) bg.className='fin-modal-bg';
+  };
+  var elOsde=$id('fin-modal-osde-bg');
+  if(elOsde) elOsde.addEventListener('click',function(e){ if(e.target===elOsde) finCerrarModalOsde(); });
+
+  window.finGuardarTarifasOsde = async function(){
+    var c=parseFloat($id('fin-osde-consulta').value)||0;
+    var r=parseFloat($id('fin-osde-receta').value)||0;
+    finOsdeTarifas={consulta:c,receta:r};
+    var btn=document.querySelector('#fin-modal-osde-bg .fin-btn-save');
+    if(btn){btn.disabled=true;btn.textContent='Guardando...';}
+    var val=JSON.stringify(finOsdeTarifas);
+    // Upsert en agenda_config
+    var existing=await sb.from('urcym_agenda_config').select('id').eq('key','fin_osde_tarifas').maybeSingle();
+    var res;
+    if(existing.data) res=await sb.from('urcym_agenda_config').update({value:val}).eq('key','fin_osde_tarifas');
+    else res=await sb.from('urcym_agenda_config').insert({key:'fin_osde_tarifas',value:val});
+    if(btn){btn.disabled=false;btn.textContent='Guardar tarifas';}
+    if(res.error){alert('Error: '+res.error.message);return;}
+    finCerrarModalOsde();
+    finCargar();
+  };
+
+  async function finContarOsdeMes(){
+    var r=mesRango(finMesActual);
+    var consultas=0, recetas=0;
+    // Contar turnos OSDE del mes
+    try{
+      var cfgR=await sb.from('urcym_agenda_config').select('value').eq('key','turnos').maybeSingle();
+      if(cfgR.data&&cfgR.data.value){
+        var td=JSON.parse(cfgR.data.value);
+        Object.keys(td).forEach(function(key){
+          var parts=key.split('_'); if(parts.length<3) return;
+          var fecha=parts[0];
+          if(fecha<r.desde||fecha>r.hasta) return;
+          var t=td[key];
+          if(t.osde===true || t.pago==='osde') consultas++;
+        });
+      }
+    }catch(e){}
+    // Contar recetas OSDE del mes
+    try{
+      var recR=await sb.from('urcym_recetas').select('id').eq('tipo','osde').gte('fecha',r.desde).lte('fecha',r.hasta);
+      recetas=(recR.data||[]).length;
+    }catch(e){}
+    return {consultas:consultas, recetas:recetas};
+  }
 
   // ── Guardar Gasto
   window.finGuardarGasto=function(){
