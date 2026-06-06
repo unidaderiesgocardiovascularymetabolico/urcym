@@ -1616,6 +1616,8 @@
         .fin-i-fila-monto { padding:8px 12px; border:1.5px solid var(--border); border-radius:9px; font-size:14px; font-weight:700; font-family:var(--font-main); text-align:right; background:var(--gray); color:var(--text); outline:none; width:130px; flex-shrink:0; }
         .fin-i-fila-monto:focus { border-color:#1D9E75; background:white; box-shadow:0 0 0 2px rgba(29,158,117,.15); }
         .fin-i-fila-monto.filled { border-color:#1D9E75; background:#f0fbf6; color:#1a7a40; }
+        .fin-i-fila-monto.ajuste { border-color:var(--red) !important; background:var(--red-light) !important; color:var(--red) !important; }
+        .fin-i-fila.fila-ajuste { background:#fff5f5; border-left:3px solid var(--red); }
         .fin-i-fila-nota { padding:8px 10px; border:1.5px solid var(--border); border-radius:9px; font-size:12px; font-family:var(--font-main); background:var(--gray); color:var(--text); outline:none; flex:1.5; min-width:120px; }
         .fin-i-fila-nota:focus { border-color:var(--blue); background:white; }
         .fin-i-fila-del { width:30px; height:30px; border-radius:8px; border:1.5px solid var(--red-light); background:var(--red-light); color:var(--red); font-size:16px; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:all .15s; flex-shrink:0; }
@@ -10578,11 +10580,12 @@ window.cargarProxConsultas = cargarProxConsultas;
         if(t.osde===true || t.pago==='osde'){
           turnosOsdeList.push({fecha:fecha, hora:parts[1], prof:t.prof, paciente:t.paciente||'', monto:0, pago:'osde', origen:'osde'});
         } else {
-          // Incluir TODOS los turnos particulares (pagados, sin seña, señados)
+          var senaNum = (t.pago==='señado' || t.sena) ? (parseFloat(t.sena)||0) : 0;
           turnosList.push({
             fecha:fecha, hora:parts[1], prof:t.prof, paciente:t.paciente||'',
-            monto: t.pago==='pagado' && t.monto ? Number(t.monto) : 0,
-            pago: t.pago||'sin-seña', origen:'urcym'
+            monto:   t.pago==='pagado' && t.monto ? Number(t.monto) : 0,
+            sena:    senaNum,
+            pago:    t.pago||'sin-seña', origen:'urcym'
           });
         }
       });
@@ -10619,8 +10622,10 @@ window.cargarProxConsultas = cargarProxConsultas;
       countOsdeRecetas=(recOsdeRows.data||[]).length;
       var totalOsde=countOsdeConsultas*(finOsdeTarifas.consulta||0)+countOsdeRecetas*(finOsdeTarifas.receta||0);
 
-      // KPIs — solo turnos efectivamente cobrados
-      var totalConsultas = turnosList.filter(function(t){return t.pago==='pagado';}).reduce(function(a,t){return a+t.monto;},0);
+      // KPIs — pagado + señas cobradas
+      var totalConsultas = turnosList.reduce(function(a,t){
+        return a + t.monto + t.sena; // monto=0 si no pagado, sena=0 si no señado
+      }, 0);
       var totalRecetas   = recList.reduce(function(a,r){return a+r.monto;},0);
       var totalIngManual = ingList.reduce(function(a,i){return a+i.monto;},0);
       var totalIng       = totalConsultas + totalRecetas + totalIngManual;
@@ -10639,9 +10644,12 @@ window.cargarProxConsultas = cargarProxConsultas;
       var kpiGasSub=$id('fin-kpi-gas-sub'); if(kpiGasSub) kpiGasSub.textContent=gasList.length+' registros';
       var kpiRecSub=$id('fin-kpi-rec-sub'); if(kpiRecSub) kpiRecSub.textContent=recList.length+' recetas';
 
-      // Resumen ingresos por origen — solo cobrados
+      // Resumen ingresos por origen — pagado + señas
       var origenes = {};
-      turnosList.filter(function(t){return t.pago==='pagado';}).forEach(function(t){ origenes['urcym']=(origenes['urcym']||0)+t.monto; });
+      turnosList.forEach(function(t){
+        var v = t.monto + t.sena;
+        if(v > 0) origenes['urcym'] = (origenes['urcym']||0) + v;
+      });
       recList.forEach(function(r){ origenes[r.origen]=(origenes[r.origen]||0)+r.monto; });
       ingList.forEach(function(i){ origenes[i.categoria]=(origenes[i.categoria]||0)+i.monto; });
       // OSDE no suma a ingresos reales — es estimado a cobrar
@@ -10747,18 +10755,21 @@ window.cargarProxConsultas = cargarProxConsultas;
             id:'turnos', icon:'🩺', titulo:'Turnos URCyM',
             items: turnosList.sort(function(a,b){return a.fecha>b.fecha?-1:1;}),
             renderFila: function(r){
-              var pagoLbl = {pagado:'✅ Pagado', senado:'🔶 Señado', 'sin-seña':'⬜ Sin seña'}[r.pago] || r.pago;
-              var pagoCls = {pagado:'pagado', senado:'senado', 'sin-seña':'sin-sena'}[r.pago] || 'sin-sena';
-              var monto = r.pago==='pagado' ? '<span class="fin-monto-pos">'+moneda(r.monto)+'</span>' : '<span style="color:var(--text-soft);font-size:12px;">—</span>';
+              var pagoLbl = {pagado:'✅ Pagado', señado:'🔶 Señado', 'sin-seña':'⬜ Sin seña'}[r.pago] || r.pago;
+              var pagoCls = {pagado:'pagado', señado:'senado', 'sin-seña':'sin-sena'}[r.pago] || 'sin-sena';
+              var montoStr = '';
+              if(r.pago==='pagado' && r.monto>0) montoStr = '<span class="fin-monto-pos">'+moneda(r.monto)+'</span>';
+              else if(r.sena>0) montoStr = '<span class="fin-monto-pos">'+moneda(r.sena)+'</span><span style="font-size:10px;color:#b45309;margin-left:4px;">(seña)</span>';
+              else montoStr = '<span style="color:var(--text-soft);font-size:12px;">—</span>';
               return '<tr><td>'+finFmtFecha(r.fecha)+'</td>'
                 +'<td style="font-size:12px;color:var(--text-soft);">'+r.hora+'</td>'
                 +'<td style="font-weight:600">'+r.paciente+'</td>'
                 +'<td style="font-size:12px;color:var(--text-soft);">'+(PROF_FULL_FIN[r.prof]||r.prof||'')+'</td>'
                 +'<td><span class="fin-pago-badge '+pagoCls+'">'+pagoLbl+'</span></td>'
-                +'<td>'+monto+'</td>'
+                +'<td>'+montoStr+'</td>'
                 +'<td></td></tr>';
             },
-            totalFn: function(items){ return items.filter(function(t){return t.pago==='pagado';}).reduce(function(a,t){return a+t.monto;},0); },
+            totalFn: function(items){ return items.reduce(function(a,t){return a+t.monto+t.sena;},0); },
             cols: ['Fecha','Hora','Paciente','Prof.','Estado','Monto','']
           },
           {
@@ -10795,11 +10806,19 @@ window.cargarProxConsultas = cargarProxConsultas;
             items: ingList.sort(function(a,b){return a.fecha>b.fecha?-1:1;}),
             renderFila: function(r){
               var lbl = CAT_ING_LBL[r.categoria]||r.categoria||'Manual';
-              return '<tr><td>'+finFmtFecha(r.fecha)+'</td>'
-                +'<td><span class="fin-badge ingreso">'+lbl+'</span></td>'
-                +'<td style="max-width:180px;font-size:12px">'+( r.descripcion||'—')+'</td>'
-                +'<td></td><td><span class="fin-pago-badge pagado">✅ Cobrado</span></td>'
-                +'<td class="fin-monto-pos">'+moneda(r.monto)+'</td>'
+              var esAjuste = r.categoria === 'ajuste' || r.monto < 0;
+              var montoStr = esAjuste
+                ? '<span class="fin-monto-neg">−'+moneda(Math.abs(r.monto))+'</span>'
+                : '<span class="fin-monto-pos">'+moneda(r.monto)+'</span>';
+              var estadoBadge = esAjuste
+                ? '<span class="fin-pago-badge sin-sena">⚠️ Ajuste</span>'
+                : '<span class="fin-pago-badge pagado">✅ Cobrado</span>';
+              return '<tr'+(esAjuste?' style="background:#fff5f5;"':'')+'>'+
+                '<td>'+finFmtFecha(r.fecha)+'</td>'
+                +'<td><span class="fin-badge '+(esAjuste?'gasto':'ingreso')+'">'+lbl+'</span></td>'
+                +'<td style="max-width:180px;font-size:12px">'+(r.descripcion||'—')+'</td>'
+                +'<td></td><td>'+estadoBadge+'</td>'
+                +'<td>'+montoStr+'</td>'
                 +'<td><button class="fin-btn-del" onclick="finEliminarIngreso('+r.id+')">✕</button></td></tr>';
             },
             totalFn: function(items){ return items.reduce(function(a,i){return a+i.monto;},0); },
@@ -10997,24 +11016,39 @@ window.cargarProxConsultas = cargarProxConsultas;
     {v:'salita',       icon:'🏠', l:'Salita'},
     {v:'osde',         icon:'🏥', l:'OSDE (cobrado)'},
     {v:'otro',         icon:'💰', l:'Otros'},
+    {v:'ajuste',       icon:'⚠️', l:'Ajuste / Error (resta)'},
   ];
 
   function finIngActualizarTotal() {
     var total = 0, count = 0;
     document.querySelectorAll('.fin-i-fila-monto').forEach(function(inp) {
+      var fila = inp.closest('.fin-i-fila');
+      var cat = fila ? fila.querySelector('.fin-i-fila-cat').value : '';
       var m = parseFloat(inp.value) || 0;
-      if (m > 0) { total += m; count++; inp.classList.add('filled'); }
-      else inp.classList.remove('filled');
+      var esAjuste = cat === 'ajuste';
+      var efectivo = esAjuste ? -Math.abs(m) : m;
+      if (m !== 0) {
+        count++;
+        inp.classList.add('filled');
+        if(esAjuste) inp.classList.add('ajuste');
+        else inp.classList.remove('ajuste');
+      } else {
+        inp.classList.remove('filled','ajuste');
+      }
+      total += efectivo;
     });
-    var tv = $id('fin-i-total-val'); if (tv) tv.textContent = moneda(total);
-    var tc = $id('fin-i-count'); if (tc) tc.textContent = count + (count === 1 ? ' ingreso' : ' ingresos');
+    var tv = $id('fin-i-total-val');
+    if (tv) {
+      tv.textContent = moneda(Math.abs(total));
+      tv.style.color = total < 0 ? 'var(--red)' : '';
+    }
+    var tc = $id('fin-i-count'); if (tc) tc.textContent = count + (count === 1 ? ' línea' : ' líneas');
   }
 
   var finIngFilaIdx = 0;
   window.finIngAgregarFila = function(cat, monto, nota, rowId) {
     var wrap = $id('fin-i-filas-wrap');
     if (!wrap) return;
-    // Quitar estado vacío
     var empty = wrap.querySelector('.fin-i-empty');
     if (empty) empty.remove();
 
@@ -11024,24 +11058,37 @@ window.cargarProxConsultas = cargarProxConsultas;
       return '<option value="' + c.v + '"' + (c.v === (cat || 'sapiens_bar') ? ' selected' : '') + '>' + c.icon + ' ' + c.l + '</option>';
     }).join('');
 
+    var isAjuste = cat === 'ajuste';
     var div = document.createElement('div');
-    div.className = 'fin-i-fila';
+    div.className = 'fin-i-fila' + (isAjuste ? ' fila-ajuste' : '');
     div.setAttribute('data-idx', idx);
     if (rowId) div.setAttribute('data-row-id', rowId);
     div.innerHTML =
       '<span class="fin-i-fila-num">' + idx + '</span>'
-      + '<select class="fin-i-fila-cat" onchange="finIngActualizarTotal()">' + catOpts + '</select>'
+      + '<select class="fin-i-fila-cat" onchange="finIngOnCatChange(this)">' + catOpts + '</select>'
       + '<input type="number" class="fin-i-fila-monto" placeholder="$ monto" min="0" step="0.01"'
-      +   (monto ? ' value="' + monto + '"' : '') + ' oninput="finIngActualizarTotal()"/>'
-      + '<input type="text" class="fin-i-fila-nota" placeholder="Nota / paciente (opcional)"'
+      +   (monto !== undefined && monto !== '' ? ' value="' + Math.abs(monto) + '"' : '') + ' oninput="finIngActualizarTotal()"/>'
+      + '<input type="text" class="fin-i-fila-nota" placeholder="' + (isAjuste ? 'Motivo del ajuste...' : 'Nota / paciente (opcional)') + '"'
       +   (nota ? ' value="' + nota + '"' : '') + '/>'
       + '<button class="fin-i-fila-del" title="Eliminar" onclick="finIngQuitarFila(this,' + (rowId || 'null') + ')">×</button>';
     wrap.appendChild(div);
     finIngActualizarTotal();
-    // Foco en monto
     setTimeout(function() { div.querySelector('.fin-i-fila-monto').focus(); }, 50);
   };
   window.finIngAgregarFila = window.finIngAgregarFila;
+
+  window.finIngOnCatChange = function(sel) {
+    var fila = sel.closest('.fin-i-fila');
+    var nota = fila.querySelector('.fin-i-fila-nota');
+    if (sel.value === 'ajuste') {
+      fila.classList.add('fila-ajuste');
+      nota.placeholder = 'Motivo del ajuste...';
+    } else {
+      fila.classList.remove('fila-ajuste');
+      nota.placeholder = 'Nota / paciente (opcional)';
+    }
+    finIngActualizarTotal();
+  };
 
   window.finIngQuitarFila = async function(btn, rowId) {
     // Si tiene ID de base de datos, eliminar de Supabase
@@ -11123,13 +11170,14 @@ window.cargarProxConsultas = cargarProxConsultas;
     if (!fecha) { alert('Seleccioná una fecha'); return; }
     var registros = [];
     document.querySelectorAll('.fin-i-fila').forEach(function(div) {
-      // Saltar filas que ya tienen row-id (ya guardadas)
       if (div.getAttribute('data-row-id')) return;
       var cat = div.querySelector('.fin-i-fila-cat').value;
       var m = parseFloat(div.querySelector('.fin-i-fila-monto').value) || 0;
       var nota = div.querySelector('.fin-i-fila-nota').value.trim();
-      if (m <= 0) return;
-      registros.push({ fecha: fecha, categoria: cat, descripcion: nota, monto: m, origen: 'manual' });
+      if (m === 0) return;
+      // Ajuste se guarda como negativo
+      var montoFinal = cat === 'ajuste' ? -Math.abs(m) : Math.abs(m);
+      registros.push({ fecha: fecha, categoria: cat, descripcion: nota, monto: montoFinal, origen: 'manual' });
     });
     if (!registros.length) { alert('Ingresá al menos un monto'); return; }
     var btn = $id('fin-i-btn-save');
