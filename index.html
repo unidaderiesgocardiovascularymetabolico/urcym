@@ -1652,7 +1652,6 @@
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
           <button class="fin-btn-nuevo" onclick="finAbrirModalOsde()">🏥 Tarifas OSDE</button>
-          <button class="fin-btn-nuevo teal" onclick="finAbrirModalIngreso()">+ Ingreso manual</button>
           <button class="fin-btn-nuevo red" onclick="finAbrirModalGasto()">+ Gasto</button>
         </div>
       </div>
@@ -10554,6 +10553,7 @@ window.cargarProxConsultas = cargarProxConsultas;
       } catch(e){}
 
       var turnosList = [];
+      var turnosOsdeList = [];
       Object.keys(turnosData).forEach(function(key){
         var parts = key.split('_');
         if(parts.length<3) return;
@@ -10562,6 +10562,10 @@ window.cargarProxConsultas = cargarProxConsultas;
         var t = turnosData[key];
         if(t.pago==='pagado' && t.monto && Number(t.monto)>0){
           turnosList.push({fecha:fecha, hora:parts[1], prof:t.prof, paciente:t.paciente||'', monto:Number(t.monto), origen:'urcym'});
+        }
+        // Turnos OSDE (agendados como OSDE aunque no tengan monto cobrado aún)
+        if(t.osde===true || t.pago==='osde'){
+          turnosOsdeList.push({fecha:fecha, hora:parts[1], prof:t.prof, paciente:t.paciente||'', monto:0, origen:'osde'});
         }
       });
 
@@ -10719,6 +10723,8 @@ window.cargarProxConsultas = cargarProxConsultas;
       // Tabla detalle ingresos
       var allIng=[];
       turnosList.forEach(function(t){ allIng.push({fecha:t.fecha,tipo:'consulta',desc:(t.paciente||'Consulta')+(t.prof?' — '+(PROF_FULL_FIN[t.prof]||t.prof):''),prof:PROF_FULL_FIN[t.prof]||t.prof||'',monto:t.monto,id:null}); });
+      // Turnos OSDE — aparecen en detalle aunque no tengan monto cobrado aún
+      turnosOsdeList.forEach(function(t){ allIng.push({fecha:t.fecha,tipo:'osde',desc:(t.paciente||'Consulta OSDE')+(t.prof?' — '+(PROF_FULL_FIN[t.prof]||t.prof):''),prof:PROF_FULL_FIN[t.prof]||t.prof||'',monto:t.monto,id:null,osde:true}); });
       recList.forEach(function(r){ allIng.push({fecha:r.fecha,tipo:r.origen,desc:r.descripcion,prof:'',monto:r.monto,id:null}); });
       ingList.forEach(function(i){ allIng.push({fecha:i.fecha,tipo:i.categoria||'manual',desc:i.descripcion||'Ingreso manual',prof:PROF_FULL_FIN[i.prof]||i.prof||'',monto:i.monto,id:i.id}); });
       allIng.sort(function(a,b){return a.fecha>b.fecha?-1:1;});
@@ -10728,9 +10734,20 @@ window.cargarProxConsultas = cargarProxConsultas;
         if(!allIng.length){ tbody.innerHTML='<tr><td colspan="6" class="fin-empty">Sin ingresos en este mes</td></tr>'; }
         else {
           tbody.innerHTML=allIng.map(function(r){
-            var badge='<span class="fin-badge '+r.tipo+'">'+(CAT_ING_LBL[r.tipo]||r.tipo)+'</span>';
+            var badgeLbl = r.osde ? '🏥 OSDE' : (CAT_ING_LBL[r.tipo]||r.tipo);
+            var badgeCls = r.osde ? 'osde' : r.tipo;
+            var badge='<span class="fin-badge '+badgeCls+'">'+badgeLbl+'</span>';
+            var montoCell = r.osde
+              ? '<span style="font-size:11px;color:var(--blue);font-style:italic;">a cobrar</span>'
+              : '<span class="fin-monto-pos">'+moneda(r.monto)+'</span>';
             var delBtn=r.id?'<button class="fin-btn-del" onclick="finEliminarIngreso('+r.id+')">✕</button>':'';
-            return '<tr><td>'+finFmtFecha(r.fecha)+'</td><td>'+badge+'</td><td style="max-width:200px">'+r.desc+'</td><td style="font-size:12px;color:var(--text-soft)">'+r.prof+'</td><td class="fin-monto-pos">'+moneda(r.monto)+'</td><td>'+delBtn+'</td></tr>';
+            return '<tr'+(r.osde?' style="background:#f0f6ff;"':'')+'>'
+              +'<td>'+finFmtFecha(r.fecha)+'</td>'
+              +'<td>'+badge+'</td>'
+              +'<td style="max-width:200px">'+r.desc+'</td>'
+              +'<td style="font-size:12px;color:var(--text-soft)">'+r.prof+'</td>'
+              +'<td>'+montoCell+'</td>'
+              +'<td>'+delBtn+'</td></tr>';
           }).join('');
         }
       }
@@ -10880,11 +10897,12 @@ window.cargarProxConsultas = cargarProxConsultas;
 
   // ── Opciones de categoría ingresos
   var FIN_ING_CATS = [
-    {v:'sapiens_bar',  icon:'🏥', l:'SAPIENS Bar'},
-    {v:'sapiens_omar', icon:'🏥', l:'SAPIENS Omar'},
+    {v:'sapiens_bar',  icon:'🏢', l:'SAPIENS Bar'},
+    {v:'sapiens_omar', icon:'🏢', l:'SAPIENS Omar'},
     {v:'ceq',          icon:'🏛️', l:'CEQ'},
     {v:'cem',          icon:'🏛️', l:'CEM'},
     {v:'salita',       icon:'🏠', l:'Salita'},
+    {v:'osde',         icon:'🏥', l:'OSDE (cobrado)'},
     {v:'otro',         icon:'💰', l:'Otros'},
   ];
 
