@@ -1489,11 +1489,30 @@
         .fin-badge.receta-o { background:var(--teal-light); color:#2a8587; }
         .fin-badge.gasto { background:var(--red-light); color:var(--red); }
         .fin-badge.ingreso { background:#e8f9f0; color:#1D9E75; }
-        .fin-badge.osde { background:var(--teal-light); color:#2a8587; }
+        .fin-badge.osde { background:#e0f2fe; color:#0369a1; }
         .fin-monto-pos { color:#1D9E75; font-weight:700; }
         .fin-monto-neg { color:var(--red); font-weight:700; }
         .fin-empty { text-align:center; padding:40px; color:var(--text-soft); font-size:13px; }
         .fin-loading { text-align:center; padding:32px; color:var(--text-soft); font-size:13px; }
+        /* badges estado de pago */
+        .fin-pago-badge { display:inline-block; padding:2px 8px; border-radius:20px; font-size:10px; font-weight:700; white-space:nowrap; }
+        .fin-pago-badge.pagado   { background:#e8f9f0; color:#1D9E75; }
+        .fin-pago-badge.osde     { background:#e0f2fe; color:#0369a1; }
+        .fin-pago-badge.senado   { background:#fff8e1; color:#b45309; }
+        .fin-pago-badge.sin-sena { background:#f4f7fb; color:#9ca3af; }
+        /* Detalle colapsable */
+        .fin-detalle-grupo { border:1px solid var(--border); border-radius:14px; overflow:hidden; margin-bottom:10px; background:white; }
+        .fin-detalle-grupo-header { display:flex; align-items:center; justify-content:space-between; padding:11px 16px; cursor:pointer; background:var(--gray); transition:background .15s; user-select:none; }
+        .fin-detalle-grupo-header:hover { background:#e8eef5; }
+        .fin-detalle-grupo-header.open { background:var(--blue-light); }
+        .fin-detalle-grupo-title { display:flex; align-items:center; gap:10px; font-size:13px; font-weight:700; color:var(--text); }
+        .fin-detalle-grupo-meta { display:flex; align-items:center; gap:10px; }
+        .fin-detalle-grupo-total { font-size:13px; font-weight:700; color:#1D9E75; }
+        .fin-detalle-grupo-count { font-size:11px; color:var(--text-soft); background:white; border-radius:20px; padding:2px 8px; border:1px solid var(--border); }
+        .fin-detalle-grupo-arrow { font-size:12px; color:var(--text-soft); transition:transform .2s; }
+        .fin-detalle-grupo-header.open .fin-detalle-grupo-arrow { transform:rotate(180deg); }
+        .fin-detalle-grupo-body { display:none; }
+        .fin-detalle-grupo-body.open { display:block; }
 
         /* ── Botón nuevo ── */
         .fin-btn-nuevo { display:flex; align-items:center; gap:7px; padding:9px 18px; border-radius:10px; border:none; background:var(--blue); color:white; font-family:var(--font-main); font-size:13px; font-weight:600; cursor:pointer; transition:background .2s; }
@@ -1829,13 +1848,8 @@
       </div>
 
       <div id="fin-content-detalle" style="display:none;">
-        <div class="fin-table-wrap">
-          <table class="fin-table">
-            <thead><tr>
-              <th>Fecha</th><th>Tipo</th><th>Descripción</th><th>Prof.</th><th>Monto</th><th></th>
-            </tr></thead>
-            <tbody id="fin-tbody-detalle"><tr><td colspan="6" class="fin-loading">Cargando...</td></tr></tbody>
-          </table>
+        <div id="fin-detalle-grupos">
+          <div class="fin-loading" style="padding:32px;text-align:center;color:var(--text-soft)">Cargando...</div>
         </div>
       </div>
 
@@ -10560,12 +10574,16 @@ window.cargarProxConsultas = cargarProxConsultas;
         var fecha = parts[0];
         if(fecha < desde || fecha > hasta) return;
         var t = turnosData[key];
-        if(t.pago==='pagado' && t.monto && Number(t.monto)>0){
-          turnosList.push({fecha:fecha, hora:parts[1], prof:t.prof, paciente:t.paciente||'', monto:Number(t.monto), origen:'urcym'});
-        }
-        // Turnos OSDE (agendados como OSDE aunque no tengan monto cobrado aún)
+        if(!t.paciente) return; // ignorar slots vacíos
         if(t.osde===true || t.pago==='osde'){
-          turnosOsdeList.push({fecha:fecha, hora:parts[1], prof:t.prof, paciente:t.paciente||'', monto:0, origen:'osde'});
+          turnosOsdeList.push({fecha:fecha, hora:parts[1], prof:t.prof, paciente:t.paciente||'', monto:0, pago:'osde', origen:'osde'});
+        } else {
+          // Incluir TODOS los turnos particulares (pagados, sin seña, señados)
+          turnosList.push({
+            fecha:fecha, hora:parts[1], prof:t.prof, paciente:t.paciente||'',
+            monto: t.pago==='pagado' && t.monto ? Number(t.monto) : 0,
+            pago: t.pago||'sin-seña', origen:'urcym'
+          });
         }
       });
 
@@ -10601,8 +10619,8 @@ window.cargarProxConsultas = cargarProxConsultas;
       countOsdeRecetas=(recOsdeRows.data||[]).length;
       var totalOsde=countOsdeConsultas*(finOsdeTarifas.consulta||0)+countOsdeRecetas*(finOsdeTarifas.receta||0);
 
-      // KPIs
-      var totalConsultas = turnosList.reduce(function(a,t){return a+t.monto;},0);
+      // KPIs — solo turnos efectivamente cobrados
+      var totalConsultas = turnosList.filter(function(t){return t.pago==='pagado';}).reduce(function(a,t){return a+t.monto;},0);
       var totalRecetas   = recList.reduce(function(a,r){return a+r.monto;},0);
       var totalIngManual = ingList.reduce(function(a,i){return a+i.monto;},0);
       var totalIng       = totalConsultas + totalRecetas + totalIngManual;
@@ -10621,9 +10639,9 @@ window.cargarProxConsultas = cargarProxConsultas;
       var kpiGasSub=$id('fin-kpi-gas-sub'); if(kpiGasSub) kpiGasSub.textContent=gasList.length+' registros';
       var kpiRecSub=$id('fin-kpi-rec-sub'); if(kpiRecSub) kpiRecSub.textContent=recList.length+' recetas';
 
-      // Resumen ingresos por origen
+      // Resumen ingresos por origen — solo cobrados
       var origenes = {};
-      turnosList.forEach(function(t){ origenes['urcym']=(origenes['urcym']||0)+t.monto; });
+      turnosList.filter(function(t){return t.pago==='pagado';}).forEach(function(t){ origenes['urcym']=(origenes['urcym']||0)+t.monto; });
       recList.forEach(function(r){ origenes[r.origen]=(origenes[r.origen]||0)+r.monto; });
       ingList.forEach(function(i){ origenes[i.categoria]=(origenes[i.categoria]||0)+i.monto; });
       // OSDE no suma a ingresos reales — es estimado a cobrar
@@ -10720,37 +10738,104 @@ window.cargarProxConsultas = cargarProxConsultas;
           : '<div style="font-size:12px;color:var(--text-soft);padding:14px 18px">Sin gastos registrados este mes</div>';
       }
 
-      // Tabla detalle ingresos
-      var allIng=[];
-      turnosList.forEach(function(t){ allIng.push({fecha:t.fecha,tipo:'consulta',desc:(t.paciente||'Consulta')+(t.prof?' — '+(PROF_FULL_FIN[t.prof]||t.prof):''),prof:PROF_FULL_FIN[t.prof]||t.prof||'',monto:t.monto,id:null}); });
-      // Turnos OSDE — aparecen en detalle aunque no tengan monto cobrado aún
-      turnosOsdeList.forEach(function(t){ allIng.push({fecha:t.fecha,tipo:'osde',desc:(t.paciente||'Consulta OSDE')+(t.prof?' — '+(PROF_FULL_FIN[t.prof]||t.prof):''),prof:PROF_FULL_FIN[t.prof]||t.prof||'',monto:t.monto,id:null,osde:true}); });
-      recList.forEach(function(r){ allIng.push({fecha:r.fecha,tipo:r.origen,desc:r.descripcion,prof:'',monto:r.monto,id:null}); });
-      ingList.forEach(function(i){ allIng.push({fecha:i.fecha,tipo:i.categoria||'manual',desc:i.descripcion||'Ingreso manual',prof:PROF_FULL_FIN[i.prof]||i.prof||'',monto:i.monto,id:i.id}); });
-      allIng.sort(function(a,b){return a.fecha>b.fecha?-1:1;});
+      // ── Detalle colapsable por grupo
+      var gruposEl = $id('fin-detalle-grupos');
+      if(gruposEl){
+        // Armar grupos
+        var grupos = [
+          {
+            id:'turnos', icon:'🩺', titulo:'Turnos URCyM',
+            items: turnosList.sort(function(a,b){return a.fecha>b.fecha?-1:1;}),
+            renderFila: function(r){
+              var pagoLbl = {pagado:'✅ Pagado', senado:'🔶 Señado', 'sin-seña':'⬜ Sin seña'}[r.pago] || r.pago;
+              var pagoCls = {pagado:'pagado', senado:'senado', 'sin-seña':'sin-sena'}[r.pago] || 'sin-sena';
+              var monto = r.pago==='pagado' ? '<span class="fin-monto-pos">'+moneda(r.monto)+'</span>' : '<span style="color:var(--text-soft);font-size:12px;">—</span>';
+              return '<tr><td>'+finFmtFecha(r.fecha)+'</td>'
+                +'<td style="font-size:12px;color:var(--text-soft);">'+r.hora+'</td>'
+                +'<td style="font-weight:600">'+r.paciente+'</td>'
+                +'<td style="font-size:12px;color:var(--text-soft);">'+(PROF_FULL_FIN[r.prof]||r.prof||'')+'</td>'
+                +'<td><span class="fin-pago-badge '+pagoCls+'">'+pagoLbl+'</span></td>'
+                +'<td>'+monto+'</td>'
+                +'<td></td></tr>';
+            },
+            totalFn: function(items){ return items.filter(function(t){return t.pago==='pagado';}).reduce(function(a,t){return a+t.monto;},0); },
+            cols: ['Fecha','Hora','Paciente','Prof.','Estado','Monto','']
+          },
+          {
+            id:'osde', icon:'🏥', titulo:'Turnos OSDE',
+            items: turnosOsdeList.sort(function(a,b){return a.fecha>b.fecha?-1:1;}),
+            renderFila: function(r){
+              return '<tr style="background:#f0f6ff"><td>'+finFmtFecha(r.fecha)+'</td>'
+                +'<td style="font-size:12px;color:var(--text-soft);">'+r.hora+'</td>'
+                +'<td style="font-weight:600">'+r.paciente+'</td>'
+                +'<td style="font-size:12px;color:var(--text-soft);">'+(PROF_FULL_FIN[r.prof]||r.prof||'')+'</td>'
+                +'<td><span class="fin-pago-badge osde">🏥 OSDE</span></td>'
+                +'<td style="font-size:11px;color:var(--blue);font-style:italic;">a cobrar</td>'
+                +'<td></td></tr>';
+            },
+            totalFn: function(){ return 0; },
+            cols: ['Fecha','Hora','Paciente','Prof.','','','']
+          },
+          {
+            id:'recetas', icon:'💊', titulo:'Recetas',
+            items: recList.sort(function(a,b){return a.fecha>b.fecha?-1:1;}),
+            renderFila: function(r){
+              var tipoBadge = r.origen==='receta_particular'
+                ? '<span class="fin-badge receta-p">Particular</span>'
+                : '<span class="fin-badge receta-o">OSDE</span>';
+              return '<tr><td>'+finFmtFecha(r.fecha)+'</td><td colspan="2">'+tipoBadge+'</td>'
+                +'<td></td><td><span class="fin-pago-badge pagado">✅ Cobrada</span></td>'
+                +'<td class="fin-monto-pos">'+moneda(r.monto)+'</td><td></td></tr>';
+            },
+            totalFn: function(items){ return items.reduce(function(a,r){return a+r.monto;},0); },
+            cols: ['Fecha','Tipo','','','','Monto','']
+          },
+          {
+            id:'manuales', icon:'💰', titulo:'Ingresos manuales',
+            items: ingList.sort(function(a,b){return a.fecha>b.fecha?-1:1;}),
+            renderFila: function(r){
+              var lbl = CAT_ING_LBL[r.categoria]||r.categoria||'Manual';
+              return '<tr><td>'+finFmtFecha(r.fecha)+'</td>'
+                +'<td><span class="fin-badge ingreso">'+lbl+'</span></td>'
+                +'<td style="max-width:180px;font-size:12px">'+( r.descripcion||'—')+'</td>'
+                +'<td></td><td><span class="fin-pago-badge pagado">✅ Cobrado</span></td>'
+                +'<td class="fin-monto-pos">'+moneda(r.monto)+'</td>'
+                +'<td><button class="fin-btn-del" onclick="finEliminarIngreso('+r.id+')">✕</button></td></tr>';
+            },
+            totalFn: function(items){ return items.reduce(function(a,i){return a+i.monto;},0); },
+            cols: ['Fecha','Categoría','Descripción','','','Monto','']
+          }
+        ];
 
-      var tbody=$id('fin-tbody-detalle');
-      if(tbody){
-        if(!allIng.length){ tbody.innerHTML='<tr><td colspan="6" class="fin-empty">Sin ingresos en este mes</td></tr>'; }
-        else {
-          tbody.innerHTML=allIng.map(function(r){
-            var badgeLbl = r.osde ? '🏥 OSDE' : (CAT_ING_LBL[r.tipo]||r.tipo);
-            var badgeCls = r.osde ? 'osde' : r.tipo;
-            var badge='<span class="fin-badge '+badgeCls+'">'+badgeLbl+'</span>';
-            var montoCell = r.osde
-              ? '<span style="font-size:11px;color:var(--blue);font-style:italic;">a cobrar</span>'
-              : '<span class="fin-monto-pos">'+moneda(r.monto)+'</span>';
-            var delBtn=r.id?'<button class="fin-btn-del" onclick="finEliminarIngreso('+r.id+')">✕</button>':'';
-            return '<tr'+(r.osde?' style="background:#f0f6ff;"':'')+'>'
-              +'<td>'+finFmtFecha(r.fecha)+'</td>'
-              +'<td>'+badge+'</td>'
-              +'<td style="max-width:200px">'+r.desc+'</td>'
-              +'<td style="font-size:12px;color:var(--text-soft)">'+r.prof+'</td>'
-              +'<td>'+montoCell+'</td>'
-              +'<td>'+delBtn+'</td></tr>';
-          }).join('');
-        }
+        var html = '';
+        grupos.forEach(function(g){
+          if(!g.items.length) return;
+          var tot = g.totalFn(g.items);
+          var totStr = tot > 0 ? moneda(tot) : '';
+          html += '<div class="fin-detalle-grupo">'
+            +'<div class="fin-detalle-grupo-header" onclick="finDetalleToggle(this)">'
+              +'<div class="fin-detalle-grupo-title">'+g.icon+' '+g.titulo+'</div>'
+              +'<div class="fin-detalle-grupo-meta">'
+                +(totStr ? '<span class="fin-detalle-grupo-total">'+totStr+'</span>' : '')
+                +'<span class="fin-detalle-grupo-count">'+g.items.length+' registros</span>'
+                +'<span class="fin-detalle-grupo-arrow">▼</span>'
+              +'</div>'
+            +'</div>'
+            +'<div class="fin-detalle-grupo-body">'
+              +'<table class="fin-table"><thead><tr>'
+              +g.cols.map(function(c){ return '<th>'+c+'</th>'; }).join('')
+              +'</tr></thead><tbody>'
+              +g.items.map(g.renderFila).join('')
+              +'</tbody></table>'
+            +'</div>'
+          +'</div>';
+        });
+
+        gruposEl.innerHTML = html || '<div class="fin-empty">Sin movimientos en este mes</div>';
       }
+
+      // tbody legacy — ya no se usa pero por si acaso
+      var tbody=$id('fin-tbody-detalle'); if(tbody) tbody.innerHTML='';
 
       // Tabla gastos
       var tbodyG=$id('fin-tbody-gastos');
@@ -10835,6 +10920,14 @@ window.cargarProxConsultas = cargarProxConsultas;
       barsEl.innerHTML='<div style="font-size:12px;color:var(--text-soft);padding:8px">Error al cargar gráfico</div>';
     }
   }
+
+  // ── Toggle grupos colapsables en Detalle
+  window.finDetalleToggle = function(header) {
+    var body = header.nextElementSibling;
+    var isOpen = body.classList.contains('open');
+    header.classList.toggle('open', !isOpen);
+    body.classList.toggle('open', !isOpen);
+  };
 
   // ── Tabs
   window.finShowTab=function(tab){
