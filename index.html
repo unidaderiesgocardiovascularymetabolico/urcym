@@ -1379,9 +1379,269 @@
       <div class="empty-state"><div>🔬</div><p>Próximamente disponible</p></div>
     </div>
     <div class="page" id="page-finanzas">
-      <div class="page-title">Finanzas</div>
-      <div class="page-subtitle">Módulo en desarrollo</div>
-      <div class="empty-state"><div>💳</div><p>Próximamente disponible</p></div>
+      <!-- ESTILOS FINANZAS -->
+      <style>
+        /* ── Layout ── */
+        .fin-header { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; margin-bottom:20px; }
+        .fin-tabs { display:flex; gap:4px; background:var(--gray); border-radius:12px; padding:4px; }
+        .fin-tab { padding:7px 18px; border-radius:9px; border:none; background:transparent; font-family:var(--font-main); font-size:13px; font-weight:500; color:var(--text-soft); cursor:pointer; transition:all .2s; white-space:nowrap; }
+        .fin-tab.active { background:white; color:var(--blue); font-weight:600; box-shadow:0 1px 4px rgba(48,137,202,.18); }
+        .fin-filtros { display:flex; gap:10px; flex-wrap:wrap; align-items:center; background:white; border:1px solid var(--border); border-radius:14px; padding:12px 16px; margin-bottom:20px; }
+        .fin-filtros label { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.07em; color:var(--text-soft); margin-bottom:3px; display:block; }
+        .fin-filtros select, .fin-filtros input[type=month] { padding:7px 10px; border:1.5px solid var(--border); border-radius:9px; font-size:13px; font-family:var(--font-main); background:var(--gray); color:var(--text); outline:none; cursor:pointer; }
+        .fin-filtros select:focus, .fin-filtros input[type=month]:focus { border-color:var(--blue); background:white; }
+
+        /* ── KPIs ── */
+        .fin-kpis { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:16px; margin-bottom:24px; }
+        .fin-kpi { background:white; border-radius:16px; border:1px solid var(--border); padding:20px 22px; }
+        .fin-kpi-label { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.08em; color:var(--text-soft); margin-bottom:6px; }
+        .fin-kpi-val { font-family:var(--font-display); font-size:26px; font-weight:700; color:var(--text); line-height:1; }
+        .fin-kpi-val.green { color:#1D9E75; }
+        .fin-kpi-val.red { color:var(--red); }
+        .fin-kpi-val.blue { color:var(--blue); }
+        .fin-kpi-sub { font-size:11px; color:var(--text-soft); margin-top:4px; }
+
+        /* ── Tabla ── */
+        .fin-table-wrap { background:white; border-radius:16px; border:1px solid var(--border); overflow:hidden; }
+        .fin-table { width:100%; border-collapse:collapse; font-size:13px; }
+        .fin-table th { background:var(--gray); padding:10px 14px; text-align:left; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:var(--text-soft); white-space:nowrap; }
+        .fin-table td { padding:10px 14px; border-top:1px solid var(--border); vertical-align:middle; }
+        .fin-table tr:hover td { background:#fafcff; }
+        .fin-badge { display:inline-block; padding:2px 9px; border-radius:20px; font-size:11px; font-weight:600; }
+        .fin-badge.consulta { background:#e8f3fc; color:var(--blue); }
+        .fin-badge.receta-p { background:#f3eeff; color:#7c5cbf; }
+        .fin-badge.receta-o { background:var(--teal-light); color:#2a8587; }
+        .fin-badge.gasto { background:var(--red-light); color:var(--red); }
+        .fin-badge.ingreso { background:#e8f9f0; color:#1D9E75; }
+        .fin-badge.osde { background:var(--teal-light); color:#2a8587; }
+        .fin-monto-pos { color:#1D9E75; font-weight:700; }
+        .fin-monto-neg { color:var(--red); font-weight:700; }
+        .fin-empty { text-align:center; padding:40px; color:var(--text-soft); font-size:13px; }
+        .fin-loading { text-align:center; padding:32px; color:var(--text-soft); font-size:13px; }
+
+        /* ── Botón nuevo ── */
+        .fin-btn-nuevo { display:flex; align-items:center; gap:7px; padding:9px 18px; border-radius:10px; border:none; background:var(--blue); color:white; font-family:var(--font-main); font-size:13px; font-weight:600; cursor:pointer; transition:background .2s; }
+        .fin-btn-nuevo:hover { background:var(--blue-dark); }
+        .fin-btn-nuevo.red { background:var(--red); }
+        .fin-btn-nuevo.red:hover { background:#c73d33; }
+        .fin-btn-nuevo.teal { background:var(--teal); }
+        .fin-btn-nuevo.teal:hover { background:#3aa5a7; }
+
+        /* ── Modal gasto/ingreso ── */
+        .fin-modal-bg { display:none; position:fixed; inset:0; background:rgba(0,0,0,.35); z-index:3000; align-items:center; justify-content:center; padding:20px; }
+        .fin-modal-bg.open { display:flex; }
+        .fin-modal { background:white; border-radius:20px; padding:28px 28px 24px; width:100%; max-width:460px; animation:fadeUp .25s ease; }
+        .fin-modal-title { font-family:var(--font-display); font-size:17px; font-weight:700; color:var(--text); margin-bottom:20px; }
+        .fin-form-row { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:14px; }
+        .fin-form-row.full { grid-template-columns:1fr; }
+        .fin-form-group { display:flex; flex-direction:column; gap:5px; }
+        .fin-form-group label { font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.06em; color:var(--text-soft); }
+        .fin-form-group input, .fin-form-group select, .fin-form-group textarea { padding:9px 12px; border:1.5px solid var(--border); border-radius:10px; font-size:13px; font-family:var(--font-main); background:var(--gray); color:var(--text); outline:none; }
+        .fin-form-group input:focus, .fin-form-group select:focus, .fin-form-group textarea:focus { border-color:var(--blue); background:white; box-shadow:0 0 0 3px var(--blue-glow); }
+        .fin-form-actions { display:flex; gap:10px; margin-top:20px; justify-content:flex-end; }
+        .fin-btn-cancel { padding:9px 18px; border-radius:10px; border:1.5px solid var(--border); background:white; font-family:var(--font-main); font-size:13px; font-weight:500; color:var(--text-soft); cursor:pointer; }
+        .fin-btn-save { padding:9px 22px; border-radius:10px; border:none; background:var(--blue); color:white; font-family:var(--font-main); font-size:13px; font-weight:600; cursor:pointer; }
+        .fin-btn-save:hover { background:var(--blue-dark); }
+        .fin-btn-save.red { background:var(--red); }
+        .fin-btn-del { padding:5px 10px; border-radius:7px; border:1.5px solid var(--red-light); background:var(--red-light); color:var(--red); font-size:11px; font-weight:600; cursor:pointer; font-family:var(--font-main); transition:all .15s; }
+        .fin-btn-del:hover { background:var(--red); color:white; }
+
+        /* ── Gráfico barras ── */
+        .fin-chart-wrap { background:white; border:1px solid var(--border); border-radius:16px; padding:20px 22px; margin-bottom:24px; }
+        .fin-chart-title { font-family:var(--font-display); font-size:14px; font-weight:700; color:var(--text); margin-bottom:14px; }
+        .fin-chart-bars { display:flex; align-items:flex-end; gap:8px; height:120px; }
+        .fin-chart-bar-wrap { flex:1; display:flex; flex-direction:column; align-items:center; gap:4px; }
+        .fin-chart-bar-inner { width:100%; display:flex; flex-direction:column; justify-content:flex-end; height:100px; }
+        .fin-chart-bar { width:100%; border-radius:5px 5px 0 0; min-height:3px; transition:height .3s; }
+        .fin-chart-bar.ing { background:linear-gradient(180deg,#48d9a4 0%,#1D9E75 100%); }
+        .fin-chart-bar.gasto { background:linear-gradient(180deg,#f08080 0%,var(--red) 100%); }
+        .fin-chart-label { font-size:9px; color:var(--text-soft); font-weight:600; text-align:center; }
+        .fin-chart-legend { display:flex; gap:16px; margin-top:10px; }
+        .fin-chart-legend-item { display:flex; align-items:center; gap:5px; font-size:11px; color:var(--text-soft); }
+        .fin-chart-legend-dot { width:10px; height:10px; border-radius:50%; }
+
+        /* Resumen mes tabla */
+        .fin-resumen-grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:24px; }
+        .fin-resumen-card { background:white; border-radius:14px; border:1px solid var(--border); padding:16px 18px; }
+        .fin-resumen-card h4 { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.07em; color:var(--text-soft); margin-bottom:10px; }
+        .fin-resumen-row { display:flex; justify-content:space-between; align-items:center; padding:5px 0; border-bottom:1px solid var(--border); font-size:13px; }
+        .fin-resumen-row:last-child { border-bottom:none; font-weight:700; }
+        .fin-resumen-row span:last-child { font-weight:600; }
+      </style>
+
+      <!-- Header -->
+      <div class="fin-header">
+        <div>
+          <div class="page-title">💰 Finanzas</div>
+          <div class="page-subtitle">Ingresos, gastos y resumen del consultorio</div>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="fin-btn-nuevo teal" onclick="finAbrirModalIngreso()">+ Ingreso manual</button>
+          <button class="fin-btn-nuevo red" onclick="finAbrirModalGasto()">+ Gasto</button>
+        </div>
+      </div>
+
+      <!-- Filtros -->
+      <div class="fin-filtros">
+        <div>
+          <label>Mes</label>
+          <input type="month" id="fin-filtro-mes" onchange="finCargar()"/>
+        </div>
+        <div>
+          <label>Vista</label>
+          <div class="fin-tabs">
+            <button class="fin-tab active" id="fin-tab-resumen" onclick="finShowTab('resumen')">Resumen</button>
+            <button class="fin-tab" id="fin-tab-detalle" onclick="finShowTab('detalle')">Detalle</button>
+            <button class="fin-tab" id="fin-tab-gastos" onclick="finShowTab('gastos')">Gastos</button>
+          </div>
+        </div>
+        <div style="margin-left:auto;">
+          <label>&nbsp;</label>
+          <button onclick="finExportarPDF()" style="padding:7px 14px;border-radius:9px;border:1.5px solid var(--border);background:white;font-size:12px;font-family:var(--font-main);cursor:pointer;color:var(--text-soft);">📄 Exportar PDF</button>
+        </div>
+      </div>
+
+      <!-- KPIs -->
+      <div class="fin-kpis" id="fin-kpis">
+        <div class="fin-kpi"><div class="fin-kpi-label">Ingresos del mes</div><div class="fin-kpi-val green" id="fin-kpi-ing">—</div><div class="fin-kpi-sub" id="fin-kpi-ing-sub">cargando...</div></div>
+        <div class="fin-kpi"><div class="fin-kpi-label">Gastos del mes</div><div class="fin-kpi-val red" id="fin-kpi-gas">—</div><div class="fin-kpi-sub" id="fin-kpi-gas-sub">cargando...</div></div>
+        <div class="fin-kpi"><div class="fin-kpi-label">Balance neto</div><div class="fin-kpi-val blue" id="fin-kpi-net">—</div><div class="fin-kpi-sub">ingresos − gastos</div></div>
+        <div class="fin-kpi"><div class="fin-kpi-label">Recetas cobradas</div><div class="fin-kpi-val" id="fin-kpi-rec">—</div><div class="fin-kpi-sub" id="fin-kpi-rec-sub">cargando...</div></div>
+      </div>
+
+      <!-- Contenido por tab -->
+      <div id="fin-content-resumen">
+        <div class="fin-chart-wrap" id="fin-chart-wrap">
+          <div class="fin-chart-title">Evolución mensual (últimos 6 meses)</div>
+          <div class="fin-chart-bars" id="fin-chart-bars"><div class="fin-loading">Cargando gráfico...</div></div>
+          <div class="fin-chart-legend">
+            <div class="fin-chart-legend-item"><div class="fin-chart-legend-dot" style="background:#1D9E75"></div>Ingresos</div>
+            <div class="fin-chart-legend-item"><div class="fin-chart-legend-dot" style="background:var(--red)"></div>Gastos</div>
+          </div>
+        </div>
+        <div class="fin-resumen-grid" id="fin-resumen-grid">
+          <div class="fin-resumen-card">
+            <h4>Ingresos por origen</h4>
+            <div id="fin-res-ing-origen"><div class="fin-loading">Cargando...</div></div>
+          </div>
+          <div class="fin-resumen-card">
+            <h4>Gastos por categoría</h4>
+            <div id="fin-res-gas-cat"><div class="fin-loading">Cargando...</div></div>
+          </div>
+        </div>
+      </div>
+
+      <div id="fin-content-detalle" style="display:none;">
+        <div class="fin-table-wrap">
+          <table class="fin-table">
+            <thead><tr>
+              <th>Fecha</th><th>Tipo</th><th>Descripción</th><th>Prof.</th><th>Monto</th><th></th>
+            </tr></thead>
+            <tbody id="fin-tbody-detalle"><tr><td colspan="6" class="fin-loading">Cargando...</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div id="fin-content-gastos" style="display:none;">
+        <div class="fin-table-wrap">
+          <table class="fin-table">
+            <thead><tr>
+              <th>Fecha</th><th>Categoría</th><th>Descripción</th><th>Monto</th><th></th>
+            </tr></thead>
+            <tbody id="fin-tbody-gastos"><tr><td colspan="5" class="fin-loading">Cargando...</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- MODAL GASTO -->
+    <div class="fin-modal-bg" id="fin-modal-gasto-bg">
+      <div class="fin-modal">
+        <div class="fin-modal-title">📤 Registrar Gasto</div>
+        <div class="fin-form-row">
+          <div class="fin-form-group">
+            <label>Fecha</label>
+            <input type="date" id="fin-g-fecha"/>
+          </div>
+          <div class="fin-form-group">
+            <label>Monto ($)</label>
+            <input type="number" id="fin-g-monto" placeholder="0" min="0" step="0.01"/>
+          </div>
+        </div>
+        <div class="fin-form-row full">
+          <div class="fin-form-group">
+            <label>Categoría</label>
+            <select id="fin-g-categoria">
+              <option value="alquiler">Alquiler</option>
+              <option value="insumos">Insumos médicos</option>
+              <option value="administrativo">Administrativo</option>
+              <option value="servicios">Servicios (luz/agua/internet)</option>
+              <option value="honorarios">Honorarios / sueldos</option>
+              <option value="impuestos">Impuestos / aportes</option>
+              <option value="equipamiento">Equipamiento</option>
+              <option value="otro">Otro</option>
+            </select>
+          </div>
+        </div>
+        <div class="fin-form-row full">
+          <div class="fin-form-group">
+            <label>Descripción</label>
+            <input type="text" id="fin-g-desc" placeholder="Detalle del gasto..."/>
+          </div>
+        </div>
+        <div class="fin-form-actions">
+          <button class="fin-btn-cancel" onclick="finCerrarModals()">Cancelar</button>
+          <button class="fin-btn-save red" onclick="finGuardarGasto()">Guardar gasto</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- MODAL INGRESO MANUAL -->
+    <div class="fin-modal-bg" id="fin-modal-ing-bg">
+      <div class="fin-modal">
+        <div class="fin-modal-title">📥 Registrar Ingreso</div>
+        <div class="fin-form-row">
+          <div class="fin-form-group">
+            <label>Fecha</label>
+            <input type="date" id="fin-i-fecha"/>
+          </div>
+          <div class="fin-form-group">
+            <label>Monto ($)</label>
+            <input type="number" id="fin-i-monto" placeholder="0" min="0" step="0.01"/>
+          </div>
+        </div>
+        <div class="fin-form-row">
+          <div class="fin-form-group">
+            <label>Categoría</label>
+            <select id="fin-i-categoria">
+              <option value="consulta">Consulta</option>
+              <option value="procedimiento">Procedimiento</option>
+              <option value="certificado">Certificado</option>
+              <option value="otro">Otro</option>
+            </select>
+          </div>
+          <div class="fin-form-group">
+            <label>Profesional</label>
+            <select id="fin-i-prof">
+              <option value="">Sin especificar</option>
+              <option value="BG">Dra. Guerrero</option>
+              <option value="OB">Dr. Bertani</option>
+              <option value="LA">Dra. López A.</option>
+              <option value="SA">Dra. Saracho</option>
+            </select>
+          </div>
+        </div>
+        <div class="fin-form-row full">
+          <div class="fin-form-group">
+            <label>Descripción / Paciente</label>
+            <input type="text" id="fin-i-desc" placeholder="Detalle del ingreso..."/>
+          </div>
+        </div>
+        <div class="fin-form-actions">
+          <button class="fin-btn-cancel" onclick="finCerrarModals()">Cancelar</button>
+          <button class="fin-btn-save" onclick="finGuardarIngreso()">Guardar ingreso</button>
+        </div>
+      </div>
     </div>
 
     <!-- HISTORIA CLINICA (LECTURA) -->
@@ -10034,5 +10294,438 @@ window.cargarProxConsultas = cargarProxConsultas;
   window.addEventListener('scroll', updateNombreVisibility, { passive: true });
 })();
 </script>
+<script>
+/* ══════════════════════════════════════════════════════
+   MÓDULO FINANZAS URCyM
+   Tablas Supabase requeridas:
+
+   CREATE TABLE IF NOT EXISTS urcym_gastos (
+     id          bigserial PRIMARY KEY,
+     fecha       date        NOT NULL,
+     categoria   text        NOT NULL,
+     descripcion text,
+     monto       numeric     NOT NULL DEFAULT 0,
+     created_at  timestamptz DEFAULT now()
+   );
+
+   CREATE TABLE IF NOT EXISTS urcym_ingresos (
+     id          bigserial PRIMARY KEY,
+     fecha       date        NOT NULL,
+     categoria   text        NOT NULL DEFAULT 'consulta',
+     descripcion text,
+     prof        text,
+     monto       numeric     NOT NULL DEFAULT 0,
+     origen      text        NOT NULL DEFAULT 'manual',
+     created_at  timestamptz DEFAULT now()
+   );
+══════════════════════════════════════════════════════ */
+(function(){
+  var finTabActual = 'resumen';
+  var finMesActual = '';
+  var PROF_FULL_FIN = {BG:'Guerrero',OB:'Bertani',LA:'López A.',SA:'Saracho',MA:'MAPA'};
+  var CAT_GAS_LBL = {alquiler:'Alquiler',insumos:'Insumos',administrativo:'Administrativo',
+    servicios:'Servicios',honorarios:'Honorarios',impuestos:'Impuestos',equipamiento:'Equipamiento',otro:'Otro'};
+  var CAT_ING_LBL = {consulta:'Consulta',procedimiento:'Procedimiento',certificado:'Certificado',
+    receta_particular:'Receta particular',receta_osde:'Receta OSDE',otro:'Otro',manual:'Manual'};
+
+  function $id(id){ return document.getElementById(id); }
+  function moneda(n){ return '$'+Number(n||0).toLocaleString('es-AR',{minimumFractionDigits:0,maximumFractionDigits:0}); }
+  function mesLabel(ym){
+    var meses=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+    var p=ym.split('-'); return meses[parseInt(p[1])-1]+' '+p[0];
+  }
+  function hoyYM(){
+    var d=new Date(); var y=d.getFullYear(); var m=d.getMonth()+1;
+    return y+'-'+(m<10?'0':'')+m;
+  }
+  function hoyISO(){
+    var d=new Date(); return d.toISOString().split('T')[0];
+  }
+  function mesRango(ym){
+    var p=ym.split('-'); var y=parseInt(p[0]); var m=parseInt(p[1]);
+    var desde=ym+'-01';
+    var lastDay=new Date(y,m,0).getDate();
+    var hasta=ym+'-'+(lastDay<10?'0':'')+lastDay;
+    return {desde:desde,hasta:hasta};
+  }
+  function finFmtFecha(iso){
+    if(!iso) return '';
+    var p=iso.split('-'); return p[2]+'/'+p[1]+'/'+p[0];
+  }
+
+  // ── Init
+  window.finInit = function(){
+    var inp=$id('fin-filtro-mes');
+    if(inp && !inp.value){ inp.value=hoyYM(); }
+    finMesActual=inp?inp.value:hoyYM();
+    finCargar();
+  };
+
+  // ── Cargar
+  window.finCargar = function(){
+    var inp=$id('fin-filtro-mes');
+    finMesActual=inp?inp.value:hoyYM();
+    if(!finMesActual) finMesActual=hoyYM();
+    var r=mesRango(finMesActual);
+    finCargarDatos(r.desde, r.hasta);
+    finCargarGrafico();
+  };
+
+  async function finCargarDatos(desde, hasta){
+    ['fin-kpi-ing','fin-kpi-gas','fin-kpi-net','fin-kpi-rec'].forEach(function(id){
+      var el=$id(id); if(el) el.textContent='...';
+    });
+    try {
+      // Turnos pagados
+      var turnosData = {};
+      try {
+        var cfgRows = await sb.from('urcym_agenda_config').select('value').eq('key','turnos').maybeSingle();
+        if(cfgRows.data && cfgRows.data.value) turnosData = JSON.parse(cfgRows.data.value);
+      } catch(e){}
+
+      var turnosList = [];
+      Object.keys(turnosData).forEach(function(key){
+        var parts = key.split('_');
+        if(parts.length<3) return;
+        var fecha = parts[0];
+        if(fecha < desde || fecha > hasta) return;
+        var t = turnosData[key];
+        if(t.pago==='pagado' && t.monto && Number(t.monto)>0){
+          turnosList.push({fecha:fecha, hora:parts[1], prof:t.prof, paciente:t.paciente||'', monto:Number(t.monto), origen:'consulta'});
+        }
+      });
+
+      // Recetas
+      var recRows = await sb.from('urcym_recetas').select('*').gte('fecha',desde).lte('fecha',hasta);
+      var recList = (recRows.data||[]).map(function(r){
+        return {fecha:r.fecha, hora:r.hora||'', monto:Number(r.monto||0),
+          origen: r.tipo==='particular'?'receta_particular':'receta_osde',
+          descripcion: r.tipo==='particular'?'Receta particular':'Receta OSDE', prof:''};
+      });
+
+      // Ingresos manuales
+      var ingRows = await sb.from('urcym_ingresos').select('*').gte('fecha',desde).lte('fecha',hasta).order('fecha',{ascending:true});
+      var ingList = (ingRows.data||[]).map(function(r){
+        return {id:r.id, fecha:r.fecha, monto:Number(r.monto||0), origen:r.origen||'manual',
+          categoria:r.categoria, descripcion:r.descripcion||'', prof:r.prof||''};
+      });
+
+      // Gastos
+      var gasRows = await sb.from('urcym_gastos').select('*').gte('fecha',desde).lte('fecha',hasta).order('fecha',{ascending:true});
+      var gasList = (gasRows.data||[]);
+
+      // KPIs
+      var totalConsultas = turnosList.reduce(function(a,t){return a+t.monto;},0);
+      var totalRecetas   = recList.reduce(function(a,r){return a+r.monto;},0);
+      var totalIngManual = ingList.reduce(function(a,i){return a+i.monto;},0);
+      var totalIng       = totalConsultas + totalRecetas + totalIngManual;
+      var totalGas       = gasList.reduce(function(a,g){return a+Number(g.monto||0);},0);
+      var balance        = totalIng - totalGas;
+
+      var kpiIng=$id('fin-kpi-ing'); if(kpiIng) kpiIng.textContent=moneda(totalIng);
+      var kpiGas=$id('fin-kpi-gas'); if(kpiGas) kpiGas.textContent=moneda(totalGas);
+      var kpiNet=$id('fin-kpi-net');
+      if(kpiNet){ kpiNet.textContent=moneda(balance); kpiNet.className='fin-kpi-val '+(balance>=0?'green':'red'); }
+      var kpiRec=$id('fin-kpi-rec'); if(kpiRec) kpiRec.textContent=moneda(totalRecetas);
+      var kpiIngSub=$id('fin-kpi-ing-sub'); if(kpiIngSub) kpiIngSub.textContent=(turnosList.length+ingList.length)+' movimientos';
+      var kpiGasSub=$id('fin-kpi-gas-sub'); if(kpiGasSub) kpiGasSub.textContent=gasList.length+' registros';
+      var kpiRecSub=$id('fin-kpi-rec-sub'); if(kpiRecSub) kpiRecSub.textContent=recList.length+' recetas';
+
+      // Resumen ingresos por origen
+      var origenes = {};
+      turnosList.forEach(function(t){ origenes['consulta']=(origenes['consulta']||0)+t.monto; });
+      recList.forEach(function(r){ origenes[r.origen]=(origenes[r.origen]||0)+r.monto; });
+      ingList.forEach(function(i){ origenes[i.categoria]=(origenes[i.categoria]||0)+i.monto; });
+
+      var resIngEl = $id('fin-res-ing-origen');
+      if(resIngEl){
+        var lbl={consulta:'🩺 Consultas',receta_particular:'💊 Recetas particular',receta_osde:'🏥 Recetas OSDE',procedimiento:'🔬 Procedimientos',certificado:'📄 Certificados',otro:'📌 Otros',manual:'📌 Manual'};
+        var rows=Object.keys(origenes).filter(function(k){return origenes[k]>0;}).map(function(k){
+          return '<div class="fin-resumen-row"><span>'+(lbl[k]||k)+'</span><span class="fin-monto-pos">'+moneda(origenes[k])+'</span></div>';
+        });
+        rows.push('<div class="fin-resumen-row"><span>Total</span><span class="fin-monto-pos">'+moneda(totalIng)+'</span></div>');
+        resIngEl.innerHTML = rows.length>1?rows.join(''):'<div style="font-size:12px;color:var(--text-soft);padding:8px 0">Sin ingresos registrados</div>';
+      }
+
+      // Gastos por categoría
+      var catGas = {};
+      gasList.forEach(function(g){ catGas[g.categoria]=(catGas[g.categoria]||0)+Number(g.monto||0); });
+      var resGasEl = $id('fin-res-gas-cat');
+      if(resGasEl){
+        var catRows=Object.keys(catGas).map(function(k){
+          return '<div class="fin-resumen-row"><span>'+(CAT_GAS_LBL[k]||k)+'</span><span class="fin-monto-neg">'+moneda(catGas[k])+'</span></div>';
+        });
+        catRows.push('<div class="fin-resumen-row"><span>Total</span><span class="fin-monto-neg">'+moneda(totalGas)+'</span></div>');
+        resGasEl.innerHTML=catRows.length>1?catRows.join(''):'<div style="font-size:12px;color:var(--text-soft);padding:8px 0">Sin gastos registrados</div>';
+      }
+
+      // Tabla detalle ingresos
+      var allIng=[];
+      turnosList.forEach(function(t){ allIng.push({fecha:t.fecha,tipo:'consulta',desc:(t.paciente||'Consulta')+(t.prof?' — '+(PROF_FULL_FIN[t.prof]||t.prof):''),prof:PROF_FULL_FIN[t.prof]||t.prof||'',monto:t.monto,id:null}); });
+      recList.forEach(function(r){ allIng.push({fecha:r.fecha,tipo:r.origen,desc:r.descripcion,prof:'',monto:r.monto,id:null}); });
+      ingList.forEach(function(i){ allIng.push({fecha:i.fecha,tipo:i.categoria||'manual',desc:i.descripcion||'Ingreso manual',prof:PROF_FULL_FIN[i.prof]||i.prof||'',monto:i.monto,id:i.id}); });
+      allIng.sort(function(a,b){return a.fecha>b.fecha?-1:1;});
+
+      var tbody=$id('fin-tbody-detalle');
+      if(tbody){
+        if(!allIng.length){ tbody.innerHTML='<tr><td colspan="6" class="fin-empty">Sin ingresos en este mes</td></tr>'; }
+        else {
+          tbody.innerHTML=allIng.map(function(r){
+            var badge='<span class="fin-badge '+r.tipo+'">'+(CAT_ING_LBL[r.tipo]||r.tipo)+'</span>';
+            var delBtn=r.id?'<button class="fin-btn-del" onclick="finEliminarIngreso('+r.id+')">✕</button>':'';
+            return '<tr><td>'+finFmtFecha(r.fecha)+'</td><td>'+badge+'</td><td style="max-width:200px">'+r.desc+'</td><td style="font-size:12px;color:var(--text-soft)">'+r.prof+'</td><td class="fin-monto-pos">'+moneda(r.monto)+'</td><td>'+delBtn+'</td></tr>';
+          }).join('');
+        }
+      }
+
+      // Tabla gastos
+      var tbodyG=$id('fin-tbody-gastos');
+      if(tbodyG){
+        var gasSort=gasList.slice().sort(function(a,b){return a.fecha>b.fecha?-1:1;});
+        if(!gasSort.length){ tbodyG.innerHTML='<tr><td colspan="5" class="fin-empty">Sin gastos en este mes</td></tr>'; }
+        else {
+          tbodyG.innerHTML=gasSort.map(function(g){
+            return '<tr><td>'+finFmtFecha(g.fecha)+'</td>'
+              +'<td><span class="fin-badge gasto">'+(CAT_GAS_LBL[g.categoria]||g.categoria)+'</span></td>'
+              +'<td style="max-width:220px">'+(g.descripcion||'—')+'</td>'
+              +'<td class="fin-monto-neg">'+moneda(g.monto)+'</td>'
+              +'<td><button class="fin-btn-del" onclick="finEliminarGasto('+g.id+')">✕</button></td></tr>';
+          }).join('');
+        }
+      }
+
+    } catch(err){ console.error('[Finanzas] Error',err); }
+  }
+
+  // ── Gráfico evolución 6 meses
+  async function finCargarGrafico(){
+    var barsEl=$id('fin-chart-bars');
+    if(!barsEl) return;
+    barsEl.innerHTML='<div class="fin-loading">Cargando...</div>';
+    var meses=[];
+    var now=new Date();
+    for(var i=5;i>=0;i--){
+      var d=new Date(now.getFullYear(),now.getMonth()-i,1);
+      var y=d.getFullYear(); var m=d.getMonth()+1;
+      meses.push(y+'-'+(m<10?'0':'')+m);
+    }
+    var dataMap={};
+    meses.forEach(function(ym){ dataMap[ym]={ing:0,gas:0}; });
+    try{
+      var desde=meses[0]+'-01'; var hasta=meses[meses.length-1]+'-31';
+      var recR=await sb.from('urcym_recetas').select('fecha,monto').gte('fecha',desde).lte('fecha',hasta);
+      (recR.data||[]).forEach(function(r){ var ym=r.fecha.substring(0,7); if(dataMap[ym]) dataMap[ym].ing+=Number(r.monto||0); });
+      var ingR=await sb.from('urcym_ingresos').select('fecha,monto').gte('fecha',desde).lte('fecha',hasta);
+      (ingR.data||[]).forEach(function(r){ var ym=r.fecha.substring(0,7); if(dataMap[ym]) dataMap[ym].ing+=Number(r.monto||0); });
+      try{
+        var cfgR=await sb.from('urcym_agenda_config').select('value').eq('key','turnos').maybeSingle();
+        if(cfgR.data&&cfgR.data.value){
+          var td=JSON.parse(cfgR.data.value);
+          Object.keys(td).forEach(function(key){
+            var parts=key.split('_'); if(parts.length<3) return;
+            var fecha=parts[0]; var ym=fecha.substring(0,7);
+            if(!dataMap[ym]) return;
+            var t=td[key];
+            if(t.pago==='pagado'&&t.monto&&Number(t.monto)>0) dataMap[ym].ing+=Number(t.monto);
+          });
+        }
+      }catch(e){}
+      var gasR=await sb.from('urcym_gastos').select('fecha,monto').gte('fecha',desde).lte('fecha',hasta);
+      (gasR.data||[]).forEach(function(g){ var ym=g.fecha.substring(0,7); if(dataMap[ym]) dataMap[ym].gas+=Number(g.monto||0); });
+
+      var maxVal=1;
+      meses.forEach(function(ym){ maxVal=Math.max(maxVal,dataMap[ym].ing,dataMap[ym].gas); });
+      barsEl.innerHTML='';
+      meses.forEach(function(ym){
+        var d=dataMap[ym];
+        var hIng=Math.max(3,Math.round((d.ing/maxVal)*96));
+        var hGas=Math.max(3,Math.round((d.gas/maxVal)*96));
+        var isCurrent=ym===finMesActual;
+        var wrap=document.createElement('div');
+        wrap.className='fin-chart-bar-wrap';
+        wrap.style.cursor='pointer';
+        wrap.title=mesLabel(ym)+': Ing '+moneda(d.ing)+' | Gas '+moneda(d.gas);
+        wrap.onclick=function(){var inp=$id('fin-filtro-mes');if(inp){inp.value=ym;finCargar();}};
+        wrap.innerHTML='<div class="fin-chart-bar-inner">'
+          +'<div class="fin-chart-bar ing" style="height:'+hIng+'px'+(isCurrent?';box-shadow:0 0 0 2px #1D9E75':'')+'"></div>'
+          +'<div style="height:3px"></div>'
+          +'<div class="fin-chart-bar gasto" style="height:'+hGas+'px'+(isCurrent?';box-shadow:0 0 0 2px var(--red)':'')+'"></div>'
+          +'</div>'
+          +'<div class="fin-chart-label" style="'+(isCurrent?'color:var(--blue);font-weight:700':'')+'">'+mesLabel(ym).split(' ')[0]+'</div>';
+        barsEl.appendChild(wrap);
+      });
+    }catch(err){
+      barsEl.innerHTML='<div style="font-size:12px;color:var(--text-soft);padding:8px">Error al cargar gráfico</div>';
+    }
+  }
+
+  // ── Tabs
+  window.finShowTab=function(tab){
+    finTabActual=tab;
+    ['resumen','detalle','gastos'].forEach(function(t){
+      var btn=$id('fin-tab-'+t); if(btn) btn.className='fin-tab'+(t===tab?' active':'');
+      var cnt=$id('fin-content-'+t); if(cnt) cnt.style.display=t===tab?'':'none';
+    });
+  };
+
+  // ── Modales
+  window.finAbrirModalGasto=function(){
+    var fi=$id('fin-g-fecha'); if(fi) fi.value=hoyISO();
+    var bg=$id('fin-modal-gasto-bg'); if(bg) bg.className='fin-modal-bg open';
+    setTimeout(function(){ var mi=$id('fin-g-monto'); if(mi){mi.value='';mi.focus();} },100);
+  };
+  window.finAbrirModalIngreso=function(){
+    var fi=$id('fin-i-fecha'); if(fi) fi.value=hoyISO();
+    var bg=$id('fin-modal-ing-bg'); if(bg) bg.className='fin-modal-bg open';
+    setTimeout(function(){ var mi=$id('fin-i-monto'); if(mi){mi.value='';mi.focus();} },100);
+  };
+  window.finCerrarModals=function(){
+    var g=$id('fin-modal-gasto-bg'); if(g) g.className='fin-modal-bg';
+    var i=$id('fin-modal-ing-bg'); if(i) i.className='fin-modal-bg';
+  };
+  ['fin-modal-gasto-bg','fin-modal-ing-bg'].forEach(function(id){
+    var el=$id(id);
+    if(el) el.addEventListener('click',function(e){ if(e.target===el) finCerrarModals(); });
+  });
+
+  // ── Guardar Gasto
+  window.finGuardarGasto=function(){
+    var fecha=$id('fin-g-fecha').value;
+    var monto=parseFloat($id('fin-g-monto').value)||0;
+    var cat=$id('fin-g-categoria').value;
+    var desc=$id('fin-g-desc').value.trim();
+    if(!fecha||monto<=0){ alert('Completá fecha y monto'); return; }
+    var btn=document.querySelector('#fin-modal-gasto-bg .fin-btn-save');
+    if(btn){btn.disabled=true;btn.textContent='Guardando...';}
+    sb.from('urcym_gastos').insert({fecha:fecha,categoria:cat,descripcion:desc,monto:monto}).then(function(r){
+      if(btn){btn.disabled=false;btn.textContent='Guardar gasto';}
+      if(r.error){alert('Error: '+r.error.message);return;}
+      finCerrarModals();
+      $id('fin-g-monto').value=''; $id('fin-g-desc').value='';
+      finCargar();
+      finShowTab('gastos');
+    });
+  };
+
+  // ── Guardar Ingreso manual
+  window.finGuardarIngreso=function(){
+    var fecha=$id('fin-i-fecha').value;
+    var monto=parseFloat($id('fin-i-monto').value)||0;
+    var cat=$id('fin-i-categoria').value;
+    var prof=$id('fin-i-prof').value;
+    var desc=$id('fin-i-desc').value.trim();
+    if(!fecha||monto<=0){ alert('Completá fecha y monto'); return; }
+    var btn=document.querySelector('#fin-modal-ing-bg .fin-btn-save');
+    if(btn){btn.disabled=true;btn.textContent='Guardando...';}
+    sb.from('urcym_ingresos').insert({fecha:fecha,categoria:cat,descripcion:desc,prof:prof||null,monto:monto,origen:'manual'}).then(function(r){
+      if(btn){btn.disabled=false;btn.textContent='Guardar ingreso';}
+      if(r.error){alert('Error: '+r.error.message);return;}
+      finCerrarModals();
+      $id('fin-i-monto').value=''; $id('fin-i-desc').value='';
+      finCargar();
+      finShowTab('detalle');
+    });
+  };
+
+  // ── Eliminar
+  window.finEliminarGasto=function(id){
+    if(!confirm('¿Eliminar este gasto?')) return;
+    sb.from('urcym_gastos').delete().eq('id',id).then(function(r){
+      if(r.error){alert('Error: '+r.error.message);return;}
+      finCargar();
+    });
+  };
+  window.finEliminarIngreso=function(id){
+    if(!confirm('¿Eliminar este ingreso?')) return;
+    sb.from('urcym_ingresos').delete().eq('id',id).then(function(r){
+      if(r.error){alert('Error: '+r.error.message);return;}
+      finCargar();
+    });
+  };
+
+  // ── Exportar PDF
+  window.finExportarPDF=function(){
+    var r=mesRango(finMesActual);
+    var win=window.open('','_blank','width=820,height=700');
+    if(!win){alert('Permitir popups para exportar');return;}
+    async function buildPDF(){
+      var turnosData={};
+      try{
+        var cfgR=await sb.from('urcym_agenda_config').select('value').eq('key','turnos').maybeSingle();
+        if(cfgR.data&&cfgR.data.value) turnosData=JSON.parse(cfgR.data.value);
+      }catch(e){}
+      var totalConsultas=0,totalRec=0,totalIngM=0,totalGas=0;
+      var rows=[];
+      Object.keys(turnosData).forEach(function(key){
+        var parts=key.split('_'); if(parts.length<3) return;
+        var fecha=parts[0]; if(fecha<r.desde||fecha>r.hasta) return;
+        var t=turnosData[key];
+        if(t.pago==='pagado'&&t.monto&&Number(t.monto)>0){
+          totalConsultas+=Number(t.monto);
+          rows.push({fecha:fecha,tipo:'Consulta',desc:(t.paciente||'')+(t.prof?' / '+(PROF_FULL_FIN[t.prof]||t.prof):''),monto:Number(t.monto),sign:1});
+        }
+      });
+      var recR=await sb.from('urcym_recetas').select('*').gte('fecha',r.desde).lte('fecha',r.hasta);
+      (recR.data||[]).forEach(function(rec){totalRec+=Number(rec.monto||0);rows.push({fecha:rec.fecha,tipo:rec.tipo==='particular'?'Receta particular':'Receta OSDE',desc:'',monto:Number(rec.monto||0),sign:1});});
+      var ingR=await sb.from('urcym_ingresos').select('*').gte('fecha',r.desde).lte('fecha',r.hasta).order('fecha');
+      (ingR.data||[]).forEach(function(i){totalIngM+=Number(i.monto||0);rows.push({fecha:i.fecha,tipo:CAT_ING_LBL[i.categoria]||i.categoria,desc:i.descripcion||'',monto:Number(i.monto||0),sign:1});});
+      var gasR=await sb.from('urcym_gastos').select('*').gte('fecha',r.desde).lte('fecha',r.hasta).order('fecha');
+      (gasR.data||[]).forEach(function(g){totalGas+=Number(g.monto||0);rows.push({fecha:g.fecha,tipo:CAT_GAS_LBL[g.categoria]||g.categoria,desc:g.descripcion||'',monto:Number(g.monto||0),sign:-1});});
+      rows.sort(function(a,b){return a.fecha>b.fecha?1:-1;});
+      var totalIng=totalConsultas+totalRec+totalIngM;
+      var balance=totalIng-totalGas;
+      win.document.write('<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Finanzas '+mesLabel(finMesActual)+'</title>'
+        +'<style>body{font-family:Arial,sans-serif;margin:32px;color:#1a2535;font-size:13px}'
+        +'h1{font-size:20px;margin-bottom:2px}h2{font-size:13px;color:#6b7a8d;margin-bottom:20px;font-weight:normal}'
+        +'.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px}'
+        +'.kpi{border:1px solid #e5e7eb;border-radius:10px;padding:12px 14px}'
+        +'.kpi-l{font-size:10px;text-transform:uppercase;color:#6b7a8d;margin-bottom:4px;letter-spacing:.05em}'
+        +'.kpi-v{font-size:22px;font-weight:700}'
+        +'table{width:100%;border-collapse:collapse}th{background:#f4f7fb;padding:8px 10px;text-align:left;font-size:10px;text-transform:uppercase;color:#6b7a8d;letter-spacing:.05em}'
+        +'td{padding:7px 10px;border-top:1px solid #e5e7eb}'
+        +'tfoot td{font-weight:700;border-top:2px solid #e5e7eb}'
+        +'@media print{body{margin:16px}}</style></head><body>'
+        +'<h1>Resumen Financiero — '+mesLabel(finMesActual)+'</h1><h2>Consultorio URCyM</h2>'
+        +'<div class="kpis">'
+          +'<div class="kpi"><div class="kpi-l">Ingresos</div><div class="kpi-v" style="color:#1D9E75">'+moneda(totalIng)+'</div></div>'
+          +'<div class="kpi"><div class="kpi-l">Gastos</div><div class="kpi-v" style="color:#e25247">'+moneda(totalGas)+'</div></div>'
+          +'<div class="kpi"><div class="kpi-l">Balance</div><div class="kpi-v" style="color:'+(balance>=0?'#1D9E75':'#e25247')+'">'+moneda(balance)+'</div></div>'
+          +'<div class="kpi"><div class="kpi-l">Recetas</div><div class="kpi-v">'+moneda(totalRec)+'</div></div>'
+        +'</div>'
+        +'<table><thead><tr><th>Fecha</th><th>Tipo</th><th>Detalle</th><th style="text-align:right">Monto</th></tr></thead><tbody>'
+        +rows.map(function(row){
+          var color=row.sign>0?'#1D9E75':'#e25247';
+          var prefix=row.sign>0?'+':'-';
+          return '<tr><td>'+finFmtFecha(row.fecha)+'</td><td>'+row.tipo+'</td><td>'+row.desc+'</td><td style="color:'+color+';text-align:right;font-weight:600">'+prefix+moneda(row.monto)+'</td></tr>';
+        }).join('')
+        +'</tbody><tfoot>'
+          +'<tr><td colspan="3">TOTAL INGRESOS</td><td style="color:#1D9E75;text-align:right">'+moneda(totalIng)+'</td></tr>'
+          +'<tr><td colspan="3">TOTAL GASTOS</td><td style="color:#e25247;text-align:right">−'+moneda(totalGas)+'</td></tr>'
+          +'<tr><td colspan="3" style="font-size:14px">BALANCE NETO</td><td style="font-size:14px;color:'+(balance>=0?'#1D9E75':'#e25247')+';text-align:right">'+moneda(balance)+'</td></tr>'
+        +'</tfoot></table>'
+        +'<p style="margin-top:24px;font-size:10px;color:#9ca3af">Generado el '+new Date().toLocaleString('es-AR')+' — URCyM Sistema de Gestión</p>'
+        +'</body></html>');
+      win.document.close();
+      setTimeout(function(){win.print();},800);
+    }
+    buildPDF().catch(function(e){console.error(e);win.close();alert('Error al generar PDF');});
+  };
+
+  // ── Auto-init al activar tab
+  var _finCargado=false;
+  var _finObs=new MutationObserver(function(){
+    var el=document.getElementById('page-finanzas');
+    if(el&&el.classList.contains('active')&&!_finCargado){
+      _finCargado=true;
+      setTimeout(finInit,120);
+    }
+    if(el&&!el.classList.contains('active')) _finCargado=false;
+  });
+  var _pfEl=document.getElementById('page-finanzas');
+  if(_pfEl) _finObs.observe(_pfEl,{attributes:true,attributeFilter:['class']});
+
+})();
+</script>
+
 </body>
 </html>
