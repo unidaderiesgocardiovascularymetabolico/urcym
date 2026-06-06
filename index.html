@@ -1597,13 +1597,30 @@
         .fin-chart-legend-item { display:flex; align-items:center; gap:5px; font-size:11px; color:var(--text-soft); }
         .fin-chart-legend-dot { width:10px; height:10px; border-radius:50%; }
 
-        /* Resumen mes tabla */
+        /* Resumen mes */
         .fin-resumen-grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:24px; }
-        .fin-resumen-card { background:white; border-radius:14px; border:1px solid var(--border); padding:16px 18px; }
-        .fin-resumen-card h4 { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.07em; color:var(--text-soft); margin-bottom:10px; }
-        .fin-resumen-row { display:flex; justify-content:space-between; align-items:center; padding:5px 0; border-bottom:1px solid var(--border); font-size:13px; }
-        .fin-resumen-row:last-child { border-bottom:none; font-weight:700; }
-        .fin-resumen-row span:last-child { font-weight:600; }
+        .fin-resumen-card { background:white; border-radius:14px; border:1px solid var(--border); padding:0; overflow:hidden; }
+        .fin-resumen-card-header { display:flex; align-items:center; justify-content:space-between; padding:13px 18px 11px; border-bottom:2px solid var(--border); background:var(--gray); }
+        .fin-resumen-card-header h4 { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.07em; color:var(--text-soft); margin:0; }
+        .fin-resumen-card-body { padding:0; }
+        .fin-resumen-row { display:flex; justify-content:space-between; align-items:center; padding:9px 18px; border-bottom:1px solid var(--border); font-size:13px; transition:background .1s; }
+        .fin-resumen-row:hover { background:#fafcff; }
+        .fin-resumen-row:last-child { border-bottom:none; }
+        .fin-resumen-row.total-row { background:var(--gray); border-top:2px solid var(--border) !important; font-weight:700; font-size:14px; border-bottom:none; }
+        .fin-resumen-row.total-row:hover { background:var(--gray); }
+        .fin-resumen-row.osde-row { background:var(--blue-light); border-top:1px dashed rgba(48,137,202,.3); }
+        .fin-resumen-row.osde-row:hover { background:#d8ecfa; }
+        .fin-resumen-row-label { display:flex; align-items:center; gap:8px; color:var(--text); }
+        .fin-resumen-row-label .fin-row-icon { font-size:15px; width:20px; text-align:center; }
+        .fin-resumen-row-label .fin-row-sub { font-size:10px; color:var(--text-soft); font-weight:400; margin-left:2px; }
+        .fin-resumen-val { font-weight:600; }
+        .fin-monto-pos { color:#1D9E75; }
+        .fin-monto-neg { color:var(--red); }
+        .fin-monto-osde { color:var(--blue); font-style:italic; }
+        .fin-osde-note { font-size:10px; color:var(--blue); font-weight:400; }
+        /* Botón inline en header resumen */
+        .fin-res-btn { padding:4px 10px; border-radius:7px; border:1.5px solid var(--border); background:white; font-family:var(--font-main); font-size:11px; font-weight:600; color:var(--text-soft); cursor:pointer; transition:all .15s; white-space:nowrap; }
+        .fin-res-btn:hover { border-color:var(--blue); color:var(--blue); background:var(--blue-light); }
       </style>
 
       <!-- Header -->
@@ -1736,6 +1753,7 @@
           <label>📅 Fecha</label>
           <input type="date" id="fin-i-fecha-global"/>
           <span class="fin-panel-fecha-hint">Se aplica a todos los ingresos cargados</span>
+          <button onclick="finAbrirModalOsde()" style="margin-left:auto;padding:6px 12px;border-radius:8px;border:1.5px solid var(--blue);background:var(--blue-light);color:var(--blue);font-size:12px;font-family:var(--font-main);font-weight:600;cursor:pointer;white-space:nowrap;">🏥 Tarifas OSDE</button>
         </div>
         <div style="overflow-x:auto;">
           <table class="fin-quick-table">
@@ -1808,12 +1826,18 @@
         </div>
         <div class="fin-resumen-grid" id="fin-resumen-grid">
           <div class="fin-resumen-card">
-            <h4>Ingresos por origen</h4>
-            <div id="fin-res-ing-origen"><div class="fin-loading">Cargando...</div></div>
+            <div class="fin-resumen-card-header">
+              <h4>📥 Ingresos del mes</h4>
+              <button class="fin-res-btn" onclick="finAbrirModalIngreso()">+ Agregar</button>
+            </div>
+            <div class="fin-resumen-card-body" id="fin-res-ing-origen"><div class="fin-loading" style="padding:16px 18px">Cargando...</div></div>
           </div>
           <div class="fin-resumen-card">
-            <h4>Gastos por categoría</h4>
-            <div id="fin-res-gas-cat"><div class="fin-loading">Cargando...</div></div>
+            <div class="fin-resumen-card-header">
+              <h4>📤 Gastos del mes</h4>
+              <button class="fin-res-btn" onclick="finAbrirModalGasto()">+ Agregar</button>
+            </div>
+            <div class="fin-resumen-card-body" id="fin-res-gas-cat"><div class="fin-loading" style="padding:16px 18px">Cargando...</div></div>
           </div>
         </div>
       </div>
@@ -10615,24 +10639,94 @@ window.cargarProxConsultas = cargarProxConsultas;
 
       var resIngEl = $id('fin-res-ing-origen');
       if(resIngEl){
-        var lbl={urcym:'🩺 URCyM',sapiens_bar:'🏢 SAPIENS Bar',sapiens_omar:'🏢 SAPIENS Omar',ceq:'🏢 CEQ',cem:'🏢 CEM',salita:'🏢 Salita',otro:'📌 Otros',manual:'📌 Manual',receta_particular:'💊 Recetas particular',receta_osde:'🏥 Recetas OSDE',osde:'🏥 OSDE'};
-        var rows=Object.keys(origenes).filter(function(k){return origenes[k]>0;}).map(function(k){
-          return '<div class="fin-resumen-row"><span>'+(lbl[k]||k)+'</span><span class="fin-monto-pos">'+moneda(origenes[k])+'</span></div>';
+        // Orden y labels con íconos
+        var ING_ORDER = [
+          {k:'urcym',       icon:'🩺', label:'URCyM',              sub:'Consultas cobradas'},
+          {k:'sapiens_bar', icon:'🏢', label:'SAPIENS Bar',         sub:''},
+          {k:'sapiens_omar',icon:'🏢', label:'SAPIENS Omar',        sub:''},
+          {k:'ceq',         icon:'🏛️', label:'CEQ',                 sub:''},
+          {k:'cem',         icon:'🏛️', label:'CEM',                 sub:''},
+          {k:'salita',      icon:'🏠', label:'Salita',              sub:''},
+          {k:'receta_particular', icon:'💊', label:'Recetas particular', sub:''},
+          {k:'receta_osde', icon:'💊', label:'Recetas OSDE',        sub:'cobradas'},
+          {k:'otro',        icon:'📌', label:'Otros',               sub:''},
+          {k:'manual',      icon:'📌', label:'Manual',              sub:''},
+        ];
+        var rows = [];
+        // Filas de ingresos reales (solo los que tienen valor)
+        ING_ORDER.forEach(function(item){
+          var v = origenes[item.k] || 0;
+          if(v <= 0) return;
+          rows.push('<div class="fin-resumen-row">'
+            +'<div class="fin-resumen-row-label"><span class="fin-row-icon">'+item.icon+'</span><span>'+item.label+(item.sub?'<span class="fin-row-sub"> · '+item.sub+'</span>':'')+'</span></div>'
+            +'<span class="fin-resumen-val fin-monto-pos">'+moneda(v)+'</span>'
+            +'</div>');
         });
-        rows.push('<div class="fin-resumen-row"><span>Total</span><span class="fin-monto-pos">'+moneda(totalIng)+'</span></div>');
-        resIngEl.innerHTML = rows.length>1?rows.join(''):'<div style="font-size:12px;color:var(--text-soft);padding:8px 0">Sin ingresos registrados</div>';
+        // Categorías libres que no estén en el orden predefinido
+        Object.keys(origenes).forEach(function(k){
+          var known = ING_ORDER.find(function(i){return i.k===k;});
+          if(!known && origenes[k]>0){
+            rows.push('<div class="fin-resumen-row">'
+              +'<div class="fin-resumen-row-label"><span class="fin-row-icon">📌</span><span>'+k+'</span></div>'
+              +'<span class="fin-resumen-val fin-monto-pos">'+moneda(origenes[k])+'</span>'
+              +'</div>');
+          }
+        });
+        // Total ingresos reales
+        rows.push('<div class="fin-resumen-row total-row">'
+          +'<div class="fin-resumen-row-label"><span class="fin-row-icon">✅</span><span>Total ingresos</span></div>'
+          +'<span class="fin-resumen-val fin-monto-pos">'+moneda(totalIng)+'</span>'
+          +'</div>');
+        // OSDE estimado (separado, no suma al balance)
+        rows.push('<div class="fin-resumen-row osde-row">'
+          +'<div class="fin-resumen-row-label"><span class="fin-row-icon">🏥</span>'
+          +'<span>OSDE a cobrar <span class="fin-row-sub">estimado · diferido</span></span></div>'
+          +'<span class="fin-resumen-val fin-monto-osde">'+moneda(totalOsde)
+          +'<span class="fin-osde-note"> &nbsp;<button onclick="finAbrirModalOsde()" style="padding:2px 8px;border-radius:6px;border:1px solid var(--blue);background:white;color:var(--blue);font-size:10px;font-family:var(--font-main);cursor:pointer;font-weight:600;">⚙ tarifas</button></span></span>'
+          +'</div>');
+        resIngEl.innerHTML = rows.length > 2
+          ? rows.join('')
+          : '<div style="font-size:12px;color:var(--text-soft);padding:14px 18px">Sin ingresos registrados este mes</div>';
       }
 
-      // Gastos por categoría
       var catGas = {};
       gasList.forEach(function(g){ catGas[g.categoria]=(catGas[g.categoria]||0)+Number(g.monto||0); });
       var resGasEl = $id('fin-res-gas-cat');
       if(resGasEl){
-        var catRows=Object.keys(catGas).map(function(k){
-          return '<div class="fin-resumen-row"><span>'+(CAT_GAS_LBL[k]||k)+'</span><span class="fin-monto-neg">'+moneda(catGas[k])+'</span></div>';
+        var GAS_ORDER = [
+          {k:'luz',           icon:'💡', label:'Luz'},
+          {k:'internet',      icon:'🌐', label:'Internet / Teléfono'},
+          {k:'expensas',      icon:'🏢', label:'Expensas'},
+          {k:'limpieza',      icon:'🧹', label:'Limpieza'},
+          {k:'papeleria',     icon:'📄', label:'Papelería / Insumos'},
+          {k:'mantenimiento', icon:'🔧', label:'Mantenimiento'},
+          {k:'extraordinario',icon:'⭐', label:'Extraordinarios'},
+        ];
+        var catRows = [];
+        GAS_ORDER.forEach(function(item){
+          var v = catGas[item.k] || 0;
+          if(v <= 0) return;
+          catRows.push('<div class="fin-resumen-row">'
+            +'<div class="fin-resumen-row-label"><span class="fin-row-icon">'+item.icon+'</span><span>'+item.label+'</span></div>'
+            +'<span class="fin-resumen-val fin-monto-neg">'+moneda(v)+'</span>'
+            +'</div>');
         });
-        catRows.push('<div class="fin-resumen-row"><span>Total</span><span class="fin-monto-neg">'+moneda(totalGas)+'</span></div>');
-        resGasEl.innerHTML=catRows.length>1?catRows.join(''):'<div style="font-size:12px;color:var(--text-soft);padding:8px 0">Sin gastos registrados</div>';
+        Object.keys(catGas).forEach(function(k){
+          var known = GAS_ORDER.find(function(i){return i.k===k;});
+          if(!known && catGas[k]>0){
+            catRows.push('<div class="fin-resumen-row">'
+              +'<div class="fin-resumen-row-label"><span class="fin-row-icon">📌</span><span>'+(CAT_GAS_LBL[k]||k)+'</span></div>'
+              +'<span class="fin-resumen-val fin-monto-neg">'+moneda(catGas[k])+'</span>'
+              +'</div>');
+          }
+        });
+        catRows.push('<div class="fin-resumen-row total-row">'
+          +'<div class="fin-resumen-row-label"><span class="fin-row-icon">🔴</span><span>Total gastos</span></div>'
+          +'<span class="fin-resumen-val fin-monto-neg">'+moneda(totalGas)+'</span>'
+          +'</div>');
+        resGasEl.innerHTML = catRows.length > 1
+          ? catRows.join('')
+          : '<div style="font-size:12px;color:var(--text-soft);padding:14px 18px">Sin gastos registrados este mes</div>';
       }
 
       // Tabla detalle ingresos
