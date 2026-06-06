@@ -956,7 +956,8 @@
     <div class="nav-tab active" onclick="showPage('dashboard')">Inicio</div>
     <div class="nav-tab" onclick="showPage('pacientes')">Pacientes</div>
     <div class="nav-tab" onclick="showPage('agenda')">Agenda</div>
-    <div class="nav-tab" onclick="showPage('finanzas')">Finanzas</div>
+    <div class="nav-tab" id="nav-tab-finanzas" onclick="showPage('finanzas')">Finanzas</div>
+    <div class="nav-tab" id="nav-tab-mis-pacientes" style="display:none" onclick="showPage('mis-pacientes')">👤 Mis Pacientes</div>
   </div>
   <div class="content">
 
@@ -1454,6 +1455,18 @@
 
     <!-- EVOLUCION — fuera de .content para ocupar ancho completo -->
     </div><!-- /content -->
+    <!-- ── Página MIS PACIENTES (para profesionales no-admin) ── -->
+    <div class="page" id="page-mis-pacientes" style="padding:28px;">
+      <div class="page-title">👤 Mis Pacientes del mes</div>
+      <div class="page-subtitle" id="mp-subtitle">Turnos del mes · cargando...</div>
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px;flex-wrap:wrap;">
+        <input type="month" id="mp-filtro-mes" onchange="mpCargar()" style="padding:7px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;font-family:var(--font-main);background:white;outline:none;"/>
+      </div>
+      <div id="mp-grupos">
+        <div class="fin-loading" style="padding:40px;text-align:center;color:var(--text-soft);">Cargando...</div>
+      </div>
+    </div>
+
     <div class="page" id="page-finanzas">
       <!-- ESTILOS FINANZAS -->
       <style>
@@ -1669,6 +1682,15 @@
         .fin-panel-personal .fin-panel-close:hover { background:#f3eeff; border-color:#7c5cbf; color:#7c5cbf; }
         .fin-panel-personal .fin-panel-fecha-bar { background:#faf7ff; border-bottom-color:rgba(124,92,191,.12); }
         .fin-panel-personal .fin-quick-section-row td { background:#f0e8ff; color:#5b3fa0; }
+        /* Banner plata mensual */
+        .fin-plata-banner { display:none; margin:16px 20px 4px; border-radius:14px; padding:16px 20px; background:linear-gradient(135deg,#1a2f1a,#1D9E75); color:white; }
+        .fin-plata-banner.visible { display:block; }
+        .fin-plata-banner-title { font-size:11px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; opacity:.75; margin-bottom:6px; }
+        .fin-plata-banner-row { display:flex; justify-content:space-between; align-items:center; padding:4px 0; font-size:13px; opacity:.88; border-bottom:1px solid rgba(255,255,255,.12); }
+        .fin-plata-banner-row:last-child { border-bottom:none; }
+        .fin-plata-banner-total { display:flex; justify-content:space-between; align-items:center; padding-top:10px; margin-top:4px; border-top:2px solid rgba(255,255,255,.25); }
+        .fin-plata-banner-total-label { font-size:13px; font-weight:700; opacity:.9; }
+        .fin-plata-banner-total-val { font-size:22px; font-weight:800; }
         .fin-panel-personal .fin-quick-table tbody tr.has-value { background:#f5f0ff; }
         .fin-panel-personal .fin-quick-table tbody tr.has-value:hover { background:#ede5ff; }
         .fin-panel-personal .fin-monto-input.filled { border-color:#7c5cbf; background:#f5f0ff; color:#5b3fa0; }
@@ -1811,6 +1833,16 @@
           <label>📅 Fecha</label>
           <input type="date" id="fin-p-fecha-global"/>
           <span class="fin-panel-fecha-hint">Se aplica a todos los gastos cargados</span>
+        </div>
+        <!-- Banner plata mensual -->
+        <div class="fin-plata-banner" id="fin-plata-banner">
+          <div class="fin-plata-banner-title">💵 Tu plata del mes</div>
+          <div class="fin-plata-banner-row"><span>Balance neto (ingresos − gastos consultorio)</span><span id="fin-plata-balance">—</span></div>
+          <div class="fin-plata-banner-row"><span>− Gastos personales del panel</span><span id="fin-plata-personal" style="color:#f87171;">—</span></div>
+          <div class="fin-plata-banner-total">
+            <span class="fin-plata-banner-total-label">= Plata mensual disponible</span>
+            <span class="fin-plata-banner-total-val" id="fin-plata-resultado">—</span>
+          </div>
         </div>
         <div style="overflow-x:auto;">
           <table class="fin-quick-table" id="fin-p-table">
@@ -2699,22 +2731,22 @@ const logoPNGB64 = 'data:image/png;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/4gHYSUNDX1
 const users = {
   barbara: {
     password:'1234', name:'Dra. Bárbara Guerrero', role:'Hipertensión · Obesidad',
-    titulo:'Dra. Bárbara A. Guerrero', mp:'M.P: 118052',
+    titulo:'Dra. Bárbara A. Guerrero', mp:'M.P: 118052', admin:true,
     especialidades:['Especialista en Medicina Interna','Especialista en Hipertensión Arterial','Postgrado en Lípidos y Obesidad']
   },
   omar: {
     password:'1234', name:'Dr. Omar Bertani', role:'Diabetes · Hipertensión',
-    titulo:'Dr. Omar B. Bertani', mp:'M.P: 118269',
+    titulo:'Dr. Omar B. Bertani', mp:'M.P: 118269', admin:true,
     especialidades:['Especialista en Medicina Interna','Especialista en Hipertensión Arterial','Especialista en Diabetes']
   },
   lopez: {
     password:'1234', name:'Dra. López Armaretti', role:'Enf. Cerebrovasculares',
-    titulo:'Dra. López Armaretti', mp:'M.N: 171048',
+    titulo:'Dra. López Armaretti', mp:'M.N: 171048', admin:false,
     especialidades:['Especialista en Enfermedades Cerebrovasculares']
   },
   saracho: {
     password:'1234', name:'Dra. Saracho Ana', role:'Enf. Hepatometabólicas',
-    titulo:'Dra. Saracho Ana', mp:'M.P: 119032',
+    titulo:'Dra. Saracho Ana', mp:'M.P: 119032', admin:false,
     especialidades:['Especialista en Enfermedades Hepatometabólicas']
   },
 };
@@ -3746,6 +3778,16 @@ function doLogin() {
     document.getElementById('app').style.display = 'block';
     document.getElementById('topbarUser').textContent = currentUser.titulo + ' · ' + currentUser.mp;
     document.getElementById('dashWelcome').textContent = 'Hola, ' + currentUser.name;
+    // Mostrar/ocultar tabs según rol
+    var navFinanzas = document.getElementById('nav-tab-finanzas');
+    var navMisPacientes = document.getElementById('nav-tab-mis-pacientes');
+    if(currentUser.admin) {
+      if(navFinanzas) navFinanzas.style.display = '';
+      if(navMisPacientes) navMisPacientes.style.display = 'none';
+    } else {
+      if(navFinanzas) navFinanzas.style.display = 'none';
+      if(navMisPacientes) navMisPacientes.style.display = '';
+    }
     cargarPacientes();
   } else {
     document.getElementById('errorMsg').classList.add('visible');
@@ -3875,6 +3917,11 @@ function marcarTabPacienteActiva(dni) {
 }
 
 function showPage(page) {
+  // Control de acceso: finanzas completa solo para admins
+  if(page === 'finanzas' && currentUser && !currentUser.admin) {
+    page = 'mis-pacientes';
+  }
+
   // Ocultar todas las páginas dentro de .content
   document.querySelectorAll('.page').forEach(p => {
     p.classList.remove('active');
@@ -3899,7 +3946,7 @@ function showPage(page) {
     if(page !== 'evolucion') el.style.display = 'block';
   }
   const tabs = document.querySelectorAll('.nav-tab:not(.patient-nav-tab)');
-  const map = {dashboard:0,pacientes:1,agenda:2,finanzas:3};
+  const map = {dashboard:0,pacientes:1,agenda:2,finanzas:3,'mis-pacientes':3};
   if(map[page]!==undefined && tabs[map[page]]) tabs[map[page]].classList.add('active');
   if(page === 'evolucion' && pacienteActual) marcarTabPacienteActiva(pacienteActual.dni);
   else marcarTabPacienteActiva(null);
@@ -3910,6 +3957,7 @@ function showPage(page) {
     if(window.finInit) window.finInit();
     else console.error('[Finanzas] finInit NO EXISTE');
   }, 100);
+  if(page==='mis-pacientes') setTimeout(function(){ mpCargar(); }, 100);
 }
 
 // ===== OBRAS SOCIALES =====
@@ -10731,6 +10779,11 @@ window.cargarProxConsultas = cargarProxConsultas;
       var kpiIngSub=$id('fin-kpi-ing-sub'); if(kpiIngSub) kpiIngSub.textContent=(turnosList.length+ingList.length)+' movimientos';
       var kpiGasSub=$id('fin-kpi-gas-sub'); if(kpiGasSub) kpiGasSub.textContent=gasList.length+' registros';
       var kpiRecSub=$id('fin-kpi-rec-sub'); if(kpiRecSub) kpiRecSub.textContent=recList.length+' recetas';
+      // Cachear para banner personal
+      var totalPersonalMes = gasList.filter(function(g){return g.tipo==='personal';}).reduce(function(a,g){return a+Number(g.monto||0);},0);
+      window._finUltBalance = balance;
+      window._finUltPersonal = totalPersonalMes;
+      if(window.finActualizarBannerPersonal) window.finActualizarBannerPersonal(balance, totalPersonalMes);
 
       // Resumen ingresos por origen — pagado + señas
       var origenes = {};
@@ -11088,7 +11141,27 @@ window.cargarProxConsultas = cargarProxConsultas;
     var pg=$id('fin-panel-gasto'); if(pg) pg.classList.remove('open');
     var pi=$id('fin-panel-ing'); if(pi) pi.classList.remove('open');
     panel.classList.add('open');
+    // Mostrar banner con datos del mes
+    finActualizarBannerPersonal();
     panel.scrollIntoView({behavior:'smooth',block:'nearest'});
+  };
+
+  window.finActualizarBannerPersonal = function(balanceNeto, totalPersonal) {
+    var banner = $id('fin-plata-banner');
+    if(!banner) return;
+    // Si no se pasan datos, buscar los últimos cacheados
+    if(balanceNeto === undefined) balanceNeto = window._finUltBalance || 0;
+    if(totalPersonal === undefined) totalPersonal = window._finUltPersonal || 0;
+    var resultado = balanceNeto - totalPersonal;
+    var fmt = function(v){ return '$'+(Math.abs(v)||0).toLocaleString('es-AR'); };
+    var elB = $id('fin-plata-balance'); if(elB) elB.textContent = fmt(balanceNeto);
+    var elP = $id('fin-plata-personal'); if(elP) elP.textContent = '−'+fmt(totalPersonal);
+    var elR = $id('fin-plata-resultado');
+    if(elR){
+      elR.textContent = (resultado<0?'−':'')+fmt(resultado);
+      elR.style.color = resultado >= 0 ? '#86efac' : '#f87171';
+    }
+    banner.classList.add('visible');
   };
 
   window.finPAgregarCategoria = function() {
@@ -11486,6 +11559,83 @@ window.cargarProxConsultas = cargarProxConsultas;
   // Auto-init manejado desde showPage()
 
 })();
+
+// ── Mis Pacientes (vista para profesionales no-admin)
+window.mpCargar = async function() {
+  var inp = document.getElementById('mp-filtro-mes');
+  if(inp && !inp.value) inp.value = (function(){ var d=new Date(); var m=d.getMonth()+1; return d.getFullYear()+'-'+(m<10?'0':'')+m; })();
+  var ym = inp ? inp.value : '';
+  if(!ym) return;
+  var p = ym.split('-'); var y=parseInt(p[0]); var m=parseInt(p[1]);
+  var desde = ym+'-01';
+  var lastDay = new Date(y,m,0).getDate();
+  var hasta = ym+'-'+(lastDay<10?'0':'')+lastDay;
+
+  var sub = document.getElementById('mp-subtitle');
+  var wrap = document.getElementById('mp-grupos');
+  if(wrap) wrap.innerHTML = '<div class="fin-loading" style="padding:40px;text-align:center;color:var(--text-soft);">Cargando...</div>';
+
+  // Mapear usuario actual a código de prof
+  var profMap = {barbara:'BG', omar:'OB', lopez:'LA', saracho:'SA'};
+  var miProf = selectedUser ? (profMap[selectedUser]||null) : null;
+  var PROF_FULL = {BG:'Dra. Guerrero',OB:'Dr. Bertani',LA:'Dra. López A.',SA:'Dra. Saracho'};
+
+  try {
+    var turnosData = {};
+    try {
+      var r = await sb.from('urcym_agenda_config').select('value').eq('key','turnos').maybeSingle();
+      if(r.data && r.data.value) turnosData = JSON.parse(r.data.value);
+    } catch(e){}
+
+    var misTurnos = [];
+    Object.keys(turnosData).forEach(function(key){
+      var parts = key.split('_');
+      if(parts.length < 3) return;
+      var fecha = parts[0];
+      if(fecha < desde || fecha > hasta) return;
+      var t = turnosData[key];
+      if(!t.paciente) return;
+      if(miProf && t.prof !== miProf) return; // solo mis turnos
+      misTurnos.push({fecha:fecha, hora:parts[1], paciente:t.paciente, pago:t.pago||'sin-seña', sena:parseFloat(t.sena)||0, monto:t.pago==='pagado'&&t.monto?Number(t.monto):0, osde:t.osde||false, prof:t.prof});
+    });
+    misTurnos.sort(function(a,b){return a.fecha>b.fecha?-1:a.fecha<b.fecha?1:a.hora>b.hora?1:-1;});
+
+    if(sub) sub.textContent = (miProf?PROF_FULL[miProf]+' · ':'') + misTurnos.length + ' turnos en ' + ym.split('-').reverse().join('/');
+
+    if(!misTurnos.length){
+      if(wrap) wrap.innerHTML = '<div class="fin-empty" style="padding:40px;text-align:center;color:var(--text-soft);">Sin turnos en este mes</div>';
+      return;
+    }
+
+    var pagoLbl = {pagado:'✅ Pagado', señado:'🔶 Señado', 'sin-seña':'⬜ Sin seña', osde:'🏥 OSDE'};
+    var pagoCls = {pagado:'pagado', señado:'senado', 'sin-seña':'sin-sena', osde:'osde'};
+
+    var html = '<div class="fin-detalle-grupo" style="border-color:rgba(48,137,202,.2);">'
+      + '<div class="fin-detalle-grupo-header open" style="background:var(--blue-light);cursor:default;">'
+        + '<div class="fin-detalle-grupo-title">🩺 Mis turnos — '+ym.split('-').reverse().join('/')+'</div>'
+        + '<div class="fin-detalle-grupo-meta"><span class="fin-detalle-grupo-count">'+misTurnos.length+' turnos</span></div>'
+      + '</div>'
+      + '<div class="fin-detalle-grupo-body open">'
+        + '<table class="fin-table"><thead><tr><th>Fecha</th><th>Hora</th><th>Paciente</th><th>Estado</th><th>Monto</th></tr></thead><tbody>'
+        + misTurnos.map(function(t){
+            var pago = t.osde ? 'osde' : (t.pago||'sin-seña');
+            var lbl = t.osde ? '🏥 OSDE' : (pagoLbl[pago]||pago);
+            var cls = t.osde ? 'osde' : (pagoCls[pago]||'sin-sena');
+            var montoStr = t.osde ? '<span style="font-size:11px;color:var(--blue);font-style:italic;">a cobrar</span>'
+              : t.monto>0 ? '<span class="fin-monto-pos">$'+t.monto.toLocaleString('es-AR')+'</span>'
+              : t.sena>0 ? '<span class="fin-monto-pos">$'+t.sena.toLocaleString('es-AR')+'</span><span style="font-size:10px;color:#b45309;margin-left:4px;">(seña)</span>'
+              : '<span style="color:var(--text-soft);font-size:12px;">—</span>';
+            var d=t.fecha.split('-'); var fechaFmt=d[2]+'/'+d[1]+'/'+d[0];
+            return '<tr><td>'+fechaFmt+'</td><td style="font-size:12px;color:var(--text-soft);">'+t.hora+'</td><td style="font-weight:600">'+t.paciente+'</td><td><span class="fin-pago-badge '+cls+'">'+lbl+'</span></td><td>'+montoStr+'</td></tr>';
+          }).join('')
+        + '</tbody></table>'
+      + '</div></div>';
+    if(wrap) wrap.innerHTML = html;
+  } catch(e) {
+    console.error('mpCargar error', e);
+    if(wrap) wrap.innerHTML = '<div class="fin-empty">Error al cargar datos</div>';
+  }
+};
 </script>
 
 </body>
