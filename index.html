@@ -1559,6 +1559,8 @@
         .fin-btn-save.red { background:var(--red); }
         .fin-btn-del { padding:5px 10px; border-radius:7px; border:1.5px solid var(--red-light); background:var(--red-light); color:var(--red); font-size:11px; font-weight:600; cursor:pointer; font-family:var(--font-main); transition:all .15s; }
         .fin-btn-del:hover { background:var(--red); color:white; }
+        .fin-btn-edit { padding:5px 8px; border-radius:7px; border:1.5px solid var(--border); background:var(--gray); color:var(--text-soft); font-size:11px; cursor:pointer; font-family:var(--font-main); transition:all .15s; }
+        .fin-btn-edit:hover { border-color:var(--blue); background:var(--blue-light); color:var(--blue); }
 
         /* ── Paneles de carga rápida (tabla fija por categoría) ── */
         .fin-panel { display:none; background:white; border-radius:18px; border:1.5px solid var(--border); margin-bottom:20px; overflow:hidden; animation:fadeUp .25s ease; box-shadow: 0 4px 24px rgba(48,137,202,.10); }
@@ -1831,14 +1833,9 @@
       <div class="fin-panel fin-panel-personal" id="fin-panel-personal">
         <div class="fin-panel-header">
           <div>
-            <div class="fin-panel-title">👤 Gastos Personales <span class="fin-panel-subtitle">— completá los que correspondan</span></div>
+            <div class="fin-panel-title">👤 Gastos Personales <span class="fin-panel-subtitle" id="fin-p-mes-label">— cargando…</span></div>
           </div>
           <button class="fin-panel-close" onclick="finCerrarModals()" title="Cerrar">×</button>
-        </div>
-        <div class="fin-panel-fecha-bar">
-          <label>📅 Fecha</label>
-          <input type="date" id="fin-p-fecha-global"/>
-          <span class="fin-panel-fecha-hint">Se aplica a todos los gastos cargados</span>
         </div>
         <!-- Banner plata mensual -->
         <div class="fin-plata-banner" id="fin-plata-banner">
@@ -1985,9 +1982,9 @@
         <div class="fin-table-wrap">
           <table class="fin-table">
             <thead><tr>
-              <th>Fecha</th><th>Categoría</th><th>Descripción</th><th>Monto</th><th></th>
+              <th>Fecha</th><th>Categoría</th><th>Descripción</th><th>Monto</th><th></th><th></th>
             </tr></thead>
-            <tbody id="fin-tbody-gastos"><tr><td colspan="5" class="fin-loading">Cargando...</td></tr></tbody>
+            <tbody id="fin-tbody-gastos"><tr><td colspan="6" class="fin-loading">Cargando...</td></tr></tbody>
           </table>
         </div>
       </div>
@@ -4430,6 +4427,7 @@ function _pdfFooter(doc, PW, PH) {
 /* ─────────────────────────────────────────────────── */
 function generarPDF(tipo) {
   const u = users[selectedUser]; if (!u) return;
+  _getLogoPNG(function() {
   const p = pacienteActual;
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({ unit: 'mm', format: 'a5', orientation: 'portrait' });
@@ -4499,6 +4497,7 @@ function generarPDF(tipo) {
 
   const np = p ? (p.apellido || p.nombre || 'doc').replace(/\s+/g, '_') : 'doc';
   doc.save(`${tipo}_${np}_${hoy.replace(/\//g, '-')}.pdf`);
+  }); // fin _getLogoPNG
 }
 
 // ===== MODAL PACIENTE =====
@@ -5778,8 +5777,10 @@ function generarPDFIndicacionesEvol() {
   const indEl3 = document.getElementById('evol_indicaciones_editor');
   const txt = indEl3 ? indEl3.innerText.trim() : '';
   if(!txt) { alert('No hay indicaciones para generar.'); return; }
-  const { doc, filename } = _crearPDFIndicacionesEvol(txt);
-  doc.save(filename);
+  _getLogoPNG(function() {
+    const { doc, filename } = _crearPDFIndicacionesEvol(txt);
+    doc.save(filename);
+  });
 }
 
 function _crearPDFIndicacionesEvol(txt) {
@@ -5829,14 +5830,16 @@ function enviarMailIndicacionesEvol() {
   const indEl2 = document.getElementById('evol_indicaciones_editor');
   const txt = indEl2 ? indEl2.innerText.trim() : '';
   if(!txt || !p.email) { alert(!txt?'Sin indicaciones.':'El paciente no tiene email registrado.'); return; }
-  const { doc, filename, hoy } = _crearPDFIndicacionesEvol(txt);
-  doc.save(filename);
-  const u = users[selectedUser];
-  setTimeout(() => {
-    const asunto = encodeURIComponent('Indicaciones médicas - URCyM - '+hoy);
-    const cuerpo = encodeURIComponent('Estimado/a '+p.nombre+',\n\nSus indicaciones del '+hoy+':\n\n'+txt+'\n\nSaludos,\n'+u.titulo+'\nURCyM - 2246 58-8469');
-    window.location.href = 'mailto:'+p.email+'?subject='+asunto+'&body='+cuerpo;
-  }, 800);
+  _getLogoPNG(function() {
+    const { doc, filename, hoy } = _crearPDFIndicacionesEvol(txt);
+    doc.save(filename);
+    const u = users[selectedUser];
+    setTimeout(() => {
+      const asunto = encodeURIComponent('Indicaciones médicas - URCyM - '+hoy);
+      const cuerpo = encodeURIComponent('Estimado/a '+p.nombre+',\n\nSus indicaciones del '+hoy+':\n\n'+txt+'\n\nSaludos,\n'+u.titulo+'\nURCyM - 2246 58-8469');
+      window.location.href = 'mailto:'+p.email+'?subject='+asunto+'&body='+cuerpo;
+    }, 800);
+  });
 }
 
 // ===== PESTAÑAS PACIENTE =====
@@ -10644,6 +10647,17 @@ window.cargarProxConsultas = cargarProxConsultas;
      origen      text        NOT NULL DEFAULT 'manual',
      created_at  timestamptz DEFAULT now()
    );
+
+   -- Gastos personales: separados del consultorio, se repiten mes a mes
+   CREATE TABLE IF NOT EXISTS urcym_personal (
+     id          bigserial PRIMARY KEY,
+     mes         text        NOT NULL,   -- YYYY-MM
+     categoria   text        NOT NULL,
+     nota        text,
+     monto       numeric     NOT NULL DEFAULT 0,
+     created_at  timestamptz DEFAULT now(),
+     UNIQUE(mes, categoria)
+   );
 ══════════════════════════════════════════════════════ */
 (function(){
   var finTabActual = 'resumen';
@@ -10749,9 +10763,14 @@ window.cargarProxConsultas = cargarProxConsultas;
           categoria:r.categoria, descripcion:r.descripcion||'', prof:r.prof||''};
       });
 
-      // Gastos
+      // Gastos consultorio (NO incluye personal — tabla separada)
       var gasRows = await sb.from('urcym_gastos').select('*').gte('fecha',desde).lte('fecha',hasta).order('fecha',{ascending:true});
       var gasList = (gasRows.data||[]);
+
+      // Gastos personales desde su propia tabla
+      var mesActual = finMesActual || hoyYM();
+      var persRows = await sb.from('urcym_personal').select('*').eq('mes', mesActual);
+      var persList = (persRows.data||[]);
 
       // OSDE: contar turnos y recetas OSDE del mes
       await finCargarTarifasOsde();
@@ -10787,8 +10806,8 @@ window.cargarProxConsultas = cargarProxConsultas;
       var kpiIngSub=$id('fin-kpi-ing-sub'); if(kpiIngSub) kpiIngSub.textContent=(turnosList.length+ingList.length)+' movimientos';
       var kpiGasSub=$id('fin-kpi-gas-sub'); if(kpiGasSub) kpiGasSub.textContent=gasList.length+' registros';
       var kpiRecSub=$id('fin-kpi-rec-sub'); if(kpiRecSub) kpiRecSub.textContent=recList.length+' recetas';
-      // Cachear para banner personal
-      var totalPersonalMes = gasList.filter(function(g){return g.tipo==='personal';}).reduce(function(a,g){return a+Number(g.monto||0);},0);
+      // Cachear para banner personal (usa tabla urcym_personal)
+      var totalPersonalMes = persList.reduce(function(a,g){return a+Number(g.monto||0);},0);
       window._finUltBalance = balance;
       window._finUltPersonal = totalPersonalMes;
       if(window.finActualizarBannerPersonal) window.finActualizarBannerPersonal(balance, totalPersonalMes);
@@ -11009,13 +11028,15 @@ window.cargarProxConsultas = cargarProxConsultas;
       var tbodyG=$id('fin-tbody-gastos');
       if(tbodyG){
         var gasSort=gasList.slice().sort(function(a,b){return a.fecha>b.fecha?-1:1;});
-        if(!gasSort.length){ tbodyG.innerHTML='<tr><td colspan="5" class="fin-empty">Sin gastos en este mes</td></tr>'; }
+        if(!gasSort.length){ tbodyG.innerHTML='<tr><td colspan="6" class="fin-empty">Sin gastos en este mes</td></tr>'; }
         else {
           tbodyG.innerHTML=gasSort.map(function(g){
+            var descEsc=(g.descripcion||'').replace(/'/g,"\\'");
             return '<tr><td>'+finFmtFecha(g.fecha)+'</td>'
               +'<td><span class="fin-badge gasto">'+(CAT_GAS_LBL[g.categoria]||g.categoria)+'</span></td>'
               +'<td style="max-width:220px">'+(g.descripcion||'—')+'</td>'
               +'<td class="fin-monto-neg">'+moneda(g.monto)+'</td>'
+              +'<td><button class="fin-btn-edit" onclick="finEditarGasto('+g.id+',\''+g.fecha+'\',\''+g.categoria+'\',\''+descEsc+'\','+g.monto+')">✏️</button></td>'
               +'<td><button class="fin-btn-del" onclick="finEliminarGasto('+g.id+')">✕</button></td></tr>';
           }).join('');
         }
@@ -11145,13 +11166,13 @@ window.cargarProxConsultas = cargarProxConsultas;
   window.finAbrirPanelPersonal = function() {
     var panel=$id('fin-panel-personal'); if(!panel) return;
     finQLimpiar('p');
-    var fi=$id('fin-p-fecha-global'); if(fi) fi.value=hoyISO();
     var pg=$id('fin-panel-gasto'); if(pg) pg.classList.remove('open');
     var pi=$id('fin-panel-ing'); if(pi) pi.classList.remove('open');
     panel.classList.add('open');
-    // Mostrar banner con datos del mes
     finActualizarBannerPersonal();
     panel.scrollIntoView({behavior:'smooth',block:'nearest'});
+    // Cargar datos guardados (o mes anterior si es la primera vez)
+    finCargarPersonalEnPanel(finMesActual || hoyYM());
   };
 
   window.finActualizarBannerPersonal = function(balanceNeto, totalPersonal) {
@@ -11189,26 +11210,60 @@ window.cargarProxConsultas = cargarProxConsultas;
     tr.scrollIntoView({behavior:'smooth',block:'nearest'});
   };
 
+  // Carga datos del mes en el panel (o del mes anterior si no hay nada)
+  window.finCargarPersonalEnPanel = async function(mes) {
+    var lbl=$id('fin-p-mes-label');
+    var r = await sb.from('urcym_personal').select('*').eq('mes', mes);
+    var rows = r.data||[];
+    var origen = mes;
+    if(!rows.length) {
+      // traer mes anterior como base
+      var p=mes.split('-'); var y=parseInt(p[0]); var m=parseInt(p[1]);
+      m--; if(m===0){m=12;y--;}
+      var mesPrev=y+'-'+(m<10?'0':'')+m;
+      var rp=await sb.from('urcym_personal').select('*').eq('mes',mesPrev);
+      rows=rp.data||[];
+      origen=rows.length?mesPrev:null;
+    }
+    if(lbl){
+      if(origen===mes) lbl.textContent='— '+mesLabel(mes);
+      else if(origen) lbl.textContent='— '+mesLabel(mes)+' (pre-cargado de '+mesLabel(origen)+')';
+      else lbl.textContent='— '+mesLabel(mes)+' (nuevo)';
+    }
+    rows.forEach(function(row){
+      var inp=document.querySelector('.fin-p-monto[data-cat="'+row.categoria+'"]');
+      if(inp){inp.value=row.monto||''; finQActualizar(inp,'p');}
+      var notaEl=document.querySelector('.fin-p-nota[data-cat="'+row.categoria+'"]');
+      if(notaEl) notaEl.value=row.nota||'';
+    });
+  };
+
   window.finGuardarPersonal = async function() {
-    var fecha=$id('fin-p-fecha-global')?$id('fin-p-fecha-global').value:hoyISO();
-    if(!fecha){alert('Seleccioná una fecha');return;}
+    var mes = finMesActual || hoyYM();
     var registros=[];
     document.querySelectorAll('.fin-p-monto').forEach(function(inp){
-      var m=parseFloat(inp.value)||0; if(m<=0) return;
+      var m=parseFloat(inp.value)||0;
       var cat=inp.getAttribute('data-cat');
       var notaEl=document.querySelector('.fin-p-nota[data-cat="'+cat+'"]');
       var nota=notaEl?notaEl.value.trim():'';
-      registros.push({fecha:fecha,categoria:cat,descripcion:nota,monto:m,tipo:'personal'});
+      // guardamos todos los que tienen monto > 0
+      if(m>0) registros.push({mes:mes,categoria:cat,nota:nota,monto:m});
     });
     if(!registros.length){alert('Ingresá al menos un monto');return;}
     var btn=$id('fin-p-btn-save');
     if(btn){btn.disabled=true;btn.textContent='Guardando…';}
-    var r=await sb.from('urcym_gastos').insert(registros);
+    // upsert: actualiza si ya existe para ese mes+categoria, inserta si no
+    var r=await sb.from('urcym_personal').upsert(registros,{onConflict:'mes,categoria'});
     if(btn){btn.disabled=false;btn.textContent='💾 Guardar gastos';}
-    if(r.error){alert('Error: '+r.error.message);return;}
+    if(r.error){alert('Error al guardar: '+r.error.message);return;}
     finCerrarModals();
     finCargar();
-    finShowTab('gastos');
+    // toast confirmación
+    var toast=document.createElement('div');
+    toast.style.cssText='position:fixed;bottom:24px;right:24px;background:#7c5cbf;color:white;padding:11px 20px;border-radius:10px;font-size:13px;font-weight:600;z-index:99999;box-shadow:0 4px 16px rgba(0,0,0,.2)';
+    toast.textContent='✅ Gastos personales guardados — '+mesLabel(mes);
+    document.body.appendChild(toast);
+    setTimeout(function(){toast.remove();},2800);
   };
 
   // ── Opciones de categoría ingresos
@@ -11479,6 +11534,16 @@ window.cargarProxConsultas = cargarProxConsultas;
   window.finEliminarGasto=function(id){
     if(!confirm('¿Eliminar este gasto?')) return;
     sb.from('urcym_gastos').delete().eq('id',id).then(function(r){
+      if(r.error){alert('Error: '+r.error.message);return;}
+      finCargar();
+    });
+  };
+  window.finEditarGasto=function(id,fecha,cat,desc,monto){
+    var nFecha=prompt('Fecha (YYYY-MM-DD):',fecha); if(nFecha===null) return;
+    var nDesc=prompt('Descripción:',desc); if(nDesc===null) return;
+    var nMonto=prompt('Monto:',monto); if(nMonto===null) return;
+    var m=parseFloat(nMonto); if(isNaN(m)||m<=0){alert('Monto inválido');return;}
+    sb.from('urcym_gastos').update({fecha:nFecha.trim(),descripcion:nDesc.trim(),monto:m}).eq('id',id).then(function(r){
       if(r.error){alert('Error: '+r.error.message);return;}
       finCargar();
     });
