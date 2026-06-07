@@ -3823,8 +3823,9 @@ function doLogin() {
   }
   if(pwd === users[selectedUser].password) {
     currentUser = users[selectedUser];
-    window.currentUser = currentUser;
-    window.selectedUser = selectedUser;
+    window._cu = currentUser;
+    window._su = selectedUser;
+    console.log('[URCyM login] window._cu set:', window._cu, '_su:', window._su);
     document.getElementById('loginCard').style.display = 'none';
     document.getElementById('app').style.display = 'block';
     document.getElementById('topbarUser').textContent = currentUser.titulo + ' · ' + currentUser.mp;
@@ -3862,7 +3863,7 @@ function doLogin() {
 }
 function logout() {
   currentUser = null; selectedUser = null;
-  window.currentUser = null; window.selectedUser = null;
+  window._cu = null; window._su = null;
   document.getElementById('password').value = '';
   document.getElementById('app').style.display = 'none';
   document.getElementById('loginCard').style.display = 'flex';
@@ -7953,12 +7954,14 @@ function renderGrid(){
   var TOTAL_H=TOTAL_MIN*PX_PER_MIN;
 
   var days=[];for(var i=0;i<6;i++)days.push(addDays(currentMonday,i));
-  // Calcular visProfs: si usuario no-admin forzar solo su prof
+  // Calcular visProfs: forzar prof para no-admin
   var visProfs;
   var _pm={barbara:'BG',omar:'OB',lopez:'LA',saracho:'SA'};
-  var _cu=window.currentUser; var _su=window.selectedUser;
-  if(_cu&&_cu.admin===false&&_su&&_pm[_su]){
-    visProfs=[_pm[_su]];
+  var _wcu=window._cu; var _wsu=window._su;
+  console.log('[URCyM agenda] renderGrid - _wcu:', _wcu, '_wsu:', _wsu);
+  if(_wcu && _wcu.admin===false && _wsu && _pm[_wsu]){
+    visProfs=[_pm[_wsu]];
+    console.log('[URCyM agenda] forzando visProfs:', visProfs);
   } else if(typeof profFilter!=='undefined'&&Array.isArray(profFilter)&&profFilter.length>0){
     visProfs=profFilter.slice();
   } else if(pf&&pf.length>0){
@@ -7966,6 +7969,7 @@ function renderGrid(){
   } else {
     visProfs=ALL_PROFS.slice();
   }
+  console.log('[URCyM agenda] visProfs final:', visProfs);
 
 
   // Header row
@@ -9156,9 +9160,8 @@ var _origRenderGrid=renderGrid;
 renderGrid=function(){
   // Si usuario no es admin, asegurar profFilter correcto antes de renderizar
   var _pm2={barbara:'BG',omar:'OB',lopez:'LA',saracho:'SA'};
-  var _cu2=window.currentUser; var _su2=window.selectedUser;
-  if(_cu2&&_cu2.admin===false&&_su2&&_pm2[_su2]){
-    profFilter=[_pm2[_su2]];
+  if(typeof currentUser!=='undefined'&&currentUser&&currentUser.admin===false&&typeof selectedUser!=='undefined'&&selectedUser&&_pm2[selectedUser]){
+    profFilter=[_pm2[selectedUser]];
   }
   _origRenderGrid();
 };
