@@ -1078,15 +1078,15 @@
           <button class="ag-btn-tasks" id="ag-btn-tasks" title="Tareas por profesional">&#9989; Tareas</button>
           <button id="ag-btn-aranceles" style="background:none;border:1px solid #059669;border-radius:6px;padding:5px 10px;font-size:12px;color:#059669;cursor:pointer;font-family:inherit;" title="Configurar aranceles por consulta">💲 Aranceles</button>
         </div>
-        <div class="ag-legend" id="ag-legend">
-          <div class="ag-legend-item" data-legend-prof="BG"><div class="ag-legend-bar" style="background:#7F77DD"></div>Guerrero</div>
-          <div class="ag-legend-item" data-legend-prof="OB"><div class="ag-legend-bar" style="background:#378ADD"></div>Bertani</div>
-          <div class="ag-legend-item" data-legend-prof="LA"><div class="ag-legend-bar" style="background:#E24B4A"></div>López A.</div>
-          <div class="ag-legend-item" data-legend-prof="SA"><div class="ag-legend-bar" style="background:#EF9F27"></div>Saracho</div>
-          <div class="ag-legend-item" data-legend-prof="MA"><div class="ag-legend-bar" style="background:#22C55E"></div>MAPA</div>
-          <div class="ag-legend-sep" data-legend-sep="nl"></div>
-          <div class="ag-legend-item" data-legend-nl="BG"><div class="ag-legend-bar" style="background:#7B6EA6"></div>No laborable Guerrero</div>
-          <div class="ag-legend-item" data-legend-nl="OB"><div class="ag-legend-bar" style="background:#2B4E8C"></div>No laborable Bertani</div>
+        <div class="ag-legend">
+          <div class="ag-legend-item"><div class="ag-legend-bar" style="background:#7F77DD"></div>Guerrero</div>
+          <div class="ag-legend-item"><div class="ag-legend-bar" style="background:#378ADD"></div>Bertani</div>
+          <div class="ag-legend-item"><div class="ag-legend-bar" style="background:#E24B4A"></div>López A.</div>
+          <div class="ag-legend-item"><div class="ag-legend-bar" style="background:#EF9F27"></div>Saracho</div>
+          <div class="ag-legend-item"><div class="ag-legend-bar" style="background:#22C55E"></div>MAPA</div>
+          <div class="ag-legend-sep"></div>
+          <div class="ag-legend-item"><div class="ag-legend-bar" style="background:#7B6EA6"></div>No laborable Guerrero</div>
+          <div class="ag-legend-item"><div class="ag-legend-bar" style="background:#2B4E8C"></div>No laborable Bertani</div>
           <div class="ag-legend-item"><div class="ag-legend-bar" style="background:#e5e7eb;border:1px solid #9ca3af"></div>Institucional</div>
         </div>
         <div class="ag-grid-wrap"><div class="ag-grid" id="ag-grid"></div></div>
@@ -3840,10 +3840,6 @@ function doLogin() {
       var pillsWrap = document.getElementById('ag-prof-pills');
       if(pillsWrap) pillsWrap.style.display = '';
       if(typeof syncPillsUI === 'function') syncPillsUI();
-      // Restaurar leyenda completa para admins
-      document.querySelectorAll('#ag-legend [data-legend-prof], #ag-legend [data-legend-nl], #ag-legend [data-legend-sep]').forEach(function(el){
-        el.style.display = '';
-      });
     } else {
       if(navFinanzas) navFinanzas.style.display = 'none';
       if(navMisPacientes) navMisPacientes.style.display = '';
@@ -3856,15 +3852,6 @@ function doLogin() {
       var pillsWrap = document.getElementById('ag-prof-pills');
       if(pillsWrap) pillsWrap.style.display = 'none';
       if(typeof syncPillsUI === 'function') syncPillsUI();
-      // Filtrar leyenda: mostrar solo el prof propio
-      document.querySelectorAll('#ag-legend [data-legend-prof]').forEach(function(el){
-        el.style.display = (!miProf || el.dataset.legendProf === miProf || el.dataset.legendProf === 'MA') ? '' : 'none';
-      });
-      document.querySelectorAll('#ag-legend [data-legend-nl]').forEach(function(el){
-        el.style.display = 'none'; // no-laborable no es relevante para non-admins
-      });
-      var nlSep = document.querySelector('#ag-legend [data-legend-sep="nl"]');
-      if(nlSep) nlSep.style.display = 'none';
     }
     cargarPacientes();
   } else {
@@ -7965,9 +7952,9 @@ function renderGrid(){
   var days=[];for(var i=0;i<6;i++)days.push(addDays(currentMonday,i));
   // Calcular visProfs: si usuario no-admin forzar solo su prof
   var visProfs;
-  var _pmap={barbara:'BG',omar:'OB',lopez:'LA',saracho:'SA'};
-  if(typeof currentUser!=='undefined'&&currentUser&&!currentUser.admin&&typeof selectedUser!=='undefined'&&selectedUser&&_pmap[selectedUser]){
-    visProfs=[_pmap[selectedUser]];
+  var _pm={barbara:'BG',omar:'OB',lopez:'LA',saracho:'SA'};
+  if(typeof currentUser!=='undefined'&&currentUser&&currentUser.admin===false&&typeof selectedUser!=='undefined'&&selectedUser&&_pm[selectedUser]){
+    visProfs=[_pm[selectedUser]];
   } else if(typeof profFilter!=='undefined'&&Array.isArray(profFilter)&&profFilter.length>0){
     visProfs=profFilter.slice();
   } else if(pf&&pf.length>0){
@@ -9160,22 +9147,16 @@ Object.defineProperty(_hiddenProfFilter,'value',{
   get:function(){return getProfFilterStr();},
   set:function(v){profFilter=v?[v]:[];}
 });
-// Parchear renderGrid para que visProfs entienda multi-select
+// Parchear renderGrid: forzar profFilter para no-admins antes de cada render
 var _origRenderGrid=renderGrid;
 renderGrid=function(){
-  // Sobreescribir temporalmente getElementById para ag-prof-filter
+  // Si usuario no es admin, asegurar profFilter correcto antes de renderizar
+  var _pm2={barbara:'BG',omar:'OB',lopez:'LA',saracho:'SA'};
+  if(typeof currentUser!=='undefined'&&currentUser&&currentUser.admin===false&&typeof selectedUser!=='undefined'&&selectedUser&&_pm2[selectedUser]){
+    profFilter=[_pm2[selectedUser]];
+  }
   _origRenderGrid();
 };
-// Parchear visProfs dentro de renderGrid: el código hace var pf=...value; var visProfs=pf?[pf]:ALL_PROFS;
-// Con multi, pf = 'BG,OB' → visProfs debe ser ['BG','OB']
-// Hacemos esto al vuelo redefiniendo después:
-var _realRenderGrid=renderGrid;
-renderGrid=function(){
-  // Guardar profFilter actual y fabricar un valor compatible
-  _realRenderGrid();
-};
-// La verdadera solución: parchear después del IIFE para visProfs multi
-// Se hace en el patch de abajo.
 
 // ── Helpers Supabase para agenda ──────────────────────────────────────────
 
