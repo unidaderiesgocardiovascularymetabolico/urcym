@@ -12333,6 +12333,17 @@ window.gpCargar = async function() {
       (filtProf ? PROF_FULL[filtProf]+' · ' : 'Guerrero + Bertani · ')
       + total + ' turnos · ' + ym.split('-').reverse().join('/');
 
+    // Leer recetas del período
+    var totalRecetas = 0, recetasOsde = 0, recetasParticular = 0;
+    try {
+      var rRec = await sb.from('urcym_recetas').select('tipo').gte('fecha', desde).lte('fecha', hasta);
+      if(rRec.data && rRec.data.length) {
+        totalRecetas = rRec.data.length;
+        recetasOsde = rRec.data.filter(function(r){ return r.tipo === 'osde'; }).length;
+        recetasParticular = totalRecetas - recetasOsde;
+      }
+    } catch(e){}
+
     // KPIs
     var kpiItems = [
       {label:'Total turnos',            val:total,        sub:'en el período',           color:'var(--blue)'},
@@ -12340,6 +12351,7 @@ window.gpCargar = async function() {
       {label:'Ausentismo',              val:pctAus+'%',   sub:ausentes+' marcado'+(ausentes!==1?'s':'')+' ausente', color:pctAus>15?'var(--red)':'#1D9E75'},
       {label:'Videollamadas',           val:totalVideo,   sub:(total-totalVideo)+' presenciales', color:'#7B3FC4'},
       {label:'Reconsultas',             val:reconsultas,  sub:'pacientes c/ 2+ visitas al mismo prof', color:'var(--teal)'},
+      {label:'Recetas del mes',         val:totalRecetas, sub:recetasOsde+' OSDE · '+recetasParticular+' particular', color:'#7c5cbf'},
     ];
     if(!filtProf){
       kpiItems.push({label:'Guerrero', val:porProf.BG.length, sub:porProf.BG.filter(function(t){return t.osde;}).length+' OSDE · '+porProf.BG.filter(function(t){return !t.osde;}).length+' Part.', color:'#7F77DD'});
