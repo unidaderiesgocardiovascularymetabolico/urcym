@@ -8119,18 +8119,19 @@ function dowOf(ds){return parseLocalDate(ds).getDay();}
 function diOf(ds){var dw=dowOf(ds);return dw===0?6:dw-1;}// 0=Lun..5=Sáb
 
 // ── Verifica si un bloque NL/disp aplica en una fecha concreta según freq+startDate ──
-// Sin startDate o freq='semanal' sin startDate → siempre aplica (comportamiento original)
+// Sin startDate → siempre aplica. Con startDate → solo a partir de esa fecha.
+// semanal+startDate → aplica cada semana DESDE startDate (no antes)
 function isBlockActiveOnDate(b, dateStr){
   var di=diOf(dateStr);
   if(b.day!==di)return false; // día de semana no coincide
   var freq=b.freq||'semanal';
-  if(freq==='semanal')return true; // siempre aplica ese día de semana
   if(freq==='unico'){return b.startDate===dateStr;} // solo ese día exacto
   if(!b.startDate)return true; // sin fecha de inicio → aplica siempre
   var startD=parseLocalDate(b.startDate);
   var checkD=parseLocalDate(dateStr);
   var diffMs=checkD.getTime()-startD.getTime();
   if(diffMs<0)return false; // antes de la fecha de inicio
+  if(freq==='semanal')return true; // a partir de startDate, aplica cada semana
   var diffDays=Math.round(diffMs/86400000);
   var interval=freq==='quincenal'?14:28; // quincenal=14d, mensual=28d
   return diffDays%interval===0;
