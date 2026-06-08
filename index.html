@@ -557,6 +557,40 @@
 #agenda-app .ag-nl-block{position:absolute;left:1px;right:1px;border-radius:4px;overflow:hidden;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;}
 #agenda-app .ag-nl-block.lila{background:#7B6EA6;color:#E8E4F8;}
 #agenda-app .ag-nl-block.blue{background:#2B4E8C;color:#C5D6F0;}
+/* ── Slot bloqueado manualmente ── */
+#agenda-app .ag-blocked-slot{
+  position:absolute;border-radius:4px;border:1.5px dashed #9ca3af;
+  background:repeating-linear-gradient(135deg,#f9fafb,#f9fafb 4px,#e5e7eb 4px,#e5e7eb 8px);
+  display:flex;align-items:center;justify-content:center;
+  cursor:pointer;z-index:3;box-sizing:border-box;overflow:hidden;
+  transition:filter .15s;
+}
+#agenda-app .ag-blocked-slot:hover{filter:brightness(.94);}
+#agenda-app .ag-blocked-slot .ag-blocked-label{
+  font-size:9px;font-weight:700;color:#6b7280;text-transform:uppercase;
+  letter-spacing:.05em;pointer-events:none;text-align:center;padding:2px 4px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;
+}
+/* Popup bloqueo */
+.ag-block-popup{
+  position:fixed;z-index:20000;background:#fff;border-radius:12px;
+  box-shadow:0 8px 32px rgba(0,0,0,.18);border:1.5px solid #e5e7eb;
+  padding:12px;min-width:200px;animation:fadeUp .15s ease;
+}
+.ag-block-popup-title{font-size:11px;font-weight:700;letter-spacing:.06em;
+  text-transform:uppercase;color:#6b7280;margin-bottom:8px;}
+.ag-block-popup input{
+  width:100%;padding:7px 10px;border:1.5px solid #e2e8f0;border-radius:8px;
+  font-size:13px;font-family:inherit;box-sizing:border-box;margin-bottom:8px;outline:none;
+}
+.ag-block-popup input:focus{border-color:#6b7280;}
+.ag-block-popup-row{display:flex;gap:6px;}
+.ag-block-popup-btn{flex:1;padding:7px;border:none;border-radius:7px;font-size:12px;
+  font-weight:600;font-family:inherit;cursor:pointer;}
+.ag-block-popup-btn.confirm{background:#374151;color:#fff;}
+.ag-block-popup-btn.confirm:hover{background:#1f2937;}
+.ag-block-popup-btn.cancel{background:#f3f4f6;color:#6b7280;}
+.ag-block-popup-btn.cancel:hover{background:#e5e7eb;}
 /* Disponibilidad */
 #agenda-app .ag-disp-block{position:absolute;opacity:.15;border-radius:3px;}
 #agenda-app .ag-disp-block.bg{background:#7F77DD;}
@@ -609,6 +643,7 @@
 #agenda-app .ag-dot.pagado{background:#1D9E75;}
 #agenda-app .ag-dot.señado{background:#EF9F27;}
 #agenda-app .ag-dot.sin-seña{background:#d1d5db;}
+#agenda-app .ag-dot.osde{background:#0284c7;}
 #agenda-app .ag-turno.bg{background:#EEEDFE;border-left:3px solid #7F77DD;color:#3C3489;}
 #agenda-app .ag-turno.bg .ag-badge{background:#AFA9EC;color:#26215C;}
 #agenda-app .ag-turno.ob{background:#E6F1FB;border-left:3px solid #378ADD;color:#0C447C;}
@@ -7912,7 +7947,7 @@ function saveOffered(){
     sb.from('urcym_agenda_config').upsert({key:'offered_slots',value:JSON.stringify(offeredSlots)},{onConflict:'key'}).then(function(res){if(res&&res.error)console.warn('[URCyM] saveOffered error',res.error);});
   }catch(e){console.warn('[URCyM] saveOffered error',e);}
 }
-function loadBlocked(){try{var s=localStorage.getItem(LS_BLOCKED);if(s)blockedSlots=JSON.parse(s);}catch(e){}}
+function loadBlocked(){try{var s=localStorage.getItem(LS_BLOCKED);if(s){var bs=JSON.parse(s);Object.keys(bs).forEach(function(k){if(bs[k]===true)bs[k]={label:''};});blockedSlots=bs;}}catch(e){}}
 function saveBlocked(){
   try{localStorage.setItem(LS_BLOCKED,JSON.stringify(blockedSlots));}catch(e){}
   try{
@@ -7923,6 +7958,53 @@ loadOffered();
 
 var _offeredPopup=null;
 function closeOfferedPopup(){if(_offeredPopup){_offeredPopup.remove();_offeredPopup=null;}}
+
+// ── Popup bloqueo de slot con título ─────────────────────────────────────────
+var _blockPopup=null;
+function closeBlockPopup(){if(_blockPopup){_blockPopup.remove();_blockPopup=null;}}
+document.addEventListener('click',function(e){
+  if(_blockPopup&&!_blockPopup.contains(e.target))closeBlockPopup();
+});
+function openBlockPopup(e,ds,tm,prof){
+  e.preventDefault();e.stopPropagation();
+  closeBlockPopup();closeOfferedPopup();
+  var manualKey=ds+'_'+tm+'_'+prof;
+  // If already blocked → unblock directly
+  if(blockedSlots[manualKey]){
+    delete blockedSlots[manualKey];
+    saveBlocked();
+    renderGrid();
+    return;
+  }
+  var popup=document.createElement('div');
+  popup.className='ag-block-popup';
+  popup.innerHTML='<div class="ag-block-popup-title">🚫 Bloquear '+tm+'</div>'
+    +'<input type="text" placeholder="Motivo (opcional)" maxlength="30" />'
+    +'<div class="ag-block-popup-row">'
+    +'<button class="ag-block-popup-btn cancel">Cancelar</button>'
+    +'<button class="ag-block-popup-btn confirm">Bloquear</button>'
+    +'</div>';
+  document.body.appendChild(popup);
+  _blockPopup=popup;
+  var inp=popup.querySelector('input');
+  inp.focus();
+  function doBlock(){
+    var label=inp.value.trim();
+    blockedSlots[manualKey]={label:label};
+    saveBlocked();
+    closeBlockPopup();
+    renderGrid();
+  }
+  popup.querySelector('.confirm').addEventListener('click',function(ev){ev.stopPropagation();doBlock();});
+  popup.querySelector('.cancel').addEventListener('click',function(ev){ev.stopPropagation();closeBlockPopup();});
+  inp.addEventListener('keydown',function(ev){if(ev.key==='Enter'){ev.preventDefault();doBlock();}if(ev.key==='Escape')closeBlockPopup();});
+  // Position
+  var x=e.clientX+8,y=e.clientY+8;
+  popup.style.left=x+'px';popup.style.top=y+'px';
+  var r=popup.getBoundingClientRect();
+  if(r.right>window.innerWidth-8)popup.style.left=(window.innerWidth-r.width-8)+'px';
+  if(r.bottom>window.innerHeight-8)popup.style.top=(e.clientY-r.height-4)+'px';
+}
 document.addEventListener('click',function(e){
   if(_offeredPopup&&!_offeredPopup.contains(e.target))closeOfferedPopup();
 });
@@ -8244,6 +8326,51 @@ function renderGrid(){
       });
     });
 
+    // ── Render blocked slots ──────────────────────────────────────────────────
+    Object.keys(blockedSlots).forEach(function(bk){
+      var parts=bk.split('_');
+      if(parts[0]!==ds)return;
+      var bTime=parts[1];
+      var bProf=parts[2];
+      if(visProfs.indexOf(bProf)<0)return;
+      var bData=blockedSlots[bk];
+      var label=(bData&&bData.label)?bData.label:'';
+      var dur=PROF_45.indexOf(bProf)>=0?45:30;
+      var bEl=document.createElement('div');
+      bEl.className='ag-blocked-slot';
+      bEl.title='Bloqueado'+(label?' · '+label:'')+' · click derecho para desbloquear';
+      bEl.style.top=topOf(bTime)+'px';
+      bEl.style.height=Math.max(20,dur*PX_PER_MIN-2)+'px';
+      bEl.style.left='1px';bEl.style.right='1px';bEl.style.width='calc(100% - 2px)';
+      if(label){
+        var lbl=document.createElement('span');
+        lbl.className='ag-blocked-label';
+        lbl.textContent='🚫 '+label;
+        bEl.appendChild(lbl);
+      } else {
+        var lbl2=document.createElement('span');
+        lbl2.className='ag-blocked-label';
+        lbl2.textContent='🚫';
+        bEl.appendChild(lbl2);
+      }
+      // Click = unblock
+      (function(bk2,bTime2,bProf2){
+        bEl.addEventListener('click',function(e){
+          e.stopPropagation();
+          delete blockedSlots[bk2];
+          saveBlocked();
+          renderGrid();
+        });
+        bEl.addEventListener('contextmenu',function(e){
+          e.preventDefault();e.stopPropagation();
+          delete blockedSlots[bk2];
+          saveBlocked();
+          renderGrid();
+        });
+      })(bk,bTime,bProf);
+      col.appendChild(bEl);
+    });
+
     // Institutional blocks — deferred until after layout so we know totalProfs
     var pendingInstBlocks=[];
     instBlocks.forEach(function(b,realIdx){
@@ -8469,15 +8596,7 @@ function renderGrid(){
             }
           });
           el2.addEventListener('contextmenu',function(e){
-            e.preventDefault();e.stopPropagation();
-            if(!offeredSlots[offKey]){
-              offeredSlots[offKey]=true;
-              el2.classList.add('ofrecido');
-            } else {
-              delete offeredSlots[offKey];
-              el2.classList.remove('ofrecido');
-            }
-            saveOffered();
+            openBlockPopup(e,ds2,tm2,prof2);
           });
         })(el,ds,item.tm,p);
         col.appendChild(el);
@@ -8542,7 +8661,7 @@ function makeTurnoEl(t,key,hPx){
   var el=document.createElement('div');
   var pc=PROF_CLS[t.prof]||'bg';
   el.className='ag-turno '+pc+(t.estado==='cancelado'?' cancelado':'')+(t.extra?' ag-turno-extra':'')+(t.video?' ag-turno-video':'');
-  var dc=t.pago||'sin-seña';
+  var dc=t.osde?'osde':(t.pago||'sin-seña');
 
   var nameColor='';
   if(t.sinCargo)nameColor='color:#185FA5;';
@@ -9529,7 +9648,12 @@ async function loadLocal(){
           if(row.key==='disp_blocks')dispDB=JSON.parse(row.value);
           if(row.key==='inst_blocks')instDB=JSON.parse(row.value);
           if(row.key==='offered_slots'){try{offeredSlots=JSON.parse(row.value);localStorage.setItem(LS_OFFERED,row.value);}catch(e){}}
-          if(row.key==='blocked_slots'){try{blockedSlots=JSON.parse(row.value);localStorage.setItem(LS_BLOCKED,row.value);}catch(e){}}
+          if(row.key==='blocked_slots'){try{
+    var bs=JSON.parse(row.value);
+    // migrate old format (value===true) to {label:''}
+    Object.keys(bs).forEach(function(k){if(bs[k]===true)bs[k]={label:''};});
+    blockedSlots=bs;localStorage.setItem(LS_BLOCKED,row.value);
+  }catch(e){}}
           if(row.key==='day_starts'){try{dayStarts=JSON.parse(row.value);localStorage.setItem(LS_DS,row.value);}catch(e){}}
 
         }catch(e){}
