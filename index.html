@@ -816,6 +816,7 @@
 }
 .ag-day-start-btn:hover{background:#dbeafe;border-color:#93c5fd;}
 .ag-day-start-btn.modified{background:#fef3c7;border-color:#f59e0b;color:#92400e;}
+.ag-day-start-btn.modified::after{content:' ✓';}
 #ag-daystart-modal-bg{
   position:fixed;inset:0;background:rgba(15,23,42,.5);
   display:flex;align-items:center;justify-content:center;
@@ -834,7 +835,7 @@
 .ag-ds-close{background:none;border:none;font-size:20px;cursor:pointer;color:#6b7280;padding:2px 6px;}
 .ag-ds-body{padding:20px;}
 .ag-ds-info{font-size:12px;color:#64748b;margin-bottom:16px;line-height:1.5;background:#f0f9ff;border-radius:8px;padding:10px 12px;border:1px solid #bae6fd;}
-.ag-ds-prof-row{display:flex;align-items:center;gap:10px;margin-bottom:12px;padding:10px 12px;border-radius:10px;border:1.5px solid #e2e8f0;background:#f9fafb;}
+.ag-ds-prof-row{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:12px;padding:10px 12px;border-radius:10px;border:1.5px solid #e2e8f0;background:#f9fafb;}
 .ag-ds-prof-label{font-size:13px;font-weight:600;color:#374151;flex:1;}
 .ag-ds-time-inp{padding:7px 10px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:14px;font-weight:700;font-family:inherit;color:#1e293b;width:110px;}
 .ag-ds-time-inp:focus{outline:none;border-color:#185FA5;box-shadow:0 0 0 3px rgba(24,95,165,.10);}
@@ -8232,7 +8233,7 @@ function renderGrid(){
     if(hasDsp){
       var ebtn=document.createElement('button');
       // Check if any dayStart override exists for this date
-      var hasOvr=visProfs.some(function(p){return dayStarts[ds0+'_'+p];});
+      var hasOvr=visProfs.some(function(p){var ov=dayStarts[ds0+'_'+p];return ov&&ov.from;});
       ebtn.className='ag-day-start-btn'+(hasOvr?' modified':'');
       ebtn.title='Editar horario de inicio de turnos';
       ebtn.textContent=hasOvr?'🕐 mod':'🕐';
@@ -8394,64 +8395,76 @@ function renderGrid(){
 
     // Items libres (sin turno asignado para ese prof)
     visProfs.forEach(function(p){
-      // Usar duración del bloque de disponibilidad si existe
-      // Generar slots según duración del bloque de disponibilidad
       var _profDispBlocks=dispBlocks.filter(function(b){return b.prof===p;});
-      var _slotsSet={};
-      var dur=_profDispBlocks.length&&_profDispBlocks[0].dur?_profDispBlocks[0].dur:(PROF_45.indexOf(p)>=0?45:30);
+      var defaultDur=_profDispBlocks.length&&_profDispBlocks[0].dur?_profDispBlocks[0].dur:(PROF_45.indexOf(p)>=0?45:30);
 
-      // ── Horario de inicio personalizado (dayStarts override) ──────────────
+      // ── Horario personalizado para este día ───────────────────────────────
+      // dayStarts guarda { from:'HH:MM', to:'HH:MM' } o null
       var dsKey=ds+'_'+p;
-      var customStart=dayStarts[dsKey]||null; // 'HH:MM' or null
-
-      _profDispBlocks.forEach(function(b){
-        if(!isBlockActiveOnDate(b,ds)) return; // solo bloques activos hoy
-        var blockDur=b.dur||( PROF_45.indexOf(p)>=0?45:30 );
-        var fromStr=b.from;
-        // Si hay override de inicio Y este bloque es el primero del día,
-        // reemplazar 'from' con el horario personalizado
-        if(customStart){
-          var activeBlocks=_profDispBlocks.filter(function(bb){return isBlockActiveOnDate(bb,ds);});
-          activeBlocks.sort(function(a,b2){return t2m(a.from)-t2m(b2.from);});
-          if(activeBlocks.length && activeBlocks[0]===b){
-            // Recalcular slots desde customStart cada dur minutos
-            makeSlotsForDur(customStart,b.to,blockDur).forEach(function(s){_slotsSet[s]=true;});
-            return;
-          }
-        }
-        makeSlotsForDur(fromStr,b.to,blockDur).forEach(function(s){_slotsSet[s]=true;});
-      });
-
-      var profSlots=Object.keys(_slotsSet).sort();
-      if(!profSlots.length){
-        if(customStart){
-          // Fallback: generar desde customStart hasta fin del día trabajado
-          var fallbackEnd=PROF_45.indexOf(p)>=0?'18:00':'18:00';
-          profSlots=makeSlotsForDur(customStart,fallbackEnd,dur);
-        } else {
-          profSlots=PROF_45.indexOf(p)>=0?SLOTS_45:SLOTS_30;
-        }
+      var _rawOv=dayStarts[dsKey]||null;
+      // Compat: old format stored just a string '09:30', new format is {from,to}
+      var override=null;
+      if(_rawOv){
+        if(typeof _rawOv==='string') override={from:_rawOv,to:null};
+        else override=_rawOv;
       }
-      profSlots.forEach(function(tm){
-        var startM=t2m(tm);
-        var endM=startM+dur;
-        var inDisp=dispBlocks.some(function(b){
-          return b.prof===p&&isBlockActiveOnDate(b,ds)&&t2m(b.from)<=startM&&startM<t2m(b.to);
+
+      var profSlots=[];
+
+      if(override && override.from){
+        var ovTo=override.to;
+        if(!ovTo){
+          // Old format: only 'from' stored — derive 'to' from last dispBlock
+          var _lb2=_profDispBlocks.filter(function(b){return isBlockActiveOnDate(b,ds);}).sort(function(a,b2){return t2m(b2.to)-t2m(a.to);})[0];
+          ovTo=_lb2?_lb2.to:'18:00';
+        }
+        // Generar slots directamente desde el override, ignorando dispBlocks normales
+        profSlots=makeSlotsForDur(override.from, ovTo, defaultDur);
+        profSlots.forEach(function(tm){
+          var startM=t2m(tm);
+          var endM=startM+defaultDur;
+          // Solo filtrar NL y bloques manuales; NO filtrar por inDisp (el override lo reemplaza)
+          var inNL=nlBlocks.some(function(b){
+            return b.prof===p&&isBlockActiveOnDate(b,ds)&&t2m(b.from)<=startM&&startM<t2m(b.to);
+          });
+          if(inNL)return;
+          var manualKey=ds+'_'+tm+'_'+p;
+          if(blockedSlots[manualKey])return;
+          var tk=ds+'_'+tm;
+          var tkProf=ds+'_'+tm+'_'+p;
+          if((turnos[tkProf]&&turnos[tkProf].prof===p)||(turnos[tk]&&turnos[tk].prof===p))return;
+          allItems.push({prof:p,tm:tm,startM:startM,endM:endM,dur:defaultDur,tipo:'free'});
         });
-        if(!inDisp)return;
-        var inNL=nlBlocks.some(function(b){
-          return b.prof===p&&isBlockActiveOnDate(b,ds)&&t2m(b.from)<=startM&&startM<t2m(b.to);
+      } else {
+        // Comportamiento estándar: usar dispBlocks
+        var _slotsSet={};
+        _profDispBlocks.forEach(function(b){
+          if(!isBlockActiveOnDate(b,ds))return;
+          var blockDur=b.dur||defaultDur;
+          makeSlotsForDur(b.from,b.to,blockDur).forEach(function(s){_slotsSet[s]=true;});
         });
-        if(inNL)return;
-        // Bloqueo manual (click derecho)
-        var manualKey=ds+'_'+tm+'_'+p;
-        if(blockedSlots[manualKey])return;
-        var tk=ds+'_'+tm;
-        // Verificar con formato prof-aware Y formato legacy (solo si el turno es de este prof)
-        var tkProf=ds+'_'+tm+'_'+p;
-        if((turnos[tkProf]&&turnos[tkProf].prof===p)||(turnos[tk]&&turnos[tk].prof===p))return;
-        allItems.push({prof:p,tm:tm,startM:startM,endM:endM,dur:dur,tipo:'free'});
-      });
+        profSlots=Object.keys(_slotsSet).sort();
+        if(!profSlots.length) profSlots=PROF_45.indexOf(p)>=0?SLOTS_45:SLOTS_30;
+
+        profSlots.forEach(function(tm){
+          var startM=t2m(tm);
+          var endM=startM+defaultDur;
+          var inDisp=dispBlocks.some(function(b){
+            return b.prof===p&&isBlockActiveOnDate(b,ds)&&t2m(b.from)<=startM&&startM<t2m(b.to);
+          });
+          if(!inDisp)return;
+          var inNL=nlBlocks.some(function(b){
+            return b.prof===p&&isBlockActiveOnDate(b,ds)&&t2m(b.from)<=startM&&startM<t2m(b.to);
+          });
+          if(inNL)return;
+          var manualKey=ds+'_'+tm+'_'+p;
+          if(blockedSlots[manualKey])return;
+          var tk=ds+'_'+tm;
+          var tkProf=ds+'_'+tm+'_'+p;
+          if((turnos[tkProf]&&turnos[tkProf].prof===p)||(turnos[tk]&&turnos[tk].prof===p))return;
+          allItems.push({prof:p,tm:tm,startM:startM,endM:endM,dur:defaultDur,tipo:'free'});
+        });
+      }
     });
 
     // Items ocupados (turnos asignados)
@@ -9541,49 +9554,59 @@ var _dsDate=null, _dsProfs=[];
 function openDayStartModal(dateStr, visibleProfs){
   _dsDate=dateStr;
   _dsProfs=visibleProfs.slice();
-  // Filtrar solo profs con disponibilidad activa ese día
   var activeProfs=_dsProfs.filter(function(p){
     return dispBlocks.some(function(b){return b.prof===p&&isBlockActiveOnDate(b,dateStr);});
   });
   if(!activeProfs.length){alert('No hay bloques de disponibilidad configurados para ese día.');return;}
 
-  // Title
   var d=parseLocalDate(dateStr);
   var diNames=['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];
-  document.getElementById('ag-ds-title').textContent='🕐 Horario de inicio — '+diNames[d.getDay()]+' '+d.getDate()+'/'+('0'+(d.getMonth()+1)).slice(-2)+'/'+d.getFullYear();
+  document.getElementById('ag-ds-title').textContent='🕐 Ajustar horario — '+diNames[d.getDay()]+' '+d.getDate()+'/'+('0'+(d.getMonth()+1)).slice(-2)+'/'+d.getFullYear();
 
-  // Build rows
   var rows=document.getElementById('ag-ds-rows');
   rows.innerHTML='';
   activeProfs.forEach(function(p){
     var dsKey=dateStr+'_'+p;
-    var cur=dayStarts[dsKey]||'';
-    // Get default start from first active dispBlock
-    var firstBlock=dispBlocks.filter(function(b){return b.prof===p&&isBlockActiveOnDate(b,dateStr);}).sort(function(a,b2){return t2m(a.from)-t2m(b2.from);})[0];
-    var defStart=firstBlock?firstBlock.from:'09:00';
+    var cur=dayStarts[dsKey]||null; // {from, to} or null
+    var activeBlocks=dispBlocks.filter(function(b){return b.prof===p&&isBlockActiveOnDate(b,dateStr);})
+                               .sort(function(a,b2){return t2m(a.from)-t2m(b2.from);});
+    var firstBlock=activeBlocks[0];
+    var lastBlock=activeBlocks[activeBlocks.length-1];
+    var defFrom=firstBlock?firstBlock.from:'09:00';
+    var defTo=lastBlock?lastBlock.to:'17:00';
     var dur=firstBlock&&firstBlock.dur?firstBlock.dur:(PROF_45.indexOf(p)>=0?45:30);
+    var curFrom=cur&&cur.from?cur.from:defFrom;
+    var curTo=cur&&cur.to?cur.to:defTo;
+    var profColors={BG:'#7F77DD',OB:'#378ADD',LA:'#E24B4A',SA:'#EF9F27',MA:'#22C55E'};
 
     var row=document.createElement('div');
     row.className='ag-ds-prof-row';
+    row.style.flexWrap='wrap';
     row.innerHTML=''
-      +'<div class="ag-ds-prof-label">'
-        +'<span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:'
-          +({BG:'#7F77DD',OB:'#378ADD',LA:'#E24B4A',SA:'#EF9F27',MA:'#22C55E'}[p]||'#aaa')
-          +';margin-right:6px;"></span>'
-        +(PROF_FULL[p]||p)
-        +'<br><span style="font-size:10px;color:#9ca3af;font-weight:400">Intervalo '+dur+' min · Default '+defStart+'</span>'
+      +'<div class="ag-ds-prof-label" style="width:100%;margin-bottom:8px;">'
+        +'<span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:'+(profColors[p]||'#aaa')+';margin-right:6px;vertical-align:middle;"></span>'
+        +'<strong>'+(PROF_FULL[p]||p)+'</strong>'
+        +'<span style="font-size:10px;color:#9ca3af;font-weight:400;margin-left:8px;">'+dur+' min · Default '+defFrom+' – '+defTo+'</span>'
       +'</div>'
-      +'<input type="time" class="ag-ds-time-inp" data-prof="'+p+'" data-default="'+defStart+'" value="'+(cur||defStart)+'" step="'+dur*60+'" />'
-      +'<button class="ag-ds-reset" data-prof="'+p+'" title="Restablecer al horario original">↺</button>';
+      +'<div style="display:flex;align-items:center;gap:8px;flex:1;">'
+        +'<label style="font-size:11px;font-weight:600;color:#6b7280;white-space:nowrap;">Desde</label>'
+        +'<input type="time" class="ag-ds-time-inp ag-ds-from" data-prof="'+p+'" data-field="from" data-default-from="'+defFrom+'" data-default-to="'+defTo+'" value="'+curFrom+'" step="'+dur*60+'" style="width:100px;" />'
+        +'<label style="font-size:11px;font-weight:600;color:#6b7280;white-space:nowrap;">Hasta</label>'
+        +'<input type="time" class="ag-ds-time-inp ag-ds-to" data-prof="'+p+'" data-field="to" value="'+curTo+'" step="'+dur*60+'" style="width:100px;" />'
+        +'<button class="ag-ds-reset" data-prof="'+p+'" title="Restablecer al horario original" style="margin-left:4px;">↺</button>'
+      +'</div>';
     rows.appendChild(row);
   });
 
-  // Bind reset buttons
   rows.querySelectorAll('.ag-ds-reset').forEach(function(btn){
     btn.addEventListener('click',function(){
       var p=this.dataset.prof;
-      var inp=rows.querySelector('input[data-prof="'+p+'"]');
-      if(inp) inp.value=inp.dataset.default;
+      var fromInp=rows.querySelector('.ag-ds-from[data-prof="'+p+'"]');
+      var toInp=rows.querySelector('.ag-ds-to[data-prof="'+p+'"]');
+      if(fromInp){fromInp.value=fromInp.dataset.defaultFrom;}
+      if(toInp){toInp.value=fromInp?fromInp.dataset.defaultTo:'';}
+      var dsKey=dateStr+'_'+p;
+      delete dayStarts[dsKey];
     });
   });
 
@@ -9593,15 +9616,23 @@ function openDayStartModal(dateStr, visibleProfs){
 function saveDayStarts(){
   var rows=document.getElementById('ag-ds-rows');
   if(!rows)return;
+  // Group by prof: collect from and to inputs
+  var byProf={};
   rows.querySelectorAll('input.ag-ds-time-inp').forEach(function(inp){
     var p=inp.dataset.prof;
-    var val=inp.value.trim();
-    var defVal=inp.dataset.default;
+    if(!byProf[p])byProf[p]={};
+    byProf[p][inp.dataset.field]=inp.value.trim();
+    byProf[p]['defaultFrom']=inp.dataset.defaultFrom||'';
+    byProf[p]['defaultTo']=inp.dataset.defaultTo||'';
+  });
+  Object.keys(byProf).forEach(function(p){
+    var data=byProf[p];
     var dsKey=_dsDate+'_'+p;
-    if(!val||val===defVal){
+    var isDefault=(data.from===data.defaultFrom&&data.to===data.defaultTo);
+    if(!data.from||!data.to||isDefault){
       delete dayStarts[dsKey];
     } else {
-      dayStarts[dsKey]=val;
+      dayStarts[dsKey]={from:data.from, to:data.to};
     }
   });
   saveLocal();
