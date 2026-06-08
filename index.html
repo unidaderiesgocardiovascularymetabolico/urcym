@@ -1446,7 +1446,7 @@
     <div id="ag-extend-bg" class="ag-modal-bg" style="display:none;z-index:10300;">
       <div class="ag-modal" style="width:400px;max-width:96vw;" role="dialog" aria-modal="true">
         <div class="ag-modal-header">
-          <h3>⏱ Nuevo horario fuera de la franja</h3>
+          <h3 id="ag-extend-modal-title">⏱ Nuevo horario fuera de la franja</h3>
         </div>
         <div class="ag-modal-body">
           <p id="ag-extend-info" style="font-size:13px;color:#374151;line-height:1.65;margin-bottom:16px;"></p>
@@ -8139,7 +8139,12 @@ function isBlockActiveOnDate(b, dateStr){
 function getBlocksAt(blocks,dateStr,time,profFilter){
   var tm=t2m(time);
   var src=profFilter?blocks.filter(function(b){return b.prof===profFilter;}):blocks;
-  return src.filter(function(b){return isBlockActiveOnDate(b,dateStr)&&t2m(b.from)<=tm&&tm<t2m(b.to);});
+  return src.filter(function(b){return isBlockActiveOnDate(b,dateStr)&&t2m(getEffectiveFrom(b,dateStr))<=tm&&tm<t2m(b.to);});
+}
+
+// Devuelve el 'from' efectivo del bloque para un día dado (respeta dayOverrides)
+function getEffectiveFrom(b, dateStr){
+  return (b.dayOverrides&&b.dayOverrides[dateStr]&&b.dayOverrides[dateStr].from)||b.from;
 }
 
 // Slot válido para un prof dado (BG/OB → 45min, resto → 30min)
@@ -8362,7 +8367,7 @@ function renderGrid(){
       _profDispBlocks.forEach(function(b){
         if(!isBlockActiveOnDate(b,ds))return;
         var blockDur=b.dur||defaultDur;
-        makeSlotsForDur(b.from,b.to,blockDur).forEach(function(s){_slotsSet[s]=true;});
+        makeSlotsForDur(getEffectiveFrom(b,ds),b.to,blockDur).forEach(function(s){_slotsSet[s]=true;});
       });
       var profSlots=Object.keys(_slotsSet).sort();
       if(!profSlots.length) profSlots=PROF_45.indexOf(p)>=0?SLOTS_45:SLOTS_30;
@@ -8370,7 +8375,7 @@ function renderGrid(){
         var startM=t2m(tm);
         var endM=startM+defaultDur;
         var inDisp=dispBlocks.some(function(b){
-          return b.prof===p&&isBlockActiveOnDate(b,ds)&&t2m(b.from)<=startM&&startM<t2m(b.to);
+          return b.prof===p&&isBlockActiveOnDate(b,ds)&&t2m(getEffectiveFrom(b,ds))<=startM&&startM<t2m(b.to);
         });
         if(!inDisp)return;
         var inNL=nlBlocks.some(function(b){
@@ -9092,7 +9097,7 @@ function openReprog(key){
       return b.prof===profVal&&isBlockActiveOnDate(b,ds);
     }).sort(function(a,b2){return t2m(a.from)-t2m(b2.from);});
     var inDisp=_activeBlocks.some(function(b){
-      return t2m(b.from)<=t2m(newTime)&&t2m(newTime)<t2m(b.to);
+      return t2m(getEffectiveFrom(b,ds))<=t2m(newTime)&&t2m(newTime)<t2m(b.to);
     });
     var hasAnyDisp=dispBlocks.some(function(b){return b.prof===profVal;});
     if(hasAnyDisp&&!inDisp){
@@ -9133,13 +9138,79 @@ function openReprog(key){
           _extSlots.appendChild(chip);
         });
       }
-      window._extendCtx={profVal:profVal,ds:ds,newTime:newTime,dur:dur2,activeBlocks:_activeBlocks,slotsAtras:slotsAtras,slotsAdelante:slotsAdelante};
+      window._extendCtx={profVal:profVal,ds:ds,newTime:newTime,dur:dur2,activeBlocks:_activeBlocks,slotsAtras:slotsAtras,slotsAdelante:slotsAdelante,mode:'extender'};
       window._extendPending={profVal:profVal,ds:ds,newTime:newTime,oldKey:oldKey,newKey:newKey,isFreeMode:isFreeMode,freeTmEl:freeTmEl,durCasc:dur2};
       document.getElementById('ag-extend-bg').style.display='flex';
       return; // continúa en ag-extend-yes / ag-extend-no
     }
-  }
-  // Validar solapamiento con bloques NO LABORABLES del prof
+    // ── Turno DENTRO del bloque pero NO coincide con ningún slot generado ──
+    if(hasAnyDisp&&inDisp){
+      var dur3=PROF_45.indexOf(profVal)>=0?45:30;
+      var newM3=t2m(newTime);
+      // Chequear si newTime es exactamente un slot del bloque activo
+      var generatedSlots3={};
+      _activeBlocks.forEach(function(b){
+        var bd3=b.dur||dur3;
+        makeSlotsForDur(getEffectiveFrom(b,ds),b.to,bd3).forEach(function(s){generatedSlots3[s]=true;});
+      });
+      var isAligned=generatedSlots3[newTime]===true;
+      if(!isAligned){
+        // Calcular qué slots se generarían si el bloque se reancla desde newTime
+        // Para cada bloque activo, buscar el que contiene newTime
+        var containingBlock=_activeBlocks.filter(function(b){return t2m(getEffectiveFrom(b,ds))<=newM3&&newM3<t2m(b.to);})[0];
+        if(containingBlock){
+          var bd3c=containingBlock.dur||dur3;
+          var effFrom=getEffectiveFrom(containingBlock,ds);
+          // Slots actuales del bloque (con from efectivo)
+          var oldSlots=makeSlotsForDur(effFrom,containingBlock.to,bd3c);
+          // Calcular nuevo from: retroceder desde newTime hasta el from efectivo del bloque
+          var blockFromM=t2m(effFrom);
+          // new from = newTime menos la cantidad de pasos que lo llevan atrás al from del bloque (o al borde)
+          var newFromM3=newM3;
+          while(newFromM3-bd3c>=blockFromM)newFromM3-=bd3c;
+          var _nfh=Math.floor(newFromM3/60),_nfm=newFromM3%60;
+          var newFromStr=(_nfh<10?'0':'')+_nfh+':'+((_nfm<10?'0':'')+_nfm);
+          // Si newFromStr === effFrom ya está alineado (no debería llegar acá)
+          if(newFromStr===effFrom){
+            // ya alineado, continuar sin modal
+          } else {
+          // Slots nuevos (con reajuste)
+          var newSlots=makeSlotsForDur(newFromStr,containingBlock.to,bd3c);
+          // Chips: mostrar slots nuevos, resaltando el turno y los que son nuevos
+          var oldSlotsSet={};oldSlots.forEach(function(s){oldSlotsSet[s]=true;});
+          var _extInfo3=document.getElementById('ag-extend-info');
+          var _extSlots3=document.getElementById('ag-extend-slots');
+          var _extTitle3=document.getElementById('ag-extend-modal-title');
+          if(_extTitle3)_extTitle3.textContent='⏱ Horario no alineado con los slots';
+          if(_extInfo3){
+            _extInfo3.innerHTML='El horario <strong>'+newTime+'</strong> no coincide con los slots del bloque de <strong>'+PROF_FULL[profVal]+'</strong> ('+effFrom+' – '+containingBlock.to+', cada '+bd3c+' min).<br><br>¿Querés reajustar los slots de ese día desde este horario?';
+          }
+          if(_extSlots3){
+            _extSlots3.innerHTML='';
+            newSlots.forEach(function(ts){
+              var chip=document.createElement('span');
+              chip.textContent=ts;
+              var isTurno=(ts===newTime);
+              var isAdded=!oldSlotsSet[ts];
+              chip.style.cssText='padding:4px 10px;border-radius:20px;font-size:12px;font-weight:600;display:inline-block;margin:2px;'
+                +(isTurno?'background:#185FA5;color:#fff;'
+                  :isAdded?'background:#d1fae5;color:#065f46;border:1.5px solid #6ee7b7;'
+                  :'background:#f1f5f9;color:#374151;border:1.5px solid #e2e8f0;');
+              _extSlots3.appendChild(chip);
+            });
+          }
+          // Btn label
+          var _extYesBtn=document.getElementById('ag-extend-yes');
+          if(_extYesBtn)_extYesBtn.textContent='Reajustar slots';
+          window._extendCtx={profVal:profVal,ds:ds,newTime:newTime,dur:dur3,activeBlocks:_activeBlocks,containingBlock:containingBlock,newFromStr:newFromStr,mode:'reajustar'};
+          window._extendPending={profVal:profVal,ds:ds,newTime:newTime,oldKey:oldKey,newKey:newKey,isFreeMode:isFreeMode,freeTmEl:freeTmEl,durCasc:dur3};
+          document.getElementById('ag-extend-bg').style.display='flex';
+          return;
+          } // end else (not aligned)
+        } // end if(containingBlock)
+      } // end if(!isAligned)
+    } // end if(hasAnyDisp&&inDisp)
+  } // end if(!isExtra&&!videoLibre)
   if(!isExtra){
     var inNL=nlBlocks.some(function(b){
       return b.prof===profVal&&isBlockActiveOnDate(b,ds)&&t2m(b.from)<=t2m(newTime)&&t2m(newTime)<t2m(b.to);
@@ -9245,44 +9316,62 @@ function _finalizeSave(pending){
 }
 (document.getElementById('ag-extend-no')||{addEventListener:function(){}}).addEventListener('click',function(){
   document.getElementById('ag-extend-bg').style.display='none';
+  var _tt=document.getElementById('ag-extend-modal-title');if(_tt)_tt.textContent='⏱ Nuevo horario fuera de la franja';
+  var _yb=document.getElementById('ag-extend-yes');if(_yb)_yb.textContent='Agregar slots';
   var p=window._extendPending;
   window._extendCtx=null;window._extendPending=null;
   _finalizeSave(p);
 });
 (document.getElementById('ag-extend-yes')||{addEventListener:function(){}}).addEventListener('click',function(){
   document.getElementById('ag-extend-bg').style.display='none';
+  // Reset modal title and btn text for next use
+  var _tt=document.getElementById('ag-extend-modal-title');if(_tt)_tt.textContent='⏱ Nuevo horario fuera de la franja';
+  this.textContent='Agregar slots';
   var ctx=window._extendCtx;
   var p=window._extendPending;
   window._extendCtx=null;window._extendPending=null;
   if(ctx){
-    // Find the dispBlock this prof has on this day and extend it
-    var dur=ctx.dur;
-    var allNewSlots=[].concat(ctx.slotsAtras,ctx.slotsAdelante); // exclude newTime itself — already saved as turno
-    // Extend earliest active block backward OR latest forward
-    // Strategy: find the block closest to newTime and extend its boundary
-    var blocks=ctx.activeBlocks;
-    var newM=t2m(ctx.newTime);
-    if(!blocks.length){
-      // No blocks at all for this day — can't extend; skip
-    } else {
-      var lastBlock=blocks[blocks.length-1];
-      var firstBlock=blocks[0];
-      // If newTime is after latestTo, extend lastBlock.to
-      if(newM>=t2m(lastBlock.to)){
-        // Find new 'to': newTime + dur (so the turno fits inside)
-        var newToM=newM+dur;
-        // Also include any slotsAdelante that are contiguous
-        ctx.slotsAdelante.forEach(function(ts){var m=t2m(ts);if(m+dur>newToM)newToM=m+dur;});
-        var _nh=Math.floor(newToM/60),_nm=newToM%60;
-        lastBlock.to=(_nh<10?'0':'')+_nh+':'+((_nm<10?'0':'')+_nm);
+    if(ctx.mode==='reajustar'){
+      // Reajustar el from del bloque que contiene el turno para que los slots queden alineados
+      var cb=ctx.containingBlock;
+      if(cb&&ctx.newFromStr){
+        // Solo modificar el from si es distinto al actual
+        if(cb.from!==ctx.newFromStr){
+          // Guardar override por día solo para ese día (no tocar el bloque global)
+          // Estrategia: el bloque es un objeto en el array dispBlocks → modificar directamente
+          // pero sólo aplica para ese día si el bloque es recurrente.
+          // Para bloques recurrentes: crear un override de from sólo para ese día.
+          // Para bloques de un solo día (startDate===ds): modificar directamente.
+          if(cb.startDate){
+            // Bloque de un solo día → modificar directo
+            cb.from=ctx.newFromStr;
+          } else {
+            // Bloque recurrente → crear override de startTime por día
+            if(!cb.dayOverrides)cb.dayOverrides={};
+            cb.dayOverrides[ctx.ds]={from:ctx.newFromStr};
+          }
+        }
       }
-      // If newTime is before earliestFrom, extend firstBlock.from
-      if(newM<t2m(firstBlock.from)){
-        // New 'from': earliest slotsAtras
-        var newFromM=newM;
-        ctx.slotsAtras.forEach(function(ts){var m=t2m(ts);if(m<newFromM)newFromM=m;});
-        var _nh2=Math.floor(newFromM/60),_nm2=newFromM%60;
-        firstBlock.from=(_nh2<10?'0':'')+_nh2+':'+((_nm2<10?'0':'')+_nm2);
+    } else {
+      // Modo extender: lógica original
+      var dur=ctx.dur;
+      var blocks=ctx.activeBlocks;
+      var newM=t2m(ctx.newTime);
+      if(blocks.length){
+        var lastBlock=blocks[blocks.length-1];
+        var firstBlock=blocks[0];
+        if(newM>=t2m(lastBlock.to)){
+          var newToM=newM+dur;
+          ctx.slotsAdelante.forEach(function(ts){var m=t2m(ts);if(m+dur>newToM)newToM=m+dur;});
+          var _nh=Math.floor(newToM/60),_nm=newToM%60;
+          lastBlock.to=(_nh<10?'0':'')+_nh+':'+((_nm<10?'0':'')+_nm);
+        }
+        if(newM<t2m(firstBlock.from)){
+          var newFromM=newM;
+          ctx.slotsAtras.forEach(function(ts){var m=t2m(ts);if(m<newFromM)newFromM=m;});
+          var _nh2=Math.floor(newFromM/60),_nm2=newFromM%60;
+          firstBlock.from=(_nh2<10?'0':'')+_nh2+':'+((_nm2<10?'0':'')+_nm2);
+        }
       }
     }
   }
@@ -9291,6 +9380,8 @@ function _finalizeSave(pending){
 (document.getElementById('ag-extend-bg')||{addEventListener:function(){}}).addEventListener('click',function(e){
   if(e.target===this){
     this.style.display='none';
+    var _tt=document.getElementById('ag-extend-modal-title');if(_tt)_tt.textContent='⏱ Nuevo horario fuera de la franja';
+    var _yb=document.getElementById('ag-extend-yes');if(_yb)_yb.textContent='Agregar slots';
     var p=window._extendPending;window._extendCtx=null;window._extendPending=null;
     _finalizeSave(p);
   }
