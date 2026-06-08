@@ -770,6 +770,46 @@
 .ag-cfg-v2-empty{text-align:center;padding:24px 0;color:#9ca3af;font-size:12px;}
 .ag-cfg-v2-footer{display:flex;justify-content:flex-end;gap:8px;padding:12px 20px;border-top:1px solid #f3f4f6;}
 
+/* ── Edición horario inicio por día ── */
+.ag-day-start-btn{
+  display:inline-flex;align-items:center;gap:3px;
+  margin-left:6px;padding:2px 7px;border-radius:20px;
+  border:1.5px solid transparent;background:rgba(24,95,165,.10);
+  color:#185FA5;font-size:10px;font-weight:700;cursor:pointer;
+  font-family:inherit;transition:all .15s;white-space:nowrap;
+  vertical-align:middle;
+}
+.ag-day-start-btn:hover{background:#dbeafe;border-color:#93c5fd;}
+.ag-day-start-btn.modified{background:#fef3c7;border-color:#f59e0b;color:#92400e;}
+#ag-daystart-modal-bg{
+  position:fixed;inset:0;background:rgba(15,23,42,.5);
+  display:flex;align-items:center;justify-content:center;
+  z-index:10600;padding:16px;
+}
+#ag-daystart-modal{
+  background:#fff;border-radius:16px;width:420px;max-width:96vw;
+  font-family:inherit;box-shadow:0 24px 60px rgba(0,0,0,.20);overflow:hidden;
+}
+.ag-ds-header{
+  padding:18px 20px 14px;border-bottom:1px solid #f1f5f9;
+  display:flex;align-items:center;justify-content:space-between;
+  background:#f8fafc;
+}
+.ag-ds-header h3{font-size:15px;font-weight:700;color:#0f172a;margin:0;}
+.ag-ds-close{background:none;border:none;font-size:20px;cursor:pointer;color:#6b7280;padding:2px 6px;}
+.ag-ds-body{padding:20px;}
+.ag-ds-info{font-size:12px;color:#64748b;margin-bottom:16px;line-height:1.5;background:#f0f9ff;border-radius:8px;padding:10px 12px;border:1px solid #bae6fd;}
+.ag-ds-prof-row{display:flex;align-items:center;gap:10px;margin-bottom:12px;padding:10px 12px;border-radius:10px;border:1.5px solid #e2e8f0;background:#f9fafb;}
+.ag-ds-prof-label{font-size:13px;font-weight:600;color:#374151;flex:1;}
+.ag-ds-time-inp{padding:7px 10px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:14px;font-weight:700;font-family:inherit;color:#1e293b;width:110px;}
+.ag-ds-time-inp:focus{outline:none;border-color:#185FA5;box-shadow:0 0 0 3px rgba(24,95,165,.10);}
+.ag-ds-reset{padding:5px 10px;border:1.5px solid #e2e8f0;border-radius:7px;background:white;font-size:11px;color:#6b7280;cursor:pointer;font-family:inherit;}
+.ag-ds-reset:hover{border-color:#ef4444;color:#ef4444;background:#fef2f2;}
+.ag-ds-footer{display:flex;justify-content:flex-end;gap:8px;padding:14px 20px;border-top:1px solid #f1f5f9;}
+.ag-ds-btn-cancel{padding:9px 18px;border:1.5px solid #e2e8f0;border-radius:9px;background:white;font-size:13px;font-family:inherit;cursor:pointer;color:#374151;}
+.ag-ds-btn-save{padding:9px 20px;border:none;border-radius:9px;background:#185FA5;color:#fff;font-size:13px;font-weight:700;font-family:inherit;cursor:pointer;}
+.ag-ds-btn-save:hover{background:#1351901;}
+
 /* ── Slots de disponibilidad individuales por profesional ── */
 #agenda-app .ag-disp-slot{
   border-radius:4px;
@@ -1385,6 +1425,24 @@
       <div class="page-title">Estudios</div>
       <div class="page-subtitle">Módulo en desarrollo</div>
       <div class="empty-state"><div>🔬</div><p>Próximamente disponible</p></div>
+    </div>
+
+    <!-- Modal: editar horario de inicio por día -->
+    <div id="ag-daystart-modal-bg" style="display:none">
+      <div id="ag-daystart-modal">
+        <div class="ag-ds-header">
+          <h3 id="ag-ds-title">🕐 Ajustar horario de inicio</h3>
+          <button class="ag-ds-close" id="ag-ds-close">✕</button>
+        </div>
+        <div class="ag-ds-body">
+          <div class="ag-ds-info">Cambiá el horario de inicio para uno o más profesionales <strong>solo para este día</strong>. Los turnos libres se regeneran en cascada cada 45 min (BG/OB) o 30 min (LA/SA).</div>
+          <div id="ag-ds-rows"></div>
+        </div>
+        <div class="ag-ds-footer">
+          <button class="ag-ds-btn-cancel" id="ag-ds-cancel">Cancelar</button>
+          <button class="ag-ds-btn-save" id="ag-ds-save">Aplicar cambios</button>
+        </div>
+      </div>
     </div>
 
     <!-- MODAL GASTO -->
@@ -7810,6 +7868,8 @@ var NL_PROFS=['BG','OB'];
 var ALL_PROFS=['BG','OB','LA','SA','MA'];
 
 var LS_T='urcym_ag_turnos', LS_NL='urcym_ag_nl', LS_D='urcym_ag_disp', LS_INST='urcym_ag_inst';
+var LS_DS='urcym_ag_daystarts'; // { 'YYYY-MM-DD_PROF': 'HH:MM', ... }
+var dayStarts={};
 
 var DEFAULT_NL=[
   {prof:'BG',day:0,from:'09:00',to:'12:00',label:'CEQ'},
@@ -8077,9 +8137,27 @@ function renderGrid(){
   blank.style.cssText='background:#f9fafb;border-bottom:1px solid #e5e7eb;';
   wrap.appendChild(blank);
   days.forEach(function(d,i){
+    var ds0=kd(d);
     var h=document.createElement('div');
-    h.className='ag-cell-head'+(kd(d)===todayStr?' ag-today':'');
-    h.textContent=DIAS[i]+' '+d.getDate();
+    h.className='ag-cell-head'+(ds0===todayStr?' ag-today':'');
+    h.style.cursor='default';
+    // Day label
+    var lbl=document.createElement('span');
+    lbl.textContent=DIAS[i]+' '+d.getDate();
+    h.appendChild(lbl);
+    // Edit-start button (visible only for days that have dispBlocks for visible profs)
+    var hasDsp=dispBlocks.some(function(b){return isBlockActiveOnDate(b,ds0)&&visProfs.indexOf(b.prof)>=0;});
+    if(hasDsp){
+      var ebtn=document.createElement('button');
+      // Check if any dayStart override exists for this date
+      var hasOvr=visProfs.some(function(p){return dayStarts[ds0+'_'+p];});
+      ebtn.className='ag-day-start-btn'+(hasOvr?' modified':'');
+      ebtn.title='Editar horario de inicio de turnos';
+      ebtn.textContent=hasOvr?'🕐 mod':'🕐';
+      ebtn.dataset.date=ds0;
+      ebtn.addEventListener('click',function(e){e.stopPropagation();openDayStartModal(ds0,visProfs);});
+      h.appendChild(ebtn);
+    }
     wrap.appendChild(h);
   });
 
@@ -8193,13 +8271,40 @@ function renderGrid(){
       // Generar slots según duración del bloque de disponibilidad
       var _profDispBlocks=dispBlocks.filter(function(b){return b.prof===p;});
       var _slotsSet={};
-      _profDispBlocks.forEach(function(b){
-        var d=b.dur||( PROF_45.indexOf(p)>=0?45:30 );
-        makeSlotsForDur(b.from,b.to,d).forEach(function(s){_slotsSet[s]=true;});
-      });
-      var profSlots=Object.keys(_slotsSet).sort();
-      if(!profSlots.length) profSlots=PROF_45.indexOf(p)>=0?SLOTS_45:SLOTS_30;
       var dur=_profDispBlocks.length&&_profDispBlocks[0].dur?_profDispBlocks[0].dur:(PROF_45.indexOf(p)>=0?45:30);
+
+      // ── Horario de inicio personalizado (dayStarts override) ──────────────
+      var dsKey=ds+'_'+p;
+      var customStart=dayStarts[dsKey]||null; // 'HH:MM' or null
+
+      _profDispBlocks.forEach(function(b){
+        if(!isBlockActiveOnDate(b,ds)) return; // solo bloques activos hoy
+        var blockDur=b.dur||( PROF_45.indexOf(p)>=0?45:30 );
+        var fromStr=b.from;
+        // Si hay override de inicio Y este bloque es el primero del día,
+        // reemplazar 'from' con el horario personalizado
+        if(customStart){
+          var activeBlocks=_profDispBlocks.filter(function(bb){return isBlockActiveOnDate(bb,ds);});
+          activeBlocks.sort(function(a,b2){return t2m(a.from)-t2m(b2.from);});
+          if(activeBlocks.length && activeBlocks[0]===b){
+            // Recalcular slots desde customStart cada dur minutos
+            makeSlotsForDur(customStart,b.to,blockDur).forEach(function(s){_slotsSet[s]=true;});
+            return;
+          }
+        }
+        makeSlotsForDur(fromStr,b.to,blockDur).forEach(function(s){_slotsSet[s]=true;});
+      });
+
+      var profSlots=Object.keys(_slotsSet).sort();
+      if(!profSlots.length){
+        if(customStart){
+          // Fallback: generar desde customStart hasta fin del día trabajado
+          var fallbackEnd=PROF_45.indexOf(p)>=0?'18:00':'18:00';
+          profSlots=makeSlotsForDur(customStart,fallbackEnd,dur);
+        } else {
+          profSlots=PROF_45.indexOf(p)>=0?SLOTS_45:SLOTS_30;
+        }
+      }
       profSlots.forEach(function(tm){
         var startM=t2m(tm);
         var endM=startM+dur;
@@ -9311,23 +9416,111 @@ async function sbSaveTurnos(){
   }
 }
 
+// ═══ MODAL EDICIÓN HORARIO DE INICIO POR DÍA ═══
+var _dsDate=null, _dsProfs=[];
+
+function openDayStartModal(dateStr, visibleProfs){
+  _dsDate=dateStr;
+  _dsProfs=visibleProfs.slice();
+  // Filtrar solo profs con disponibilidad activa ese día
+  var activeProfs=_dsProfs.filter(function(p){
+    return dispBlocks.some(function(b){return b.prof===p&&isBlockActiveOnDate(b,dateStr);});
+  });
+  if(!activeProfs.length){alert('No hay bloques de disponibilidad configurados para ese día.');return;}
+
+  // Title
+  var d=parseLocalDate(dateStr);
+  var diNames=['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];
+  document.getElementById('ag-ds-title').textContent='🕐 Horario de inicio — '+diNames[d.getDay()]+' '+d.getDate()+'/'+('0'+(d.getMonth()+1)).slice(-2)+'/'+d.getFullYear();
+
+  // Build rows
+  var rows=document.getElementById('ag-ds-rows');
+  rows.innerHTML='';
+  activeProfs.forEach(function(p){
+    var dsKey=dateStr+'_'+p;
+    var cur=dayStarts[dsKey]||'';
+    // Get default start from first active dispBlock
+    var firstBlock=dispBlocks.filter(function(b){return b.prof===p&&isBlockActiveOnDate(b,dateStr);}).sort(function(a,b2){return t2m(a.from)-t2m(b2.from);})[0];
+    var defStart=firstBlock?firstBlock.from:'09:00';
+    var dur=firstBlock&&firstBlock.dur?firstBlock.dur:(PROF_45.indexOf(p)>=0?45:30);
+
+    var row=document.createElement('div');
+    row.className='ag-ds-prof-row';
+    row.innerHTML=''
+      +'<div class="ag-ds-prof-label">'
+        +'<span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:'
+          +({BG:'#7F77DD',OB:'#378ADD',LA:'#E24B4A',SA:'#EF9F27',MA:'#22C55E'}[p]||'#aaa')
+          +';margin-right:6px;"></span>'
+        +(PROF_FULL[p]||p)
+        +'<br><span style="font-size:10px;color:#9ca3af;font-weight:400">Intervalo '+dur+' min · Default '+defStart+'</span>'
+      +'</div>'
+      +'<input type="time" class="ag-ds-time-inp" data-prof="'+p+'" data-default="'+defStart+'" value="'+(cur||defStart)+'" step="'+dur*60+'" />'
+      +'<button class="ag-ds-reset" data-prof="'+p+'" title="Restablecer al horario original">↺</button>';
+    rows.appendChild(row);
+  });
+
+  // Bind reset buttons
+  rows.querySelectorAll('.ag-ds-reset').forEach(function(btn){
+    btn.addEventListener('click',function(){
+      var p=this.dataset.prof;
+      var inp=rows.querySelector('input[data-prof="'+p+'"]');
+      if(inp) inp.value=inp.dataset.default;
+    });
+  });
+
+  document.getElementById('ag-daystart-modal-bg').style.display='flex';
+}
+
+function saveDayStarts(){
+  var rows=document.getElementById('ag-ds-rows');
+  if(!rows)return;
+  rows.querySelectorAll('input.ag-ds-time-inp').forEach(function(inp){
+    var p=inp.dataset.prof;
+    var val=inp.value.trim();
+    var defVal=inp.dataset.default;
+    var dsKey=_dsDate+'_'+p;
+    if(!val||val===defVal){
+      delete dayStarts[dsKey];
+    } else {
+      dayStarts[dsKey]=val;
+    }
+  });
+  saveLocal();
+  document.getElementById('ag-daystart-modal-bg').style.display='none';
+  renderGrid();
+}
+
+(document.getElementById('ag-ds-save')||{addEventListener:function(){}}).addEventListener('click',saveDayStarts);
+(document.getElementById('ag-ds-cancel')||{addEventListener:function(){}}).addEventListener('click',function(){
+  document.getElementById('ag-daystart-modal-bg').style.display='none';
+});
+(document.getElementById('ag-ds-close')||{addEventListener:function(){}}).addEventListener('click',function(){
+  document.getElementById('ag-daystart-modal-bg').style.display='none';
+});
+(document.getElementById('ag-daystart-modal-bg')||{addEventListener:function(){}}).addEventListener('click',function(e){
+  if(e.target===this)this.style.display='none';
+});
+
+
 function saveLocal(){
   // Guardar localStorage INMEDIATAMENTE (caché local)
   try{localStorage.setItem(LS_NL,JSON.stringify(nlBlocks));}catch(e){}
   try{localStorage.setItem(LS_D,JSON.stringify(dispBlocks));}catch(e){}
   try{localStorage.setItem(LS_INST,JSON.stringify(instBlocks));}catch(e){}
+  try{localStorage.setItem(LS_DS,JSON.stringify(dayStarts));}catch(e){}
   // Guardar en Supabase (async)
   sbSaveTurnos();
   sbUpsertAgendaConfig('nl_blocks', nlBlocks);
   sbUpsertAgendaConfig('disp_blocks', dispBlocks);
   sbUpsertAgendaConfig('inst_blocks', instBlocks);
+  sbUpsertAgendaConfig('day_starts', dayStarts);
 }
 
 async function loadLocal(){
   // Cargar desde Supabase, con fallback a localStorage
   var turnosDB=null, nlDB=null, dispDB=null, instDB=null;
   try{
-    var rows=await sb.from('urcym_agenda_config').select('key,value').in('key',['turnos','nl_blocks','disp_blocks','inst_blocks','offered_slots','blocked_slots']);
+    var rows=await sb.from('urcym_agenda_config').select('key,value').in('key',['turnos','nl_blocks','disp_blocks','inst_blocks','offered_slots','blocked_slots','day_starts']);
     if(rows.data){
       rows.data.forEach(function(row){
         try{
@@ -9337,6 +9530,7 @@ async function loadLocal(){
           if(row.key==='inst_blocks')instDB=JSON.parse(row.value);
           if(row.key==='offered_slots'){try{offeredSlots=JSON.parse(row.value);localStorage.setItem(LS_OFFERED,row.value);}catch(e){}}
           if(row.key==='blocked_slots'){try{blockedSlots=JSON.parse(row.value);localStorage.setItem(LS_BLOCKED,row.value);}catch(e){}}
+          if(row.key==='day_starts'){try{dayStarts=JSON.parse(row.value);localStorage.setItem(LS_DS,row.value);}catch(e){}}
 
         }catch(e){}
       });
@@ -9372,6 +9566,9 @@ async function loadLocal(){
   // Inst Blocks
   if(instDB){instBlocks=instDB;}
   else{try{var ri2=localStorage.getItem(LS_INST);instBlocks=ri2?JSON.parse(ri2):[];}catch(e){instBlocks=[];}}
+
+  // Day Starts (custom per-day slot offsets)
+  try{var rds=localStorage.getItem(LS_DS);if(rds)dayStarts=JSON.parse(rds);}catch(e){}
 
   // Actualizar caché local con lo que vino de DB
   if(turnosDB)try{localStorage.setItem(LS_T,JSON.stringify(turnos));}catch(e){}
