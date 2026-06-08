@@ -591,6 +591,22 @@
 .ag-block-popup-btn.confirm:hover{background:#1f2937;}
 .ag-block-popup-btn.cancel{background:#f3f4f6;color:#6b7280;}
 .ag-block-popup-btn.cancel:hover{background:#e5e7eb;}
+/* Popup desbloqueo */
+.ag-unblock-popup{
+  position:fixed;z-index:20000;background:#fff;border-radius:12px;
+  box-shadow:0 8px 32px rgba(0,0,0,.18);border:1.5px solid #e5e7eb;
+  padding:4px;min-width:170px;animation:fadeUp .12s ease;overflow:hidden;
+}
+.ag-unblock-item{
+  display:flex;align-items:center;gap:9px;padding:10px 14px;
+  font-size:13px;font-family:inherit;cursor:pointer;border:none;background:none;
+  width:100%;text-align:left;border-radius:9px;color:#1e293b;font-weight:500;
+  transition:background .1s;
+}
+.ag-unblock-item:hover{background:#f1f5f9;}
+.ag-unblock-item .ag-ui-icon{font-size:15px;width:20px;text-align:center;}
+.ag-unblock-sep{height:1px;background:#f1f5f9;margin:2px 0;}
+.ag-unblock-label{font-size:10px;color:#9ca3af;padding:6px 14px 2px;letter-spacing:.05em;text-transform:uppercase;font-weight:600;}
 /* Disponibilidad */
 #agenda-app .ag-disp-block{position:absolute;opacity:.15;border-radius:3px;}
 #agenda-app .ag-disp-block.bg{background:#7F77DD;}
@@ -7980,6 +7996,74 @@ function closeOfferedPopup(){if(_offeredPopup){_offeredPopup.remove();_offeredPo
 // ── Popup bloqueo de slot con título ─────────────────────────────────────────
 var _blockPopup=null;
 function closeBlockPopup(){if(_blockPopup){_blockPopup.remove();_blockPopup=null;}}
+
+// ── Popup opciones al clicar un slot bloqueado ────────────────────────────
+var _unblockPopup=null;
+function closeUnblockPopup(){if(_unblockPopup){_unblockPopup.remove();_unblockPopup=null;}}
+document.addEventListener('click',function(e){
+  if(_unblockPopup&&!_unblockPopup.contains(e.target))closeUnblockPopup();
+});
+function openUnblockPopup(e,bk,bTime,bProf,bLabel){
+  e.stopPropagation();
+  closeUnblockPopup();closeBlockPopup();
+  var popup=document.createElement('div');
+  popup.className='ag-unblock-popup';
+
+  // Header label
+  var hdr=document.createElement('div');
+  hdr.className='ag-unblock-label';
+  hdr.textContent=bTime+(bLabel?' · '+bLabel:'');
+  popup.appendChild(hdr);
+
+  var sep0=document.createElement('div');sep0.className='ag-unblock-sep';
+  popup.appendChild(sep0);
+
+  // Option 1: Dar turno
+  var btn1=document.createElement('button');
+  btn1.className='ag-unblock-item';
+  btn1.innerHTML='<span class="ag-ui-icon">📅</span> Dar turno';
+  btn1.addEventListener('click',function(ev){
+    ev.stopPropagation();
+    closeUnblockPopup();
+    // Unblock first, then open modal pre-filled
+    delete blockedSlots[bk];
+    saveBlocked();
+    // bk = 'YYYY-MM-DD_HH:MM_PROF'
+    var parts=bk.split('_');
+    var ds2=parts[0], tm2=parts[1];
+    renderGrid();
+    openModal(ds2,tm2,null,bProf);
+  });
+  popup.appendChild(btn1);
+
+  var sep1=document.createElement('div');sep1.className='ag-unblock-sep';
+  popup.appendChild(sep1);
+
+  // Option 2: Solo desbloquear
+  var btn2=document.createElement('button');
+  btn2.className='ag-unblock-item';
+  btn2.innerHTML='<span class="ag-ui-icon">🔓</span> Solo desbloquear';
+  btn2.addEventListener('click',function(ev){
+    ev.stopPropagation();
+    closeUnblockPopup();
+    delete blockedSlots[bk];
+    saveBlocked();
+    renderGrid();
+  });
+  popup.appendChild(btn2);
+
+  document.body.appendChild(popup);
+  _unblockPopup=popup;
+
+  // Position near click
+  var x=e.clientX+8, y=e.clientY+4;
+  popup.style.left=x+'px'; popup.style.top=y+'px';
+  requestAnimationFrame(function(){
+    var r=popup.getBoundingClientRect();
+    if(r.right>window.innerWidth-8) popup.style.left=(window.innerWidth-r.width-8)+'px';
+    if(r.bottom>window.innerHeight-8) popup.style.top=(e.clientY-r.height-4)+'px';
+  });
+}
 document.addEventListener('click',function(e){
   if(_blockPopup&&!_blockPopup.contains(e.target))closeBlockPopup();
 });
