@@ -1463,6 +1463,23 @@
       <div class="empty-state"><div>🔬</div><p>Próximamente disponible</p></div>
     </div>
 
+    <!-- Modal cascada: corregir solo o ajustar el bloque -->
+    <div id="ag-cascade-bg" class="ag-modal-bg" style="display:none;z-index:10200;">
+      <div class="ag-modal" style="width:420px;max-width:96vw;" role="dialog" aria-modal="true">
+        <div class="ag-modal-header">
+          <h3>📅 Turno guardado — ¿ajustar los siguientes?</h3>
+        </div>
+        <div class="ag-modal-body">
+          <p id="ag-cascade-info" style="font-size:13px;color:#374151;margin-bottom:14px;line-height:1.6;"></p>
+          <div id="ag-cascade-list" style="font-size:12px;color:#6b7280;background:#f9fafb;border-radius:8px;padding:10px 14px;max-height:160px;overflow-y:auto;margin-bottom:4px;"></div>
+        </div>
+        <div class="ag-modal-actions" style="gap:8px;">
+          <button class="ag-btn-ghost" id="ag-cascade-solo">Solo este turno</button>
+          <button class="ag-btn-primary" id="ag-cascade-ok">Ajustar en cascada</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Modal: editar horario de inicio por día -->
     <div id="ag-daystart-modal-bg" style="display:none">
       <div id="ag-daystart-modal">
@@ -9241,16 +9258,89 @@ function openReprog(key){
     video:isVideo3?true:undefined,
     osde:osdeVal?true:undefined
   };
-  saveLocal();document.getElementById('ag-modal-bg').style.display='none';editKey=null;
-  // Reset free-time mode
+
+  // Cerrar modal principal
+  document.getElementById('ag-modal-bg').style.display='none';editKey=null;
   if(freeTmEl){freeTmEl.style.display='none';freeTmEl.value='';}
   var timeSel2=document.getElementById('ag-f-time');
   if(timeSel2)timeSel2.style.display='';
   document.getElementById('ag-monto-row').style.display='none';
   document.getElementById('ag-f-monto').value='';
+
+  // ── Detección de cascada ──────────────────────────────────────────────────
+  // Buscar turnos del mismo prof en el mismo día DESPUÉS del horario guardado
+  var durCasc=PROF_45.indexOf(profVal)>=0?45:30;
+  var newStartMC=t2m(newTime);
+  var siguientes=Object.keys(turnos).filter(function(k){
+    if(k===newKey)return false;
+    var kp=k.split('_');
+    if(kp[0]!==ds)return false;
+    var t=turnos[k];
+    if(t.prof!==profVal)return false;
+    return t2m(kp[1])>newStartMC; // solo los de DESPUÉS
+  }).sort(function(a,b){return t2m(a.split('_')[1])-t2m(b.split('_')[1]);});
+
+  if(siguientes.length>0){
+    // Mostrar modal de cascada
+    var infoEl=document.getElementById('ag-cascade-info');
+    var listEl=document.getElementById('ag-cascade-list');
+    if(infoEl){
+      infoEl.innerHTML='El turno de <strong>'+PROF_FULL[profVal]+'</strong> se guardó en <strong>'+newTime+'</strong>.<br>'
+        +'Hay <strong>'+siguientes.length+'</strong> turno'+(siguientes.length>1?'s':'')+' posterior'+(siguientes.length>1?'es':'')+' ese día:';
+    }
+    if(listEl){
+      listEl.innerHTML=siguientes.map(function(k){
+        var kp=k.split('_');
+        var t=turnos[k];
+        return '<div style="padding:2px 0;border-bottom:1px solid #e5e7eb;"><span style="font-weight:600;color:#374151;">'+kp[1]+'</span>'
+          +(t.paciente?' — '+t.paciente:'<span style="color:#9ca3af;"> (libre)</span>')+'</div>';
+      }).join('');
+    }
+    // Guardar contexto para los botones
+    window._cascadeCtx={profVal:profVal,ds:ds,newTime:newTime,durCasc:durCasc,siguientes:siguientes};
+    document.getElementById('ag-cascade-bg').style.display='flex';
+    saveLocal();
+  } else {
+    saveLocal();
+    renderGrid();
+  }
+});
+// ── Handlers del modal cascada ────────────────────────────────────────────
+(document.getElementById('ag-cascade-solo')||{addEventListener:function(){}}).addEventListener('click',function(){
+  document.getElementById('ag-cascade-bg').style.display='none';
+  window._cascadeCtx=null;
   renderGrid();
 });
-// Turno extra: mostrar/ocultar input de horario libre
+(document.getElementById('ag-cascade-ok')||{addEventListener:function(){}}).addEventListener('click',function(){
+  var ctx=window._cascadeCtx;
+  if(!ctx){document.getElementById('ag-cascade-bg').style.display='none';renderGrid();return;}
+  document.getElementById('ag-cascade-bg').style.display='none';
+  // Cascada: reasignar los turnos siguientes en secuencia desde newTime+durCasc
+  var curM=t2m(ctx.newTime)+ctx.durCasc;
+  ctx.siguientes.forEach(function(k){
+    var kp=k.split('_');
+    var t=turnos[k];
+    if(!t)return;
+    var hh=Math.floor(curM/60);var mm=curM%60;
+    var newT=(hh<10?'0':'')+hh+':'+(mm<10?'0':'')+mm;
+    var newK=kp[0]+'_'+newT+'_'+kp[2];
+    if(k!==newK){
+      delete turnos[k];
+      // Solo guardar si no solapará con otro (básico)
+      if(!turnos[newK]){
+        turnos[newK]=Object.assign({},t);
+      } else {
+        // Si hay conflicto, mantener el original con nota
+        turnos[k]=t;
+      }
+    }
+    curM+=ctx.durCasc;
+  });
+  window._cascadeCtx=null;
+  saveLocal();
+  renderGrid();
+});
+// ── Turno extra: mostrar/ocultar input de horario libre ─────────────────
 document.addEventListener('change',function(e){
   if(e.target.id==='ag-f-extra'){
     var exTm=document.getElementById('ag-f-extra-time');
