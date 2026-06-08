@@ -8299,19 +8299,14 @@ function renderGrid(){
     function topOf(timeStr){return Math.max(0,(t2m(timeStr)-HOUR_START*60)*PX_PER_MIN);}
     function heightOf(fromStr,toStr){return Math.max(4,(t2m(toStr)-t2m(fromStr))*PX_PER_MIN);}
 
-    // NL blocks per prof
+    // NL blocks — se renderizan después del layout unificado para respetar columnas
+    var pendingNlBlocks=[];
     var nlRendered={};
     visProfs.forEach(function(p){
       nlBlocks.filter(function(b){return b.prof===p&&isBlockActiveOnDate(b,ds);}).forEach(function(b){
         var bk=b.from+b.to+p;
         if(nlRendered[bk])return;nlRendered[bk]=true;
-        var el=document.createElement('div');
-        el.className='ag-nl-block '+(p==='BG'?'lila':'blue');
-        el.style.top=topOf(b.from)+'px';
-        el.style.height=heightOf(b.from,b.to)+'px';
-        el.style.zIndex=2;
-        el.textContent=b.label+(visProfs.length>1?' ('+PROF_LBL[p]+')':'');
-        col.appendChild(el);
+        pendingNlBlocks.push({b:b,p:p});
       });
     });
 
@@ -8436,6 +8431,12 @@ function renderGrid(){
       allItems.push({prof:t.prof,tm:tTime,startM:startM,endM:startM+dur,dur:dur,tipo:'turno',key:k,turno:t});
     });
 
+    // Agregar NL blocks como items virtuales para que el layout de columnas los considere
+    pendingNlBlocks.forEach(function(entry){
+      var b=entry.b, p=entry.p;
+      allItems.push({prof:p,tm:b.from,startM:t2m(b.from),endM:t2m(b.to),dur:t2m(b.to)-t2m(b.from),tipo:'nl_virtual'});
+    });
+
     // Paso 2: por cada prof, ordenar items y recortar endM al inicio del siguiente
     // Esto garantiza que nunca haya solapamiento y cada item ocupa exactamente su hueco
     allItems.sort(function(a,b){return a.startM-b.startM||(a.prof<b.prof?-1:1);});
@@ -8514,6 +8515,7 @@ function renderGrid(){
 
     // Paso 4: renderizar
     uLayout.forEach(function(item){
+      if(item.tipo==='nl_virtual') return; // los NL blocks se renderizan aparte con su propio estilo
       var topPx=topOf(item.tm);
       var hPx=Math.max(20,item.dur*PX_PER_MIN-2);
       var wPct=Math.floor(100/item.totalCols);
@@ -8572,6 +8574,37 @@ function renderGrid(){
         if(wPct<50)el2.classList.add('ag-turno-narrow');
         col.appendChild(el2);
       }
+    });
+
+    // ── Render NL blocks con layout de columnas (igual que Google Calendar) ──
+    pendingNlBlocks.forEach(function(entry){
+      var b=entry.b, p=entry.p;
+      var startM=t2m(b.from), endM=t2m(b.to);
+
+      // Calcular columnas: todos los profs con items (incluye nl_virtual) que se solapan
+      var overlapProfs=[];
+      allItems.forEach(function(item){
+        if(item.startM < endM && item.endM > startM){
+          if(overlapProfs.indexOf(item.prof)<0) overlapProfs.push(item.prof);
+        }
+      });
+      if(overlapProfs.indexOf(p)<0) overlapProfs.push(p);
+      overlapProfs.sort(function(a,b_){return ALL_PROFS.indexOf(a)-ALL_PROFS.indexOf(b_);});
+
+      var totalCols=overlapProfs.length||1;
+      var profCol=overlapProfs.indexOf(p);
+      var wPct=Math.floor(100/totalCols);
+      var leftPct=profCol*wPct;
+
+      var el=document.createElement('div');
+      el.className='ag-nl-block '+(p==='BG'?'lila':'blue');
+      el.style.top=topOf(b.from)+'px';
+      el.style.height=heightOf(b.from,b.to)+'px';
+      el.style.left='calc('+leftPct+'% + 1px)';
+      el.style.width='calc('+wPct+'% - 2px)';
+      el.style.zIndex=2;
+      el.textContent=b.label+(visProfs.length>1?' ('+PROF_LBL[p]+')':'');
+      col.appendChild(el);
     });
 
     // Click en área vacía (col o líneas de grilla) — abre modal con horario editable libre
