@@ -7943,7 +7943,20 @@ function openCtxMenu(e,key){
   menu.appendChild(mkItem(
     (pago?'<span style="color:#1D9E75">✓</span> ':'<span style="opacity:.3">○</span> ')+'Pagó total',
     pago?'#1D9E75':'#374151',
-    function(){if(!pago){turnos[key].pago='pagado';if(!turnos[key].monto){var ar=getArancel(turnos[key].prof);if(ar>0)turnos[key].monto=ar;}}else{turnos[key].pago='sin-seña';}saveLocal();renderGrid();}
+    function(){
+      if(!pago){
+        // Marcar como pagado: arancel como monto, limpiar seña
+        turnos[key].pago='pagado';
+        if(!turnos[key].monto){var ar=getArancel(turnos[key].prof);if(ar>0)turnos[key].monto=ar;}
+        // Si tenía seña, ya está incluida en el monto del arancel — no acumular
+        turnos[key].sena='';
+      } else {
+        // Desmarcar: volver a sin-seña y limpiar monto
+        turnos[key].pago='sin-seña';
+        turnos[key].monto=undefined;
+      }
+      saveLocal();renderGrid();
+    }
   ));
   menu.appendChild(mkItem(
     (sinCargo?'<span style="color:#185FA5">✓</span> ':'<span style="opacity:.3">○</span> ')+'Sin cargo',
@@ -8701,7 +8714,7 @@ function openModal(ds,time,key,forcedProf,freeTime){
     document.getElementById('ag-f-paciente').value=t.paciente||'';
     document.getElementById('ag-f-prof').value=t.prof||'BG';
     document.getElementById('ag-f-estado').value=t.estado||'';
-    document.getElementById('ag-f-sena').value=t.sena||'';
+    document.getElementById('ag-f-sena').value=t.pago==='pagado'?'':(t.sena||'');
     document.getElementById('ag-f-pago').value=t.pago==='osde'?'sin-seña':(t.pago||'sin-seña');
     document.getElementById('ag-f-notas').value=t.notas||'';
     document.getElementById('ag-f-osde').checked=t.osde?true:false;
@@ -8966,6 +8979,7 @@ function openReprog(key){
   }
   var senaVal=document.getElementById('ag-f-sena').value.trim();
   var pagoVal=document.getElementById('ag-f-pago').value;
+  // Sincronizar pago con seña: si borraron la seña, quitar "señado"
   if(senaVal&&pagoVal==='sin-seña')pagoVal='señado';
   if(!senaVal&&pagoVal==='señado')pagoVal='sin-seña';
   var osdeVal=document.getElementById('ag-f-osde').checked;
@@ -8975,13 +8989,15 @@ function openReprog(key){
     // Si no se ingresó monto y hay arancel configurado, usar el arancel
     if(!montoVal){var _ar=getArancel(profVal);if(_ar>0)montoVal=String(_ar);}
   }
+  // Si pago es pagado, la seña queda absorbida en el monto total — no acumular
+  if(pagoVal==='pagado') senaVal='';
   turnos[newKey]={
     paciente:document.getElementById('ag-f-paciente').value.trim(),
     prof:profVal,
     estado:document.getElementById('ag-f-estado').value,
     sena:osdeVal?'':senaVal,
     pago:osdeVal?'osde':pagoVal,
-    monto:montoVal||undefined,
+    monto:pagoVal==='pagado'&&montoVal?montoVal:undefined,
     notas:document.getElementById('ag-f-notas').value,
     asistencia:prevAsist,
     extra:isExtra?true:undefined,
@@ -10891,12 +10907,16 @@ window.cargarProxConsultas = cargarProxConsultas;
         if(t.osde===true || t.pago==='osde'){
           turnosOsdeList.push({fecha:fecha, hora:parts[1], prof:t.prof, paciente:t.paciente||'', monto:0, pago:'osde', origen:'osde'});
         } else {
-          var senaNum = (t.pago==='señado' || t.sena) ? (parseFloat(t.sena)||0) : 0;
+          // Si pago='pagado', la seña ya está absorbida en el monto total — no acumular
+          var senaNum = t.pago==='señado' ? (parseFloat(t.sena)||0) : 0;
           turnosList.push({
             fecha:fecha, hora:parts[1], prof:t.prof, paciente:t.paciente||'',
             monto:   t.pago==='pagado' && t.monto ? Number(t.monto) : 0,
             sena:    senaNum,
-            pago:    t.pago||'sin-seña', origen:'urcym'
+            pago:    t.pago||'sin-seña', origen:'urcym',
+            ausente: t.asistencia==='ausente',
+            notas:   t.notas||'',
+            video:   !!t.video
           });
         }
       });
@@ -11234,6 +11254,7 @@ window.cargarProxConsultas = cargarProxConsultas;
             if(!dataMap[ym]) return;
             var t=td[key];
             if(t.pago==='pagado'&&t.monto&&Number(t.monto)>0) dataMap[ym].ing+=Number(t.monto);
+            else if(t.pago==='señado'&&t.sena&&Number(t.sena)>0) dataMap[ym].ing+=Number(t.sena);
           });
         }
       }catch(e){}
@@ -11885,7 +11906,7 @@ window.gpCargar = async function() {
       if(r.data && r.data.value) turnosData = JSON.parse(r.data.value);
     } catch(e){}
 
-    // Construir lista filtrada de turnos (solo BG y OB)
+    // Construir lista filtrada (solo BG y OB)
     var turnos = [];
     Object.keys(turnosData).forEach(function(key){
       var kparts = key.split('_');
@@ -11896,21 +11917,18 @@ window.gpCargar = async function() {
       if(!t.paciente) return;
       if(t.prof !== 'BG' && t.prof !== 'OB') return;
       if(filtProf && t.prof !== filtProf) return;
-      // Lugar: inferir de la clave o campo video
-      var lugar = t.video ? 'videollamada' : (t.lugar || 'consultorio');
+      var esVideo = !!t.video;
+      var lugar = esVideo ? 'videollamada' : 'consultorio';
       if(filtLugar && lugar !== filtLugar) return;
       turnos.push({
-        fecha: fecha,
-        hora: kparts[1],
-        prof: t.prof,
+        fecha:   fecha,
+        hora:    kparts[1],
+        prof:    t.prof,
         paciente: t.paciente,
-        dni: t.paciente_dni||'',
-        osde: !!t.osde,
-        pago: t.pago||'sin-seña',
-        estado: t.estado||'',
-        video: !!t.video,
-        lugar: lugar,
-        notas: t.notas||''
+        osde:    !!(t.osde || t.pago==='osde'),
+        ausente: t.asistencia === 'ausente',   // único campo real
+        video:   esVideo,
+        notas:   t.notas||''
       });
     });
 
@@ -11918,83 +11936,99 @@ window.gpCargar = async function() {
     var porProf = {BG:[], OB:[]};
     turnos.forEach(function(t){ if(porProf[t.prof]) porProf[t.prof].push(t); });
 
-    // Calcular métricas globales
-    var total = turnos.length;
-    var totalOsde = turnos.filter(function(t){ return t.osde; }).length;
-    var totalPart = total - totalOsde;
-    // Ausentismo: sin estado o estado vacío y sin pago (heurística)
-    var ausentes = turnos.filter(function(t){ return t.pago==='sin-seña' && !t.osde && t.estado!=='presente' && t.estado!=='atendido'; }).length;
-    // Reconsulta: pacientes que aparecen más de 1 vez en el mes (mismo nombre)
-    var pacNombres = turnos.map(function(t){ return t.paciente.toLowerCase(); });
-    var frecuencia = {};
-    pacNombres.forEach(function(n){ frecuencia[n]=(frecuencia[n]||0)+1; });
-    var reconsultas = Object.values(frecuencia).filter(function(c){ return c>1; }).length;
-    var pctAus = total>0 ? Math.round(ausentes/total*100) : 0;
+    // KPIs globales
+    var total      = turnos.length;
+    var totalOsde  = turnos.filter(function(t){ return t.osde; }).length;
+    var totalPart  = total - totalOsde;
+    var ausentes   = turnos.filter(function(t){ return t.ausente; }).length;
+    var totalVideo = turnos.filter(function(t){ return t.video; }).length;
+    // Reconsulta: mismo paciente, mismo prof, 2+ veces en el mes
+    var frecGlobal = {};
+    turnos.forEach(function(t){
+      var k = t.prof+'|'+t.paciente.toLowerCase();
+      frecGlobal[k] = (frecGlobal[k]||0) + 1;
+    });
+    var reconsultas = Object.values(frecGlobal).filter(function(c){ return c>1; }).length;
+    var pctAus  = total>0 ? Math.round(ausentes/total*100)  : 0;
     var pctOsde = total>0 ? Math.round(totalOsde/total*100) : 0;
 
-    if(subtitleEl) subtitleEl.textContent = (filtProf?PROF_FULL[filtProf]+' · ':'Guerrero + Bertani · ') + total + ' turnos · ' + ym.split('-').reverse().join('/');
+    if(subtitleEl) subtitleEl.textContent =
+      (filtProf ? PROF_FULL[filtProf]+' · ' : 'Guerrero + Bertani · ')
+      + total + ' turnos · ' + ym.split('-').reverse().join('/');
 
-    // ── KPIs
-    if(kpisEl) kpisEl.innerHTML = [
-      {label:'Total turnos', val:total, sub:'en el período', color:'var(--blue)'},
-      {label:'OSDE', val:totalOsde+' <small style="font-size:14px">('+pctOsde+'%)</small>', sub:totalPart+' particulares', color:'#0369a1'},
-      {label:'Ausentismo', val:pctAus+'%', sub:ausentes+' turno'+(ausentes!==1?'s':''), color: pctAus>20?'var(--red)':'#1D9E75'},
-      {label:'Pacientes c/ reconsulta', val:reconsultas, sub:'vieron al mismo prof 2+ veces', color:'var(--teal)'},
-      {label:'Guerrero', val:porProf.BG.length, sub:porProf.BG.filter(function(t){return t.osde;}).length+' OSDE · '+porProf.BG.filter(function(t){return !t.osde;}).length+' Particular', color:'#7F77DD'},
-      {label:'Bertani', val:porProf.OB.length, sub:porProf.OB.filter(function(t){return t.osde;}).length+' OSDE · '+porProf.OB.filter(function(t){return !t.osde;}).length+' Particular', color:'#378ADD'},
-    ].map(function(k){
-      return '<div class="gp-kpi" style="--kpi-color:'+k.color+'"><div class="gp-kpi-label">'+k.label+'</div><div class="gp-kpi-val">'+k.val+'</div><div class="gp-kpi-sub">'+k.sub+'</div></div>';
+    // KPIs
+    var kpiItems = [
+      {label:'Total turnos',            val:total,        sub:'en el período',           color:'var(--blue)'},
+      {label:'OSDE',                    val:totalOsde+' <small style="font-size:14px">('+pctOsde+'%)</small>', sub:totalPart+' particulares', color:'#0369a1'},
+      {label:'Ausentismo',              val:pctAus+'%',   sub:ausentes+' marcado'+(ausentes!==1?'s':'')+' ausente', color:pctAus>15?'var(--red)':'#1D9E75'},
+      {label:'Videollamadas',           val:totalVideo,   sub:(total-totalVideo)+' presenciales', color:'#7B3FC4'},
+      {label:'Reconsultas',             val:reconsultas,  sub:'pacientes c/ 2+ visitas al mismo prof', color:'var(--teal)'},
+    ];
+    if(!filtProf){
+      kpiItems.push({label:'Guerrero', val:porProf.BG.length, sub:porProf.BG.filter(function(t){return t.osde;}).length+' OSDE · '+porProf.BG.filter(function(t){return !t.osde;}).length+' Part.', color:'#7F77DD'});
+      kpiItems.push({label:'Bertani',  val:porProf.OB.length, sub:porProf.OB.filter(function(t){return t.osde;}).length+' OSDE · '+porProf.OB.filter(function(t){return !t.osde;}).length+' Part.', color:'#378ADD'});
+    }
+    if(kpisEl) kpisEl.innerHTML = kpiItems.map(function(k){
+      return '<div class="gp-kpi" style="--kpi-color:'+k.color+'">'
+        +'<div class="gp-kpi-label">'+k.label+'</div>'
+        +'<div class="gp-kpi-val">'+k.val+'</div>'
+        +'<div class="gp-kpi-sub">'+k.sub+'</div>'
+        +'</div>';
     }).join('');
 
-    // ── Función para construir bloque por profesional
+    // Bloque por profesional
     function bloqueProf(profCod) {
       var ts = porProf[profCod];
       if(!ts.length) return '<div class="gp-empty">Sin turnos para este profesional en el período.</div>';
-      var ausP = ts.filter(function(t){ return t.pago==='sin-seña' && !t.osde && t.estado!=='presente' && t.estado!=='atendido'; }).length;
-      var recP = {};
-      ts.forEach(function(t){ var n=t.paciente.toLowerCase(); recP[n]=(recP[n]||0)+1; });
-      var reconsultasP = Object.values(recP).filter(function(c){return c>1;}).length;
-      var pctAusP = ts.length>0?Math.round(ausP/ts.length*100):0;
-      var osdeP = ts.filter(function(t){return t.osde;}).length;
 
-      // Por lugar
-      var lugares = {};
-      ts.forEach(function(t){ var l=t.lugar||'consultorio'; lugares[l]=(lugares[l]||0)+1; });
+      var ausP   = ts.filter(function(t){ return t.ausente; }).length;
+      var osdeP  = ts.filter(function(t){ return t.osde; }).length;
+      var videoP = ts.filter(function(t){ return t.video; }).length;
+      var pctAusP = ts.length>0 ? Math.round(ausP/ts.length*100) : 0;
+      var frecP = {};
+      ts.forEach(function(t){ var n=t.paciente.toLowerCase(); frecP[n]=(frecP[n]||0)+1; });
+      var reconsP = Object.values(frecP).filter(function(c){ return c>1; }).length;
 
-      // Tabla de turnos
-      var rows = ts.slice().sort(function(a,b){return a.fecha>b.fecha?1:-1;}).map(function(t){
-        var dp=t.fecha.split('-'); var fechaFmt=dp[2]+'/'+dp[1]+'/'+dp[0];
-        var tipoBadge = t.osde
+      var rows = ts.slice().sort(function(a,b){
+        return a.fecha>b.fecha?1:a.fecha<b.fecha?-1:a.hora>b.hora?1:-1;
+      }).map(function(t){
+        var dp = t.fecha.split('-');
+        var fechaFmt = dp[2]+'/'+dp[1]+'/'+dp[0];
+        var cobBadge = t.osde
           ? '<span class="gp-badge" style="background:#e0f2fe;color:#0369a1">🏥 OSDE</span>'
           : '<span class="gp-badge gp-badge-blue">Particular</span>';
-        var estadoBadge = t.estado==='atendido'?'<span class="gp-badge gp-badge-green">✅ Atendido</span>'
-          : t.estado==='presente'?'<span class="gp-badge gp-badge-teal">🟡 Presente</span>'
-          : ausP && t.pago==='sin-seña' && !t.osde ? '<span class="gp-badge gp-badge-red">⬜ Ausente</span>'
-          : '<span class="gp-badge gp-badge-amber">⏳ Pendiente</span>';
-        var lugarBadge = t.video ? '<span style="font-size:10px;color:#7B3FC4">📹 Video</span>' : '<span style="font-size:10px;color:var(--text-soft)">🏠 Consultorio</span>';
-        return '<tr><td>'+fechaFmt+'</td><td style="font-size:11px;color:var(--text-soft)">'+t.hora+'</td>'
-          +'<td style="font-weight:600">'+t.paciente+'</td>'
-          +'<td>'+tipoBadge+'</td>'
-          +'<td>'+estadoBadge+'</td>'
-          +'<td>'+lugarBadge+'</td>'
-          +'</tr>';
+        var vidCell = t.video
+          ? '<span style="font-size:12px;color:#7B3FC4;font-weight:600;">📹 Video</span>'
+          : '<span style="font-size:12px;color:var(--text-soft)">Presencial</span>';
+        var motivoCell = t.notas
+          ? '<span style="font-size:12px">'+t.notas+'</span>'
+          : '<span style="font-size:11px;color:#b0bcc9">—</span>';
+        var ausenteTag = t.ausente
+          ? ' <span style="font-size:10px;background:#fdecea;color:var(--red);padding:1px 6px;border-radius:8px;font-weight:700;">Ausente</span>'
+          : '';
+        return '<tr'+(t.ausente?' style="opacity:.55;background:#fffbfb;"':'')+'>'+
+          '<td style="white-space:nowrap">'+fechaFmt+'</td>'+
+          '<td style="font-size:11px;color:var(--text-soft);white-space:nowrap">'+t.hora+'</td>'+
+          '<td style="font-weight:600">'+t.paciente+ausenteTag+'</td>'+
+          '<td>'+cobBadge+'</td>'+
+          '<td>'+vidCell+'</td>'+
+          '<td>'+motivoCell+'</td>'+
+          '</tr>';
       }).join('');
 
-      var lugaresStr = Object.entries(lugares).map(function(e){return e[1]+' '+e[0];}).join(' · ');
-
-      return '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-bottom:16px">'
+      return '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:10px;margin-bottom:16px">'
         +'<div style="background:var(--gray);border-radius:10px;padding:12px 14px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-soft);margin-bottom:4px">Total turnos</div><div style="font-size:22px;font-weight:700">'+ts.length+'</div></div>'
         +'<div style="background:var(--gray);border-radius:10px;padding:12px 14px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-soft);margin-bottom:4px">OSDE</div><div style="font-size:22px;font-weight:700;color:#0369a1">'+osdeP+'</div><div style="font-size:11px;color:var(--text-soft)">'+(ts.length-osdeP)+' particulares</div></div>'
-        +'<div style="background:var(--gray);border-radius:10px;padding:12px 14px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-soft);margin-bottom:4px">Ausentismo</div><div style="font-size:22px;font-weight:700;color:'+(pctAusP>20?'var(--red)':'#1D9E75')+'">'+pctAusP+'%</div><div style="font-size:11px;color:var(--text-soft)">'+ausP+' sin confirmar</div></div>'
-        +'<div style="background:var(--gray);border-radius:10px;padding:12px 14px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-soft);margin-bottom:4px">Reconsultas</div><div style="font-size:22px;font-weight:700;color:var(--teal)">'+reconsultasP+'</div><div style="font-size:11px;color:var(--text-soft)">pacientes distintos</div></div>'
+        +'<div style="background:var(--gray);border-radius:10px;padding:12px 14px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-soft);margin-bottom:4px">Ausentismo</div><div style="font-size:22px;font-weight:700;color:'+(pctAusP>15?'var(--red)':'#1D9E75')+'">'+pctAusP+'%</div><div style="font-size:11px;color:var(--text-soft)">'+ausP+' marcado'+(ausP!==1?'s':'')+' ausente</div></div>'
+        +'<div style="background:var(--gray);border-radius:10px;padding:12px 14px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-soft);margin-bottom:4px">Videollamadas</div><div style="font-size:22px;font-weight:700;color:#7B3FC4">'+videoP+'</div><div style="font-size:11px;color:var(--text-soft)">'+(ts.length-videoP)+' presenciales</div></div>'
+        +'<div style="background:var(--gray);border-radius:10px;padding:12px 14px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-soft);margin-bottom:4px">Reconsultas</div><div style="font-size:22px;font-weight:700;color:var(--teal)">'+reconsP+'</div><div style="font-size:11px;color:var(--text-soft)">pacientes c/ 2+ visitas</div></div>'
         +'</div>'
-        +'<div style="font-size:11px;color:var(--text-soft);margin-bottom:12px">📍 Lugar: '+lugaresStr+'</div>'
         +'<div style="overflow-x:auto"><table class="gp-table"><thead><tr>'
-          +'<th>Fecha</th><th>Hora</th><th>Paciente</th><th>Cobertura</th><th>Estado</th><th>Modalidad</th>'
+          +'<th>Fecha</th><th>Hora</th><th>Paciente</th><th>Cobertura</th><th>Modalidad</th><th>Motivo de consulta</th>'
         +'</tr></thead><tbody>'+rows+'</tbody></table></div>';
     }
 
-    // ── Renderizar cuerpo
+    // Renderizar
     var html = '';
     var profsAMostrar = filtProf ? [filtProf] : ['BG','OB'];
     profsAMostrar.forEach(function(cod){
