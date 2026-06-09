@@ -4278,14 +4278,17 @@ async function cargarPacientes() {
   // para poder ordenar correctamente por fecha de última evolución
   await precargarUltimasEvoluciones(pacientesData);
 
-  // Ordenar: primero los que tienen evolución (más reciente primero), luego los sin evolución
+  // Ordenar: por actividad más reciente (última evolución o última edición del paciente)
   pacientesData.sort(function(a, b) {
-    const fa = ultimaEvolucionMap[a.dni] ? Date.parse(ultimaEvolucionMap[a.dni]) : 0;
-    const fb = ultimaEvolucionMap[b.dni] ? Date.parse(ultimaEvolucionMap[b.dni]) : 0;
-    if(fb !== fa) return fb - fa;
-    // Desempate: por updated_at del paciente
-    return (Date.parse(b.updated_at || b.created_at || 0) || 0) -
-           (Date.parse(a.updated_at || a.created_at || 0) || 0);
+    const fa = Math.max(
+      ultimaEvolucionMap[a.dni] ? Date.parse(ultimaEvolucionMap[a.dni]) : 0,
+      Date.parse(a.updated_at || a.created_at || 0) || 0
+    );
+    const fb = Math.max(
+      ultimaEvolucionMap[b.dni] ? Date.parse(ultimaEvolucionMap[b.dni]) : 0,
+      Date.parse(b.updated_at || b.created_at || 0) || 0
+    );
+    return fb - fa;
   });
 
   renderTabla(pacientesData);
@@ -4328,13 +4331,17 @@ function renderTabla(data) {
     cont.innerHTML = '<div class="empty-state"><div>👤</div><p>No hay pacientes registrados todavía.<br>Hacé clic en "+ Nuevo paciente" para agregar el primero.</p></div>';
     return;
   }
-  // Ordenar por fecha de última evolución desc (primero los últimos evolucionados)
+  // Ordenar: por actividad más reciente (última evolución o última edición del paciente)
   const sorted = [...data].sort(function(a, b) {
-    const fa = ultimaEvolucionMap[a.dni] ? Date.parse(ultimaEvolucionMap[a.dni]) : 0;
-    const fb = ultimaEvolucionMap[b.dni] ? Date.parse(ultimaEvolucionMap[b.dni]) : 0;
-    if(fb !== fa) return fb - fa;
-    return (Date.parse(b.updated_at || b.created_at || 0) || 0) -
-           (Date.parse(a.updated_at || a.created_at || 0) || 0);
+    const fa = Math.max(
+      ultimaEvolucionMap[a.dni] ? Date.parse(ultimaEvolucionMap[a.dni]) : 0,
+      Date.parse(a.updated_at || a.created_at || 0) || 0
+    );
+    const fb = Math.max(
+      ultimaEvolucionMap[b.dni] ? Date.parse(ultimaEvolucionMap[b.dni]) : 0,
+      Date.parse(b.updated_at || b.created_at || 0) || 0
+    );
+    return fb - fa;
   });
   cont.innerHTML = '<table><thead><tr><th>Apellido y nombre</th><th>DNI</th><th>Edad</th><th>Obra Social</th><th>Última evolución</th><th>Acciones</th></tr></thead><tbody>' +
     sorted.map((p,i) => {
@@ -7377,6 +7384,12 @@ async function guardarEvolucionHistorica() {
     });
 
     if(error) throw error;
+
+    // Actualizar mapa de última evolución para que el orden de la lista sea correcto
+    const fechaISO = fecha + 'T00:00:00';
+    if (!ultimaEvolucionMap[dni] || fechaISO > ultimaEvolucionMap[dni]) {
+      ultimaEvolucionMap[dni] = fechaISO;
+    }
 
     cerrarEvolucionHistorica();
 
