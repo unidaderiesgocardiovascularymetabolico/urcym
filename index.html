@@ -2145,7 +2145,25 @@
       <!-- ══════════════════════════════════════════════════════
            SECCIÓN PERSONAL — completamente separada del consultorio
            ══════════════════════════════════════════════════════ -->
-      <div id="fin-section-personal" style="margin-top:36px;">
+      <div id="fin-section-personal" style="margin-top:36px;position:relative;">
+
+        <!-- ── Overlay de PIN ── -->
+        <div id="fin-personal-overlay" style="position:absolute;inset:0;z-index:20;background:rgba(255,255,255,0.92);backdrop-filter:blur(6px);border-radius:18px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;min-height:220px;">
+          <div style="font-size:28px;">🔒</div>
+          <div style="font-family:var(--font-display);font-size:14px;font-weight:700;color:#5b3fa0;">Gastos Personales — protegido</div>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <input id="fin-personal-pin-input" type="password" placeholder="Contraseña" maxlength="20"
+              style="padding:9px 14px;border:1.5px solid rgba(124,92,191,.4);border-radius:10px;font-size:14px;font-family:var(--font-main);outline:none;width:170px;text-align:center;letter-spacing:.12em;"
+              onkeydown="if(event.key==='Enter') finPersonalVerificarPin()"
+              oninput="document.getElementById('fin-personal-pin-error').style.display='none'"/>
+            <button onclick="finPersonalVerificarPin()"
+              style="padding:9px 18px;border:none;border-radius:10px;background:#7c5cbf;color:white;font-family:var(--font-main);font-size:13px;font-weight:600;cursor:pointer;">
+              Ver
+            </button>
+          </div>
+          <div id="fin-personal-pin-error" style="display:none;font-size:12px;color:#e05252;font-weight:600;">Contraseña incorrecta</div>
+        </div>
+
         <div style="display:flex;align-items:center;gap:14px;margin-bottom:16px;">
           <div style="flex:1;height:2px;background:linear-gradient(to right,rgba(124,92,191,.35),transparent);"></div>
           <div style="font-family:var(--font-display);font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#7c5cbf;white-space:nowrap;">👤 Gastos Personales</div>
@@ -11296,6 +11314,7 @@ window.cargarProxConsultas = cargarProxConsultas;
   // ── Init
   window.finInit = function(){
     console.log('[Finanzas] finInit ejecutado');
+    if(window.finPersonalLock) window.finPersonalLock();
     var inp=$id('fin-filtro-mes');
     console.log('[Finanzas] input mes:', inp, inp ? inp.value : 'NULL');
     if(inp && !inp.value){ inp.value=hoyYM(); }
@@ -11868,6 +11887,32 @@ window.cargarProxConsultas = cargarProxConsultas;
         elBody.innerHTML = rows;
       }
     }
+  };
+
+  // ── PIN protección gastos personales ──
+  window.finPersonalVerificarPin = function() {
+    var inp = document.getElementById('fin-personal-pin-input');
+    var err = document.getElementById('fin-personal-pin-error');
+    if(!inp) return;
+    if(inp.value === '856685') {
+      var overlay = document.getElementById('fin-personal-overlay');
+      if(overlay) overlay.style.display = 'none';
+      inp.value = '';
+    } else {
+      if(err) err.style.display = 'block';
+      inp.value = '';
+      inp.focus();
+    }
+  };
+
+  // Resetear el PIN al entrar a finanzas (llamado desde finInit)
+  window.finPersonalLock = function() {
+    var overlay = document.getElementById('fin-personal-overlay');
+    if(overlay) overlay.style.display = 'flex';
+    var inp = document.getElementById('fin-personal-pin-input');
+    if(inp) inp.value = '';
+    var err = document.getElementById('fin-personal-pin-error');
+    if(err) err.style.display = 'none';
   };
 
   window.finPAgregarCategoria = function() {
