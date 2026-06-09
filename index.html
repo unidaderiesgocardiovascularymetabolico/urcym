@@ -2992,6 +2992,64 @@ const _savedCols = {lab:new Set(), ant:new Set(), est:new Set()};
 let _labSnapshot = null;
 
 function marcarDirty(tab) { _dirty[tab] = true; _tabDirty = tab==='lab'||tab==='ant'||tab==='est'; }
+
+// Navegación con flechas / Tab entre celdas de las tablas
+function navegarCeldaTabla(el, e) {
+  const key = e.key;
+  const isArrow = ['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(key);
+  const isTab = key === 'Tab';
+  if(!isArrow && !isTab) return;
+
+  const wrap = el.closest('table');
+  if(!wrap) return;
+
+  const fi = parseInt(el.dataset.fi);
+  const ci = parseInt(el.dataset.ci);
+  const wrapId = el.dataset.wrap;
+
+  const esLab = ['lab_tabla_wrap','evlab_wrap'].includes(wrapId);
+  const esEst = ['est_tabla_wrap','evest_wrap'].includes(wrapId);
+  const datos = esLab ? labDatos : esEst ? estDatos : antDatos;
+  const filas = esLab ? LAB_FILAS : esEst ? EST_FILAS : ANT_FILAS;
+  const todosFilas = [...filas, ...(datos.extraFilas||[]).map(lbl=>({label:lbl,key:'extra_'+lbl}))];
+  const nCols = datos.columnas.length;
+
+  let targetFi = fi, targetCi = ci;
+
+  if(key === 'ArrowRight' || (isTab && !e.shiftKey)) {
+    if(ci + 1 < nCols) { targetCi = ci + 1; }
+    else {
+      targetCi = 0;
+      let next = fi + 1;
+      while(next < todosFilas.length && (todosFilas[next].cat || todosFilas[next].calc)) next++;
+      if(next < todosFilas.length) targetFi = next;
+    }
+  } else if(key === 'ArrowLeft' || (isTab && e.shiftKey)) {
+    if(ci - 1 >= 0) { targetCi = ci - 1; }
+    else {
+      targetCi = nCols - 1;
+      let prev = fi - 1;
+      while(prev >= 0 && (todosFilas[prev].cat || todosFilas[prev].calc)) prev--;
+      if(prev >= 0) targetFi = prev;
+    }
+  } else if(key === 'ArrowDown') {
+    let next = fi + 1;
+    while(next < todosFilas.length && (todosFilas[next].cat || todosFilas[next].calc)) next++;
+    if(next < todosFilas.length) targetFi = next;
+  } else if(key === 'ArrowUp') {
+    let prev = fi - 1;
+    while(prev >= 0 && (todosFilas[prev].cat || todosFilas[prev].calc)) prev--;
+    if(prev >= 0) targetFi = prev;
+  }
+
+  if(targetFi === fi && targetCi === ci) return;
+
+  e.preventDefault();
+  const wrapEl = document.getElementById(wrapId);
+  if(!wrapEl) return;
+  const target = wrapEl.querySelector('[data-fi="'+targetFi+'"][data-ci="'+targetCi+'"][data-wrap="'+wrapId+'"]');
+  if(target) { target.focus(); if(target.select) target.select(); }
+}
 // Fecha local (evita el bug de UTC en Argentina: a las 21hs del 25/05, toISOString() da 26/05)
 function fechaHoy() {
   const d = new Date();
@@ -3581,7 +3639,7 @@ function renderTablaGenerica(datos, filas, wrapId, newColIdx) {
       const valColor = esAlerta ? 'var(--red)' : 'var(--text)';
       const valFw = esAlerta ? '700' : '400';
 
-      h += '<td style="padding:3px 4px;border:1px solid var(--border);background:'+cellBg+';text-align:center;vertical-align:middle;width:110px;min-width:110px"'+(esAlerta&&refTxtSexo?' title="Ref: '+refTxtSexo+'"':'')+'>';
+      h += '<td style="padding:3px 4px;border:1px solid var(--border);background:'+cellBg+';text-align:center;vertical-align:middle;width:110px;min-width:110px"'+(isCalc?' data-calc-fi="'+fi+'" data-calc-ci="'+ci+'"':'')+(esAlerta&&refTxtSexo?' title="Ref: '+refTxtSexo+'"':'')+'>';
 
       if(isCalc) {
         h += '<div style="font-size:12px;font-weight:'+valFw+';color:'+valColor+';padding:3px 2px"'+(esAlerta&&refTxtSexo?' title="Ref: '+refTxtSexo+'"':'')+'>'+val+'</div>';
@@ -3589,14 +3647,14 @@ function renderTablaGenerica(datos, filas, wrapId, newColIdx) {
       } else if(f.opciones) {
         // Campo con opciones fijas → <select>
         const borderCol = esAlerta ? 'var(--red)' : isActive ? '#1a9e6e' : 'var(--border)';
-        h += '<select data-fi="'+fi+'" data-ci="'+ci+'" data-wrap="'+wrapId+'" onchange="actualizarCelda(this)" onfocus="destacarFila(this,true)" onblur="destacarFila(this,false)"';
+        h += '<select data-fi="'+fi+'" data-ci="'+ci+'" data-wrap="'+wrapId+'" onchange="actualizarCelda(this)" onfocus="destacarFila(this,true)" onblur="destacarFila(this,false)" onkeydown="navegarCeldaTabla(this,event)"';
         h += ' style="display:block;width:96%;margin:0 auto;border:none;border-bottom:1.5px solid '+borderCol+';background:transparent;font-size:13px;font-family:var(--font-main);outline:none;color:'+valColor+';font-weight:'+valFw+';text-align:center;padding:3px 2px;cursor:pointer">';
         f.opciones.forEach(op => { h += '<option value="'+op+'"'+(val===op?' selected':'')+'>'+op+'</option>'; });
         h += '</select>';
       } else {
         // Todas las celdas no-calc son editables
         const borderCol = esAlerta ? 'var(--red)' : isActive ? '#1a9e6e' : 'var(--border)';
-        h += '<input type="text" value="'+val+'" data-fi="'+fi+'" data-ci="'+ci+'" data-wrap="'+wrapId+'" oninput="actualizarCelda(this)" onfocus="destacarFila(this,true)" onblur="destacarFila(this,false)"';
+        h += '<input type="text" value="'+val+'" data-fi="'+fi+'" data-ci="'+ci+'" data-wrap="'+wrapId+'" oninput="actualizarCelda(this)" onfocus="destacarFila(this,true)" onblur="destacarFila(this,false)" onkeydown="navegarCeldaTabla(this,event)"';
         h += ' style="display:block;width:90%;margin:0 auto 2px;border:none;border-bottom:1.5px solid '+borderCol+';background:transparent;font-size:13px;text-align:center;font-family:var(--font-main);outline:none;color:'+valColor+';font-weight:'+valFw+';padding:2px 0"/>';
         if(uns.length > 1) {
           h += '<select data-key="'+f.key+'" data-wrap="'+wrapId+'" onchange="actualizarUnidad(this)" style="display:block;width:96%;margin:0 auto;font-size:10px;padding:1px 2px;border:1px solid var(--border);border-radius:4px;background:#e0f7fa;color:var(--text-soft)">';
@@ -3626,8 +3684,9 @@ function renderTablaGenerica(datos, filas, wrapId, newColIdx) {
     h += '<div style="margin-top:12px"><button onclick="abrirCargaHistorica(\''+tipo+'\')" style="padding:5px 14px;border:1.5px solid var(--blue);border-radius:7px;background:var(--blue-light);color:var(--blue);font-size:12px;cursor:pointer;font-family:var(--font-main);font-weight:600">📅 Cargar '+label+' histórico</button></div>';
   }
   wrap.innerHTML = h;
-  // Scroll automático al final: columna nueva siempre visible a la derecha
-  if(hasHistory) {
+  // Scroll: solo ir al final cuando se agrega columna nueva (newColIdx explícito pasado)
+  // Si no se pasó newColIdx es una re-render por edición → preservar posición
+  if(hasHistory && newColIdx !== undefined) {
     setTimeout(() => {
       // Sync top scrollbar width
       const topInner = document.getElementById('evlab_top_scroll_inner');
@@ -3638,6 +3697,15 @@ function renderTablaGenerica(datos, filas, wrapId, newColIdx) {
       // Scroll al final para mostrar columna nueva
       const parent = document.getElementById('evlab_scroll_body') || wrap.closest('[style*="overflow-x"]') || wrap.parentElement;
       if(parent) parent.scrollLeft = parent.scrollWidth;
+    }, 0);
+  } else if(hasHistory) {
+    // Solo sincronizar ancho del scrollbar superior, sin mover posición
+    setTimeout(() => {
+      const topInner = document.getElementById('evlab_top_scroll_inner');
+      const body = document.getElementById('evlab_scroll_body');
+      if(topInner && body && wrap.scrollWidth) {
+        topInner.style.width = wrap.scrollWidth + 'px';
+      }
     }, 0);
   }
 }
@@ -3737,6 +3805,41 @@ function destacarFila(input, enfocar) {
   }
 }
 
+// Debounce timers para guardar sin bloquear el tipeo
+const _saveTimers = {};
+function _debouncedSave(saveWrap) {
+  clearTimeout(_saveTimers[saveWrap]);
+  _saveTimers[saveWrap] = setTimeout(() => {
+    guardarDatosPac(saveWrap);
+    sincronizarRO();
+  }, 800);
+}
+
+// Actualiza solo las celdas calculadas (●calc) directo en el DOM, sin reconstruir la tabla
+function _actualizarCalcsEnDOM(wrapId, datos, filas) {
+  const wrapEl = document.getElementById(wrapId);
+  if(!wrapEl) return;
+  const sexoPac = window.pacienteActual?.sexo === 'Femenino' ? 'F' : 'H';
+  const todosFilas = [...filas, ...(datos.extraFilas||[]).map(lbl=>({label:lbl,key:'extra_'+lbl}))];
+  todosFilas.forEach((f, fi) => {
+    if(!f.calc) return;
+    const storedU = (datos.unidades && datos.unidades[f.key]) || (f.unidades && f.unidades[0]) || '';
+    datos.columnas.forEach((_, ci) => {
+      const val = (datos.filas[fi] || [])[ci] || '';
+      const td = wrapEl.querySelector('td[data-calc-fi="'+fi+'"][data-calc-ci="'+ci+'"]');
+      if(!td) return;
+      const esAlerta = val && f.ref && f.ref(val, sexoPac, storedU);
+      td.style.background = esAlerta ? '#fff0f0' : 'white';
+      const divs = td.querySelectorAll('div');
+      if(divs[0]) {
+        divs[0].textContent = val;
+        divs[0].style.color = esAlerta ? 'var(--red)' : 'var(--text)';
+        divs[0].style.fontWeight = esAlerta ? '700' : '400';
+      }
+    });
+  });
+}
+
 function actualizarCelda(input) {
   const fi = parseInt(input.dataset.fi);
   const ci = parseInt(input.dataset.ci);
@@ -3745,68 +3848,34 @@ function actualizarCelda(input) {
   const esAnt = ['ant_tabla_wrap','evant_wrap'].includes(wrapId);
   const esEst = ['est_tabla_wrap','evest_wrap'].includes(wrapId);
   const datos = esLab ? labDatos : esEst ? estDatos : antDatos;
+  const filas = esLab ? LAB_FILAS : esAnt ? ANT_FILAS : EST_FILAS;
+
+  // 1. Guardar valor en memoria
   if(!datos.filas[fi]) datos.filas[fi] = [];
   datos.filas[fi][ci] = input.value;
-  const _dirtytab = ["evlab_wrap","lab_tabla_wrap"].includes(wrapId)?"lab":["evant_wrap","ant_tabla_wrap"].includes(wrapId)?"ant":"est";
+
+  const _dirtytab = esLab ? 'lab' : esAnt ? 'ant' : 'est';
   marcarDirty(_dirtytab);
-  // Update cell color in real time
-  const filas = esLab ? LAB_FILAS : esAnt ? ANT_FILAS : EST_FILAS;
+
+  // 2. Actualizar color del input actual según referencia
   const fila = filas[fi];
   if(fila && fila.ref) {
-    const sexoPac = pacienteActual?.sexo==='Femenino'?'F':'H';
+    const sexoPac = pacienteActual?.sexo === 'Femenino' ? 'F' : 'H';
     const esAlerta = input.value && fila.ref(input.value, sexoPac);
-    const color = esAlerta ? 'var(--red)' : 'var(--text)';
-    const bg = esAlerta ? '#fff0f0' : 'transparent';
-    const fw = esAlerta ? '700' : 'normal';
-    input.style.color = color; input.style.background = bg; input.style.fontWeight = fw;
+    input.style.color      = esAlerta ? 'var(--red)'  : 'var(--text)';
+    input.style.background = esAlerta ? '#fff0f0'     : 'transparent';
+    input.style.fontWeight = esAlerta ? '700'         : 'normal';
     input.parentElement.style.background = esAlerta ? '#fff0f0' : '';
   }
-  const saveWrap = ['evlab_wrap','lab_tabla_wrap'].includes(wrapId)?'lab_tabla_wrap':
-                   ['evest_wrap','est_tabla_wrap'].includes(wrapId)?'est_tabla_wrap':'ant_tabla_wrap';
-  // Recalculate derived values for lab and re-render table
-  if(esLab) {
-    calcLabValues(labDatos, LAB_FILAS);
-    const nci = labDatos.columnas.length - 1;
-    renderTablaGenerica(labDatos, LAB_FILAS, wrapId, nci);
-    setTimeout(() => {
-      const wrap2 = document.getElementById(wrapId);
-      if(wrap2) {
-        const inp = wrap2.querySelector('input[data-fi="'+fi+'"][data-ci="'+ci+'"]');
-        if(inp) { inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length); }
-      }
-    }, 0);
-  }
-  // Recalculate derived values for ant (IMC, Cintura/Estatura, Cintura/Cadera) in real time
-  if(esAnt) {
-    calcAntValues(antDatos, ANT_FILAS);
-    const nci = antDatos.columnas.length - 1;
-    renderTablaGenerica(antDatos, ANT_FILAS, wrapId, nci);
-    setTimeout(() => {
-      const wrap2 = document.getElementById(wrapId);
-      if(wrap2) {
-        const inp = wrap2.querySelector('input[data-fi="'+fi+'"][data-ci="'+ci+'"]');
-        if(inp) { inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length); }
-      }
-    }, 0);
-  }
-  // Recalculate derived values for estudios complementarios (IMVI, EPR, geometría VI)
-  if(esEst) {
-    calcEstValues(estDatos, EST_FILAS);
-    const nci = estDatos.columnas.length - 1;
-    renderTablaGenerica(estDatos, EST_FILAS, wrapId, nci);
-    setTimeout(() => {
-      const wrap2 = document.getElementById(wrapId);
-      if(wrap2) {
-        const inp = wrap2.querySelector('[data-fi="'+fi+'"][data-ci="'+ci+'"]');
-        if(inp) {
-          inp.focus();
-          if(inp.setSelectionRange && inp.value) inp.setSelectionRange(inp.value.length, inp.value.length);
-        }
-      }
-    }, 0);
-  }
-  guardarDatosPac(saveWrap);
-  sincronizarRO();
+
+  // 3. Recalcular valores derivados y actualizar solo celdas calc en el DOM
+  if(esLab) { calcLabValues(labDatos, LAB_FILAS); _actualizarCalcsEnDOM(wrapId, labDatos, LAB_FILAS); }
+  if(esAnt) { calcAntValues(antDatos, ANT_FILAS); _actualizarCalcsEnDOM(wrapId, antDatos, ANT_FILAS); }
+  if(esEst) { calcEstValues(estDatos, EST_FILAS); _actualizarCalcsEnDOM(wrapId, estDatos, EST_FILAS); }
+
+  // 4. Guardar con debounce (no bloquea el tipeo)
+  const saveWrap = esLab ? 'lab_tabla_wrap' : esEst ? 'est_tabla_wrap' : 'ant_tabla_wrap';
+  _debouncedSave(saveWrap);
 }
 
 async function guardarDatosPac(wrapId) {
