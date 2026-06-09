@@ -2227,6 +2227,7 @@
         <button class="btn-volver" onclick="volverDesdeEvolucion()">← Volver</button>
         <div class="evol-paciente-header">
           <span id="evol_nombre" style="font-family:var(--font-display);font-size:16px;font-weight:700;color:var(--text)"></span>
+          <button onclick="editarPacienteDesdeEvolucion()" title="Editar datos del paciente" style="padding:3px 9px;border-radius:8px;border:1.5px solid var(--border);background:white;font-size:11px;font-weight:600;cursor:pointer;color:var(--text-soft);transition:all .2s;line-height:1.4" onmouseover="this.style.borderColor='var(--blue)';this.style.color='var(--blue)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--text-soft)'">✏️ Editar</button>
           <span id="evol_dni" style="font-size:12px;color:var(--text-soft)"></span>
           <span style="font-size:11px;color:var(--text-soft)">·</span>
           <span id="evol_fnac" style="font-size:12px;color:var(--text-soft)"></span>
@@ -2998,6 +2999,7 @@ let antDatos = { columnas:[], filas:[] };
 let vacDatos = { aplicadas:{}, notas:{}, antecedentes:[] };
 let _historialData = []; // cache para filtrado en memoria
 let _hcSoloLectura = false; // true cuando se abre desde lista de pacientes (solo lectura)
+let _editandoDesdeEvolucion = false; // true cuando se edita paciente desde la pantalla de evolución
 let _historialActivo = null;
 let _chartInstances = {};
 let pacHistoriaDni = null;
@@ -4733,7 +4735,7 @@ function generarPDF(tipo) {
 }
 
 // ===== MODAL PACIENTE =====
-function cerrarModal(id) { document.getElementById(id).classList.remove('open'); }
+function cerrarModal(id) { document.getElementById(id).classList.remove('open'); if(id === 'modalPaciente') _editandoDesdeEvolucion = false; }
 
 function abrirModalNuevo() {
   modoEdicion = false; dniEdicion = null;
@@ -4777,6 +4779,12 @@ async function editarPaciente(dni) {
   document.getElementById('prof_omar').checked = profs.includes('Dr. Omar Bertani');
   document.getElementById('formError').style.display='none';
   document.getElementById('modalPaciente').classList.add('open');
+}
+
+function editarPacienteDesdeEvolucion() {
+  if(!pacienteActual) return;
+  _editandoDesdeEvolucion = true;
+  editarPaciente(pacienteActual.dni);
 }
 
 async function guardarPaciente() {
@@ -4834,7 +4842,30 @@ async function guardarPaciente() {
   if(document.getElementById('prof_omar').checked) profs.push({dni_paciente:dni,profesional:'Dr. Omar Bertani'});
   if(profs.length) await sb.from('paciente_profesionales').insert(profs);
   cerrarModal('modalPaciente');
-  cargarPacientes();
+  if(_editandoDesdeEvolucion) {
+    _editandoDesdeEvolucion = false;
+    // Refrescar datos en memoria y actualizar el header de evolución sin salir de la pantalla
+    const idx = pacientesData.findIndex(x => x.dni === dni);
+    if(idx !== -1) {
+      pacientesData[idx] = { ...pacientesData[idx], ...paciente };
+      pacienteActual = pacientesData[idx];
+    }
+    // Actualizar topbar de evolución
+    document.getElementById('evol_nombre').textContent = paciente.apellido + ', ' + paciente.nombre;
+    const evhNombre = document.getElementById('evh_nombre_paciente');
+    if(evhNombre) evhNombre.textContent = paciente.apellido + ', ' + paciente.nombre;
+    document.getElementById('evol_fnac').textContent = 'F. Nac: ' + formatFecha(paciente.fecha_nacimiento);
+    document.getElementById('evol_edad').textContent = edadDesde(paciente.fecha_nacimiento) + ' años';
+    document.getElementById('evol_os').textContent = paciente.obra_social || 'Sin obra social';
+    // Notificación sutil
+    const notif = document.createElement('div');
+    notif.style.cssText = 'position:fixed;bottom:24px;right:24px;background:#3089ca;color:white;padding:12px 20px;border-radius:10px;font-size:13px;font-weight:600;z-index:9999;box-shadow:0 4px 16px rgba(0,0,0,.2)';
+    notif.textContent = '✅ Datos del paciente actualizados';
+    document.body.appendChild(notif);
+    setTimeout(() => notif.remove(), 2500);
+  } else {
+    cargarPacientes();
+  }
 }
 
 
