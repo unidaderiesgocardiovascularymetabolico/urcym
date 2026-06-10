@@ -4286,6 +4286,113 @@ function confirmarCambiarPassword() {
 // ===== NAVEGACIÓN =====
 let pacienteTabsAbiertas = [];
 
+// ===== PERSISTENCIA DE PESTAÑAS EN SESIÓN =====
+// Guarda el borrador del paciente actual en sessionStorage
+function _guardarEstadoPestana(dni) {
+  if(!dni) return;
+  const editor    = document.getElementById('evol_editor');
+  const indEditor = document.getElementById('evol_indicaciones_editor');
+  const estado = {
+    html:       editor    ? editor.innerHTML    : '',
+    indicaciones: indEditor ? indEditor.innerHTML : '',
+    ta1s:  (document.getElementById('evol_ta1s')||{}).value  || '',
+    ta1d:  (document.getElementById('evol_ta1d')||{}).value  || '',
+    ta2s:  (document.getElementById('evol_ta2s')||{}).value  || '',
+    ta2d:  (document.getElementById('evol_ta2d')||{}).value  || '',
+    ta3s:  (document.getElementById('evol_ta3s')||{}).value  || '',
+    ta3d:  (document.getElementById('evol_ta3d')||{}).value  || '',
+    fc1:   (document.getElementById('evol_fc1') ||{}).value  || '',
+    fc2:   (document.getElementById('evol_fc2') ||{}).value  || '',
+    fc3:   (document.getElementById('evol_fc3') ||{}).value  || '',
+    peso:  (document.getElementById('evol_peso')||{}).value  || '',
+    talla: (document.getElementById('evol_talla')||{}).value || '',
+    cintura:(document.getElementById('evol_cintura')||{}).value || '',
+    tap_s: (document.getElementById('evol_tap_s')||{}).value || '',
+    tap_d: (document.getElementById('evol_tap_d')||{}).value || '',
+    tap_fc:(document.getElementById('evol_tap_fc')||{}).value|| '',
+    proxDias:(document.getElementById('evol_prox_dias')||{}).value||'',
+    ts: Date.now()
+  };
+  // Solo guardar si hay algo
+  const hayCambios = estado.html || estado.indicaciones ||
+    ['ta1s','ta1d','ta2s','ta2d','ta3s','ta3d','fc1','fc2','fc3',
+     'peso','talla','cintura','tap_s','tap_d','tap_fc','proxDias']
+    .some(k => estado[k]);
+  if(hayCambios) {
+    sessionStorage.setItem('urcym_tab_' + dni, JSON.stringify(estado));
+    _marcarPestanaConBorrador(dni, true);
+  }
+}
+
+// Restaura el borrador desde sessionStorage (sin tocar Supabase)
+function _restaurarEstadoPestana(dni) {
+  if(!dni) return false;
+  const raw = sessionStorage.getItem('urcym_tab_' + dni);
+  if(!raw) return false;
+  try {
+    const estado = JSON.parse(raw);
+    const editor = document.getElementById('evol_editor');
+    if(editor && estado.html !== undefined) editor.innerHTML = estado.html;
+    const indEditor = document.getElementById('evol_indicaciones_editor');
+    if(indEditor && estado.indicaciones !== undefined) indEditor.innerHTML = estado.indicaciones;
+    const campos = ['ta1s','ta1d','ta2s','ta2d','ta3s','ta3d','fc1','fc2','fc3',
+                    'peso','talla','cintura','tap_s','tap_d','tap_fc'];
+    campos.forEach(id => {
+      const el = document.getElementById('evol_' + id);
+      if(el && estado[id] !== undefined) el.value = estado[id];
+    });
+    const proxEl = document.getElementById('evol_prox_dias');
+    if(proxEl && estado.proxDias) proxEl.value = estado.proxDias;
+    actualizarPromedios();
+    actualizarIMC();
+    return true;
+  } catch(e) { return false; }
+}
+
+// Borra el borrador guardado para un paciente (al guardar evolución real)
+function _limpiarEstadoPestana(dni) {
+  if(!dni) return;
+  sessionStorage.removeItem('urcym_tab_' + dni);
+  _marcarPestanaConBorrador(dni, false);
+}
+
+// Muestra/oculta el punto naranja "●" en la pestaña del paciente
+function _marcarPestanaConBorrador(dni, tiene) {
+  document.querySelectorAll('.patient-nav-tab').forEach(tab => {
+    if(tab.title && tab.title.includes('DNI ' + dni)) {
+      const nameEl = tab.querySelector('.patient-tab-name');
+      if(!nameEl) return;
+      const base = nameEl.textContent.replace(/^● /, '');
+      nameEl.textContent = tiene ? '● ' + base : base;
+      nameEl.style.color = tiene ? 'var(--teal)' : '';
+    }
+  });
+}
+
+// Verifica si alguna pestaña tiene borrador sin guardar
+function _hayBorradoresSinGuardar() {
+  return pacienteTabsAbiertas.some(t =>
+    sessionStorage.getItem('urcym_tab_' + t.dni) !== null
+  );
+}
+
+// Auto-guardar en sessionStorage cuando el usuario tipea en el editor
+function _autoGuardarEnSesion() {
+  if(pacienteActual && pacienteActual.dni) {
+    _guardarEstadoPestana(pacienteActual.dni);
+  }
+}
+
+// Advertencia al cerrar/recargar pestaña del navegador
+window.addEventListener('beforeunload', function(e) {
+  if(_hayBorradoresSinGuardar() || _dirty.evol ||
+     document.getElementById('evol_editor')?.innerText?.trim()) {
+    e.preventDefault();
+    e.returnValue = '¿Querés salir? Hay evoluciones no guardadas.';
+    return e.returnValue;
+  }
+});
+
 function nombreCortoPaciente(p) {
   if(!p) return 'Paciente';
   const ape = (p.apellido || '').trim();
@@ -4311,7 +4418,9 @@ function renderTabsPacientes(dniActivo) {
     tab.onclick = function(){ activarTabPaciente(t.dni); };
     const span = document.createElement('span');
     span.className = 'patient-tab-name';
-    span.textContent = t.nombre;
+    const tieneBorrador = sessionStorage.getItem('urcym_tab_' + t.dni) !== null;
+    span.textContent = tieneBorrador ? '● ' + t.nombre : t.nombre;
+    if(tieneBorrador) span.style.color = 'var(--teal)';
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'patient-tab-close';
@@ -4325,6 +4434,10 @@ function renderTabsPacientes(dniActivo) {
 }
 
 async function activarTabPaciente(dni) {
+  // Guardar borrador del paciente actual antes de cambiar
+  if(pacienteActual && pacienteActual.dni && String(pacienteActual.dni) !== String(dni)) {
+    _guardarEstadoPestana(pacienteActual.dni);
+  }
   const p = pacientesData.find(x => String(x.dni) === String(dni));
   if(p) await abrirEvolucion(p.dni);
   else showPage('pacientes');
@@ -4332,6 +4445,17 @@ async function activarTabPaciente(dni) {
 
 function cerrarTabPaciente(ev, dni) {
   if(ev) { ev.preventDefault(); ev.stopPropagation(); }
+  // Si la pestaña tiene borrador sin guardar, pedir confirmación
+  const tieneBorrador = sessionStorage.getItem('urcym_tab_' + dni) !== null;
+  const esPacienteActual = pacienteActual && String(pacienteActual.dni) === String(dni);
+  const tieneEditorConTexto = esPacienteActual &&
+    !!document.getElementById('evol_editor')?.innerText?.trim();
+  if(tieneBorrador || tieneEditorConTexto) {
+    const nombre = (pacienteTabsAbiertas.find(t => String(t.dni) === String(dni)) || {}).nombre || 'este paciente';
+    const ok = confirm('La evolución de ' + nombre + ' tiene cambios sin guardar.\n\n¿Cerrar igual sin guardar?');
+    if(!ok) return;
+  }
+  _limpiarEstadoPestana(dni);
   pacienteTabsAbiertas = pacienteTabsAbiertas.filter(t => String(t.dni) !== String(dni));
   renderTabsPacientes(pacienteActual && pacienteActual.dni);
   if(pacienteActual && String(pacienteActual.dni) === String(dni)) {
@@ -4349,6 +4473,13 @@ function showPage(page) {
   // Control de acceso: finanzas completa solo para admins
   if(page === 'finanzas' && currentUser && !currentUser.admin) {
     page = 'mis-pacientes';
+  }
+  // Si se sale de evolución yendo a otra sección principal, guardar borrador en sesión
+  if(page !== 'evolucion' && pacienteActual && pacienteActual.dni) {
+    const editor = document.getElementById('evol_editor');
+    if(editor && editor.innerText && editor.innerText.trim()) {
+      _guardarEstadoPestana(pacienteActual.dni);
+    }
   }
 
   // Ocultar todas las páginas dentro de .content
@@ -5863,32 +5994,62 @@ async function abrirEvolucion(dni) {
   document.getElementById('evol_fnac').textContent = 'F. Nac: ' + formatFecha(p.fecha_nacimiento);
   document.getElementById('evol_edad').textContent = edadDesde(p.fecha_nacimiento) + ' años';
   document.getElementById('evol_os').textContent = p.obra_social || 'Sin obra social';
-  document.getElementById('evol_editor').innerHTML = '';
-  ['evol_ta1s','evol_ta1d','evol_ta2s','evol_ta2d','evol_ta3s','evol_ta3d','evol_fc1','evol_fc2','evol_fc3','evol_peso','evol_talla','evol_cintura','evol_tap_s','evol_tap_d','evol_tap_fc'].forEach(id=>{
-    const el = document.getElementById(id); if(el) el.value='';
-  });
-  ['upd_tto'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
-  const indEl=document.getElementById('evol_indicaciones_editor');if(indEl)indEl.innerHTML='';
-  const proxDiasEl=document.getElementById('evol_prox_dias');if(proxDiasEl)proxDiasEl.value='';
-  const proxFechaEl=document.getElementById('evol_prox_fecha_display');if(proxFechaEl)proxFechaEl.textContent='';
-  updTtoItems = []; renderTtoUpd();
-  initGruposUpd();
-  ['upd_actividad','upd_alimentacion'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
-  const tapRes = document.getElementById('evol_tap_result'); if(tapRes) tapRes.textContent='';
-  actualizarPromedios();
-  actualizarIMC();
+  // Solo limpiar campos si NO hay borrador guardado en sesión para este paciente
+  const hayBorradorSesion = sessionStorage.getItem('urcym_tab_' + p.dni) !== null;
+  if(!hayBorradorSesion) {
+    document.getElementById('evol_editor').innerHTML = '';
+    ['evol_ta1s','evol_ta1d','evol_ta2s','evol_ta2d','evol_ta3s','evol_ta3d','evol_fc1','evol_fc2','evol_fc3','evol_peso','evol_talla','evol_cintura','evol_tap_s','evol_tap_d','evol_tap_fc'].forEach(id=>{
+      const el = document.getElementById(id); if(el) el.value='';
+    });
+    ['upd_tto'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+    const indEl=document.getElementById('evol_indicaciones_editor');if(indEl)indEl.innerHTML='';
+    const proxDiasEl=document.getElementById('evol_prox_dias');if(proxDiasEl)proxDiasEl.value='';
+    const proxFechaEl=document.getElementById('evol_prox_fecha_display');if(proxFechaEl)proxFechaEl.textContent='';
+    updTtoItems = []; renderTtoUpd();
+    initGruposUpd();
+    ['upd_actividad','upd_alimentacion'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+    const tapRes = document.getElementById('evol_tap_result'); if(tapRes) tapRes.textContent='';
+    actualizarPromedios();
+    actualizarIMC();
+  }
   evolClinicaSnapshot = null;
   // IMPORTANTE: cargar datos históricos PRIMERO, luego mostrar la página
   _savedCols.lab.clear(); _savedCols.ant.clear(); _savedCols.est.clear();
   await cargarDatosTablasEvol(p.dni);
   await cargarVacunacion(p.dni);
-  await restaurarBorradorEvol(p.dni);
+  if(hayBorradorSesion) {
+    // Restaurar desde sessionStorage (más reciente que el borrador en Supabase)
+    _restaurarEstadoPestana(p.dni);
+  } else {
+    await restaurarBorradorEvol(p.dni);
+  }
   showPage('evolucion');
   switchPacMainTab('evol');
   await window.actualizarEncabezadoVariable(p.dni);
   await cargarSnapshotInicial(p.dni);
   // Precargar PREVENT con datos disponibles del paciente
   setTimeout(precargarPREVENT, 800);
+  // Conectar auto-guardado en sessionStorage al editor
+  setTimeout(function() {
+    const ed = document.getElementById('evol_editor');
+    const ind = document.getElementById('evol_indicaciones_editor');
+    const inputIds = ['evol_ta1s','evol_ta1d','evol_ta2s','evol_ta2d','evol_ta3s','evol_ta3d',
+                      'evol_fc1','evol_fc2','evol_fc3','evol_peso','evol_talla','evol_cintura',
+                      'evol_tap_s','evol_tap_d','evol_tap_fc','evol_prox_dias'];
+    [ed, ind].forEach(function(el) {
+      if(el && !el._urcymAutoGuardar) {
+        el._urcymAutoGuardar = true;
+        el.addEventListener('input', _autoGuardarEnSesion);
+      }
+    });
+    inputIds.forEach(function(id) {
+      const el = document.getElementById(id);
+      if(el && !el._urcymAutoGuardar) {
+        el._urcymAutoGuardar = true;
+        el.addEventListener('input', _autoGuardarEnSesion);
+      }
+    });
+  }, 300);
 }
 
 function verHistoria(dni) {
@@ -6063,7 +6224,9 @@ async function volverDesdeEvolucion() {
       await guardarEvolucion();
       return;
     }
-    // Descartar: guardar de todas formas las tablas con cambios para no perder datos
+    // Descartar: conservar borrador en sessionStorage para recuperar desde la pestaña
+    if(pacienteActual) _guardarEstadoPestana(pacienteActual.dni);
+    // Guardar tablas con cambios para no perder datos
     if(_dirty.lab && labDatos.columnas && labDatos.columnas.length) await guardarDatosPac('lab_tabla_wrap');
     if(_dirty.ant && antDatos.columnas && antDatos.columnas.length) await guardarDatosPac('ant_tabla_wrap');
     if(_dirty.est && estDatos.columnas && estDatos.columnas.length) await guardarDatosPac('est_tabla_wrap');
@@ -6114,6 +6277,8 @@ async function guardarEvolucion() {
     return;
   }
   limpiarDirty('evol');
+  // Limpiar borrador de sessionStorage al guardar evolución real
+  _limpiarEstadoPestana(p.dni);
   // Auto-guardar laboratorio solo si tiene cambios
   if(_dirty.lab && labDatos.columnas && labDatos.columnas.length) {
     await guardarDatosPac('lab_tabla_wrap');
