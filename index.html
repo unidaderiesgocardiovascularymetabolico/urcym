@@ -4816,24 +4816,25 @@ function _indSetColor(color) {
 // Walk DOM nodes and extract text segments with bold/italic/color info
 function _parseRichTextSegments(container) {
   var segments = [];
-  function walk(node, bold, italic, color) {
+  function walk(node, bold, italic, color, underline) {
     if(node.nodeType === 3) { // text node
       var txt = node.textContent;
-      if(txt) segments.push({text:txt, bold:bold, italic:italic, color:color, isNewLine:false});
+      if(txt) segments.push({text:txt, bold:bold, italic:italic, color:color, underline:underline, isNewLine:false});
       return;
     }
     if(node.nodeType !== 1) return;
     var tag = node.tagName ? node.tagName.toUpperCase() : '';
     // Block-level elements get a newline before them (except the first)
     if(['P','DIV','LI','H1','H2','H3','H4','H5','H6'].indexOf(tag)>=0 && segments.length>0) {
-      segments.push({text:'', bold:false, italic:false, color:null, isNewLine:true});
+      segments.push({text:'', bold:false, italic:false, color:null, underline:false, isNewLine:true});
     }
     if(tag === 'BR') {
-      segments.push({text:'', bold:false, italic:false, color:null, isNewLine:true});
+      segments.push({text:'', bold:false, italic:false, color:null, underline:false, isNewLine:true});
       return;
     }
     var isBold = bold || tag==='B' || tag==='STRONG';
     var isItalic = italic || tag==='I' || tag==='EM';
+    var isUnderline = underline || tag==='U';
     // Extract color from style
     var nodeColor = color;
     if(node.style) {
@@ -4851,23 +4852,24 @@ function _parseRichTextSegments(container) {
       }
       if(node.style.fontWeight==='bold'||node.style.fontWeight==='700') isBold=true;
       if(node.style.fontStyle==='italic') isItalic=true;
+      if(node.style.textDecoration&&node.style.textDecoration.indexOf('underline')>=0) isUnderline=true;
     }
-    node.childNodes.forEach(function(child){ walk(child, isBold, isItalic, nodeColor); });
+    node.childNodes.forEach(function(child){ walk(child, isBold, isItalic, nodeColor, isUnderline); });
     // Add newline after block elements
     if(['P','DIV','LI','H1','H2','H3','H4','H5','H6'].indexOf(tag)>=0) {
-      segments.push({text:'', bold:false, italic:false, color:null, isNewLine:true});
+      segments.push({text:'', bold:false, italic:false, color:null, underline:false, isNewLine:true});
     }
   }
-  walk(container, false, false, null);
+  walk(container, false, false, null, false);
   // Merge consecutive same-style text segments on same line into one
   var merged = [];
   segments.forEach(function(s){
     if(s.isNewLine){ merged.push(s); return; }
     var last = merged[merged.length-1];
-    if(last && !last.isNewLine && last.bold===s.bold && last.italic===s.italic && last.color===s.color){
+    if(last && !last.isNewLine && last.bold===s.bold && last.italic===s.italic && last.color===s.color && last.underline===s.underline){
       last.text += s.text;
     } else {
-      merged.push({text:s.text, bold:s.bold, italic:s.italic, color:s.color, isNewLine:false});
+      merged.push({text:s.text, bold:s.bold, italic:s.italic, color:s.color, underline:s.underline, isNewLine:false});
     }
   });
   return merged;
@@ -4957,6 +4959,16 @@ function generarPDF(tipo) {
           lines.forEach(function(ln) {
             if (curY > maxY) return;
             doc.text(ln, ML + 4, curY);
+            // Simular subrayado: línea fina debajo del texto
+            if (seg.underline) {
+              const textW = doc.getTextWidth(ln);
+              const ulY = curY + 0.7;
+              doc.setLineWidth(0.25);
+              doc.setDrawColor(
+                ...(seg.color ? _hexToRgb(seg.color) : _C.oscuro)
+              );
+              doc.line(ML + 4, ulY, ML + 4 + textW, ulY);
+            }
             curY += lineH;
           });
         });
@@ -5054,20 +5066,38 @@ async function guardarPaciente() {
     updated_at: new Date().toISOString(),
   };
   let error;
-  if(modoEdicion) {
-    ({ error } = await sb.from('pacientes').update(paciente).eq('dni', dniEdicion));
-    // Si falla por columna inexistente (lugar_atencion), reintentar sin ella
-    if(error && error.message && error.message.includes('lugar_atencion')) {
-      const { lugar_atencion, ...sinLugar } = paciente;
-      ({ error } = await sb.from('pacientes').update(sinLugar).eq('dni', dniEdicion));
+  // Función para quitar columnas inexistentes según el error
+  function _sinColumna(obj, col) {
+    const copia = Object.assign({}, obj);
+    delete copia[col];
+    return copia;
+  }
+  function _colFaltante(err) {
+    if (!err || !err.message) return null;
+    const m = err.message.match(/column[s]? ['""]?([\w]+)['""]? (of|in|does)/i)
+           || err.message.match(/Could not find the '([\w]+)' column/i);
+    return m ? m[1] : null;
+  }
+  async function _upsertSinColumnas(op, data) {
+    let payload = data;
+    let res;
+    for (let i = 0; i < 5; i++) {
+      if (op === 'update') {
+        res = await sb.from('pacientes').update(payload).eq('dni', dniEdicion);
+      } else {
+        res = await sb.from('pacientes').insert(payload);
+      }
+      const col = _colFaltante(res.error);
+      if (!col) break;
+      payload = _sinColumna(payload, col);
     }
+    return res;
+  }
+  if(modoEdicion) {
+    ({ error } = await _upsertSinColumnas('update', paciente));
     if(!error) ultimoDniCargado = dniEdicion;
   } else {
-    ({ error } = await sb.from('pacientes').insert(paciente));
-    if(error && error.message && error.message.includes('lugar_atencion')) {
-      const { lugar_atencion, ...sinLugar } = paciente;
-      ({ error } = await sb.from('pacientes').insert(sinLugar));
-    }
+    ({ error } = await _upsertSinColumnas('insert', paciente));
     if(!error) ultimoDniCargado = dni;
   }
   if(error) {
