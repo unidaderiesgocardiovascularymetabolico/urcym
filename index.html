@@ -2453,6 +2453,17 @@
               style="border-radius:0 0 10px 10px;min-height:120px"></div>
             <div class="evol-ind-actions">
               <button class="btn btn-secondary" onclick="volcarIndicacionesAlEditor()" style="width:auto;margin:0;padding:7px 16px;font-size:12px">↑ Volcar a evolución</button>
+              <div id="evol_ind_tipo_hoja_wrap" style="display:none;align-items:center;gap:8px;font-size:12px;color:var(--text-soft)">
+                <input type="hidden" id="evol_ind_tipo_hoja" value="urcym">
+                <label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-weight:500;color:var(--text)">
+                  <input type="radio" name="evol_ind_tipo_hoja_opt" value="urcym" checked style="accent-color:#3089ca;"
+                    onchange="document.getElementById('evol_ind_tipo_hoja').value='urcym'"> URCyM
+                </label>
+                <label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-weight:500;color:var(--text)">
+                  <input type="radio" name="evol_ind_tipo_hoja_opt" value="otro" style="accent-color:#3089ca;"
+                    onchange="document.getElementById('evol_ind_tipo_hoja').value='otro'"> Otra hoja
+                </label>
+              </div>
               <button class="btn btn-teal" onclick="generarPDFIndicacionesEvol()" style="width:auto;margin:0;padding:7px 16px;font-size:12px">⬇ PDF</button>
               <button class="btn" onclick="enviarMailIndicacionesEvol()" style="width:auto;margin:0;padding:7px 16px;font-size:12px;background:var(--gray);border:1.5px solid var(--border);color:var(--text)">✉ Email</button>
             </div>
@@ -4542,6 +4553,15 @@ function showPage(page) {
     if(page === 'evolucion') {
       evolPage.style.display = 'block';
       evolPage.classList.add('active');
+      // Mostrar selector tipo hoja solo para Guerrero y Bertani
+      var _uEvol = (selectedUser || '').toLowerCase();
+      var _esBGOB = _uEvol === 'barbara' || _uEvol === 'omar';
+      var _evolIndWrap = document.getElementById('evol_ind_tipo_hoja_wrap');
+      if(_evolIndWrap) { _evolIndWrap.style.display = _esBGOB ? 'flex' : 'none'; }
+      // Resetear selección
+      var _evolIndHidden = document.getElementById('evol_ind_tipo_hoja');
+      if(_evolIndHidden) _evolIndHidden.value = 'urcym';
+      document.querySelectorAll('input[name="evol_ind_tipo_hoja_opt"]').forEach(function(r){ r.checked = r.value === 'urcym'; });
     } else {
       evolPage.style.display = 'none';
       evolPage.classList.remove('active');
@@ -5208,6 +5228,9 @@ function generarPDF(tipo) {
   const hoy = new Date().toLocaleDateString('es-AR',
     { day: '2-digit', month: '2-digit', year: 'numeric' });
   const cY = p ? _pdfPatientBar(doc, p, hoy, PW, ML, MR) : headerEndY;
+
+  // Zona disponible para contenido (hasta la firma, que empieza en PH-56)
+  const contentMaxY = PH - 56 - 2;
   const contentH = contentMaxY - cY;
 
   if (tipo === 'receta') {
@@ -6794,13 +6817,15 @@ function generarPDFIndicacionesEvol() {
   const indEl3 = document.getElementById('evol_indicaciones_editor');
   const txt = indEl3 ? indEl3.innerText.trim() : '';
   if(!txt) { alert('No hay indicaciones para generar.'); return; }
+  const _tipoHojaEl = document.getElementById('evol_ind_tipo_hoja');
+  const _usarOtroEvol = _tipoHojaEl && _tipoHojaEl.value === 'otro';
   _getLogoPNG(function() {
-    const { doc, filename } = _crearPDFIndicacionesEvol(txt);
+    const { doc, filename } = _crearPDFIndicacionesEvol(txt, _usarOtroEvol);
     doc.save(filename);
   });
 }
 
-function _crearPDFIndicacionesEvol(txt) {
+function _crearPDFIndicacionesEvol(txt, usarOtro) {
   const { jsPDF } = window.jspdf;
   const p = pacienteActual;
   const u = users[selectedUser];
@@ -6810,7 +6835,7 @@ function _crearPDFIndicacionesEvol(txt) {
   const doc = new jsPDF({ unit:'mm', format:'a5', orientation:'portrait' });
   const PW = 148, PH = 210, ML = 10, MR = 10, CW = PW - ML - MR;
 
-  _pdfHeader(doc, u, PW, ML);
+  if(usarOtro) { _pdfHeaderOtro(doc, u, PW, ML); } else { _pdfHeader(doc, u, PW, ML); }
   _pdfPatientBar(doc, p, hoy, PW, ML, MR);
 
   let curY = 48;
@@ -6839,7 +6864,7 @@ function _crearPDFIndicacionesEvol(txt) {
   });
 
   _pdfFirma(doc, u, PW, PH, ML, 'ninguna');
-  _pdfFooter(doc, PW, PH);
+  if(usarOtro) { _pdfFooterOtro(doc, u, PW, PH); } else { _pdfFooter(doc, PW, PH); }
 
   return { doc, filename, hoy };
 }
@@ -6849,8 +6874,10 @@ function enviarMailIndicacionesEvol() {
   const indEl2 = document.getElementById('evol_indicaciones_editor');
   const txt = indEl2 ? indEl2.innerText.trim() : '';
   if(!txt || !p.email) { alert(!txt?'Sin indicaciones.':'El paciente no tiene email registrado.'); return; }
+  const _tipoHojaEl2 = document.getElementById('evol_ind_tipo_hoja');
+  const _usarOtroEvol2 = _tipoHojaEl2 && _tipoHojaEl2.value === 'otro';
   _getLogoPNG(function() {
-    const { doc, filename, hoy } = _crearPDFIndicacionesEvol(txt);
+    const { doc, filename, hoy } = _crearPDFIndicacionesEvol(txt, _usarOtroEvol2);
     doc.save(filename);
     const u = users[selectedUser];
     setTimeout(() => {
