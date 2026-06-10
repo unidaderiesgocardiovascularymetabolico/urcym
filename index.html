@@ -6466,7 +6466,29 @@ async function guardarEvolucion() {
   btnGuardar.textContent = 'Guardando...';
   const ta_prom = calcPromedioTA();
   const fc_prom = calcPromedioFC();
-  const { error } = await sb.from('evoluciones').insert({
+  const _preventData = (function(){
+    const badge=document.getElementById('evh_prevent_badge');
+    const pct=badge&&badge.textContent&&badge.textContent!=='—'?badge.textContent.replace(/[^\d.]/g,''):null;
+    if(!pct) return null;
+    return JSON.stringify({
+      pct: pct,
+      badge: badge?badge.innerHTML:'',
+      label: (document.getElementById('evh_prevent_label')||{}).textContent||'',
+      color: (document.getElementById('evh_prevent_badge')||{}).style.color||'',
+      edad: (document.getElementById('prev_edad')||{}).value||null,
+      sexo: (document.getElementById('prev_sexo')||{}).value||null,
+      tas: (document.getElementById('prev_tas')||{}).value||null,
+      ct: (document.getElementById('prev_ct')||{}).value||null,
+      hdl: (document.getElementById('prev_hdl')||{}).value||null,
+      glu: (document.getElementById('prev_glu')||{}).value||null,
+      egfr: (document.getElementById('prev_egfr')||{}).value||null,
+      hta_tto: (document.getElementById('prev_hta_tto')||{}).checked||false,
+      estatina: (document.getElementById('prev_estatina')||{}).checked||false,
+      asa: (document.getElementById('prev_asa')||{}).checked||false,
+      tabaco: (document.getElementById('prev_tabaco')||{}).checked||false
+    });
+  })();
+  const _baseInsert = {
     dni_paciente: p.dni,
     medico: currentUser.titulo + ' — ' + currentUser.mp,
     contenido_html: contenido,
@@ -6489,33 +6511,17 @@ async function guardarEvolucion() {
     tap_fc: document.getElementById('evol_tap_fc').value||null,
     fecha_hora: (function(){ const now = new Date().toISOString(); ultimaEvolucionMap[p.dni] = now; return now; })(),
     clinica_snapshot: evolClinicaSnapshot ? JSON.stringify(evolClinicaSnapshot) : null,
-    prevent_data: (function(){
-      const res=document.getElementById('prev_resultado');
-      const badge=document.getElementById('evh_prevent_badge');
-      const pct=badge&&badge.textContent&&badge.textContent!=='—'?badge.textContent.replace(/[^\d.]/g,''):null;
-      if(!pct) return null;
-      return JSON.stringify({
-        pct: pct,
-        badge: badge?badge.innerHTML:'',
-        label: (document.getElementById('evh_prevent_label')||{}).textContent||'',
-        color: (document.getElementById('evh_prevent_badge')||{}).style.color||'',
-        edad: (document.getElementById('prev_edad')||{}).value||null,
-        sexo: (document.getElementById('prev_sexo')||{}).value||null,
-        tas: (document.getElementById('prev_tas')||{}).value||null,
-        ct: (document.getElementById('prev_ct')||{}).value||null,
-        hdl: (document.getElementById('prev_hdl')||{}).value||null,
-        glu: (document.getElementById('prev_glu')||{}).value||null,
-        egfr: (document.getElementById('prev_egfr')||{}).value||null,
-        hta_tto: (document.getElementById('prev_hta_tto')||{}).checked||false,
-        estatina: (document.getElementById('prev_estatina')||{}).checked||false,
-        asa: (document.getElementById('prev_asa')||{}).checked||false,
-        tabaco: (document.getElementById('prev_tabaco')||{}).checked||false
-      });
-    })(),
     indicaciones: (document.getElementById('evol_indicaciones_editor')||{}).innerText||null,
     proxima_consulta_dias: parseInt(document.getElementById('evol_prox_dias')?.value)||null,
     proxima_consulta_fecha: (function(){ const d=parseInt(document.getElementById('evol_prox_dias')?.value); if(!d) return null; const f=new Date(); f.setDate(f.getDate()+d); return f.toISOString().slice(0,10); })()
-  });
+  };
+  // Intentar guardar con prevent_data; si la columna no existe en la BD, reintentar sin ella
+  let { error } = await sb.from('evoluciones').insert({ ..._baseInsert, prevent_data: _preventData });
+  if(error && error.message && error.message.includes('prevent_data')) {
+    console.warn('[guardarEvolucion] Columna prevent_data no encontrada en la BD, guardando sin ella. Agregue la columna en Supabase para conservar datos PREVENT.');
+    const r2 = await sb.from('evoluciones').insert(_baseInsert);
+    error = r2.error;
+  }
   if(error) {
     alert('Error al guardar: ' + error.message);
     btnGuardar.disabled = false;
