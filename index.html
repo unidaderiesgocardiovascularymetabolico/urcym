@@ -5305,9 +5305,16 @@ async function guardarPaciente() {
           if(cfgR.data && cfgR.data.value) {
             const turnosObj = JSON.parse(cfgR.data.value);
             let huboCambios = false;
+            const dniActualizar = String(dniEdicion||'');
             Object.keys(turnosObj).forEach(function(k) {
-              if(turnosObj[k] && turnosObj[k].paciente === _nombreViejoEnAgenda) {
+              const t = turnosObj[k];
+              if(!t) return;
+              // Coincide por DNI (robusto) o por nombre exacto (compatibilidad turnos viejos)
+              const matchDni = dniActualizar && String(t.dni_paciente||'') === dniActualizar;
+              const matchNombre = t.paciente === _nombreViejoEnAgenda;
+              if(matchDni || matchNombre) {
                 turnosObj[k].paciente = nombreNuevo;
+                if(dniActualizar) turnosObj[k].dni_paciente = dniActualizar;
                 huboCambios = true;
               }
             });
@@ -5316,8 +5323,13 @@ async function guardarPaciente() {
               // Refrescar turnos en memoria si la agenda está cargada
               if(typeof turnos !== 'undefined') {
                 Object.keys(turnos).forEach(function(k) {
-                  if(turnos[k] && turnos[k].paciente === _nombreViejoEnAgenda) {
+                  const t = turnos[k];
+                  if(!t) return;
+                  const matchDni = dniActualizar && String(t.dni_paciente||'') === dniActualizar;
+                  const matchNombre = t.paciente === _nombreViejoEnAgenda;
+                  if(matchDni || matchNombre) {
                     turnos[k].paciente = nombreNuevo;
+                    if(dniActualizar) turnos[k].dni_paciente = dniActualizar;
                   }
                 });
                 if(typeof renderAgenda === 'function') renderAgenda();
@@ -9725,6 +9737,7 @@ function openModal(ds,time,key,forcedProf,freeTime){
   if(key&&turnos[key]){
     var t=turnos[key];
     document.getElementById('ag-f-paciente').value=t.paciente||'';
+    var _dniH=document.getElementById('ag-f-paciente-dni');if(_dniH)_dniH.value=t.dni_paciente||'';
     document.getElementById('ag-f-prof').value=t.prof||'BG';
     document.getElementById('ag-f-estado').value=t.estado||'';
     document.getElementById('ag-f-sena').value=t.pago==='pagado'?'':(t.sena||'');
@@ -9747,6 +9760,7 @@ function openModal(ds,time,key,forcedProf,freeTime){
     }
   }else{
     document.getElementById('ag-f-paciente').value='';
+    var _dniHN=document.getElementById('ag-f-paciente-dni');if(_dniHN)_dniHN.value='';
     document.getElementById('ag-f-prof').value=prof;
     document.getElementById('ag-f-estado').value='';
     document.getElementById('ag-f-sena').value='';
@@ -10047,8 +10061,10 @@ function openReprog(key){
   }
   // Si pago es pagado, la seña queda absorbida en el monto total — no acumular
   if(pagoVal==='pagado') senaVal='';
+  var _agPacDni = (document.getElementById('ag-f-paciente-dni')||{}).value||'';
   turnos[newKey]={
     paciente:document.getElementById('ag-f-paciente').value.trim(),
+    dni_paciente:_agPacDni||undefined,
     prof:profVal,
     estado:document.getElementById('ag-f-estado').value,
     sena:osdeVal?'':senaVal,
