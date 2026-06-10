@@ -5294,6 +5294,11 @@ async function guardarPaciente() {
       ultimoDniCargado = dniEdicion;
       // Actualizar nombre en todos los turnos de la agenda si cambió
       const nombreNuevo = (apellido + ', ' + nombre).trim();
+      // Fallback: si _nombreViejoEnAgenda no fue inicializado, reconstruirlo desde pacientesData
+      if(!_nombreViejoEnAgenda) {
+        const pViejo = pacientesData.find(x => x.dni === dniEdicion);
+        if(pViejo) _nombreViejoEnAgenda = (pViejo.apellido + ', ' + pViejo.nombre).trim();
+      }
       if(_nombreViejoEnAgenda && _nombreViejoEnAgenda !== nombreNuevo) {
         try {
           const cfgR = await sb.from('urcym_agenda_config').select('value').eq('key','turnos').maybeSingle();
@@ -5347,6 +5352,12 @@ async function guardarPaciente() {
       pacientesData[idx] = { ...pacientesData[idx], ...paciente };
       pacienteActual = pacientesData[idx];
     }
+    // Actualizar tab de navegación con el nuevo nombre
+    const tabEntry = pacienteTabsAbiertas.find(t => String(t.dni) === String(dni));
+    if(tabEntry) {
+      tabEntry.nombre = nombreCortoPaciente(paciente);
+      renderTabsPacientes(String(dni));
+    }
     // Actualizar topbar de evolución
     document.getElementById('evol_nombre').textContent = paciente.apellido + ', ' + paciente.nombre;
     const evhNombre = document.getElementById('evh_nombre_paciente');
@@ -5361,6 +5372,14 @@ async function guardarPaciente() {
     document.body.appendChild(notif);
     setTimeout(() => notif.remove(), 2500);
   } else {
+    // Actualizar datos en memoria y tab de navegación antes de recargar tabla
+    const idx = pacientesData.findIndex(x => x.dni === dni);
+    if(idx !== -1) pacientesData[idx] = { ...pacientesData[idx], ...paciente };
+    const tabEntry = pacienteTabsAbiertas.find(t => String(t.dni) === String(dni));
+    if(tabEntry) {
+      tabEntry.nombre = nombreCortoPaciente(paciente);
+      renderTabsPacientes(null);
+    }
     cargarPacientes();
   }
 }
