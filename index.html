@@ -3097,7 +3097,12 @@ function navegarCeldaTabla(el, e) {
   const wrapEl = document.getElementById(wrapId);
   if(!wrapEl) return;
   const target = wrapEl.querySelector('[data-fi="'+targetFi+'"][data-ci="'+targetCi+'"][data-wrap="'+wrapId+'"]');
-  if(target) { target.focus(); if(target.select) target.select(); }
+  if(target) {
+    target.focus();
+    if(target.select) target.select();
+    // Scroll vertical suave para que la celda quede visible
+    target.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
+  }
 }
 // Fecha local (evita el bug de UTC en Argentina: a las 21hs del 25/05, toISOString() da 26/05)
 function fechaHoy() {
@@ -3174,7 +3179,7 @@ const LAB_FILAS = [
     ref:(v)=>parseFloat(v)>=140, refTxt:'≥140 mg/dL (alterado)'},
   {label:'Albúmina urinaria', key:'AlbUr', unidades:['mg/24h','mg/L'], defU:0, ref:null},
   {label:'Creatinina urinaria', key:'CrUr', unidades:['g/24h','mg/dL'], defU:0, ref:null},
-  {label:'RAC', key:'RAC', unidades:['mg/g','mg/mmol'], defU:0, calc:'rac',
+  {label:'RAC', key:'RAC', unidades:['mg/g','mg/mmol'], defU:0, calcAuto:'rac',
     ref:(v,s,u)=>u==='mg/mmol'?parseFloat(v)>3.4:parseFloat(v)>30, refTxt:'>30 mg/g'},
   {label:'PRCus', key:'PRCus', unidades:['mg/L'], defU:0,
     ref:(v)=>parseFloat(v)>3, refTxt:'>3 mg/L'},
@@ -3492,17 +3497,20 @@ function calcLabValues(datos, filas) {
       set('LDL_S', ci, ldl_s);
     } else { set('LDL_S', ci, null); }
 
-    // RAC = Albúmina urinaria / Creatinina urinaria
-    const albUr=get('AlbUr',ci), crUr=get('CrUr',ci);
-    if(albUr&&crUr) {
-      const uAlb = getU('AlbUr')||'mg/24h', uCr = getU('CrUr')||'g/24h';
-      let racVal;
-      // Standardize to mg/g
-      if(uAlb==='mg/24h' && uCr==='g/24h') racVal = albUr/crUr;
-      else if(uAlb==='mg/L' && uCr==='mg/dL') racVal = albUr/crUr*10;
-      else racVal = albUr/crUr;
-      set('RAC', ci, racVal);
-    } else { set('RAC', ci, null); }
+    // RAC = Albúmina urinaria / Creatinina urinaria (calcAuto: solo escribe si la celda está vacía)
+    const racFi = filas.findIndex(f=>f.key==='RAC');
+    const racManual = racFi>=0 ? ((datos.filas[racFi]||[])[ci]||'') : '';
+    if(!racManual) {
+      const albUr=get('AlbUr',ci), crUr=get('CrUr',ci);
+      if(albUr&&crUr) {
+        const uAlb = getU('AlbUr')||'mg/24h', uCr = getU('CrUr')||'g/24h';
+        let racVal;
+        if(uAlb==='mg/24h' && uCr==='g/24h') racVal = albUr/crUr;
+        else if(uAlb==='mg/L' && uCr==='mg/dL') racVal = albUr/crUr*10;
+        else racVal = albUr/crUr;
+        set('RAC', ci, racVal);
+      }
+    }
 
     // RAR = Aldosterona (pg/mL) / Renina (ng/mL/h)
     const aldo=get('Aldosterona',ci), renina=get('Renina',ci);
@@ -3660,7 +3668,7 @@ function renderTablaGenerica(datos, filas, wrapId, newColIdx) {
       h += '<tr><td colspan="'+(1+datos.columnas.length)+'" style="background:#dbeafe;color:var(--blue);font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;padding:5px 14px;border:1px solid var(--border)">'+f.label+'</td></tr>';
       return;
     }
-    const isCalc = !!f.calc;
+    const isCalc = !!f.calc && !f.calcAuto; // calcAuto es editable pero también se calcula automáticamente
     const uns = f.unidades || [''];
     const storedU = datos.unidades[f.key] || uns[0];
     // Columna de parámetro: siempre fondo blanco (o azul claro si calc) — sin amarillo
@@ -7158,7 +7166,7 @@ function abrirCargaHistorica(tipo) {
 
   const filas = tipo==='lab' ? LAB_FILAS : tipo==='ant' ? ANT_FILAS : EST_FILAS;
   const datos = tipo==='lab' ? labDatos : tipo==='ant' ? antDatos : estDatos;
-  const sexoPac = pacienteActual?.sexo==='Femenino'?'F':'H';
+  if(!datos.extraFilas) datos.extraFilas = [];
 
   let h = '<table style="border-collapse:collapse;font-size:12px;width:100%">';
   h += '<thead><tr><th style="background:var(--blue);color:white;padding:7px 14px;text-align:left;min-width:180px">Parámetro</th>';
@@ -7170,7 +7178,7 @@ function abrirCargaHistorica(tipo) {
       h += '<tr><td colspan="3" style="background:#dbeafe;color:var(--blue);font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;padding:5px 14px;border:1px solid var(--border)">'+f.label+'</td></tr>';
       return;
     }
-    if(f.calc) return; // calculados automáticamente
+    if(f.calc && !f.calcAuto) return; // solo bloqueamos los puramente calculados (LDL, noHDL, etc.)
     const storedU = (datos.unidades&&datos.unidades[f.key]) || (f.unidades||[''])[0];
     const uns = f.unidades || [''];
     const inputId = 'mch_input_'+f.key;
@@ -7187,9 +7195,61 @@ function abrirCargaHistorica(tipo) {
     h += '<input type="text" id="'+inputId+'" placeholder="—" data-key="'+f.key+'" style="width:90%;border:none;border-bottom:1.5px solid #1a9e6e;background:transparent;font-size:13px;text-align:center;font-family:var(--font-main);outline:none;padding:2px 0"/>';
     h += '</td></tr>';
   });
+
+  // ── Filas extra existentes ──────────────────────────────────────────────
+  if(datos.extraFilas.length > 0) {
+    h += '<tr><td colspan="3" style="background:#f0f7ff;color:var(--blue);font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;padding:5px 14px;border:1px solid var(--border)">Parámetros adicionales</td></tr>';
+    datos.extraFilas.forEach((lbl) => {
+      const key = 'extra_'+lbl;
+      const inputId = 'mch_input_'+key;
+      h += '<tr>';
+      h += '<td style="padding:5px 14px;border:1px solid var(--border);font-weight:600;color:var(--teal)">'+lbl+'</td>';
+      h += '<td style="padding:5px 6px;border:1px solid var(--border);text-align:center;font-size:11px;color:var(--text-soft)">—</td>';
+      h += '<td style="padding:4px 10px;border:1px solid var(--border);text-align:center;background:#f0fdf4">';
+      h += '<input type="text" id="'+inputId+'" placeholder="—" data-key="'+key+'" style="width:90%;border:none;border-bottom:1.5px solid #1a9e6e;background:transparent;font-size:13px;text-align:center;font-family:var(--font-main);outline:none;padding:2px 0"/>';
+      h += '</td></tr>';
+    });
+  }
+
+  // ── Agregar nuevo parámetro ─────────────────────────────────────────────
+  h += '<tr><td colspan="3" style="padding:10px 14px;border:1px solid var(--border);background:#f8f9fc">';
+  h += '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">';
+  h += '<span style="font-size:11px;font-weight:600;color:var(--text-soft)">➕ Nuevo parámetro:</span>';
+  h += '<input type="text" id="mch_nuevo_param_lbl" placeholder="Ej: Ferritina" style="padding:4px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:12px;font-family:var(--font-main);width:140px"/>';
+  h += '<input type="text" id="mch_nuevo_param_val" placeholder="Valor" style="padding:4px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:12px;font-family:var(--font-main);width:90px"/>';
+  h += '<button onclick="mchAgregarNuevoParam()" style="padding:4px 12px;border:1.5px solid var(--teal);border-radius:6px;background:var(--teal-light);color:var(--teal);font-size:11px;cursor:pointer;font-family:var(--font-main);font-weight:600">Agregar</button>';
+  h += '</div>';
+  h += '<div id="mch_nuevos_lista" style="margin-top:8px;display:flex;flex-wrap:wrap;gap:6px"></div>';
+  h += '</td></tr>';
+
   h += '</tbody></table>';
   document.getElementById('mch_tabla_wrap').innerHTML = h;
   modal.style.display = 'flex';
+}
+
+function mchAgregarNuevoParam() {
+  const lblEl = document.getElementById('mch_nuevo_param_lbl');
+  const valEl = document.getElementById('mch_nuevo_param_val');
+  const lista = document.getElementById('mch_nuevos_lista');
+  if(!lblEl||!valEl||!lista) return;
+  const lbl = lblEl.value.trim();
+  const val = valEl.value.trim();
+  if(!lbl) { lblEl.focus(); return; }
+  // Evitar duplicados en la sesión
+  if(document.getElementById('mch_nuevo_tag_'+lbl.replace(/\s+/g,'_'))) {
+    lblEl.select(); return;
+  }
+  const tag = document.createElement('div');
+  tag.id = 'mch_nuevo_tag_'+lbl.replace(/\s+/g,'_');
+  tag.dataset.lbl = lbl;
+  tag.dataset.val = val;
+  tag.style.cssText = 'display:inline-flex;align-items:center;gap:6px;background:var(--teal-light);border:1px solid var(--teal);border-radius:8px;padding:4px 10px;font-size:12px;font-weight:600;color:var(--teal)';
+  tag.innerHTML = lbl + (val?' = <span style="color:var(--text);font-weight:400">'+val+'</span>':'')
+    + ' <button onclick="this.parentElement.remove()" style="background:none;border:none;cursor:pointer;color:var(--text-soft);font-size:14px;padding:0;margin-left:2px">✕</button>';
+  lista.appendChild(tag);
+  lblEl.value = '';
+  valEl.value = '';
+  lblEl.focus();
 }
 
 function cerrarCargaHistorica() {
@@ -7211,7 +7271,7 @@ async function guardarCargaHistorica() {
 
   // Leer valores del modal y cargarlos en la nueva columna
   filas.forEach((f, fi) => {
-    if(f.cat || f.calc) return;
+    if(f.cat || (f.calc && !f.calcAuto)) return; // calcAuto (RAC) es editable, se guarda
     const input = document.getElementById('mch_input_'+f.key);
     const val = input ? input.value.trim() : '';
     if(val) {
@@ -7223,6 +7283,37 @@ async function guardarCargaHistorica() {
     if(unitSel && unitSel.value) {
       if(!datos.unidades) datos.unidades = {};
       datos.unidades[f.key] = unitSel.value;
+    }
+  });
+
+  // Guardar parámetros extra nuevos agregados en el modal
+  const lista = document.getElementById('mch_nuevos_lista');
+  if(lista) {
+    lista.querySelectorAll('[data-lbl]').forEach(tag => {
+      const lbl = tag.dataset.lbl;
+      const val = tag.dataset.val || '';
+      if(!lbl) return;
+      if(!datos.extraFilas) datos.extraFilas = [];
+      // Agregar a extraFilas si no existe
+      if(!datos.extraFilas.includes(lbl)) datos.extraFilas.push(lbl);
+      // Ubicar índice: después de las filas base
+      const extraFi = filas.length + datos.extraFilas.indexOf(lbl);
+      if(val) {
+        if(!datos.filas[extraFi]) datos.filas[extraFi] = [];
+        datos.filas[extraFi][pos] = val;
+      }
+    });
+  }
+
+  // También guardar los valores de extraFilas existentes que hayan sido completados
+  (datos.extraFilas||[]).forEach((lbl, ei) => {
+    const key = 'extra_'+lbl;
+    const input = document.getElementById('mch_input_'+key);
+    const val = input ? input.value.trim() : '';
+    const extraFi = filas.length + ei;
+    if(val) {
+      if(!datos.filas[extraFi]) datos.filas[extraFi] = [];
+      datos.filas[extraFi][pos] = val;
     }
   });
 
