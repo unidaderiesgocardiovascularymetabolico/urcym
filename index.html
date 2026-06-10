@@ -3158,6 +3158,7 @@ let vacDatos = { aplicadas:{}, notas:{}, antecedentes:[] };
 let _historialData = []; // cache para filtrado en memoria
 let _hcSoloLectura = false; // true cuando se abre desde lista de pacientes (solo lectura)
 let _editandoDesdeEvolucion = false; // true cuando se edita paciente desde la pantalla de evolución
+let _nombreViejoEnAgenda = null; // nombre viejo del paciente para actualizar turnos
 let _historialActivo = null;
 let _chartInstances = {};
 let pacHistoriaDni = null;
@@ -5046,10 +5047,10 @@ function generarPDF(tipo) {
 }
 
 // ===== MODAL PACIENTE =====
-function cerrarModal(id) { document.getElementById(id).classList.remove('open'); if(id === 'modalPaciente') _editandoDesdeEvolucion = false; }
+function cerrarModal(id) { document.getElementById(id).classList.remove('open'); if(id === 'modalPaciente') { _editandoDesdeEvolucion = false; _nombreViejoEnAgenda = null; } }
 
 function abrirModalNuevo() {
-  modoEdicion = false; dniEdicion = null;
+  modoEdicion = false; dniEdicion = null; _nombreViejoEnAgenda = null;
   document.getElementById('modalTitulo').textContent = 'Nuevo Paciente';
   document.getElementById('f_dni').disabled = false;
   ['f_dni','f_apellido','f_nombre','f_email','f_telefono','f_afiliado','f_ocupacion'].forEach(id=>document.getElementById(id).value='');
@@ -5069,6 +5070,8 @@ async function editarPaciente(dni) {
   modoEdicion = true; dniEdicion = dni;
   const p = pacientesData.find(x=>x.dni===dni);
   if(!p) return;
+  // Guardar nombre viejo para actualizar turnos si cambia
+  _nombreViejoEnAgenda = (p.apellido + ', ' + p.nombre).trim();
   document.getElementById('modalTitulo').textContent = 'Editar Paciente';
   document.getElementById('f_dni').value = p.dni;
   document.getElementById('f_dni').disabled = true;
@@ -5156,7 +5159,41 @@ async function guardarPaciente() {
   }
   if(modoEdicion) {
     ({ error } = await _upsertSinColumnas('update', paciente));
-    if(!error) ultimoDniCargado = dniEdicion;
+    if(!error) {
+      ultimoDniCargado = dniEdicion;
+      // Actualizar nombre en todos los turnos de la agenda si cambió
+      const nombreNuevo = (apellido + ', ' + nombre).trim();
+      if(_nombreViejoEnAgenda && _nombreViejoEnAgenda !== nombreNuevo) {
+        try {
+          const cfgR = await sb.from('urcym_agenda_config').select('value').eq('key','turnos').maybeSingle();
+          if(cfgR.data && cfgR.data.value) {
+            const turnosObj = JSON.parse(cfgR.data.value);
+            let huboCambios = false;
+            Object.keys(turnosObj).forEach(function(k) {
+              if(turnosObj[k] && turnosObj[k].paciente === _nombreViejoEnAgenda) {
+                turnosObj[k].paciente = nombreNuevo;
+                huboCambios = true;
+              }
+            });
+            if(huboCambios) {
+              await sb.from('urcym_agenda_config').upsert({key:'turnos', value:JSON.stringify(turnosObj)},{onConflict:'key'});
+              // Refrescar turnos en memoria si la agenda está cargada
+              if(typeof turnos !== 'undefined') {
+                Object.keys(turnos).forEach(function(k) {
+                  if(turnos[k] && turnos[k].paciente === _nombreViejoEnAgenda) {
+                    turnos[k].paciente = nombreNuevo;
+                  }
+                });
+                if(typeof renderAgenda === 'function') renderAgenda();
+              }
+            }
+          }
+        } catch(eAgenda) {
+          console.warn('[URCyM] No se pudo actualizar nombre en agenda:', eAgenda);
+        }
+      }
+      _nombreViejoEnAgenda = null;
+    }
   } else {
     ({ error } = await _upsertSinColumnas('insert', paciente));
     if(!error) ultimoDniCargado = dni;
