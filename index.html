@@ -4311,6 +4311,17 @@ function _guardarEstadoPestana(dni) {
     tap_d: (document.getElementById('evol_tap_d')||{}).value || '',
     tap_fc:(document.getElementById('evol_tap_fc')||{}).value|| '',
     proxDias:(document.getElementById('evol_prox_dias')||{}).value||'',
+    prev_edad:(document.getElementById('prev_edad')||{}).value||'',
+    prev_sexo:(document.getElementById('prev_sexo')||{}).value||'',
+    prev_tas:(document.getElementById('prev_tas')||{}).value||'',
+    prev_ct:(document.getElementById('prev_ct')||{}).value||'',
+    prev_hdl:(document.getElementById('prev_hdl')||{}).value||'',
+    prev_glu:(document.getElementById('prev_glu')||{}).value||'',
+    prev_egfr:(document.getElementById('prev_egfr')||{}).value||'',
+    prev_hta_tto:(document.getElementById('prev_hta_tto')||{}).checked||false,
+    prev_estatina:(document.getElementById('prev_estatina')||{}).checked||false,
+    prev_asa:(document.getElementById('prev_asa')||{}).checked||false,
+    prev_tabaco:(document.getElementById('prev_tabaco')||{}).checked||false,
     ts: Date.now()
   };
   // Solo guardar si hay algo
@@ -4343,8 +4354,18 @@ function _restaurarEstadoPestana(dni) {
     });
     const proxEl = document.getElementById('evol_prox_dias');
     if(proxEl && estado.proxDias) proxEl.value = estado.proxDias;
+    // Restaurar campos PREVENT
+    ['prev_edad','prev_sexo','prev_tas','prev_ct','prev_hdl','prev_glu','prev_egfr'].forEach(id=>{
+      const el=document.getElementById(id);
+      if(el && estado[id] !== undefined) el.value = estado[id];
+    });
+    ['prev_hta_tto','prev_estatina','prev_asa','prev_tabaco'].forEach(id=>{
+      const el=document.getElementById(id);
+      if(el && estado[id] !== undefined) el.checked = estado[id];
+    });
     actualizarPromedios();
     actualizarIMC();
+    calcularPREVENT();
     return true;
   } catch(e) { return false; }
 }
@@ -5481,6 +5502,8 @@ async function renderPreviasList() {
         </div>
       </div>`;
     }
+    const prevData = e.prevent_data ? (() => { try{ return JSON.parse(e.prevent_data); }catch(er){ return null; } })() : null;
+    const preventBadge = prevData && prevData.pct ? `<span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px;background:rgba(0,0,0,.06);color:${prevData.color||'#555'}" title="PREVENT AHA 2024">${prevData.badge||prevData.pct+'%'} <span style="font-weight:400;opacity:.8">${prevData.label||''}</span></span>` : '';
     return `<div class="hc-entrada" id="previa_entry_${e.id}">
       <div class="hc-header ${mClase}" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
         <span class="hc-fecha">${fh.toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'})} ${fh.toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'})}</span>
@@ -5488,6 +5511,7 @@ async function renderPreviasList() {
         ${e.ta_promedio?`<span class="hc-badge-ta">TA: ${e.ta_promedio}</span>`:''}
         ${e.fc_promedio?`<span class="hc-badge-fc">FC: ${e.fc_promedio} lpm</span>`:''}
         ${e.peso?`<span class="hc-badge-peso">${e.peso} kg</span>`:''}
+        ${preventBadge}
         ${editBtn}
       </div>
       <div class="hc-cuerpo">${e.contenido_html||''}</div>
@@ -6043,6 +6067,17 @@ async function abrirEvolucion(dni) {
     actualizarPromedios();
     actualizarIMC();
   }
+  // Limpiar PREVENT siempre (no debe heredar valores de otro paciente)
+  ['prev_edad','prev_sexo','prev_tas','prev_ct','prev_hdl','prev_glu','prev_egfr'].forEach(id=>{
+    const el=document.getElementById(id); if(el){el.value='';el.style.background='';el.style.borderColor='';}
+  });
+  ['prev_hta_tto','prev_estatina','prev_asa','prev_tabaco'].forEach(id=>{
+    const el=document.getElementById(id); if(el) el.checked=false;
+  });
+  const prevRes=document.getElementById('prev_resultado');
+  if(prevRes) prevRes.innerHTML='<span style="color:var(--text-soft);font-size:11px">⚠️ Completá los campos en amarillo para calcular</span>';
+  actualizarPREVENTHeader(null,null,null,null);
+
   evolClinicaSnapshot = null;
   // IMPORTANTE: cargar datos históricos PRIMERO, luego mostrar la página
   _savedCols.lab.clear(); _savedCols.ant.clear(); _savedCols.est.clear();
@@ -6297,6 +6332,29 @@ async function guardarEvolucion() {
     tap_fc: document.getElementById('evol_tap_fc').value||null,
     fecha_hora: (function(){ const now = new Date().toISOString(); ultimaEvolucionMap[p.dni] = now; return now; })(),
     clinica_snapshot: evolClinicaSnapshot ? JSON.stringify(evolClinicaSnapshot) : null,
+    prevent_data: (function(){
+      const res=document.getElementById('prev_resultado');
+      const badge=document.getElementById('evh_prevent_badge');
+      const pct=badge&&badge.textContent&&badge.textContent!=='—'?badge.textContent.replace(/[^\d.]/g,''):null;
+      if(!pct) return null;
+      return JSON.stringify({
+        pct: pct,
+        badge: badge?badge.innerHTML:'',
+        label: (document.getElementById('evh_prevent_label')||{}).textContent||'',
+        color: (document.getElementById('evh_prevent_badge')||{}).style.color||'',
+        edad: (document.getElementById('prev_edad')||{}).value||null,
+        sexo: (document.getElementById('prev_sexo')||{}).value||null,
+        tas: (document.getElementById('prev_tas')||{}).value||null,
+        ct: (document.getElementById('prev_ct')||{}).value||null,
+        hdl: (document.getElementById('prev_hdl')||{}).value||null,
+        glu: (document.getElementById('prev_glu')||{}).value||null,
+        egfr: (document.getElementById('prev_egfr')||{}).value||null,
+        hta_tto: (document.getElementById('prev_hta_tto')||{}).checked||false,
+        estatina: (document.getElementById('prev_estatina')||{}).checked||false,
+        asa: (document.getElementById('prev_asa')||{}).checked||false,
+        tabaco: (document.getElementById('prev_tabaco')||{}).checked||false
+      });
+    })(),
     indicaciones: (document.getElementById('evol_indicaciones_editor')||{}).innerText||null,
     proxima_consulta_dias: parseInt(document.getElementById('evol_prox_dias')?.value)||null,
     proxima_consulta_fecha: (function(){ const d=parseInt(document.getElementById('evol_prox_dias')?.value); if(!d) return null; const f=new Date(); f.setDate(f.getDate()+d); return f.toISOString().slice(0,10); })()
