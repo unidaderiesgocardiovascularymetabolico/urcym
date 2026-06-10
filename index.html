@@ -998,7 +998,7 @@
   <div class="topbar">
     <div class="topbar-brand">
       <img src="logo.svg" alt="URCyM"/>
-      <div><h1>URCyM</h1><p>Unidad de Riesgo Cardiovascular y Metabólico</p></div>
+      <div><h1>URCyM</h1><p>Evaluaciones cardiometabólicas</p></div>
     </div>
     <div class="topbar-right">
       <span class="topbar-user" id="topbarUser"></span>
@@ -2860,6 +2860,20 @@
       <label>Rp: (Medicamentos, dosis y posología)</label>
       <textarea id="rec_contenido" placeholder="Ej: Enalapril 10mg - 1 comprimido cada 12 hs&#10;Losartán 50mg - 1 comprimido por día"></textarea>
     </div>
+    <div id="rec_tipo_hoja_wrap" style="display:none;background:#f0f4f9;border-radius:10px;padding:10px 14px;margin-bottom:12px">
+      <label style="display:block;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#6b7a8d;margin-bottom:8px">Tipo de hoja</label>
+      <input type="hidden" id="rec_tipo_hoja" value="urcym">
+      <div style="display:flex;gap:10px">
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;font-weight:500;color:#374151">
+          <input type="radio" name="rec_tipo_hoja_opt" value="urcym" checked style="accent-color:#3089ca;"
+            onchange="document.getElementById('rec_tipo_hoja').value='urcym'"> Hoja URCyM
+        </label>
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;font-weight:500;color:#374151">
+          <input type="radio" name="rec_tipo_hoja_opt" value="otro" style="accent-color:#3089ca;"
+            onchange="document.getElementById('rec_tipo_hoja').value='otro'"> Otra hoja
+        </label>
+      </div>
+    </div>
     <div style="background:#f0f4f9;border-radius:10px;padding:10px 14px;margin-bottom:12px">
       <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;font-weight:600;color:#374151">
         <input type="checkbox" id="firma_receta_check" style="accent-color:#3089ca;width:15px;height:15px">
@@ -2934,6 +2948,20 @@
       <style>
         #ind_contenido:empty:before{content:attr(data-placeholder);color:#a0aab4;pointer-events:none;white-space:pre;}
       </style>
+    </div>
+    <div id="ind_tipo_hoja_wrap" style="display:none;background:#f0f4f9;border-radius:10px;padding:10px 14px;margin-bottom:12px">
+      <label style="display:block;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#6b7a8d;margin-bottom:8px">Tipo de hoja</label>
+      <input type="hidden" id="ind_tipo_hoja" value="urcym">
+      <div style="display:flex;gap:10px">
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;font-weight:500;color:#374151">
+          <input type="radio" name="ind_tipo_hoja_opt" value="urcym" checked style="accent-color:#3089ca;"
+            onchange="document.getElementById('ind_tipo_hoja').value='urcym'"> Hoja URCyM
+        </label>
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;font-weight:500;color:#374151">
+          <input type="radio" name="ind_tipo_hoja_opt" value="otro" style="accent-color:#3089ca;"
+            onchange="document.getElementById('ind_tipo_hoja').value='otro'"> Otra hoja
+        </label>
+      </div>
     </div>
     <div style="background:#f0f4f9;border-radius:10px;padding:10px 14px;margin-bottom:12px">
       <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;font-weight:600;color:#374151">
@@ -4788,17 +4816,34 @@ function abrirDocumento(tipo, dni) {
   if(!p) return;
   pacienteActual = p;
   const hoy = fechaHoy();
+  // Mostrar selector de tipo de hoja solo para Guerrero y Bertani
+  const _uNow = (selectedUser || '').toLowerCase();
+  const _esBG_OB = _uNow === 'barbara' || _uNow === 'omar';
   if(tipo==='receta') {
     document.getElementById('rec_paciente').value = p.apellido + ', ' + p.nombre;
     document.getElementById('rec_dni').value = p.dni;
     document.getElementById('rec_fecha').value = hoy;
     document.getElementById('rec_contenido').value = '';
+    // Resetear selector de hoja
+    var recWrap = document.getElementById('rec_tipo_hoja_wrap');
+    if(recWrap) recWrap.style.display = _esBG_OB ? '' : 'none';
+    var recHidden = document.getElementById('rec_tipo_hoja');
+    if(recHidden) recHidden.value = 'urcym';
+    var recRadios = document.querySelectorAll('input[name="rec_tipo_hoja_opt"]');
+    recRadios.forEach(function(r){ r.checked = r.value === 'urcym'; });
     document.getElementById('modalReceta').classList.add('open');
   } else {
     document.getElementById('ind_paciente').value = p.apellido + ', ' + p.nombre;
     document.getElementById('ind_dni').value = p.dni;
     document.getElementById('ind_fecha').value = hoy;
     var indEl = document.getElementById('ind_contenido'); if(indEl){ indEl.innerHTML = ''; }
+    // Resetear selector de hoja
+    var indWrap = document.getElementById('ind_tipo_hoja_wrap');
+    if(indWrap) indWrap.style.display = _esBG_OB ? '' : 'none';
+    var indHidden = document.getElementById('ind_tipo_hoja');
+    if(indHidden) indHidden.value = 'urcym';
+    var indRadios = document.querySelectorAll('input[name="ind_tipo_hoja_opt"]');
+    indRadios.forEach(function(r){ r.checked = r.value === 'urcym'; });
     document.getElementById('modalIndicaciones').classList.add('open');
   }
 }
@@ -4969,7 +5014,7 @@ function _pdfFooter(doc, PW, PH) {
   // Nombre institucional centrado
   doc.setFont('helvetica', 'bold'); doc.setFontSize(6.5);
   doc.setTextColor(..._C.blanco);
-  doc.text('UNIDAD DE RIESGO CARDIOVASCULAR Y METABÓLICO',
+  doc.text('EVALUACIONES CARDIOMETABÓLICAS',
            PW / 2, FY + 5, { align: 'center' });
 
   // Línea divisora — color #4dbcbe
@@ -5007,6 +5052,53 @@ function _pdfFooter(doc, PW, PH) {
   doc.setFont('helvetica', 'normal'); doc.setFontSize(6);
   doc.setTextColor(..._C.blanco);
   doc.text('Calle 2 Nº 1553, Santa Teresita', lx + 4, ty);
+}
+/* ─────────────────────────────────────────────────── */
+/*  ENCABEZADO "OTRO" (sin logo, texto, grises)        */
+/* ─────────────────────────────────────────────────── */
+function _pdfHeaderOtro(doc, u, PW, ML) {
+  const HH = 30;
+  doc.setFillColor(255, 255, 255);
+  doc.rect(0, 0, PW, HH, 'F');
+  // Barra superior negra
+  doc.setFillColor(30, 30, 30);
+  doc.rect(0, 0, PW, 1.2, 'F');
+  // Nombre profesional
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(11);
+  doc.setTextColor(20, 20, 20);
+  doc.text(u.titulo || u.name || '', ML, 9);
+  // Matrícula
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(8);
+  doc.setTextColor(90, 90, 90);
+  doc.text(u.mp || '', ML, 14);
+  // Especialidades
+  const specs = Array.isArray(u.especialidades)
+    ? u.especialidades
+    : (u.role || '').split(/[·|\/]/).map(s => s.trim()).filter(Boolean);
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(7);
+  doc.setTextColor(110, 110, 110);
+  doc.text(specs.join('  ·  '), ML, 19);
+  // Línea inferior gris
+  doc.setDrawColor(150, 150, 150); doc.setLineWidth(0.4);
+  doc.line(0, HH, PW, HH);
+  return HH + 4;
+}
+/* ─────────────────────────────────────────────────── */
+/*  PIE "OTRO" (gris oscuro, email del profesional)    */
+/* ─────────────────────────────────────────────────── */
+function _pdfFooterOtro(doc, u, PW, PH) {
+  const FH = 14, FY = PH - FH;
+  doc.setFillColor(40, 40, 40);
+  doc.rect(0, FY, PW, FH, 'F');
+  doc.setDrawColor(120, 120, 120); doc.setLineWidth(0.3);
+  doc.line(0, FY + 5, PW, FY + 5);
+  const uName = (u && (u.id || u.name || '')).toLowerCase();
+  const email = (uName.includes('omar') || uName.includes('bertani'))
+    ? 'dr.bertaniomar@gmail.com'
+    : 'dra.guerrerobarbara@gmail.com';
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(6.5);
+  doc.setTextColor(220, 220, 220);
+  doc.text(email, PW / 2, FY + 10.5, { align: 'center' });
 }
 /* ─────────────────────────────────────────────────── */
 /* ─────────────────────────────────────────────────── */
@@ -5106,13 +5198,16 @@ function generarPDF(tipo) {
   const _autoKey = _uname.includes('omar') || _uname === 'ob' ? 'omar' : 'barbara';
   const firmaKey = firmaChecked ? _autoKey : 'ninguna';
 
-  const headerEndY = _pdfHeader(doc, u, PW, ML);
+  // Leer tipo de hoja (URCyM u Otro)
+  const pdfTipoSelId = tipo === 'receta' ? 'rec_tipo_hoja' : 'ind_tipo_hoja';
+  const pdfTipoSel = document.getElementById(pdfTipoSelId);
+  const usarOtro = pdfTipoSel && pdfTipoSel.value === 'otro'
+    && (_uname.includes('barbara') || _uname.includes('guerrero') || _uname.includes('omar') || _uname.includes('bertani'));
+
+  const headerEndY = usarOtro ? _pdfHeaderOtro(doc, u, PW, ML) : _pdfHeader(doc, u, PW, ML);
   const hoy = new Date().toLocaleDateString('es-AR',
     { day: '2-digit', month: '2-digit', year: 'numeric' });
   const cY = p ? _pdfPatientBar(doc, p, hoy, PW, ML, MR) : headerEndY;
-
-  // Zona disponible para contenido (hasta la firma, que empieza en PH-56)
-  const contentMaxY = PH - 56 - 2;
   const contentH = contentMaxY - cY;
 
   if (tipo === 'receta') {
@@ -5191,7 +5286,7 @@ function generarPDF(tipo) {
   }
 
   _pdfFirma(doc, u, PW, PH, ML, firmaKey);
-  _pdfFooter(doc, PW, PH);
+  if (usarOtro) { _pdfFooterOtro(doc, u, PW, PH); } else { _pdfFooter(doc, PW, PH); }
 
   const np = p ? (p.apellido || p.nombre || 'doc').replace(/\s+/g, '_') : 'doc';
   doc.save(`${tipo}_${np}_${hoy.replace(/\//g, '-')}.pdf`);
@@ -6101,7 +6196,9 @@ async function abrirEvolucion(dni) {
     const ind = document.getElementById('evol_indicaciones_editor');
     const inputIds = ['evol_ta1s','evol_ta1d','evol_ta2s','evol_ta2d','evol_ta3s','evol_ta3d',
                       'evol_fc1','evol_fc2','evol_fc3','evol_peso','evol_talla','evol_cintura',
-                      'evol_tap_s','evol_tap_d','evol_tap_fc','evol_prox_dias'];
+                      'evol_tap_s','evol_tap_d','evol_tap_fc','evol_prox_dias',
+                      'prev_edad','prev_sexo','prev_tas','prev_ct','prev_hdl','prev_glu','prev_egfr'];
+    const checkIds = ['prev_hta_tto','prev_estatina','prev_asa','prev_tabaco'];
     [ed, ind].forEach(function(el) {
       if(el && !el._urcymAutoGuardar) {
         el._urcymAutoGuardar = true;
@@ -6113,6 +6210,14 @@ async function abrirEvolucion(dni) {
       if(el && !el._urcymAutoGuardar) {
         el._urcymAutoGuardar = true;
         el.addEventListener('input', _autoGuardarEnSesion);
+        el.addEventListener('change', _autoGuardarEnSesion);
+      }
+    });
+    checkIds.forEach(function(id) {
+      const el = document.getElementById(id);
+      if(el && !el._urcymAutoGuardar) {
+        el._urcymAutoGuardar = true;
+        el.addEventListener('change', _autoGuardarEnSesion);
       }
     });
   }, 300);
