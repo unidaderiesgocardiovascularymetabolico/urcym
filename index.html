@@ -2635,8 +2635,12 @@
           <div style="padding:20px">
             <div style="display:flex;align-items:center;gap:10px;margin-bottom:18px;flex-wrap:wrap">
               <label style="font-size:13px;font-weight:600;color:var(--text)">Fecha del registro:</label>
-              <input type="date" id="mch_fecha" style="padding:7px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;font-family:var(--font-main);font-weight:600"/>
-              <span style="font-size:11px;color:var(--text-soft)">La columna se ordenará automáticamente en la tabla</span>
+              <div style="display:flex;align-items:center;gap:4px">
+                <button id="mch_fecha_prev" onclick="mchNavFecha(-1)" title="Fecha anterior" style="width:28px;height:28px;border:1.5px solid var(--border);border-radius:7px;background:var(--gray);font-size:14px;cursor:pointer;color:var(--text-soft);display:flex;align-items:center;justify-content:center;transition:all .15s" onmouseover="this.style.borderColor='var(--blue)';this.style.color='var(--blue)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--text-soft)'">‹</button>
+                <input type="date" id="mch_fecha" onchange="mchActualizarNavFecha()" style="padding:7px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;font-family:var(--font-main);font-weight:600"/>
+                <button id="mch_fecha_next" onclick="mchNavFecha(1)" title="Fecha siguiente" style="width:28px;height:28px;border:1.5px solid var(--border);border-radius:7px;background:var(--gray);font-size:14px;cursor:pointer;color:var(--text-soft);display:flex;align-items:center;justify-content:center;transition:all .15s" onmouseover="this.style.borderColor='var(--blue)';this.style.color='var(--blue)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--text-soft)'">›</button>
+              </div>
+              <span id="mch_fecha_hint" style="font-size:11px;color:var(--text-soft)">La columna se ordenará automáticamente en la tabla</span>
             </div>
             <div id="mch_tabla_wrap" style="overflow-x:auto"></div>
             <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:20px;padding-top:16px;border-top:1px solid var(--border)">
@@ -3681,6 +3685,8 @@ function renderTablaGenerica(datos, filas, wrapId, newColIdx) {
     // Todas las columnas tienen input de fecha editable
     h += '<input type="date" value="'+c+'" data-ci="'+ci+'" data-wrap="'+wrapId+'" onchange="actualizarFechaCol(this)"';
     h += ' style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.5);color:white;border-radius:5px;font-size:10px;padding:2px 4px;width:106px;color-scheme:dark"/>';
+    // Botón borrar columna (discreto)
+    h += '<button onclick="eliminarColumnaTabla('+ci+',\''+wrapId+'\')" title="Eliminar esta columna" style="margin-top:4px;display:block;background:transparent;border:none;cursor:pointer;opacity:.35;font-size:13px;padding:0;line-height:1;transition:opacity .15s" onmouseover="this.style.opacity=\'1\'" onmouseout="this.style.opacity=\'.35\'">🗑️</button>';
     h += '</th>';
   });
   h += '</tr></thead>';
@@ -4014,6 +4020,22 @@ function agregarColumnaEst() {
   agregarColumna('est_fecha_nueva', estDatos, EST_FILAS, 'est_tabla_wrap'); 
 }
 function agregarColumnaAnt() { agregarColumna('ant_fecha_nueva', antDatos, ANT_FILAS, 'ant_tabla_wrap'); }
+
+function eliminarColumnaTabla(ci, wrapId) {
+  const esLab = ['evlab_wrap','lab_tabla_wrap'].includes(wrapId);
+  const esEst = ['evest_wrap','est_tabla_wrap'].includes(wrapId);
+  const datos = esLab ? labDatos : esEst ? estDatos : antDatos;
+  const filas = esLab ? LAB_FILAS : esEst ? EST_FILAS : ANT_FILAS;
+  const saveWrap = esLab ? 'lab_tabla_wrap' : esEst ? 'est_tabla_wrap' : 'ant_tabla_wrap';
+  const fecha = datos.columnas[ci];
+  if(!fecha) return;
+  const fechaFmt = fecha.split('-').reverse().join('/');
+  if(!confirm('¿Eliminar la columna del ' + fechaFmt + '? Se borrarán todos los valores de esa fecha.')) return;
+  datos.columnas.splice(ci, 1);
+  if(datos.filas) datos.filas.forEach(fila => { if(fila) fila.splice(ci, 1); });
+  guardarDatosPac(saveWrap);
+  renderTablaGenerica(datos, filas, wrapId);
+}
 
 
 
@@ -7187,6 +7209,8 @@ function abrirCargaHistorica(tipo) {
   const titulos = { lab:'Laboratorio histórico', ant:'Antropometría histórica', est:'Estudios históricos' };
   document.getElementById('mch_titulo').textContent = '📅 ' + titulos[tipo];
   document.getElementById('mch_fecha').value = '';
+  // Inicializar navegación de fechas
+  setTimeout(mchActualizarNavFecha, 0);
 
   const filas = tipo==='lab' ? LAB_FILAS : tipo==='ant' ? ANT_FILAS : EST_FILAS;
   const datos = tipo==='lab' ? labDatos : tipo==='ant' ? antDatos : estDatos;
@@ -7274,6 +7298,82 @@ function mchAgregarNuevoParam() {
   lblEl.value = '';
   valEl.value = '';
   lblEl.focus();
+}
+
+// ===== NAVEGACIÓN DE FECHAS EN MODAL CARGA HISTÓRICA =====
+function mchActualizarNavFecha() {
+  const tipo = _cargaHistoricaTipo;
+  if(!tipo) return;
+  const datos = tipo==='lab' ? labDatos : tipo==='ant' ? antDatos : estDatos;
+  const cols = (datos.columnas || []).slice().sort();
+  const val = document.getElementById('mch_fecha').value;
+  const prevBtn = document.getElementById('mch_fecha_prev');
+  const nextBtn = document.getElementById('mch_fecha_next');
+  if(!prevBtn || !nextBtn) return;
+  const idx = cols.indexOf(val);
+  const hasPrev = idx > 0 || (idx < 0 && cols.length > 0 && val > cols[0]);
+  const hasNext = (idx >= 0 && idx < cols.length - 1) || (idx < 0 && cols.length > 0 && val < cols[cols.length-1]);
+  prevBtn.style.opacity = hasPrev ? '1' : '.35';
+  prevBtn.style.cursor = hasPrev ? 'pointer' : 'default';
+  nextBtn.style.opacity = hasNext ? '1' : '.35';
+  nextBtn.style.cursor = hasNext ? 'pointer' : 'default';
+}
+
+function mchNavFecha(dir) {
+  const tipo = _cargaHistoricaTipo;
+  if(!tipo) return;
+  const datos = tipo==='lab' ? labDatos : tipo==='ant' ? antDatos : estDatos;
+  const cols = (datos.columnas || []).slice().sort();
+  if(!cols.length) return;
+  const inp = document.getElementById('mch_fecha');
+  const val = inp.value;
+  let idx = cols.indexOf(val);
+  let newIdx;
+  if(idx < 0) {
+    // No está en la lista: ir al más cercano en la dirección
+    if(dir < 0) newIdx = cols.filter(c => c < val).length - 1;
+    else newIdx = cols.findIndex(c => c > val);
+    if(newIdx < 0) newIdx = dir < 0 ? cols.length - 1 : 0;
+  } else {
+    newIdx = idx + dir;
+  }
+  if(newIdx < 0 || newIdx >= cols.length) return;
+  inp.value = cols[newIdx];
+  // Cargar valores de esa columna en el modal
+  mchCargarValoresDeColumna(cols[newIdx]);
+  mchActualizarNavFecha();
+}
+
+function mchCargarValoresDeColumna(fecha) {
+  const tipo = _cargaHistoricaTipo;
+  if(!tipo) return;
+  const datos = tipo==='lab' ? labDatos : tipo==='ant' ? antDatos : estDatos;
+  const filas = tipo==='lab' ? LAB_FILAS : tipo==='ant' ? ANT_FILAS : EST_FILAS;
+  const ci = datos.columnas.indexOf(fecha);
+  const hint = document.getElementById('mch_fecha_hint');
+  if(ci < 0) {
+    if(hint) hint.textContent = 'La columna se ordenará automáticamente en la tabla';
+    return;
+  }
+  if(hint) hint.textContent = '📋 Cargando valores de esa fecha — podés editarlos y guardar para actualizar.';
+  // Cargar valores estándar
+  filas.forEach(f => {
+    if(f.cat || (f.calc && !f.calcAuto)) return;
+    const input = document.getElementById('mch_input_'+f.key);
+    if(!input) return;
+    const fi = filas.indexOf(f);
+    const val = (datos.filas[fi] || [])[ci] || '';
+    input.value = val;
+  });
+  // Cargar valores extra
+  (datos.extraFilas || []).forEach(lbl => {
+    const key = 'extra_'+lbl;
+    const input = document.getElementById('mch_input_'+key);
+    if(!input) return;
+    const extraFi = filas.length + datos.extraFilas.indexOf(lbl);
+    const val = (datos.filas[extraFi] || [])[ci] || '';
+    input.value = val;
+  });
 }
 
 function cerrarCargaHistorica() {
