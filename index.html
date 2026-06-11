@@ -5738,6 +5738,8 @@ function generarTextoClinico(c, meds) {
   if(c.fam_notas) lines.push('NOTAS FAMILIARES: '+c.fam_notas);
   if(c.act_notas) lines.push('NOTAS ACTIVIDAD FÍSICA: '+c.act_notas);
   if(c.tox_notas) lines.push('NOTAS TÓXICOS: '+c.tox_notas);
+  if(c.ali_notas) lines.push('NOTAS ALIMENTACIÓN: '+c.ali_notas);
+  if(c.alc_notas) lines.push('NOTAS ALCOHOL: '+c.alc_notas);
   if(c.med_notas) lines.push('NOTAS MEDICACIÓN: '+c.med_notas);
   if(!lines.length) return '';
   return '<div class="bloque-clinico" style="font-family:Arial,sans-serif;font-size:10pt;color:#333;border:1px solid #e0e0e0;padding:8px 10px;border-radius:6px;margin-bottom:10px;line-height:1.7">'+lines.join('<br>')+'</div>';
@@ -5799,6 +5801,8 @@ async function guardarClinica() {
     med_notas:document.getElementById('med_notas_generales')?.value||null,
     act_notas:document.getElementById('act_notas_generales')?.value||null,
     tox_notas:document.getElementById('tox_notas_generales')?.value||null,
+    ali_notas:document.getElementById('ali_notas_generales')?.value||null,
+    alc_notas:document.getElementById('alc_notas_generales')?.value||null,
     actualizado_en:new Date().toISOString()
   };
   // ── Filtrar solo las columnas que existen en la tabla (evita errores por columnas nuevas no migradas) ──
@@ -5916,7 +5920,8 @@ async function cargarDatosClinica(dni) {
   {const medNotes=document.getElementById('med_notas_generales');if(medNotes)medNotes.value='';}
   {const actNotes=document.getElementById('act_notas_generales');if(actNotes)actNotes.value='';}
   {const toxNotes=document.getElementById('tox_notas_generales');if(toxNotes)toxNotes.value='';}
-  {const medCont=document.getElementById('med_filas');if(medCont)medCont.innerHTML='';}
+  {const aliNotes=document.getElementById('ali_notas_generales');if(aliNotes)aliNotes.value='';}
+  {const alcNotes=document.getElementById('alc_notas_generales');if(alcNotes)alcNotes.value='';}  {const medCont=document.getElementById('med_filas');if(medCont)medCont.innerHTML='';}
   // ─────────────────────────────────────────────────────────────────────────────
 
   const { data } = await sb.from('paciente_clinica').select('*').eq('dni_paciente',dni).maybeSingle();
@@ -5961,6 +5966,10 @@ async function cargarDatosClinica(dni) {
   if(actNotes) actNotes.value = data.act_notas || '';
   const toxNotes = document.getElementById('tox_notas_generales');
   if(toxNotes) toxNotes.value = data.tox_notas || '';
+  const aliNotes = document.getElementById('ali_notas_generales');
+  if(aliNotes) aliNotes.value = data.ali_notas || '';
+  const alcNotes = document.getElementById('alc_notas_generales');
+  if(alcNotes) alcNotes.value = data.alc_notas || '';
   await cargarMedicacion(dni);
 }
 
@@ -8769,9 +8778,12 @@ async function guardarEvolucionHistorica() {
 
     <!-- TAB MEDICACION Y HABITOS -->
     <div id="tab_hab" class="ctab-content" style="display:none">
+
+      <!-- FILA 1: Tabaquismo + Alcohol (lado a lado) -->
       <div class="clinica-grid">
+        <!-- Columna izquierda: Tabaquismo -->
         <div class="clinica-section">
-          <h4>Tabaquismo</h4>
+          <h4>🚬 Tabaquismo</h4>
           <div class="habito-row">
             <label>Estado</label>
             <select id="hab_tabaquismo" onchange="actualizarTabaquismo()">
@@ -8786,36 +8798,11 @@ async function guardarEvolucionHistorica() {
             <div class="habito-row"><label id="hab_anios_label">Años fumando</label><input type="number" id="hab_anios" min="0" oninput="calcPackYear()"/></div>
             <div class="pack-year-result" id="hab_pack_year_result"></div>
           </div>
-          <h4 style="margin-top:14px">Actividad física</h4>
-          <div class="habito-row">
-            <select id="hab_actividad">
-              <option value="sedentarismo">Sedentarismo</option>
-              <option value="aerobica">Aeróbica</option>
-              <option value="fuerza">Fuerza</option>
-              <option value="mixto">Mixto</option>
-            </select>
-          </div>
-          <div style="background:#f0f4fa;border-radius:10px;padding:10px 12px;margin-top:8px">
-            <label style="font-size:11px;font-weight:700;color:var(--teal);display:block;margin-bottom:5px">📝 Notas actividad física (se vuelcan a la evolución)</label>
-            <textarea id="act_notas_generales" rows="2" placeholder="Tipo de ejercicio, frecuencia, intensidad, observaciones..." style="width:100%;padding:7px 9px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;font-family:var(--font-main);resize:vertical;line-height:1.5" onkeydown="event.stopPropagation()"></textarea>
-          </div>
-          <h4 style="margin-top:14px">Tóxicos</h4>
-          <div style="background:#fff4f4;border-radius:10px;padding:10px 12px;margin-top:4px">
-            <label style="font-size:11px;font-weight:700;color:var(--red);display:block;margin-bottom:5px">📝 Notas tóxicos (se vuelcan a la evolución)</label>
-            <textarea id="tox_notas_generales" rows="2" placeholder="Drogas, sustancias, exposición, contexto..." style="width:100%;padding:7px 9px;border:1.5px solid #f8d0d0;border-radius:8px;font-size:12px;font-family:var(--font-main);resize:vertical;line-height:1.5" onkeydown="event.stopPropagation()"></textarea>
-          </div>
-          <h4 style="margin-top:14px">Alimentación</h4>
-          <div class="habito-row">
-            <select id="hab_alimentacion">
-              <option value="no saludable">No saludable</option>
-              <option value="saludable">Saludable</option>
-              <option value="hiposodica">Hiposódica</option>
-              <option value="vegetariana">Vegetariana</option>
-            </select>
-          </div>
         </div>
+
+        <!-- Columna derecha: Alcohol -->
         <div class="clinica-section">
-          <h4>Alcohol</h4>
+          <h4>🍷 Alcohol</h4>
           <div class="habito-row">
             <label>Consume</label>
             <select id="hab_alcohol" onchange="actualizarAlcohol()">
@@ -8832,13 +8819,67 @@ async function guardarEvolucionHistorica() {
             <div class="habito-row"><label>Whisky (vasos/sem)</label><input type="number" id="alc_whisky" min="0" step="0.5" oninput="calcAlcohol()"/></div>
             <div id="hab_alcohol_result" class="alcohol-result"></div>
           </div>
+          <!-- Notas alcohol -->
+          <div style="background:#fff8ed;border-radius:10px;padding:10px 12px;margin-top:10px">
+            <label style="font-size:11px;font-weight:700;color:#b45309;display:block;margin-bottom:5px">📝 Notas alcohol (se vuelcan a la evolución)</label>
+            <textarea id="alc_notas_generales" rows="2" placeholder="Tipo de consumo, contexto, patrón, observaciones..." style="width:100%;padding:7px 9px;border:1.5px solid #f5d9a8;border-radius:8px;font-size:12px;font-family:var(--font-main);resize:vertical;line-height:1.5" onkeydown="event.stopPropagation()"></textarea>
+          </div>
         </div>
       </div>
 
-      <!-- MEDICACION -->
+      <!-- FILA 2: Actividad física + Tóxicos (lado a lado) -->
+      <div class="clinica-grid" style="margin-top:14px">
+        <!-- Columna izquierda: Actividad física -->
+        <div class="clinica-section">
+          <h4>🏃 Actividad física</h4>
+          <div class="habito-row">
+            <select id="hab_actividad">
+              <option value="sedentarismo">Sedentarismo</option>
+              <option value="aerobica">Aeróbica</option>
+              <option value="fuerza">Fuerza</option>
+              <option value="mixto">Mixto</option>
+            </select>
+          </div>
+          <div style="background:#f0f4fa;border-radius:10px;padding:10px 12px;margin-top:8px">
+            <label style="font-size:11px;font-weight:700;color:var(--teal);display:block;margin-bottom:5px">📝 Notas actividad física (se vuelcan a la evolución)</label>
+            <textarea id="act_notas_generales" rows="2" placeholder="Tipo de ejercicio, frecuencia, intensidad, observaciones..." style="width:100%;padding:7px 9px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;font-family:var(--font-main);resize:vertical;line-height:1.5" onkeydown="event.stopPropagation()"></textarea>
+          </div>
+        </div>
+
+        <!-- Columna derecha: Tóxicos -->
+        <div class="clinica-section">
+          <h4>⚠️ Tóxicos</h4>
+          <div style="background:#fff4f4;border-radius:10px;padding:10px 12px;margin-top:4px">
+            <label style="font-size:11px;font-weight:700;color:var(--red);display:block;margin-bottom:5px">📝 Notas tóxicos (se vuelcan a la evolución)</label>
+            <textarea id="tox_notas_generales" rows="4" placeholder="Drogas, sustancias, exposición, contexto..." style="width:100%;padding:7px 9px;border:1.5px solid #f8d0d0;border-radius:8px;font-size:12px;font-family:var(--font-main);resize:vertical;line-height:1.5" onkeydown="event.stopPropagation()"></textarea>
+          </div>
+        </div>
+      </div>
+
+      <!-- FILA 3: Alimentación (ancho completo) -->
+      <div class="clinica-section" style="margin-top:14px">
+        <h4>🥗 Alimentación</h4>
+        <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+          <div class="habito-row" style="margin:0;flex-shrink:0">
+            <label style="margin-right:8px">Patrón</label>
+            <select id="hab_alimentacion">
+              <option value="no saludable">No saludable</option>
+              <option value="saludable">Saludable</option>
+              <option value="hiposodica">Hiposódica</option>
+              <option value="vegetariana">Vegetariana</option>
+            </select>
+          </div>
+        </div>
+        <div style="background:#f0faf4;border-radius:10px;padding:10px 12px;margin-top:10px">
+          <label style="font-size:11px;font-weight:700;color:#16a34a;display:block;margin-bottom:5px">📝 Notas alimentación (se vuelcan a la evolución)</label>
+          <textarea id="ali_notas_generales" rows="2" placeholder="Restricciones, intolerancias, adherencia a la dieta, observaciones nutricionales..." style="width:100%;padding:7px 9px;border:1.5px solid #bbf7d0;border-radius:8px;font-size:12px;font-family:var(--font-main);resize:vertical;line-height:1.5" onkeydown="event.stopPropagation()"></textarea>
+        </div>
+      </div>
+
+      <!-- MEDICACION (ancho completo) -->
       <div class="clinica-section" style="margin-top:16px">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
-          <h4 style="margin:0">Medicación cardiometabólica</h4>
+          <h4 style="margin:0">💊 Medicación cardiometabólica</h4>
           <button onclick="agregarFilaMed()" style="background:var(--blue);color:white;border:none;border-radius:8px;padding:5px 12px;font-size:12px;cursor:pointer">+ Agregar</button>
         </div>
         <div style="display:grid;grid-template-columns:120px 1fr 90px 1fr 28px;gap:6px;margin-bottom:6px;font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--text-soft)">
