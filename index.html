@@ -2698,6 +2698,7 @@
           <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
             <span style="font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--text-soft)">Historial:</span>
             <button onclick="abrirHistorialAnt()" class="btn-historial" id="hbtn_ant">📐 Ver evolución</button>
+            <button onclick="imprimirInformeAnt()" class="btn-historial" style="background:#f0fdf4;border-color:#86efac;color:#16a34a">🖨️ Imprimir informe</button>
           </div>
           <button onclick="guardarAntYVolver()" style="padding:8px 22px;border:none;border-radius:9px;background:var(--teal);color:white;font-size:13px;cursor:pointer;font-family:var(--font-main);font-weight:600;box-shadow:0 2px 8px rgba(77,188,190,.25)">💾 Guardar antropometría</button>
         </div>
@@ -5301,13 +5302,24 @@ function generarPDF(tipo) {
       const segments = _parseRichTextSegments(elI);
       if (segments.length) {
         let curY = cY + 13;
-        const lineH = 5.5;
-        const maxY = PH - 56 - 4;
+        const lineH = 5.2;
+        // Usar máximo de altura: hasta zona de firma en última página
+        const firmaTopLast = PH - 56 - 4;
+        // En páginas intermedias usar casi toda la hoja
+        const maxYMid = PH - 20;
+
+        function _addPageWithHeader() {
+          // Footer en página actual antes de agregar nueva
+          if (usarOtro) { _pdfFooterOtro(doc, u, PW, PH); } else { _pdfFooter(doc, PW, PH); }
+          doc.addPage();
+          const newHeaderEndY = usarOtro ? _pdfHeaderOtro(doc, u, PW, ML) : _pdfHeader(doc, u, PW, ML);
+          return newHeaderEndY + 8;
+        }
+
         segments.forEach(function(seg) {
-          if (curY > maxY) return;
           const fontStyle = seg.bold && seg.italic ? 'bolditalic' : seg.bold ? 'bold' : seg.italic ? 'italic' : 'normal';
           doc.setFont('helvetica', fontStyle);
-          doc.setFontSize(10);
+          doc.setFontSize(9);
           if (seg.color) {
             const rgb = _hexToRgb(seg.color);
             doc.setTextColor(rgb[0], rgb[1], rgb[2]);
@@ -5316,11 +5328,13 @@ function generarPDF(tipo) {
           }
           if (seg.isNewLine) {
             curY += lineH * 0.6;
+            const maxY = doc.internal.getNumberOfPages() === doc.internal.getNumberOfPages() ? firmaTopLast : maxYMid;
+            if (curY > maxYMid) { curY = _addPageWithHeader(); }
             return;
           }
           const lines = doc.splitTextToSize(seg.text, W - 8);
           lines.forEach(function(ln) {
-            if (curY > maxY) return;
+            if (curY > firmaTopLast) { curY = _addPageWithHeader(); }
             doc.text(ln, ML + 4, curY);
             // Simular subrayado: línea fina debajo del texto
             if (seg.underline) {
@@ -6938,13 +6952,21 @@ function _crearPDFIndicacionesEvol(txt, usarOtro) {
   // Zona disponible hasta la firma (más compacta ahora)
   const firmaZoneTop = PH - 56 - 2;  // firma empieza en PH-56
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(10);
+  doc.setFontSize(9);
   doc.setTextColor(35, 35, 35);
-  const lineH = 5.5;
+  const lineH = 5.2;
+
+  function _addIndPage() {
+    if(usarOtro) { _pdfFooterOtro(doc, u, PW, PH); } else { _pdfFooter(doc, PW, PH); }
+    doc.addPage();
+    const newHY = usarOtro ? _pdfHeaderOtro(doc, u, PW, ML) : _pdfHeader(doc, u, PW, ML);
+    return newHY + 8;
+  }
+
   txt.split('\n').map(l => l.trim()).filter(Boolean).forEach(item => {
     const itemLines = doc.splitTextToSize('• ' + item, CW - 4);
     itemLines.forEach((ln, idx) => {
-      if(curY > firmaZoneTop) { doc.addPage(); curY = 15; }
+      if(curY > firmaZoneTop) { curY = _addIndPage(); }
       doc.text(ln, ML + (idx > 0 ? 4 : 0), curY);
       curY += lineH;
     });
@@ -13701,6 +13723,146 @@ window.mpCargar = async function() {
     if(wrap) wrap.innerHTML = '<div class="fin-empty">Error al cargar datos</div>';
   }
 };
+
+// ─── INFORME ANTROPOMETRÍA ────────────────────────────────────────────────────
+function imprimirInformeAnt() {
+  const p = pacienteActual;
+  if (!p) { alert('Sin paciente activo.'); return; }
+  const datos = antDatos;
+  if (!datos || !datos.columnas || !datos.columnas.length) {
+    alert('Sin datos antropométricos cargados.'); return;
+  }
+
+  // Filas a mostrar (en orden deseado)
+  const FILAS_INF = [
+    { key:'Peso',         label:'Peso (kg)'           },
+    { key:'IMC',          label:'IMC (kg/m²)'         },
+    { key:'PctGrasa',     label:'% grasa'             },
+    { key:'PctMusculo',   label:'% músculo'           },
+    { key:'GrasaVisceral',label:'Grasa visceral'      },
+    { key:'Cintura',      label:'Cintura (cm)'        },
+    { key:'FueraPres',    label:'Fuera de presión (cm)'},
+    { key:'Cuello',       label:'Cuello (cm)'         },
+    { key:'CintEst',      label:'Cintura/Estatura'    },
+    { key:'CintCad',      label:'Cintura/Cadera'      },
+  ];
+
+  // Mapeo key → índice en ANT_FILAS
+  const keyToFi = {};
+  ANT_FILAS.forEach((f, i) => { keyToFi[f.key] = i; });
+
+  // Columnas disponibles
+  const cols   = datos.columnas;   // array de fechas ISO
+  const nCols  = cols.length;
+
+  // Función auxiliar: valor en [fila_index][col_index]
+  const val = (fi, ci) => (datos.filas[fi] || [])[ci] || '';
+
+  // ── Encabezado paciente ──────────────────────────────────────────────────
+  const nombre = (p.apellido || '') + ', ' + (p.nombre || '');
+  const fnac   = p.fecha_nacimiento || p.fnac || '';
+  const edad   = fnac
+    ? (new Date().getFullYear() - new Date(fnac + 'T12:00:00').getFullYear()) + ' años'
+    : '';
+
+  // Fecha del último dato disponible (para "año de seguimiento")
+  const lastFecha = cols[nCols - 1] || '';
+  const anioSeg   = lastFecha ? new Date(lastFecha + 'T12:00:00').getFullYear() : '';
+
+  // ── Cabecera de columnas (mes/año) ───────────────────────────────────────
+  const thCols = cols.map(f => {
+    const d = new Date(f + 'T12:00:00');
+    const mes = d.toLocaleDateString('es-AR', { month: '2-digit', year: '2-digit' });
+    return '<th>' + mes + '</th>';
+  }).join('');
+
+  // ── Filas de datos ───────────────────────────────────────────────────────
+  const trRows = FILAS_INF.map(({ key, label }) => {
+    const fi = keyToFi[key];
+    if (fi === undefined) return '';
+    const tds = cols.map((_, ci) => {
+      const v = (fi !== undefined) ? val(fi, ci) : '';
+      const num = parseFloat(v);
+      const fila = ANT_FILAS[fi];
+      const sexo = p.sexo === 'Femenino' ? 'F' : 'H';
+      const alert = v && fila && fila.ref && fila.ref(v, sexo);
+      return '<td' + (alert ? ' style="color:#dc2626;font-weight:700"' : '') + '>'
+        + (v !== '' && v !== null ? (isNaN(num) ? v : num) : '—') + '</td>';
+    }).join('');
+    return '<tr><td class="row-label">' + label + '</td>' + tds + '</tr>';
+  }).filter(Boolean).join('');
+
+  // ── HTML del informe ─────────────────────────────────────────────────────
+  const html = `<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"/>
+<title>Informe Antropometría — ${nombre}</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Segoe UI',Arial,sans-serif;font-size:11px;color:#111;background:#fff;padding:22px 28px}
+  h1{font-size:17px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;margin-bottom:2px}
+  .sub{font-size:11px;color:#444;margin-bottom:14px}
+  .header-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:18px}
+  .hbox{background:#f0f9ff;border:1px solid #bae6fd;border-radius:6px;padding:8px 12px}
+  .hbox-label{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#0369a1;margin-bottom:3px}
+  .hbox-val{font-size:14px;font-weight:700;color:#0c4a6e}
+  table{border-collapse:collapse;width:100%;font-size:10.5px}
+  th{background:#0c4a6e;color:#fff;padding:7px 10px;text-align:center;font-weight:600;font-size:10px}
+  th:first-child{text-align:left;min-width:160px}
+  td{padding:6px 10px;text-align:center;border-bottom:1px solid #e5e7eb}
+  td.row-label{text-align:left;font-weight:600;color:#1e3a5f;background:#f8fafc}
+  tr:hover td{background:#f0f9ff}
+  .footer{margin-top:18px;font-size:9px;color:#9ca3af;text-align:right}
+  @media print{
+    body{padding:10px 14px}
+    @page{margin:12mm 14mm}
+  }
+</style>
+</head>
+<body>
+<h1>Seguimiento Antropometría</h1>
+<p class="sub">URCyM — Unidad de Riesgo Cardiovascular y Metabólico</p>
+
+<div class="header-grid">
+  <div class="hbox">
+    <div class="hbox-label">Nombre y Apellido</div>
+    <div class="hbox-val">${nombre}</div>
+  </div>
+  <div class="hbox">
+    <div class="hbox-label">Edad</div>
+    <div class="hbox-val">${edad}</div>
+  </div>
+  <div class="hbox">
+    <div class="hbox-label">Año de seguimiento</div>
+    <div class="hbox-val">${anioSeg}</div>
+  </div>
+</div>
+
+<table>
+  <thead>
+    <tr>
+      <th>Medición</th>
+      ${thCols}
+    </tr>
+  </thead>
+  <tbody>
+    ${trRows}
+  </tbody>
+</table>
+
+<p class="footer">Generado el ${new Date().toLocaleDateString('es-AR', {day:'2-digit',month:'2-digit',year:'numeric'})} · URCyM</p>
+</body>
+</html>`;
+
+  const win = window.open('', '_blank', 'width=900,height=700');
+  if (!win) { alert('Bloqueador de popups activo. Permitir para este sitio.'); return; }
+  win.document.write(html);
+  win.document.close();
+  win.focus();
+  setTimeout(() => win.print(), 400);
+}
+// ─────────────────────────────────────────────────────────────────────────────
 </script>
 
 </body>
