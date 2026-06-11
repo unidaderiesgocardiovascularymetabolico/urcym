@@ -2368,7 +2368,7 @@
           </div>
 
           <!-- Editor principal -->
-          <div id="evol_editor" class="evol-editor" contenteditable="true" spellcheck="true" placeholder="Escribí la evolución aquí..." oninput="marcarDirty('evol')" onkeydown="if(event.key==='Enter'){event.stopPropagation();}" onclick="(function(e){const ed=document.getElementById('evol_editor');if(e.target===ed&&ed.childNodes.length){const sel=window.getSelection();if(!sel.rangeCount||sel.getRangeAt(0).collapsed){const range=document.createRange();range.selectNodeContents(ed);range.collapse(false);sel.removeAllRanges();sel.addRange(range);}}})()"></div>
+          <div id="evol_editor" class="evol-editor" contenteditable="true" spellcheck="true" placeholder="Escribí la evolución aquí..." oninput="marcarDirty('evol')" onkeydown="if(event.key==='Enter'){event.stopPropagation();}"></div>
 
           <!-- Panel de actualización clínica inferior -->
           <div class="evol-update-panel">
@@ -5738,7 +5738,7 @@ function generarTextoClinico(c, meds) {
   if(c.fam_notas) lines.push('NOTAS FAMILIARES: '+c.fam_notas);
   if(c.med_notas) lines.push('NOTAS MEDICACIÓN: '+c.med_notas);
   if(!lines.length) return '';
-  return '<div class="bloque-clinico" style="font-family:Arial,sans-serif;font-size:10pt;color:#333;border:1px solid #e0e0e0;padding:8px 10px;border-radius:6px;background:#fafafa;margin-bottom:10px;line-height:1.7">'+lines.join('<br>')+'</div>';
+  return '<div class="bloque-clinico" style="font-family:Arial,sans-serif;font-size:10pt;color:#333;border:1px solid #e0e0e0;padding:8px 10px;border-radius:6px;margin-bottom:10px;line-height:1.7">'+lines.join('<br>')+'</div>';
 }
 
 // ===== SNAPSHOT CLÍNICO =====
@@ -5841,9 +5841,20 @@ async function guardarClinica() {
       const texto = generarTextoClinico(clinicaData, meds);
       if(texto) {
         const editor = document.getElementById('evol_editor');
-        const prev = editor?.querySelector('.bloque-clinico'); if(prev) prev.remove();
-        const tmp = document.createElement('div'); tmp.innerHTML = texto;
-        if(editor) editor.insertBefore(tmp.firstChild, editor.firstChild);
+        if(editor) {
+          const prev = editor.querySelector('.bloque-clinico');
+          const tmp = document.createElement('div'); tmp.innerHTML = texto;
+          if(prev) {
+            // Reemplazar el bloque existente sin tocar el texto escrito a mano
+            prev.replaceWith(tmp.firstChild);
+          } else {
+            // Solo insertar si el editor no tiene texto escrito a mano
+            const textoMano = editor.innerText ? editor.innerText.replace(/\s/g,'') : editor.textContent.replace(/\s/g,'');
+            if(!textoMano) {
+              editor.insertBefore(tmp.firstChild, editor.firstChild);
+            }
+          }
+        }
       }
     } catch(e) { console.warn('generarTextoClinico:', e); }
     evolClinicaSnapshot = { clinica: clinicaData, medicacion: meds };
@@ -6086,7 +6097,7 @@ function volcarAlteradosAlEditor(tipo) {
     '<span style="color:var(--red);font-weight:700">'+a.label+': '+a.val+(a.unidad?' '+a.unidad:'')+'</span>' +
     (a.refTxt ? ' <span style="font-size:9pt;color:#888">(ref: '+a.refTxt+')</span>' : '')
   ).join(' &nbsp;·&nbsp; ');
-  const bloque = '<div class="bloque-lab-alterados" style="font-family:Arial,sans-serif;font-size:10pt;color:#333;border-left:3px solid var(--red);padding:6px 10px;margin-bottom:10px;line-height:2;background:#fff8f8">' +
+  const bloque = '<div class="bloque-lab-alterados" style="font-family:Arial,sans-serif;font-size:10pt;color:#333;border-left:3px solid var(--red);padding:6px 10px;margin-bottom:10px;line-height:2">' +
     '<strong>'+titulo+' alterado'+(fechaStr?' ('+fechaStr+')':'')+':</strong><br>' + filas_html + '</div>';
   const editor = document.getElementById('evol_editor');
   const prev = editor.querySelector('.bloque-lab-alterados'); if(prev) prev.remove();
@@ -6725,7 +6736,7 @@ async function volcarActualizacion() {
   if(act) lines.push('<strong>Actividad física:</strong> ' + act);
   if(ali) lines.push('<strong>Alimentación:</strong> ' + ali);
 
-  const bloque = '<div class="bloque-actualizacion" style="font-family:Arial,sans-serif;font-size:10pt;color:#333;border:1px solid #d0e4f5;padding:8px 10px;border-radius:6px;background:#f0f8ff;margin-bottom:10px;line-height:1.9"><strong>Actualización de esta consulta:</strong><br>' + lines.join('<br>') + '</div>';
+  const bloque = '<div class="bloque-actualizacion" style="font-family:Arial,sans-serif;font-size:10pt;color:#333;border:1px solid #d0e4f5;padding:8px 10px;border-radius:6px;margin-bottom:10px;line-height:1.9"><strong>Actualización de esta consulta:</strong><br>' + lines.join('<br>') + '</div>';
   const editor = document.getElementById('evol_editor');
   const prev = editor.querySelector('.bloque-actualizacion'); if(prev) prev.remove();
   const tmp = document.createElement('div'); tmp.innerHTML = bloque;
@@ -6841,7 +6852,7 @@ function volcarIndicacionesAlEditor() {
   if(!txt || txt === '<br>') return;
   const editor = document.getElementById('evol_editor');
   const lines = txt;
-  const bloque = '<div class="bloque-indicaciones" style="font-family:Arial,sans-serif;font-size:10pt;color:#333;border:1px solid #d5e8d4;padding:8px 10px;border-radius:6px;background:#f8fff7;margin-bottom:10px;line-height:1.8"><strong>Indicaciones:</strong><br>'+lines+'</div>';
+  const bloque = '<div class="bloque-indicaciones" style="font-family:Arial,sans-serif;font-size:10pt;color:#333;border:1px solid #d5e8d4;padding:8px 10px;border-radius:6px;margin-bottom:10px;line-height:1.8"><strong>Indicaciones:</strong><br>'+lines+'</div>';
   const prev = editor.querySelector('.bloque-indicaciones'); if(prev) prev.remove();
   const tmp = document.createElement('div'); tmp.innerHTML = bloque;
   editor.appendChild(tmp.firstChild);
@@ -7058,7 +7069,7 @@ function volcarPromedioAlEditor() {
   // Quitar bloque anterior si existe
   const prev = editor.querySelector('.bloque-ta');
   if(lineas.length === 0) { if(prev) prev.remove(); return; }
-  const html = '<div class="bloque-ta" style="font-family:Arial,sans-serif;font-size:10pt;color:#1a2535;border-left:3px solid #3089ca;padding:6px 10px;margin-bottom:10px;line-height:1.8;background:#f0f8ff">' + lineas.join('<br>') + '</div>';
+  const html = '<div class="bloque-ta" style="font-family:Arial,sans-serif;font-size:10pt;color:#1a2535;border-left:3px solid #3089ca;padding:6px 10px;margin-bottom:10px;line-height:1.8">' + lineas.join('<br>') + '</div>';
   if(prev) {
     prev.outerHTML = html;
   } else {
