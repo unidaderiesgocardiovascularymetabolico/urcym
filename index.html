@@ -5845,16 +5845,11 @@ async function guardarClinica() {
           const tmp = document.createElement('div'); tmp.innerHTML = texto;
           const prev = editor.querySelector('.bloque-clinico');
           if(prev) {
-            // Siempre reemplazar el bloque clínico automático con los datos actualizados
-            // sin tocar nada del texto escrito a mano por el médico
+            // Actualizar el bloque clínico existente con los nuevos datos
             prev.replaceWith(tmp.firstChild);
           } else {
-            // No existe bloque previo: solo insertar si el editor está vacío de texto manual
-            const clon = editor.cloneNode(true);
-            const textoMano = (clon.innerText || clon.textContent || '').replace(/\s/g,'');
-            if(!textoMano) {
-              editor.insertBefore(tmp.firstChild, editor.firstChild);
-            }
+            // Primera vez: insertar al inicio (el texto manual queda debajo)
+            editor.insertBefore(tmp.firstChild, editor.firstChild);
           }
         }
       }
@@ -6071,11 +6066,11 @@ async function switchPacMainTab(tab) {
 
 // ===== VOLCAR ALTERADOS AL EDITOR =====
 function volcarAlteradosAlEditor(tipo) {
-  const datos = tipo === 'lab' ? labDatos : antDatos;
-  const filas = tipo === 'lab' ? LAB_FILAS : ANT_FILAS;
+  const datos = tipo === 'lab' ? labDatos : tipo === 'est' ? estDatos : antDatos;
+  const filas = tipo === 'lab' ? LAB_FILAS : tipo === 'est' ? EST_FILAS : ANT_FILAS;
   if(!datos || !datos.columnas || !datos.columnas.length) return;
   const sexoPac = pacienteActual?.sexo === 'Femenino' ? 'F' : 'H';
-  // Tomar la última columna (más reciente)
+  // Tomar la última columna con datos (penúltima tras agregarColumnaNueva, o última si aún no se agregó)
   const ultimaCol = datos.columnas.length - 1;
   const fecha = datos.columnas[ultimaCol];
   const alterados = [];
@@ -6089,27 +6084,37 @@ function volcarAlteradosAlEditor(tipo) {
       alterados.push({ label: f.label, val, unidad: storedU, refTxt: f.refTxt || '' });
     }
   });
-  if(!alterados.length) {
-    alert('No hay parámetros fuera de los valores de referencia en el laboratorio más reciente.');
-    return;
-  }
+  if(!alterados.length) return; // Sin alterados, no hacer nada
   const fechaStr = fecha ? new Date(fecha + 'T12:00:00').toLocaleDateString('es-AR', {day:'2-digit',month:'2-digit',year:'numeric'}) : '';
-  const titulo = tipo === 'lab' ? 'Laboratorio' : 'Antropometría';
+  const titulo = tipo === 'lab' ? 'Laboratorio' : tipo === 'est' ? 'Estudios' : 'Antropometría';
   const filas_html = alterados.map(a =>
     '<span style="color:var(--red);font-weight:700">'+a.label+': '+a.val+(a.unidad?' '+a.unidad:'')+'</span>' +
     (a.refTxt ? ' <span style="font-size:9pt;color:#888">(ref: '+a.refTxt+')</span>' : '')
   ).join(' &nbsp;·&nbsp; ');
-  const bloque = '<div class="bloque-lab-alterados" style="font-family:Arial,sans-serif;font-size:10pt;color:#333;border-left:3px solid var(--red);padding:6px 10px;margin-bottom:10px;line-height:2">' +
+  const claveBloque = tipo + '_' + (fecha || 'sin-fecha');
+  const bloque = '<div class="bloque-alterados" data-tipo="'+tipo+'" data-fecha="'+(fecha||'')+'" style="font-family:Arial,sans-serif;font-size:10pt;color:#333;border-left:3px solid var(--red);padding:6px 10px;margin-bottom:10px;line-height:2">' +
     '<strong>'+titulo+' alterado'+(fechaStr?' ('+fechaStr+')':'')+':</strong><br>' + filas_html + '</div>';
   const editor = document.getElementById('evol_editor');
-  const prev = editor.querySelector('.bloque-lab-alterados'); if(prev) prev.remove();
+  // Si ya existe un bloque de este mismo tipo y fecha (re-guardar mismo día) → reemplazarlo
+  // Si es fecha/tipo nuevo → acumular (no borrar los anteriores)
+  const prevMismoTipoFecha = editor.querySelector('.bloque-alterados[data-tipo="'+tipo+'"][data-fecha="'+(fecha||'')+'"]');
   const tmp = document.createElement('div'); tmp.innerHTML = bloque;
-  // Insertar después del bloque clínico si existe, sino al inicio
-  const bloqueClinico = editor.querySelector('.bloque-clinico');
-  if(bloqueClinico && bloqueClinico.nextSibling) {
-    editor.insertBefore(tmp.firstChild, bloqueClinico.nextSibling);
+  if(prevMismoTipoFecha) {
+    prevMismoTipoFecha.replaceWith(tmp.firstChild);
   } else {
-    editor.insertBefore(tmp.firstChild, editor.firstChild);
+    // Insertar después del último bloque-alterados existente, o después del bloque clínico, o al inicio
+    const todosAlt = editor.querySelectorAll('.bloque-alterados');
+    const bloqueClinico = editor.querySelector('.bloque-clinico');
+    const ancla = todosAlt.length > 0 ? todosAlt[todosAlt.length - 1]
+                : bloqueClinico ? bloqueClinico
+                : null;
+    if(ancla && ancla.nextSibling) {
+      editor.insertBefore(tmp.firstChild, ancla.nextSibling);
+    } else if(ancla) {
+      editor.appendChild(tmp.firstChild);
+    } else {
+      editor.insertBefore(tmp.firstChild, editor.firstChild);
+    }
   }
 }
 
@@ -6181,6 +6186,8 @@ async function guardarEstYVolver() {
   await guardarDatosPac('est_tabla_wrap');
   sincronizarRO();
   limpiarDirty('est');
+  volcarAlteradosAlEditor('est');
+  await guardarBorradorEvol(pacienteActual?.dni);
   agregarColumnaNueva(estDatos);
   renderTablaGenerica(estDatos, EST_FILAS, 'evest_wrap', estDatos.columnas.length - 1);
   feedbackGuardado('button[onclick="guardarEstYVolver()"]');
