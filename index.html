@@ -4980,9 +4980,9 @@ function _pdfHeader(doc, u, PW, ML) {
 /* ─────────────────────────────────────────────────── */
 /*  BARRA DE PACIENTE                                  */
 /* ─────────────────────────────────────────────────── */
-function _pdfPatientBar(doc, p, fechaStr, PW, ML, MR) {
+function _pdfPatientBar(doc, p, fechaStr, PW, ML, MR, headerEndY) {
   // Posicionado justo debajo del header
-  const bY = 30, bH = 9;
+  const bY = headerEndY || 30, bH = 9;
 
   const nombre = ((p.apellido ? p.apellido.toUpperCase() + ', ' : '') + (p.nombre || '')).trim();
   doc.setFont('helvetica', 'bold'); doc.setFontSize(8.5);
@@ -5256,7 +5256,7 @@ function generarPDF(tipo) {
   const headerEndY = usarOtro ? _pdfHeaderOtro(doc, u, PW, ML) : _pdfHeader(doc, u, PW, ML);
   const hoy = new Date().toLocaleDateString('es-AR',
     { day: '2-digit', month: '2-digit', year: 'numeric' });
-  const cY = p ? _pdfPatientBar(doc, p, hoy, PW, ML, MR) : headerEndY;
+  const cY = p ? _pdfPatientBar(doc, p, hoy, PW, ML, MR, headerEndY) : headerEndY;
 
   // Zona disponible para contenido (hasta la firma, que empieza en PH-56)
   const contentMaxY = PH - 56 - 2;
@@ -5288,7 +5288,7 @@ function generarPDF(tipo) {
     // ── Indicaciones ──────────────────────────────
 
     doc.setFont('helvetica', 'bold'); doc.setFontSize(9);
-    doc.setTextColor(..._C.azul);
+    doc.setTextColor(..._C.oscuro);
     doc.text('Indicaciones', ML + 4, cY + 5);
     doc.setLineWidth(0.2); doc.setDrawColor(..._C.gris);
     doc.line(ML + 4, cY + 7, ML + 42, cY + 7);
@@ -6908,13 +6908,13 @@ function _crearPDFIndicacionesEvol(txt, usarOtro) {
   const doc = new jsPDF({ unit:'mm', format:'a5', orientation:'portrait' });
   const PW = 148, PH = 210, ML = 10, MR = 10, CW = PW - ML - MR;
 
-  if(usarOtro) { _pdfHeaderOtro(doc, u, PW, ML); } else { _pdfHeader(doc, u, PW, ML); }
-  _pdfPatientBar(doc, p, hoy, PW, ML, MR);
+  const headerEndY = usarOtro ? _pdfHeaderOtro(doc, u, PW, ML) : _pdfHeader(doc, u, PW, ML);
+  _pdfPatientBar(doc, p, hoy, PW, ML, MR, headerEndY);
 
-  let curY = 48;
+  let curY = headerEndY + 18;
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(9);
-  doc.setTextColor(..._C.azul);
+  doc.setTextColor(..._C.oscuro);
   doc.text('Indicaciones para el paciente:', ML, curY);
   doc.setLineWidth(0.2); doc.setDrawColor(..._C.gris);
   doc.line(ML, curY + 2, ML + 62, curY + 2);
