@@ -11456,9 +11456,9 @@ function _sbShowSaveOk(){
 async function agRecuperarLocalStorage(){
   var raw=null;
   try{raw=localStorage.getItem('urcym_ag_turnos');}catch(e){}
-  if(!raw){alert('No hay datos en el caché local para recuperar.');return;}
+  if(!raw){alert('No hay datos en el cache local para recuperar.');return;}
   var local;
-  try{local=JSON.parse(raw);}catch(e){alert('Error leyendo caché local.');return;}
+  try{local=JSON.parse(raw);}catch(e){alert('Error leyendo cache local.');return;}
   var nLocal=Object.keys(local).length;
   var dbData=null;
   try{
@@ -11466,17 +11466,11 @@ async function agRecuperarLocalStorage(){
     if(r.data&&r.data.value)dbData=JSON.parse(r.data.value);
   }catch(e){}
   var nDB=dbData?Object.keys(dbData).length:0;
-  var msg='📦 Caché local: '+nLocal+' turnos
-☁️ Supabase: '+nDB+' turnos
-
-';
-  if(nLocal<=nDB){
-    msg+='El servidor tiene igual o más datos que el caché local.
-¿Subir igual? (puede restaurar turnos que el servidor no tiene)';
-  } else {
-    msg+='El caché local tiene MÁS turnos que el servidor. ¿Fusionar y subir a Supabase?';
-  }
-  if(!confirm(msg))return;
+  var detalle='Cache local: '+nLocal+' turnos | Supabase: '+nDB+' turnos.';
+  var pregunta=nLocal>nDB
+    ?'El cache local tiene MAS turnos que el servidor. Fusionar y subir a Supabase?'
+    :'El servidor tiene igual o mas datos. Subir el cache local igual?';
+  if(!confirm(detalle+' '+pregunta))return;
   var merged=Object.assign({},dbData||{},local);
   try{
     var res=await sb.from('urcym_agenda_config').upsert({key:'turnos',value:JSON.stringify(merged)},{onConflict:'key'});
@@ -11484,7 +11478,7 @@ async function agRecuperarLocalStorage(){
     turnos=merged;
     try{localStorage.setItem('urcym_ag_turnos',JSON.stringify(merged));}catch(e){}
     renderGrid();
-    alert('✅ Listo. Se fusionaron '+Object.keys(merged).length+' turnos en Supabase.');
+    alert('Listo. Se fusionaron '+Object.keys(merged).length+' turnos en Supabase.');
   }catch(e){alert('Error: '+e.message);}
 }
 
