@@ -8915,11 +8915,27 @@ function mdpaSetToma(prefix, tipo, val) {
 }
 
 function mdpaNavTecla(e, currentKey) {
-  if(e.key !== 'Enter') return;
+  if(e.key !== 'Enter' && e.key !== 'Tab') return;
   e.preventDefault();
-  const inputs = Array.from(document.querySelectorAll('#mdpa_tabla_inner .mdpa-inp'));
-  const idx = inputs.findIndex(el => el.id === 'mdpa_' + currentKey);
-  if(idx >= 0 && idx < inputs.length - 1) inputs[idx + 1].focus();
+  const est    = mdpaEstudios[mdpaIdx];
+  const nDias  = est ? (est.n_dias || 7) : 7;
+  const showPP = mdpaMostrarPP;
+  // Orden: por dia > franja (mat->pp->ves) > toma (1->2) > campo (s->d)
+  const franjas = showPP ? ['mat','pp','ves'] : ['mat','ves'];
+  const sequence = [];
+  for(let d = 1; d <= nDias; d++) {
+    for(const fr of franjas) {
+      for(let t = 1; t <= 2; t++) {
+        sequence.push('d'+d+'_t'+t+'_'+fr+'_s');
+        sequence.push('d'+d+'_t'+t+'_'+fr+'_d');
+      }
+    }
+  }
+  const idx = sequence.indexOf(currentKey);
+  if(idx >= 0 && idx < sequence.length - 1) {
+    const nextEl = document.getElementById('mdpa_' + sequence[idx + 1]);
+    if(nextEl) { nextEl.focus(); nextEl.select(); }
+  }
 }
 
 function mdpaCalcular() {
