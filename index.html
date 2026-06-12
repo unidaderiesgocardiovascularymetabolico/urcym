@@ -1193,6 +1193,7 @@
           <button class="ag-btn-inst" id="ag-btn-inst">&#127970; Institucional</button>
           <button class="ag-btn-tasks" id="ag-btn-tasks" title="Tareas por profesional">&#9989; Tareas</button>
           <button id="ag-btn-aranceles" style="background:none;border:1px solid #059669;border-radius:6px;padding:5px 10px;font-size:12px;color:#059669;cursor:pointer;font-family:inherit;" title="Configurar aranceles por consulta">💲 Aranceles</button>
+          <button onclick="agRecuperarLocalStorage()" style="background:none;border:1px solid #b45309;border-radius:6px;padding:5px 10px;font-size:12px;color:#b45309;cursor:pointer;font-family:inherit;" title="Si se perdieron turnos: fusiona el caché local con Supabase">🔁 Recuperar turnos</button>
         </div>
         <div class="ag-legend">
           <div class="ag-legend-item"><div class="ag-legend-bar" style="background:#7F77DD"></div>Guerrero</div>
@@ -11431,10 +11432,60 @@ async function sbSaveTurnos(){
     var res=await sb.from('urcym_agenda_config').upsert({key:'turnos',value:JSON.stringify(turnos)},{onConflict:'key'});
     if(res&&res.error){console.warn('[URCyM] sbSaveTurnos error',res.error);_sbShowSaveError(true);return;}
     _sbShowSaveError(false);
+    _sbShowSaveOk();
   }catch(e){
     console.warn('[URCyM] sbSaveTurnos error',e);
     _sbShowSaveError(true);
   }
+}
+
+function _sbShowSaveOk(){
+  var el=document.getElementById('urcym-save-ok-toast');
+  if(!el){
+    el=document.createElement('div');
+    el.id='urcym-save-ok-toast';
+    el.style.cssText='position:fixed;bottom:16px;right:20px;background:#16a34a;color:#fff;font-size:12px;font-weight:600;padding:8px 16px;border-radius:10px;z-index:99999;box-shadow:0 4px 16px rgba(0,0,0,.2);display:none;';
+    el.textContent='✓ Turnos guardados en la nube';
+    document.body.appendChild(el);
+  }
+  el.style.display='block';
+  clearTimeout(el._t);
+  el._t=setTimeout(function(){el.style.display='none';},2500);
+}
+
+async function agRecuperarLocalStorage(){
+  var raw=null;
+  try{raw=localStorage.getItem('urcym_ag_turnos');}catch(e){}
+  if(!raw){alert('No hay datos en el caché local para recuperar.');return;}
+  var local;
+  try{local=JSON.parse(raw);}catch(e){alert('Error leyendo caché local.');return;}
+  var nLocal=Object.keys(local).length;
+  var dbData=null;
+  try{
+    var r=await sb.from('urcym_agenda_config').select('value').eq('key','turnos').maybeSingle();
+    if(r.data&&r.data.value)dbData=JSON.parse(r.data.value);
+  }catch(e){}
+  var nDB=dbData?Object.keys(dbData).length:0;
+  var msg='📦 Caché local: '+nLocal+' turnos
+☁️ Supabase: '+nDB+' turnos
+
+';
+  if(nLocal<=nDB){
+    msg+='El servidor tiene igual o más datos que el caché local.
+¿Subir igual? (puede restaurar turnos que el servidor no tiene)';
+  } else {
+    msg+='El caché local tiene MÁS turnos que el servidor. ¿Fusionar y subir a Supabase?';
+  }
+  if(!confirm(msg))return;
+  var merged=Object.assign({},dbData||{},local);
+  try{
+    var res=await sb.from('urcym_agenda_config').upsert({key:'turnos',value:JSON.stringify(merged)},{onConflict:'key'});
+    if(res&&res.error){alert('Error al subir: '+res.error.message);return;}
+    turnos=merged;
+    try{localStorage.setItem('urcym_ag_turnos',JSON.stringify(merged));}catch(e){}
+    renderGrid();
+    alert('✅ Listo. Se fusionaron '+Object.keys(merged).length+' turnos en Supabase.');
+  }catch(e){alert('Error: '+e.message);}
 }
 
 
