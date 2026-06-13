@@ -10342,19 +10342,10 @@ function renderGrid(){
       }
     });
 
-    // ── Layout estilo Google Calendar ────────────────────────────────────────
-    // Agrupar items en "clusters" de solapamiento temporal entre distintos profs.
-    // Dentro de cada cluster: el primer prof ocupa el ancho completo (left=1px, width=100%-2px)
-    // y cada prof adicional se desplaza 18px a la derecha y reduce su ancho,
-    // quedando superpuestos visualmente (exactamente como Google Calendar).
+    // ── Layout estilo Google Calendar ─────────────────────────────────────────
+    // Algoritmo de "lanes": los items que se solapan se apilan en pistas,
+    // cada pista desplazada a la derecha (como GCal), sin dividir el ancho a partes iguales.
 
-    // 1) Ordenar todos los items por startM, luego por orden de prof
-    allItems.sort(function(a,b){
-      return a.startM-b.startM || (ALL_PROFS.indexOf(a.prof)-ALL_PROFS.indexOf(b.prof));
-    });
-
-    // 2) Para cada item, encontrar el "grupo de solapamiento" (todos los items que se tocan)
-    //    usando un algoritmo de barrido (sweep): acumular el endM máximo del grupo
     var profsPresentes=[];
     allItems.forEach(function(item){
       if(profsPresentes.indexOf(item.prof)<0)profsPresentes.push(item.prof);
@@ -10362,35 +10353,37 @@ function renderGrid(){
     profsPresentes.sort(function(a,b){return ALL_PROFS.indexOf(a)-ALL_PROFS.indexOf(b);});
     var totalProfs=profsPresentes.length||1;
 
-    // 3) Asignar a cada item su columna dentro del grupo de solapamiento
-    //    Estilo GCal: cada item en un grupo de N se asigna a una "pista" (lane)
-    //    usando el algoritmo greedy de "primero que cabe".
-    var lanes=[]; // lanes[i] = endM del último item en esa pista
-    var itemLane=[];
-    allItems.forEach(function(item,idx){
-      var assigned=-1;
-      for(var li=0;li<lanes.length;li++){
-        if(lanes[li]<=item.startM){ assigned=li; lanes[li]=item.endM; break; }
-      }
-      if(assigned<0){ assigned=lanes.length; lanes.push(item.endM); }
-      itemLane[idx]=assigned;
+    // Ordenar por startM luego por orden de prof
+    allItems.sort(function(a,b){
+      return a.startM-b.startM||(ALL_PROFS.indexOf(a.prof)-ALL_PROFS.indexOf(b.prof));
     });
 
-    // 4) Para cada item, calcular cuántas pistas activas hay en su rango (= totalCols del grupo)
+    // Asignar cada item a la primera pista libre (greedy, igual que GCal)
+    var laneEnds=[]; // laneEnds[i] = endM del último item en pista i
+    var itemLane=new Array(allItems.length);
+    allItems.forEach(function(item,idx){
+      var lane=-1;
+      for(var li=0;li<laneEnds.length;li++){
+        if(laneEnds[li]<=item.startM){lane=li;laneEnds[li]=item.endM;break;}
+      }
+      if(lane<0){lane=laneEnds.length;laneEnds.push(item.endM);}
+      itemLane[idx]=lane;
+    });
+
+    // Para cada item, contar cuántas pistas hay en su grupo de solapamiento
     var uLayout=[];
     allItems.forEach(function(item,idx){
-      // Contar máximo de pistas usadas por ítems que se solapan con este
       var maxLane=itemLane[idx];
       allItems.forEach(function(other,oi){
-        if(other.startM < item.endM && other.endM > item.startM){
-          if(itemLane[oi]>maxLane) maxLane=itemLane[oi];
+        if(other.startM<item.endM&&other.endM>item.startM){
+          if(itemLane[oi]>maxLane)maxLane=itemLane[oi];
         }
       });
-      var totalCols=maxLane+1;
-      var col=itemLane[idx];
-      uLayout.push({prof:item.prof,tm:item.tm,startM:item.startM,endM:item.endM,
-                    dur:item.endM-item.startM,tipo:item.tipo,key:item.key,turno:item.turno,
-                    col:col,totalCols:totalCols});
+      uLayout.push({
+        prof:item.prof,tm:item.tm,startM:item.startM,endM:item.endM,
+        dur:item.endM-item.startM,tipo:item.tipo,key:item.key,turno:item.turno,
+        col:itemLane[idx],totalCols:maxLane+1
+      });
     });
 
     // Render institutional blocks now that totalProfs is known — spans full column width
@@ -10426,28 +10419,28 @@ function renderGrid(){
     });
 
     // Paso 4: renderizar — estilo Google Calendar
-    // col=0 → ancho completo (left=1px, width≈100%-2px)
-    // col=1 → desplazado 20% a la derecha, encimado
-    // col=2 → desplazado 40%, etc.
-    // El primer item (col=0) con solapantes usa ~80% de ancho para dejar ver el siguiente
+    // col=0: ocupa ~80% del ancho (deja ver lo que viene detrás)
+    // col=1: desplazado 20% a la derecha, encimado, mismo ancho
+    // col=N: cada uno 20% más a la derecha
+    var GCAL_STEP=20; // % de desplazamiento por pista
+    var GCAL_W=80;    // % de ancho base (col 0 cuando hay solapamiento)
+
     uLayout.forEach(function(item){
       if(item.tipo==='nl_virtual') return;
       var topPx=topOf(item.tm);
       var hPx=Math.max(20,item.dur*PX_PER_MIN-2);
       var p=item.prof;
 
-      // GCal layout: si hay N columnas, cada col se desplaza 18% y tiene ancho 82%
-      // (el último item del grupo ocupa hasta el borde)
-      var STEP=18; // % de desplazamiento por cada pista adicional
       var leftPct, wPct;
       if(item.totalCols<=1){
+        // Sin solapamiento: ocupa todo el ancho
         leftPct=0; wPct=100;
       } else {
-        leftPct=item.col*STEP;
-        // El ancho se ajusta para que el último no salga de la columna
-        var maxLeft=(item.totalCols-1)*STEP;
-        wPct=100-maxLeft; // todos tienen el mismo ancho; los últimos alcanzan el borde
-        if(item.col===item.totalCols-1) wPct=100-leftPct; // último llega hasta el borde
+        // Con solapamiento: estilo GCal
+        leftPct=item.col*GCAL_STEP;
+        wPct=GCAL_W;
+        // Si es el último, llega hasta el borde derecho
+        if(item.col===item.totalCols-1) wPct=100-leftPct;
       }
 
       if(item.tipo==='free'){
@@ -10465,7 +10458,7 @@ function renderGrid(){
         tl.className='ag-slot-time';
         tl.textContent=item.tm;
         el.appendChild(tl);
-        if(hPx>=28&&wPct>=40){
+        if(hPx>=28&&wPct>=30){
           var pl=document.createElement('span');
           pl.className='ag-slot-prof';
           pl.textContent=PROF_LBL[p]||p;
@@ -10476,15 +10469,10 @@ function renderGrid(){
           if(offeredSlots[offKey]) el2.classList.add('ofrecido');
           el2.addEventListener('click',function(e){
             e.stopPropagation();
-            if(offeredSlots[offKey]){
-              openOfferedPopup(e,ds2,tm2,prof2);
-            } else {
-              openModal(ds2,tm2,null,prof2);
-            }
+            if(offeredSlots[offKey]){openOfferedPopup(e,ds2,tm2,prof2);}
+            else{openModal(ds2,tm2,null,prof2);}
           });
-          el2.addEventListener('contextmenu',function(e){
-            openBlockPopup(e,ds2,tm2,prof2);
-          });
+          el2.addEventListener('contextmenu',function(e){openBlockPopup(e,ds2,tm2,prof2);});
         })(el,ds,item.tm,p);
         col.appendChild(el);
 
