@@ -555,7 +555,7 @@
 /* Etiqueta de hora en columna izquierda */
 #agenda-app .ag-time-tick{position:absolute;right:6px;font-size:10px;color:#9ca3af;transform:translateY(-50%);}
 /* Bloques NL */
-#agenda-app .ag-nl-block{position:absolute;left:1px;right:1px;border-radius:4px;overflow:hidden;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;}
+#agenda-app .ag-nl-block{position:absolute;border-radius:4px;overflow:hidden;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;}
 #agenda-app .ag-nl-block.lila{background:#7B6EA6;color:#E8E4F8;}
 #agenda-app .ag-nl-block.blue{background:#2B4E8C;color:#C5D6F0;}
 /* ── Slot bloqueado manualmente ── */
@@ -10419,28 +10419,63 @@ function renderGrid(){
       col.appendChild(el);
     });
 
-    // Paso 4: renderizar — estilo Google Calendar
-    // col=0: ocupa ~80% del ancho (deja ver lo que viene detrás)
-    // col=1: desplazado 20% a la derecha, encimado, mismo ancho
-    // col=N: cada uno 20% más a la derecha
-    var GCAL_STEP=20; // % de desplazamiento por pista
-    var GCAL_W=80;    // % de ancho base (col 0 cuando hay solapamiento)
+    // ── Paso 4a: NL blocks de fondo + sus turnos encimados (PRIMERO para marcar items) ──
+    pendingNlBlocks.forEach(function(entry){
+      var b=entry.b, p=entry.p;
+      var nlStartM=t2m(b.from), nlEndM=t2m(b.to);
+
+      // Fondo: NL block ancho completo, z-index bajo
+      var nlEl=document.createElement('div');
+      nlEl.className='ag-nl-block '+(p==='BG'?'lila':'blue');
+      nlEl.style.top=topOf(b.from)+'px';
+      nlEl.style.height=heightOf(b.from,b.to)+'px';
+      nlEl.style.left='1px';
+      nlEl.style.width='calc(100% - 2px)';
+      nlEl.style.zIndex=2;
+      nlEl.textContent=b.label+(visProfs.length>1?' ('+PROF_LBL[p]+')':'');
+      col.appendChild(nlEl);
+
+      // Turnos de este prof dentro del NL: desplazados a la derecha, encimados
+      var turnosEnNL=uLayout.filter(function(item){
+        return item.tipo==='turno' && item.prof===p
+          && item.startM<nlEndM && item.endM>nlStartM;
+      });
+      turnosEnNL.sort(function(a,b_){return a.startM-b_.startM;});
+
+      turnosEnNL.forEach(function(item,i){
+        item._renderedInNL=true;
+        var topPx=topOf(item.tm);
+        var hPx=Math.max(20,item.dur*PX_PER_MIN-2);
+        var leftPct=20 + i*12;           // 20% de margen izq + 12% por cada turno extra
+        var wPct=Math.min(80,100-leftPct); // máx 80% de ancho
+        var el2=makeTurnoEl(item.turno,item.key,hPx);
+        el2.style.top=topPx+'px';
+        el2.style.height=hPx+'px';
+        el2.style.left='calc('+leftPct+'% + 1px)';
+        el2.style.width='calc('+wPct+'% - 2px)';
+        el2.style.zIndex=4+i;
+        if(wPct<50) el2.classList.add('ag-turno-narrow');
+        col.appendChild(el2);
+      });
+    });
+
+    // ── Paso 4b: renderizar el resto (sin NL) — estilo Google Calendar ──────────
+    var GCAL_STEP=20;
+    var GCAL_W=80;
 
     uLayout.forEach(function(item){
       if(item.tipo==='nl_virtual') return;
+      if(item._renderedInNL) return; // ya renderizado en el bloque NL arriba
       var topPx=topOf(item.tm);
       var hPx=Math.max(20,item.dur*PX_PER_MIN-2);
       var p=item.prof;
 
       var leftPct, wPct;
       if(item.totalCols<=1){
-        // Sin solapamiento: ocupa todo el ancho
         leftPct=0; wPct=100;
       } else {
-        // Con solapamiento: estilo GCal
         leftPct=item.col*GCAL_STEP;
         wPct=GCAL_W;
-        // Si es el último, llega hasta el borde derecho
         if(item.col===item.totalCols-1) wPct=100-leftPct;
       }
 
@@ -10476,9 +10511,7 @@ function renderGrid(){
           el2.addEventListener('contextmenu',function(e){openBlockPopup(e,ds2,tm2,prof2);});
         })(el,ds,item.tm,p);
         col.appendChild(el);
-
       } else {
-        // turno asignado
         var el2=makeTurnoEl(item.turno,item.key,hPx);
         el2.style.top=topPx+'px';
         el2.style.height=hPx+'px';
@@ -10488,39 +10521,6 @@ function renderGrid(){
         if(wPct<50)el2.classList.add('ag-turno-narrow');
         col.appendChild(el2);
       }
-    });
-
-    // ── Render NL blocks: se enciman sobre los turnos (no dividen la celda) ──
-    // Solo se dividen entre sí si hay NL blocks de distintos profs en el mismo horario.
-    pendingNlBlocks.forEach(function(entry){
-      var b=entry.b, p=entry.p;
-      var startM=t2m(b.from), endM=t2m(b.to);
-
-      // Solo compartir columna con OTROS NL blocks del mismo horario (no con turnos)
-      var overlapNlProfs=[];
-      pendingNlBlocks.forEach(function(e2){
-        var s2=t2m(e2.b.from), e2m=t2m(e2.b.to);
-        if(s2 < endM && e2m > startM){
-          if(overlapNlProfs.indexOf(e2.p)<0) overlapNlProfs.push(e2.p);
-        }
-      });
-      if(overlapNlProfs.indexOf(p)<0) overlapNlProfs.push(p);
-      overlapNlProfs.sort(function(a,b_){return ALL_PROFS.indexOf(a)-ALL_PROFS.indexOf(b_);});
-
-      var totalCols=overlapNlProfs.length||1;
-      var profCol=overlapNlProfs.indexOf(p);
-      var wPct=Math.floor(100/totalCols);
-      var leftPct=profCol*wPct;
-
-      var el=document.createElement('div');
-      el.className='ag-nl-block '+(p==='BG'?'lila':'blue');
-      el.style.top=topOf(b.from)+'px';
-      el.style.height=heightOf(b.from,b.to)+'px';
-      el.style.left='calc('+leftPct+'% + 1px)';
-      el.style.width='calc('+wPct+'% - 2px)';
-      el.style.zIndex=2;
-      el.textContent=b.label+(visProfs.length>1?' ('+PROF_LBL[p]+')':'');
-      col.appendChild(el);
     });
 
     // Click en área vacía (col o líneas de grilla) — abre modal con horario editable libre
