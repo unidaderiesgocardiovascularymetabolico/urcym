@@ -10323,9 +10323,8 @@ function renderGrid(){
     // Los NL blocks NO se agregan a allItems: se renderizan superpuestos (como Google Calendar)
     // para que los turnos de ese prof no dividan la celda sino que se encimen al NL block.
 
-    // ── Layout estilo Google Calendar ─────────────────────────────────────────
-    // Paso 2a: separar items por prof y asignar sub-columnas DENTRO de cada prof
-    // para que turnos superpuestos del mismo prof se muestren lado a lado.
+    // Paso 2: por cada prof, ordenar items y recortar endM al inicio del siguiente
+    // Esto garantiza que nunca haya solapamiento entre TURNOS del mismo prof
     allItems.sort(function(a,b){return a.startM-b.startM||(a.prof<b.prof?-1:1);});
 
     var profGroups={};
@@ -10334,59 +10333,64 @@ function renderGrid(){
       profGroups[item.prof].push(item);
     });
 
-    // Para cada prof, asignar sub-columna interna usando interval scheduling greedy
     Object.keys(profGroups).forEach(function(p){
       var g=profGroups[p];
       g.sort(function(a,b){return a.startM-b.startM;});
-      var colEnds=[];
-      g.forEach(function(item){
-        var placed=false;
-        for(var ci=0;ci<colEnds.length;ci++){
-          if(colEnds[ci]<=item.startM){
-            item._subCol=ci; colEnds[ci]=item.endM; placed=true; break;
-          }
-        }
-        if(!placed){ item._subCol=colEnds.length; colEnds.push(item.endM); }
-      });
-      // totalSubCols para cada item = max sub-col entre solapados + 1
-      g.forEach(function(item){
-        var mx=item._subCol;
-        g.forEach(function(other){
-          if(other.startM<item.endM&&other.endM>item.startM&&other._subCol>mx) mx=other._subCol;
-        });
-        item._totalSubCols=mx+1;
-      });
+      // Recortar endM de cada item al startM del siguiente (sin solapamiento)
+      for(var i=0;i<g.length-1;i++){
+        if(g[i].endM>g[i+1].startM) g[i].endM=g[i+1].startM;
+      }
     });
 
-    // Paso 2b: columna fija por prof (BG=0, OB=1, LA=2, SA=3)
+    // ── Layout estilo Google Calendar ────────────────────────────────────────
+    // Agrupar items en "clusters" de solapamiento temporal entre distintos profs.
+    // Dentro de cada cluster: el primer prof ocupa el ancho completo (left=1px, width=100%-2px)
+    // y cada prof adicional se desplaza 18px a la derecha y reduce su ancho,
+    // quedando superpuestos visualmente (exactamente como Google Calendar).
+
+    // 1) Ordenar todos los items por startM, luego por orden de prof
+    allItems.sort(function(a,b){
+      return a.startM-b.startM || (ALL_PROFS.indexOf(a.prof)-ALL_PROFS.indexOf(b.prof));
+    });
+
+    // 2) Para cada item, encontrar el "grupo de solapamiento" (todos los items que se tocan)
+    //    usando un algoritmo de barrido (sweep): acumular el endM máximo del grupo
     var profsPresentes=[];
     allItems.forEach(function(item){
       if(profsPresentes.indexOf(item.prof)<0)profsPresentes.push(item.prof);
     });
     profsPresentes.sort(function(a,b){return ALL_PROFS.indexOf(a)-ALL_PROFS.indexOf(b);});
+    var totalProfs=profsPresentes.length||1;
 
-    // Paso 2c: left% y width% combinando prof-col y sub-col interna
+    // 3) Asignar a cada item su columna dentro del grupo de solapamiento
+    //    Estilo GCal: cada item en un grupo de N se asigna a una "pista" (lane)
+    //    usando el algoritmo greedy de "primero que cabe".
+    var lanes=[]; // lanes[i] = endM del último item en esa pista
+    var itemLane=[];
+    allItems.forEach(function(item,idx){
+      var assigned=-1;
+      for(var li=0;li<lanes.length;li++){
+        if(lanes[li]<=item.startM){ assigned=li; lanes[li]=item.endM; break; }
+      }
+      if(assigned<0){ assigned=lanes.length; lanes.push(item.endM); }
+      itemLane[idx]=assigned;
+    });
+
+    // 4) Para cada item, calcular cuántas pistas activas hay en su rango (= totalCols del grupo)
     var uLayout=[];
-    allItems.forEach(function(item){
-      var overlapProfs=[];
-      allItems.forEach(function(other){
-        if(other.startM<item.endM&&other.endM>item.startM){
-          if(overlapProfs.indexOf(other.prof)<0)overlapProfs.push(other.prof);
+    allItems.forEach(function(item,idx){
+      // Contar máximo de pistas usadas por ítems que se solapan con este
+      var maxLane=itemLane[idx];
+      allItems.forEach(function(other,oi){
+        if(other.startM < item.endM && other.endM > item.startM){
+          if(itemLane[oi]>maxLane) maxLane=itemLane[oi];
         }
       });
-      overlapProfs.sort(function(a,b){return ALL_PROFS.indexOf(a)-ALL_PROFS.indexOf(b);});
-      var profColIdx=overlapProfs.indexOf(item.prof);
-      var totalProfCols=overlapProfs.length||1;
-      var profWPct=Math.floor(100/totalProfCols);
-      var profLeftPct=profColIdx*profWPct;
-      var subCols=item._totalSubCols||1;
-      var subCol=item._subCol||0;
-      var subWPct=Math.floor(profWPct/subCols);
-      var subLeftPct=profLeftPct+subCol*subWPct;
-      var finalWPct=(subCol===subCols-1)?(profWPct-subCol*subWPct):subWPct;
+      var totalCols=maxLane+1;
+      var col=itemLane[idx];
       uLayout.push({prof:item.prof,tm:item.tm,startM:item.startM,endM:item.endM,
                     dur:item.endM-item.startM,tipo:item.tipo,key:item.key,turno:item.turno,
-                    _leftPct:subLeftPct,_wPct:finalWPct});
+                    col:col,totalCols:totalCols});
     });
 
     // Render institutional blocks now that totalProfs is known — spans full column width
@@ -10421,21 +10425,37 @@ function renderGrid(){
       col.appendChild(el);
     });
 
-    // Paso 4: renderizar
+    // Paso 4: renderizar — estilo Google Calendar
+    // col=0 → ancho completo (left=1px, width≈100%-2px)
+    // col=1 → desplazado 20% a la derecha, encimado
+    // col=2 → desplazado 40%, etc.
+    // El primer item (col=0) con solapantes usa ~80% de ancho para dejar ver el siguiente
     uLayout.forEach(function(item){
       if(item.tipo==='nl_virtual') return;
       var topPx=topOf(item.tm);
       var hPx=Math.max(20,item.dur*PX_PER_MIN-2);
-      var leftPct=item._leftPct;
-      var wPct=item._wPct;
       var p=item.prof;
+
+      // GCal layout: si hay N columnas, cada col se desplaza 18% y tiene ancho 82%
+      // (el último item del grupo ocupa hasta el borde)
+      var STEP=18; // % de desplazamiento por cada pista adicional
+      var leftPct, wPct;
+      if(item.totalCols<=1){
+        leftPct=0; wPct=100;
+      } else {
+        leftPct=item.col*STEP;
+        // El ancho se ajusta para que el último no salga de la columna
+        var maxLeft=(item.totalCols-1)*STEP;
+        wPct=100-maxLeft; // todos tienen el mismo ancho; los últimos alcanzan el borde
+        if(item.col===item.totalCols-1) wPct=100-leftPct; // último llega hasta el borde
+      }
 
       if(item.tipo==='free'){
         var el=document.createElement('div');
         el.className='ag-disp-slot '+p.toLowerCase()+(wPct<50?' ag-slot-narrow':'');
         el.style.cssText='position:absolute;top:'+topPx+'px;height:'+hPx+'px;'
           +'left:calc('+leftPct+'% + 1px);width:calc('+wPct+'% - 2px);'
-          +'box-sizing:border-box;cursor:pointer;'
+          +'box-sizing:border-box;cursor:pointer;z-index:'+(3+item.col)+';'
           +'display:flex;align-items:center;justify-content:center;'
           +'flex-direction:column;gap:1px;';
         el.dataset.prof=p;
@@ -10445,15 +10465,12 @@ function renderGrid(){
         tl.className='ag-slot-time';
         tl.textContent=item.tm;
         el.appendChild(tl);
-        // Ocultar nombre del prof si el slot es muy chico
         if(hPx>=28&&wPct>=40){
           var pl=document.createElement('span');
           pl.className='ag-slot-prof';
           pl.textContent=PROF_LBL[p]||p;
           el.appendChild(pl);
         }
-        // ── click izq: si libre → modal; si ofrecido → popup opciones
-        //    click der: toggle ofrecido (gris) ──
         (function(el2,ds2,tm2,prof2){
           var offKey=ds2+'_'+tm2+'_'+prof2;
           if(offeredSlots[offKey]) el2.classList.add('ofrecido');
@@ -10478,7 +10495,7 @@ function renderGrid(){
         el2.style.height=hPx+'px';
         el2.style.left='calc('+leftPct+'% + 1px)';
         el2.style.width='calc('+wPct+'% - 2px)';
-        // mark narrow if column is less than ~60px wide (approx: day col ~120px, narrow when <50%)
+        el2.style.zIndex=3+item.col;
         if(wPct<50)el2.classList.add('ag-turno-narrow');
         col.appendChild(el2);
       }
