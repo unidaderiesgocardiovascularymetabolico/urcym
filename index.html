@@ -5872,10 +5872,10 @@ function generarTextoClinico(c, meds) {
   const FAM_NAMES = {hta:'HTA',dbt:'DBT',obe:'Obesidad',dis:'Dislipemia',iam:'IAM',acv:'ACV',erc:'ERC',ms:'S. Metabólico'};
   const dxList = Object.keys(DX_NAMES).filter(d=>c['dx_'+d]).map(d=>{
     let txt = DX_NAMES[d];
-    if(d==='acv'&&c.dx_acv_fecha){const anio=parseInt(c.dx_acv_fecha,10);if(!isNaN(anio)){const años=new Date().getFullYear()-anio;txt+=' (hace '+(años>0?años+' año'+(años!==1?'s':''):'este año')+')';}}
-    if(d==='iam'&&c.dx_iam_fecha){const anio=parseInt(c.dx_iam_fecha,10);if(!isNaN(anio)){const años=new Date().getFullYear()-anio;txt+=' (hace '+(años>0?años+' año'+(años!==1?'s':''):'este año')+')';}}
-    if(d==='hta'&&c.dx_hta_fecha){const anio=parseInt(c.dx_hta_fecha,10);if(!isNaN(anio)){const años=new Date().getFullYear()-anio;txt+=' (hace '+(años>0?años+' año'+(años!==1?'s':''):'este año')+')';}}
-    if(d==='obe'&&c.dx_obe_fecha){const anio=parseInt(c.dx_obe_fecha,10);if(!isNaN(anio)){const años=new Date().getFullYear()-anio;txt+=' (hace '+(años>0?años+' año'+(años!==1?'s':''):'este año')+')';}}
+    if(d==='acv'){try{const evs=JSON.parse(c.dx_acv_eventos||'[]');if(evs.length){txt+=' ('+evs.map(e=>e.tipo+(e.año?' '+e.año:'')).join(', ')+')'}}catch(e){}}
+    if(d==='iam'){try{const evs=JSON.parse(c.dx_iam_eventos||'[]');if(evs.length){txt+=' ('+evs.map(e=>e.tipo+(e.año?' '+e.año:'')).join(', ')+')'}}catch(e){}}
+    if(d==='hta'&&c.dx_hta_fecha){const a=parseInt(c.dx_hta_fecha,10);if(!isNaN(a)){const años=new Date().getFullYear()-a;txt+=' (hace '+(años>0?años+' año'+(años!==1?'s':''):'este año')+')'}}
+    if(d==='obe'&&c.dx_obe_fecha){const a=parseInt(c.dx_obe_fecha,10);if(!isNaN(a)){txt+=' desde '+a;}}
     if(d==='menopausia'&&c.dx_menopausia_edad)txt+=' (edad diagnóstico: '+c.dx_menopausia_edad+' años)';
     return txt;
   });
@@ -5892,6 +5892,9 @@ function generarTextoClinico(c, meds) {
   if(ginList.length) lines.push('ANT. GINECOLÓGICOS: '+ginList.join(' · '));
   const famList = Object.keys(FAM_NAMES).filter(d=>c['fam_'+d]).map(d=>FAM_NAMES[d]);
   if(famList.length) lines.push('ANT. FAMILIARES: '+famList.join(' · '));
+  // Antecedentes quirúrgicos
+  try{const cirs=JSON.parse(c.quirurg_cirugias||'[]');if(cirs.length){lines.push('ANT. QUIRÚRGICOS: '+cirs.map(x=>x.cirugia+(x.año?' ('+x.año+')':'')).join(' · '));}}catch(e){}
+  if(c.quirurg_notas) lines.push('Notas quirúrgicas: '+c.quirurg_notas);
   if(meds && meds.length) lines.push('MEDICACIÓN: '+meds.map(m=>m.farmaco+' '+m.dosis+(m.frecuencia?' '+m.frecuencia:'')).join(' · '));
   const habParts = [];
   if(c.tabaquismo==='nunca') habParts.push('No fumador');
@@ -5947,11 +5950,9 @@ async function guardarClinica() {
     gpac_p:document.getElementById('gpac_p')?.value||null,
     gpac_a:document.getElementById('gpac_a')?.value||null,
     gpac_c:document.getElementById('gpac_c')?.value||null,
-    dx_acv_subtipos:{isq:document.getElementById('dx_acv_isq')?.checked||false,hem:document.getElementById('dx_acv_hem')?.checked||false,ait:document.getElementById('dx_acv_ait')?.checked||false},
-    dx_acv_fecha:document.getElementById('dx_acv_fecha')?.value||null,
+    dx_acv_eventos: JSON.stringify(getEventosACV()),
     dx_acv_nota:document.getElementById('dx_acv_nota')?.value||null,
-    dx_iam_subtipos:{stemi:document.getElementById('dx_iam_stemi')?.checked||false,nstemi:document.getElementById('dx_iam_nstemi')?.checked||false,angiop:document.getElementById('dx_iam_angiop')?.checked||false,by:document.getElementById('dx_iam_by')?.checked||false},
-    dx_iam_fecha:document.getElementById('dx_iam_fecha')?.value||null,
+    dx_iam_eventos: JSON.stringify(getEventosIAM()),
     dx_iam_nota:document.getElementById('dx_iam_nota')?.value||null,
     dx_hta_fecha:document.getElementById('dx_hta_fecha')?.value||null,
     dx_hta_nota:document.getElementById('dx_hta_nota')?.value||null,
@@ -5976,6 +5977,8 @@ async function guardarClinica() {
     ali_notas:document.getElementById('ali_notas_generales')?.value||null,
     alc_notas:document.getElementById('alc_notas_generales')?.value||null,
     tab_notas:document.getElementById('tab_notas_generales')?.value||null,
+    quirurg_cirugias: JSON.stringify(getCirugias()),
+    quirurg_notas: document.getElementById('quirurg_notas')?.value||null,
     actualizado_en:new Date().toISOString()
   };
   // ── Filtrar solo las columnas que existen en la tabla (evita errores por columnas nuevas no migradas) ──
@@ -6078,6 +6081,12 @@ async function cargarDatosClinica(dni) {
     toggleDxExtra(dx);
     calcDxTiempo(dx);
   });
+  // Reset multi-eventos y quirúrgicos
+  {const l=document.getElementById('acv_eventos_lista');if(l)l.innerHTML='';}
+  {const l=document.getElementById('iam_eventos_lista');if(l)l.innerHTML='';}
+  {const l=document.getElementById('quirurg_filas');if(l)l.innerHTML='';}
+  {const e=document.getElementById('quirurg_empty');if(e)e.style.display='block';}
+  {const n=document.getElementById('quirurg_notas');if(n)n.value='';}
   {const tab=document.getElementById('hab_tabaquismo');if(tab){tab.value='nunca';actualizarTabaquismo();}}
   {const cig=document.getElementById('hab_cig_dia');if(cig)cig.value='';}
   {const ani=document.getElementById('hab_anios');if(ani)ani.value='';}
@@ -6105,16 +6114,42 @@ async function cargarDatosClinica(dni) {
   ['hta','dbt','obe','dis','iam','acv','erc','ms'].forEach(d=>{const el=document.getElementById('fam_'+d);if(el)el.checked=!!data['fam_'+d];});
   // GPAC
   ['g','p','a','c'].forEach(f=>{const el=document.getElementById('gpac_'+f);if(el&&data['gpac_'+f])el.value=data['gpac_'+f];});
-  // Extra dx
-  ['acv','iam','hta','obe','menopausia'].forEach(dx=>{
+  // Extra dx: HTA, OBE, Menopausia (con fecha/edad)
+  ['hta','obe','menopausia'].forEach(dx=>{
     toggleDxExtra(dx);
     const fecha=document.getElementById('dx_'+dx+'_fecha');if(fecha&&data['dx_'+dx+'_fecha'])fecha.value=data['dx_'+dx+'_fecha'];
     const nota=document.getElementById('dx_'+dx+'_nota');if(nota&&data['dx_'+dx+'_nota'])nota.value=data['dx_'+dx+'_nota'];
-    if(dx==='acv'&&data.dx_acv_subtipos){['isq','hem','ait'].forEach(s=>{const el=document.getElementById('dx_acv_'+s);if(el)el.checked=data.dx_acv_subtipos[s]||false;});}
-    if(dx==='iam'&&data.dx_iam_subtipos){['stemi','nstemi','angiop','by'].forEach(s=>{const el=document.getElementById('dx_iam_'+s);if(el)el.checked=data.dx_iam_subtipos[s]||false;});}
     if(dx==='menopausia'){const edad=document.getElementById('dx_menopausia_edad');if(edad&&data.dx_menopausia_edad)edad.value=data.dx_menopausia_edad;}
     calcDxTiempo(dx);
   });
+  // ACV multi-evento
+  toggleDxExtra('acv');
+  try{if(data.dx_acv_eventos){const evs=JSON.parse(data.dx_acv_eventos);setEventosACV(evs);}
+  else if(data.dx_acv_subtipos){// compatibilidad con datos viejos
+    const old=data.dx_acv_subtipos;
+    const evs=[];
+    if(old.isq)evs.push({tipo:'Isquémico',año:data.dx_acv_fecha||''});
+    if(old.hem)evs.push({tipo:'Hemorrágico',año:data.dx_acv_fecha||''});
+    if(old.ait)evs.push({tipo:'AIT',año:data.dx_acv_fecha||''});
+    setEventosACV(evs);
+  }}catch(e){}
+  {const nota=document.getElementById('dx_acv_nota');if(nota&&data.dx_acv_nota)nota.value=data.dx_acv_nota;}
+  // IAM multi-evento
+  toggleDxExtra('iam');
+  try{if(data.dx_iam_eventos){const evs=JSON.parse(data.dx_iam_eventos);setEventosIAM(evs);}
+  else if(data.dx_iam_subtipos){// compatibilidad con datos viejos
+    const old=data.dx_iam_subtipos;
+    const evs=[];
+    if(old.stemi)evs.push({tipo:'STEMI',año:data.dx_iam_fecha||''});
+    if(old.nstemi)evs.push({tipo:'NSTEMI',año:data.dx_iam_fecha||''});
+    if(old.angiop)evs.push({tipo:'Angioplastía',año:data.dx_iam_fecha||''});
+    if(old.by)evs.push({tipo:'By-pass',año:data.dx_iam_fecha||''});
+    setEventosIAM(evs);
+  }}catch(e){}
+  {const nota=document.getElementById('dx_iam_nota');if(nota&&data.dx_iam_nota)nota.value=data.dx_iam_nota;}
+  // Antecedentes quirúrgicos
+  try{const cirs=JSON.parse(data.quirurg_cirugias||'[]');setCirugias(cirs);}catch(e){}
+  {const qn=document.getElementById('quirurg_notas');if(qn&&data.quirurg_notas)qn.value=data.quirurg_notas;}
   const tab=document.getElementById('hab_tabaquismo');
   if(tab){tab.value=data.tabaquismo||'nunca';actualizarTabaquismo();}
   const cig=document.getElementById('hab_cig_dia');if(cig&&data.cigarrillos_dia)cig.value=data.cigarrillos_dia;
@@ -7420,6 +7455,115 @@ function calcAlcohol(){
   el.innerHTML='<span class="'+(gr>lim?'alcohol-mal':'alcohol-ok')+'">'+gr+' g/semana '+(gr>lim?'⚠️ Supera el límite recomendado':'✓ Dentro del límite')+'</span>';
 }
 
+
+// ===== EVENTOS MÚLTIPLES ACV =====
+function _crearFilaEventoACV(ev) {
+  const div = document.createElement('div');
+  div.style.cssText = 'display:flex;gap:8px;align-items:center;background:#dce8f8;border-radius:8px;padding:6px 10px;flex-wrap:wrap';
+  const tipos = ['Isquémico','Hemorrágico','AIT','Otro'];
+  const selVal = ev&&ev.tipo ? ev.tipo : '';
+  const añoVal = ev&&ev.año ? ev.año : '';
+  div.innerHTML =
+    '<select style="padding:4px 8px;border:1.5px solid var(--border);border-radius:7px;font-size:12px;font-family:var(--font-main)">'+
+      tipos.map(t=>'<option value="'+t+'"'+(t===selVal?' selected':'')+'>'+t+'</option>').join('')+
+    '</select>'+
+    '<label style="font-size:12px;display:flex;align-items:center;gap:4px;flex-shrink:0">Año:&nbsp;<input type="number" min="1940" max="2030" placeholder="aaaa" value="'+añoVal+'" style="width:80px;padding:4px 7px;border:1.5px solid var(--border);border-radius:7px;font-size:12px"></label>'+
+    '<button type="button" onclick="this.parentElement.remove();_actualizarVacioACV()" style="margin-left:auto;background:var(--red-light);color:var(--red);border:none;border-radius:6px;width:24px;height:24px;cursor:pointer;font-size:16px;line-height:1;flex-shrink:0">×</button>';
+  return div;
+}
+function _actualizarVacioACV(){
+  const lista=document.getElementById('acv_eventos_lista');
+  const empty=lista&&lista.children.length===0;
+}
+function agregarEventoACV(ev) {
+  const lista = document.getElementById('acv_eventos_lista');
+  if(!lista) return;
+  lista.appendChild(_crearFilaEventoACV(ev||null));
+}
+function getEventosACV() {
+  const lista = document.getElementById('acv_eventos_lista');
+  if(!lista) return [];
+  return Array.from(lista.children).map(div=>{
+    return {tipo:div.querySelector('select')?.value||'', año:div.querySelector('input[type="number"]')?.value||''};
+  });
+}
+function setEventosACV(eventos) {
+  const lista = document.getElementById('acv_eventos_lista');
+  if(!lista) return;
+  lista.innerHTML = '';
+  (eventos||[]).forEach(ev=>lista.appendChild(_crearFilaEventoACV(ev)));
+}
+
+// ===== EVENTOS MÚLTIPLES IAM =====
+function _crearFilaEventoIAM(ev) {
+  const div = document.createElement('div');
+  div.style.cssText = 'display:flex;gap:8px;align-items:center;background:#dce8f8;border-radius:8px;padding:6px 10px;flex-wrap:wrap';
+  const tipos = ['STEMI','NSTEMI','Angioplastía','By-pass','Otro'];
+  const selVal = ev&&ev.tipo ? ev.tipo : '';
+  const añoVal = ev&&ev.año ? ev.año : '';
+  div.innerHTML =
+    '<select style="padding:4px 8px;border:1.5px solid var(--border);border-radius:7px;font-size:12px;font-family:var(--font-main)">'+
+      tipos.map(t=>'<option value="'+t+'"'+(t===selVal?' selected':'')+'>'+t+'</option>').join('')+
+    '</select>'+
+    '<label style="font-size:12px;display:flex;align-items:center;gap:4px;flex-shrink:0">Año:&nbsp;<input type="number" min="1940" max="2030" placeholder="aaaa" value="'+añoVal+'" style="width:80px;padding:4px 7px;border:1.5px solid var(--border);border-radius:7px;font-size:12px"></label>'+
+    '<button type="button" onclick="this.parentElement.remove()" style="margin-left:auto;background:var(--red-light);color:var(--red);border:none;border-radius:6px;width:24px;height:24px;cursor:pointer;font-size:16px;line-height:1;flex-shrink:0">×</button>';
+  return div;
+}
+function agregarEventoIAM(ev) {
+  const lista = document.getElementById('iam_eventos_lista');
+  if(!lista) return;
+  lista.appendChild(_crearFilaEventoIAM(ev||null));
+}
+function getEventosIAM() {
+  const lista = document.getElementById('iam_eventos_lista');
+  if(!lista) return [];
+  return Array.from(lista.children).map(div=>{
+    return {tipo:div.querySelector('select')?.value||'', año:div.querySelector('input[type="number"]')?.value||''};
+  });
+}
+function setEventosIAM(eventos) {
+  const lista = document.getElementById('iam_eventos_lista');
+  if(!lista) return;
+  lista.innerHTML = '';
+  (eventos||[]).forEach(ev=>lista.appendChild(_crearFilaEventoIAM(ev)));
+}
+
+// ===== ANTECEDENTES QUIRÚRGICOS =====
+function agregarCirugia(data) {
+  const cont = document.getElementById('quirurg_filas');
+  if(!cont) return;
+  const empty = document.getElementById('quirurg_empty');
+  if(empty) empty.style.display = 'none';
+  const div = document.createElement('div');
+  div.style.cssText = 'display:flex;gap:8px;align-items:center;background:#f0f4fa;border-radius:8px;padding:7px 10px;flex-wrap:wrap';
+  const nomVal = data&&data.cirugia ? data.cirugia.replace(/"/g,'&quot;') : '';
+  const añoVal = data&&data.año ? data.año : '';
+  div.innerHTML =
+    '<input type="text" placeholder="Nombre de la cirugía (ej: Colecistectomía laparoscópica)" value="'+nomVal+'" style="flex:1;min-width:160px;padding:5px 8px;border:1.5px solid var(--border);border-radius:7px;font-size:12px;font-family:var(--font-main)" onkeydown="event.stopPropagation()">'+
+    '<label style="font-size:12px;display:flex;align-items:center;gap:4px;flex-shrink:0">Año:&nbsp;<input type="number" min="1900" max="2030" placeholder="aaaa" value="'+añoVal+'" style="width:80px;padding:5px 7px;border:1.5px solid var(--border);border-radius:7px;font-size:12px"></label>'+
+    '<button type="button" onclick="this.parentElement.remove();_actualizarVacioCirugias()" style="background:var(--red-light);color:var(--red);border:none;border-radius:6px;width:24px;height:24px;cursor:pointer;font-size:16px;line-height:1;flex-shrink:0">×</button>';
+  cont.appendChild(div);
+}
+function _actualizarVacioCirugias() {
+  const cont = document.getElementById('quirurg_filas');
+  const empty = document.getElementById('quirurg_empty');
+  if(empty && cont) empty.style.display = cont.children.length === 0 ? 'block' : 'none';
+}
+function getCirugias() {
+  const cont = document.getElementById('quirurg_filas');
+  if(!cont) return [];
+  return Array.from(cont.children).map(div=>{
+    const inputs = div.querySelectorAll('input');
+    return {cirugia:(inputs[0]?.value||'').trim(), año:(inputs[1]?.value||'').trim()};
+  }).filter(c=>c.cirugia||c.año);
+}
+function setCirugias(lista) {
+  const cont = document.getElementById('quirurg_filas');
+  if(!cont) return;
+  cont.innerHTML = '';
+  (lista||[]).forEach(c=>agregarCirugia(c));
+  _actualizarVacioCirugias();
+}
 
 // ===== FILTRO POR PARÁMETRO EN LABORATORIO (solo lectura) =====
 function filtrarTablaLab(query) {
@@ -9294,32 +9438,17 @@ td{padding:5px 6px;text-align:center;border-bottom:1px solid #f3f4f6}
       </div>
       <!-- Extras: ACV -->
       <div id="dx_extra_acv" style="display:none;background:#f0f4fa;border-radius:10px;padding:10px 14px;margin-top:10px;font-size:12px">
-        <div style="font-weight:600;color:var(--blue);margin-bottom:6px">ACV — detalles</div>
-        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
-          <label>Eventos:<br><div style="display:flex;gap:6px;margin-top:4px">
-            <label><input type="checkbox" id="dx_acv_isq"> Isquémico</label>
-            <label><input type="checkbox" id="dx_acv_hem"> Hemorrágico</label>
-            <label><input type="checkbox" id="dx_acv_ait"> AIT</label>
-          </div></label>
-          <label>Año del evento:<br><input type="number" id="dx_acv_fecha" min="1940" max="2030" placeholder="aaaa" style="margin-top:4px;padding:4px 8px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;width:90px" oninput="calcDxTiempo('acv')"></label>
-          <span id="dx_acv_tiempo" style="color:var(--blue);font-weight:600"></span>
-        </div>
-        <div style="margin-top:8px"><label>Nota (se vuelca a HC):<br><textarea id="dx_acv_nota" rows="2" style="width:100%;margin-top:4px;padding:6px 8px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;resize:vertical"></textarea></label></div>
+        <div style="font-weight:600;color:var(--blue);margin-bottom:8px">ACV — eventos (puede registrar más de uno)</div>
+        <div id="acv_eventos_lista" style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px"></div>
+        <button type="button" onclick="agregarEventoACV()" style="font-size:11px;padding:4px 12px;border:1.5px dashed var(--blue);border-radius:7px;background:white;color:var(--blue);cursor:pointer;display:inline-flex;align-items:center;gap:4px">＋ Agregar evento ACV</button>
+        <div style="margin-top:10px"><label>Nota general ACV (se vuelca a HC):<br><textarea id="dx_acv_nota" rows="2" style="width:100%;margin-top:4px;padding:6px 8px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;resize:vertical" onkeydown="event.stopPropagation()"></textarea></label></div>
       </div>
       <!-- Extras: IAM -->
       <div id="dx_extra_iam" style="display:none;background:#f0f4fa;border-radius:10px;padding:10px 14px;margin-top:10px;font-size:12px">
-        <div style="font-weight:600;color:var(--blue);margin-bottom:6px">IAM — detalles</div>
-        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
-          <label>Tipos:<br><div style="display:flex;gap:6px;margin-top:4px;flex-wrap:wrap">
-            <label><input type="checkbox" id="dx_iam_stemi"> STEMI</label>
-            <label><input type="checkbox" id="dx_iam_nstemi"> NSTEMI</label>
-            <label><input type="checkbox" id="dx_iam_angiop"> Angioplastía</label>
-            <label><input type="checkbox" id="dx_iam_by"> By-pass</label>
-          </div></label>
-          <label>Año del evento:<br><input type="number" id="dx_iam_fecha" min="1940" max="2030" placeholder="aaaa" style="margin-top:4px;padding:4px 8px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;width:90px" oninput="calcDxTiempo('iam')"></label>
-          <span id="dx_iam_tiempo" style="color:var(--blue);font-weight:600"></span>
-        </div>
-        <div style="margin-top:8px"><label>Nota (se vuelca a HC):<br><textarea id="dx_iam_nota" rows="2" style="width:100%;margin-top:4px;padding:6px 8px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;resize:vertical"></textarea></div>
+        <div style="font-weight:600;color:var(--blue);margin-bottom:8px">IAM — eventos (puede registrar más de uno)</div>
+        <div id="iam_eventos_lista" style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px"></div>
+        <button type="button" onclick="agregarEventoIAM()" style="font-size:11px;padding:4px 12px;border:1.5px dashed var(--blue);border-radius:7px;background:white;color:var(--blue);cursor:pointer;display:inline-flex;align-items:center;gap:4px">＋ Agregar evento IAM</button>
+        <div style="margin-top:10px"><label>Nota general IAM (se vuelca a HC):<br><textarea id="dx_iam_nota" rows="2" style="width:100%;margin-top:4px;padding:6px 8px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;resize:vertical" onkeydown="event.stopPropagation()"></textarea></label></div>
       </div>
       <!-- Extras: HTA -->
       <div id="dx_extra_hta" style="display:none;background:#f0f4fa;border-radius:10px;padding:10px 14px;margin-top:10px;font-size:12px">
@@ -9334,10 +9463,10 @@ td{padding:5px 6px;text-align:center;border-bottom:1px solid #f3f4f6}
       <div id="dx_extra_obe" style="display:none;background:#f0f4fa;border-radius:10px;padding:10px 14px;margin-top:10px;font-size:12px">
         <div style="font-weight:600;color:var(--blue);margin-bottom:6px">Obesidad — detalles</div>
         <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
-          <label>Desde (año diagnóstico):<br><input type="number" id="dx_obe_fecha" min="1940" max="2030" placeholder="aaaa" style="margin-top:4px;padding:4px 8px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;width:90px" oninput="calcDxTiempo('obe')"></label>
+          <label>Año de inicio:<br><input type="number" id="dx_obe_fecha" min="1940" max="2030" placeholder="aaaa" style="margin-top:4px;padding:4px 8px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;width:90px" oninput="calcDxTiempo('obe')"></label>
           <span id="dx_obe_tiempo" style="color:var(--blue);font-weight:600"></span>
         </div>
-        <div style="margin-top:8px"><label>Nota (se vuelca a HC):<br><textarea id="dx_obe_nota" rows="2" style="width:100%;margin-top:4px;padding:6px 8px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;resize:vertical"></textarea></label></div>
+        <div style="margin-top:8px"><label>Nota (se vuelca a HC):<br><textarea id="dx_obe_nota" rows="2" style="width:100%;margin-top:4px;padding:6px 8px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;resize:vertical" onkeydown="event.stopPropagation()"></textarea></label></div>
       </div>
       <!-- Notas generales cardiometabólicas -->
       <div style="background:#f0f4fa;border-radius:10px;padding:12px 14px;margin-top:14px">
@@ -9505,6 +9634,20 @@ td{padding:5px 6px;text-align:center;border-bottom:1px solid #f3f4f6}
         <div style="background:#f0faf4;border-radius:10px;padding:10px 12px;margin-top:10px">
           <label style="font-size:11px;font-weight:700;color:#16a34a;display:block;margin-bottom:5px">📝 Notas alimentación (se vuelcan a la evolución)</label>
           <textarea id="ali_notas_generales" rows="2" placeholder="Restricciones, intolerancias, adherencia a la dieta, observaciones nutricionales..." style="width:100%;padding:7px 9px;border:1.5px solid #bbf7d0;border-radius:8px;font-size:12px;font-family:var(--font-main);resize:vertical;line-height:1.5" onkeydown="event.stopPropagation()"></textarea>
+        </div>
+      </div>
+
+      <!-- ANTECEDENTES QUIRÚRGICOS (ancho completo) -->
+      <div class="clinica-section" style="margin-top:16px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+          <h4 style="margin:0">🔪 Antecedentes quirúrgicos</h4>
+          <button type="button" onclick="agregarCirugia()" style="background:var(--blue);color:white;border:none;border-radius:8px;padding:5px 12px;font-size:12px;cursor:pointer">＋ Agregar cirugía</button>
+        </div>
+        <div id="quirurg_filas" style="display:flex;flex-direction:column;gap:7px"></div>
+        <div id="quirurg_empty" style="font-size:12px;color:var(--text-soft);font-style:italic;padding:6px 0;display:block">Sin cirugías registradas. Presioná "Agregar cirugía" para añadir.</div>
+        <div style="background:#f0f4fa;border-radius:10px;padding:10px 12px;margin-top:10px">
+          <label style="font-size:11px;font-weight:700;color:var(--blue);display:block;margin-bottom:5px">📝 Notas quirúrgicas (se vuelcan a la evolución)</label>
+          <textarea id="quirurg_notas" rows="2" placeholder="Complicaciones, contexto, observaciones adicionales..." style="width:100%;padding:7px 9px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;font-family:var(--font-main);resize:vertical;line-height:1.5" onkeydown="event.stopPropagation()"></textarea>
         </div>
       </div>
 
@@ -10172,26 +10315,16 @@ function renderGrid(){
       if(visProfs.indexOf(t.prof)<0)return;
       var defaultDur=PROF_45.indexOf(t.prof)>=0?45:30;
       var startM=t2m(tTime);
+      // Turnos extra y videollamada usan siempre la duración estándar del prof (30 o 45 min)
       var dur=defaultDur;
-      // Para turnos extra: usar distancia al próximo turno del mismo prof (mínimo 15 min)
-      if(t.extra){
-        var lista=turnosPorProf[t.prof]||[];
-        var next=null;
-        for(var ii=0;ii<lista.length;ii++){if(lista[ii]>startM){next=lista[ii];break;}}
-        if(next!==null) dur=Math.max(15,next-startM);
-        else dur=defaultDur;
-      }
       allItems.push({prof:t.prof,tm:tTime,startM:startM,endM:startM+dur,dur:dur,tipo:'turno',key:k,turno:t});
     });
 
-    // Agregar NL blocks como items virtuales para que el layout de columnas los considere
-    pendingNlBlocks.forEach(function(entry){
-      var b=entry.b, p=entry.p;
-      allItems.push({prof:p,tm:b.from,startM:t2m(b.from),endM:t2m(b.to),dur:t2m(b.to)-t2m(b.from),tipo:'nl_virtual'});
-    });
+    // Los NL blocks NO se agregan a allItems: se renderizan superpuestos (como Google Calendar)
+    // para que los turnos de ese prof no dividan la celda sino que se encimen al NL block.
 
     // Paso 2: por cada prof, ordenar items y recortar endM al inicio del siguiente
-    // Esto garantiza que nunca haya solapamiento y cada item ocupa exactamente su hueco
+    // Esto garantiza que nunca haya solapamiento entre TURNOS del mismo prof
     allItems.sort(function(a,b){return a.startM-b.startM||(a.prof<b.prof?-1:1);});
 
     var profGroups={};
@@ -10329,23 +10462,25 @@ function renderGrid(){
       }
     });
 
-    // ── Render NL blocks con layout de columnas (igual que Google Calendar) ──
+    // ── Render NL blocks: se enciman sobre los turnos (no dividen la celda) ──
+    // Solo se dividen entre sí si hay NL blocks de distintos profs en el mismo horario.
     pendingNlBlocks.forEach(function(entry){
       var b=entry.b, p=entry.p;
       var startM=t2m(b.from), endM=t2m(b.to);
 
-      // Calcular columnas: todos los profs con items (incluye nl_virtual) que se solapan
-      var overlapProfs=[];
-      allItems.forEach(function(item){
-        if(item.startM < endM && item.endM > startM){
-          if(overlapProfs.indexOf(item.prof)<0) overlapProfs.push(item.prof);
+      // Solo compartir columna con OTROS NL blocks del mismo horario (no con turnos)
+      var overlapNlProfs=[];
+      pendingNlBlocks.forEach(function(e2){
+        var s2=t2m(e2.b.from), e2m=t2m(e2.b.to);
+        if(s2 < endM && e2m > startM){
+          if(overlapNlProfs.indexOf(e2.p)<0) overlapNlProfs.push(e2.p);
         }
       });
-      if(overlapProfs.indexOf(p)<0) overlapProfs.push(p);
-      overlapProfs.sort(function(a,b_){return ALL_PROFS.indexOf(a)-ALL_PROFS.indexOf(b_);});
+      if(overlapNlProfs.indexOf(p)<0) overlapNlProfs.push(p);
+      overlapNlProfs.sort(function(a,b_){return ALL_PROFS.indexOf(a)-ALL_PROFS.indexOf(b_);});
 
-      var totalCols=overlapProfs.length||1;
-      var profCol=overlapProfs.indexOf(p);
+      var totalCols=overlapNlProfs.length||1;
+      var profCol=overlapNlProfs.indexOf(p);
       var wPct=Math.floor(100/totalCols);
       var leftPct=profCol*wPct;
 
