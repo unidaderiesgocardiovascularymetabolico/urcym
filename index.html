@@ -10323,8 +10323,9 @@ function renderGrid(){
     // Los NL blocks NO se agregan a allItems: se renderizan superpuestos (como Google Calendar)
     // para que los turnos de ese prof no dividan la celda sino que se encimen al NL block.
 
-    // Paso 2: por cada prof, ordenar items y recortar endM al inicio del siguiente
-    // Esto garantiza que nunca haya solapamiento entre TURNOS del mismo prof
+    // ── Layout estilo Google Calendar ─────────────────────────────────────────
+    // Paso 2a: separar items por prof y asignar sub-columnas DENTRO de cada prof
+    // para que turnos superpuestos del mismo prof se muestren lado a lado.
     allItems.sort(function(a,b){return a.startM-b.startM||(a.prof<b.prof?-1:1);});
 
     var profGroups={};
@@ -10333,38 +10334,59 @@ function renderGrid(){
       profGroups[item.prof].push(item);
     });
 
+    // Para cada prof, asignar sub-columna interna usando interval scheduling greedy
     Object.keys(profGroups).forEach(function(p){
       var g=profGroups[p];
       g.sort(function(a,b){return a.startM-b.startM;});
-      // Recortar endM de cada item al startM del siguiente (sin solapamiento)
-      for(var i=0;i<g.length-1;i++){
-        if(g[i].endM>g[i+1].startM) g[i].endM=g[i+1].startM;
-      }
+      var colEnds=[];
+      g.forEach(function(item){
+        var placed=false;
+        for(var ci=0;ci<colEnds.length;ci++){
+          if(colEnds[ci]<=item.startM){
+            item._subCol=ci; colEnds[ci]=item.endM; placed=true; break;
+          }
+        }
+        if(!placed){ item._subCol=colEnds.length; colEnds.push(item.endM); }
+      });
+      // totalSubCols para cada item = max sub-col entre solapados + 1
+      g.forEach(function(item){
+        var mx=item._subCol;
+        g.forEach(function(other){
+          if(other.startM<item.endM&&other.endM>item.startM&&other._subCol>mx) mx=other._subCol;
+        });
+        item._totalSubCols=mx+1;
+      });
     });
 
-    // Asignar columna fija por prof (orden: BG=0, OB=1, LA=2, SA=3 — solo profs presentes)
+    // Paso 2b: columna fija por prof (BG=0, OB=1, LA=2, SA=3)
     var profsPresentes=[];
     allItems.forEach(function(item){
       if(profsPresentes.indexOf(item.prof)<0)profsPresentes.push(item.prof);
     });
     profsPresentes.sort(function(a,b){return ALL_PROFS.indexOf(a)-ALL_PROFS.indexOf(b);});
-    var totalProfs=profsPresentes.length||1;
 
+    // Paso 2c: left% y width% combinando prof-col y sub-col interna
     var uLayout=[];
     allItems.forEach(function(item){
-      // Encontrar qué otros profs tienen items que se solapan con este
       var overlapProfs=[];
       allItems.forEach(function(other){
-        if(other.startM < item.endM && other.endM > item.startM){
-          if(overlapProfs.indexOf(other.prof)<0) overlapProfs.push(other.prof);
+        if(other.startM<item.endM&&other.endM>item.startM){
+          if(overlapProfs.indexOf(other.prof)<0)overlapProfs.push(other.prof);
         }
       });
       overlapProfs.sort(function(a,b){return ALL_PROFS.indexOf(a)-ALL_PROFS.indexOf(b);});
-      var profCol=overlapProfs.indexOf(item.prof);
-      var totalCols=overlapProfs.length||1;
+      var profColIdx=overlapProfs.indexOf(item.prof);
+      var totalProfCols=overlapProfs.length||1;
+      var profWPct=Math.floor(100/totalProfCols);
+      var profLeftPct=profColIdx*profWPct;
+      var subCols=item._totalSubCols||1;
+      var subCol=item._subCol||0;
+      var subWPct=Math.floor(profWPct/subCols);
+      var subLeftPct=profLeftPct+subCol*subWPct;
+      var finalWPct=(subCol===subCols-1)?(profWPct-subCol*subWPct):subWPct;
       uLayout.push({prof:item.prof,tm:item.tm,startM:item.startM,endM:item.endM,
                     dur:item.endM-item.startM,tipo:item.tipo,key:item.key,turno:item.turno,
-                    col:profCol,totalCols:totalCols});
+                    _leftPct:subLeftPct,_wPct:finalWPct});
     });
 
     // Render institutional blocks now that totalProfs is known — spans full column width
@@ -10401,11 +10423,11 @@ function renderGrid(){
 
     // Paso 4: renderizar
     uLayout.forEach(function(item){
-      if(item.tipo==='nl_virtual') return; // los NL blocks se renderizan aparte con su propio estilo
+      if(item.tipo==='nl_virtual') return;
       var topPx=topOf(item.tm);
       var hPx=Math.max(20,item.dur*PX_PER_MIN-2);
-      var wPct=Math.floor(100/item.totalCols);
-      var leftPct=item.col*wPct;
+      var leftPct=item._leftPct;
+      var wPct=item._wPct;
       var p=item.prof;
 
       if(item.tipo==='free'){
