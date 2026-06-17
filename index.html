@@ -14856,6 +14856,52 @@ function imprimirInformeAnt() {
     return '<tr><td class="row-label">' + label + '</td>' + tds + '</tr>';
   }).filter(Boolean).join('');
 
+  // ── Fecha formateada ─────────────────────────────────────────────────────
+  const fechaHoy = new Date().toLocaleDateString('es-AR', {day:'2-digit',month:'long',year:'numeric'});
+
+  // ── Calcular tendencia entre primera y última columna ────────────────────
+  const tendencia = (key) => {
+    const fi = keyToFi[key];
+    if (fi === undefined || nCols < 2) return '';
+    const first = parseFloat(val(fi, 0));
+    const last  = parseFloat(val(fi, nCols - 1));
+    if (isNaN(first) || isNaN(last)) return '';
+    const diff = last - first;
+    if (Math.abs(diff) < 0.01) return '<span style="color:#64748b">→</span>';
+    return diff < 0
+      ? '<span style="color:#16a34a;font-weight:700">▼ ' + Math.abs(diff).toFixed(1) + '</span>'
+      : '<span style="color:#dc2626;font-weight:700">▲ ' + diff.toFixed(1) + '</span>';
+  };
+
+  // ── Grupos de filas para separar visualmente ─────────────────────────────
+  const GRUPOS = [
+    { titulo: 'Composición corporal', keys: ['Peso','IMC','PctGrasa','PctMusculo','GrasaVisceral'] },
+    { titulo: 'Medidas antropométricas', keys: ['Cintura','FueraPres','Cuello'] },
+    { titulo: 'Índices de riesgo', keys: ['CintEst','CintCad'] },
+  ];
+
+  const trRowsGrouped = GRUPOS.map(grupo => {
+    const filas = grupo.keys.map(key => {
+      const item = FILAS_INF.find(f => f.key === key);
+      if (!item) return '';
+      const fi = keyToFi[key];
+      if (fi === undefined) return '';
+      const tds = cols.map((_, ci) => {
+        const v = val(fi, ci);
+        const num = parseFloat(v);
+        const fila = ANT_FILAS[fi];
+        const sexo = p.sexo === 'Femenino' ? 'F' : 'H';
+        const alert = v && fila && fila.ref && fila.ref(v, sexo);
+        const display = v !== '' && v !== null ? (isNaN(num) ? v : num) : '—';
+        return `<td${alert ? ' class="alerta"' : ''}>${display}</td>`;
+      }).join('');
+      const tend = tendencia(key);
+      return `<tr><td class="row-label">${item.label}</td>${tds}${nCols>=2?'<td class="tend-col">'+tend+'</td>':''}</tr>`;
+    }).filter(Boolean).join('');
+    if (!filas) return '';
+    return `<tr class="grupo-header"><td colspan="${nCols + 1 + (nCols>=2?1:0)}">${grupo.titulo}</td></tr>${filas}`;
+  }).join('');
+
   // ── HTML del informe ─────────────────────────────────────────────────────
   const html = `<!DOCTYPE html>
 <html lang="es">
@@ -14863,69 +14909,153 @@ function imprimirInformeAnt() {
 <meta charset="UTF-8"/>
 <title>Informe Antropometría — ${nombre}</title>
 <style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
   *{box-sizing:border-box;margin:0;padding:0}
-  body{font-family:'Segoe UI',Arial,sans-serif;font-size:11px;color:#111;background:#fff;padding:22px 28px}
-  h1{font-size:17px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;margin-bottom:2px}
-  .sub{font-size:11px;color:#444;margin-bottom:14px}
-  .header-grid{display:grid;grid-template-columns:2fr 1fr 1fr;gap:6px;margin-bottom:10px}
-  .hbox{background:#f0f9ff;border:1px solid #bae6fd;border-radius:6px;padding:8px 12px}
-  .hbox-label{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#0369a1;margin-bottom:3px}
-  .hbox-val{font-size:14px;font-weight:700;color:#0c4a6e}
-  .prof-bar{background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:7px 12px;margin-bottom:14px;display:flex;align-items:center;gap:16px}
-  .prof-bar-label{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#64748b;margin-right:4px}
-  .prof-bar-val{font-size:11px;font-weight:600;color:#1e3a5f}
-  .prof-bar-sep{color:#cbd5e1;margin:0 6px}
+  body{font-family:'Inter',sans-serif;font-size:11px;color:#1e293b;background:#f8fafc;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+
+  /* ── HEADER ── */
+  .report-header{background:linear-gradient(135deg,#0c4a6e 0%,#1e3a5f 60%,#312e81 100%);color:white;padding:24px 32px 20px;display:flex;align-items:center;gap:20px}
+  .logo-circle{width:52px;height:52px;border-radius:50%;background:rgba(255,255,255,.15);border:2px solid rgba(255,255,255,.3);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:22px}
+  .header-text{flex:1}
+  .header-title{font-size:20px;font-weight:800;letter-spacing:.02em;line-height:1.1}
+  .header-sub{font-size:11px;color:rgba(255,255,255,.7);margin-top:3px;letter-spacing:.04em;text-transform:uppercase}
+  .header-fecha{text-align:right;font-size:10px;color:rgba(255,255,255,.6);line-height:1.7}
+  .header-fecha strong{display:block;font-size:12px;color:rgba(255,255,255,.9);font-weight:600}
+
+  /* ── PACIENTE ── */
+  .paciente-bar{background:white;border-bottom:3px solid #0c4a6e;padding:14px 32px;display:flex;align-items:center;gap:24px;flex-wrap:wrap}
+  .pac-chip{display:flex;flex-direction:column}
+  .pac-chip-label{font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#94a3b8;margin-bottom:2px}
+  .pac-chip-val{font-size:13px;font-weight:700;color:#0c4a6e}
+  .pac-divider{width:1px;height:32px;background:#e2e8f0;flex-shrink:0}
+  .pac-sexo-badge{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:20px;font-size:10px;font-weight:600}
+  .pac-sexo-badge.f{background:#fce7f3;color:#be185d}
+  .pac-sexo-badge.m{background:#eff6ff;color:#1d4ed8}
+
+  /* ── PROFESIONAL ── */
+  .prof-strip{background:#f0f9ff;border-left:4px solid #0369a1;padding:10px 32px;display:flex;align-items:center;gap:10px;font-size:10.5px}
+  .prof-strip-name{font-weight:700;color:#0c4a6e;font-size:11.5px}
+  .prof-strip-sep{color:#bae6fd;font-size:14px}
+  .prof-strip-mp{color:#0369a1;font-weight:600}
+  .prof-strip-esp{color:#64748b;font-style:italic}
+
+  /* ── CUERPO ── */
+  .body-wrap{padding:20px 32px 28px}
+
+  /* ── TABLA ── */
+  .table-wrap{background:white;border-radius:12px;box-shadow:0 1px 4px rgba(0,0,0,.08);overflow:hidden;border:1px solid #e2e8f0}
+  .table-caption{padding:12px 16px 10px;background:white;border-bottom:1px solid #f1f5f9;display:flex;align-items:center;gap:8px}
+  .table-caption-title{font-size:12px;font-weight:700;color:#1e293b;flex:1}
+  .table-caption-badge{background:#dbeafe;color:#1d4ed8;font-size:9px;font-weight:700;padding:2px 8px;border-radius:20px;text-transform:uppercase;letter-spacing:.06em}
   table{border-collapse:collapse;width:100%;font-size:10.5px}
-  th{background:#0c4a6e;color:#fff;padding:7px 10px;text-align:center;font-weight:600;font-size:10px}
-  th:first-child{text-align:left;width:120px;min-width:100px;max-width:140px}
-  td{padding:6px 10px;text-align:center;border-bottom:1px solid #e5e7eb}
-  td.row-label{text-align:left;font-weight:600;color:#1e3a5f;background:#f8fafc;width:120px;min-width:100px;max-width:140px;white-space:nowrap}
-  tr:hover td{background:#f0f9ff}
-  .footer{margin-top:18px;font-size:9px;color:#9ca3af;text-align:right}
+  th{background:#0c4a6e;color:rgba(255,255,255,.95);padding:9px 10px;text-align:center;font-weight:600;font-size:9.5px;letter-spacing:.04em;text-transform:uppercase;white-space:nowrap}
+  th:first-child{text-align:left;padding-left:16px;width:130px}
+  th.tend-th{background:#1e3a5f;font-style:italic;letter-spacing:0}
+  td{padding:7px 10px;text-align:center;border-bottom:1px solid #f1f5f9;color:#334155}
+  td.row-label{text-align:left;padding-left:16px;font-weight:600;color:#1e3a5f;background:#f8fafc;white-space:nowrap;border-right:1px solid #e2e8f0}
+  td.alerta{color:#dc2626;font-weight:700;background:#fff5f5}
+  td.tend-col{background:#f8fafc;border-left:1px solid #e2e8f0;font-size:11px}
+  tr:nth-child(even) td:not(.row-label):not(.tend-col){background:#fafbfc}
+  tr.grupo-header td{background:linear-gradient(90deg,#1e3a5f,#0c4a6e);color:rgba(255,255,255,.9);font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;padding:5px 16px}
+
+  /* ── LEYENDA ── */
+  .leyenda{margin-top:14px;display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+  .ley-item{display:flex;align-items:center;gap:5px;font-size:9px;color:#64748b}
+  .ley-dot{width:10px;height:10px;border-radius:2px;flex-shrink:0}
+  .ley-dot.alerta{background:#dc2626}
+  .ley-dot.ok{background:#16a34a}
+  .ley-dot.tend{background:#0369a1}
+
+  /* ── FOOTER ── */
+  .report-footer{margin-top:20px;padding-top:12px;border-top:1px solid #e2e8f0;display:flex;align-items:center;justify-content:space-between;font-size:8.5px;color:#94a3b8}
+  .footer-brand{font-weight:700;color:#64748b;letter-spacing:.04em;text-transform:uppercase}
+
   @media print{
-    body{padding:10px 14px}
-    @page{margin:12mm 14mm}
+    body{background:white}
+    @page{margin:8mm 10mm;size:A4 landscape}
+    .report-header{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    tr.grupo-header td{-webkit-print-color-adjust:exact;print-color-adjust:exact}
   }
 </style>
 </head>
 <body>
-<h1>Seguimiento Antropometría</h1>
-<p class="sub">Evaluación cardiometabólica</p>
 
-<div class="header-grid">
-  <div class="hbox">
-    <div class="hbox-label">Nombre y Apellido</div>
-    <div class="hbox-val">${nombre}</div>
+<!-- HEADER -->
+<div class="report-header">
+  <div class="logo-circle">❤️</div>
+  <div class="header-text">
+    <div class="header-title">Seguimiento Antropométrico</div>
+    <div class="header-sub">Evaluación Cardiometabólica · URCyM</div>
   </div>
-  <div class="hbox">
-    <div class="hbox-label">Edad</div>
-    <div class="hbox-val">${edad}</div>
-  </div>
-  <div class="hbox">
-    <div class="hbox-label">Año de seguimiento</div>
-    <div class="hbox-val">${anioSeg}</div>
+  <div class="header-fecha">
+    <strong>${fechaHoy}</strong>
+    Año de seguimiento: ${anioSeg}
   </div>
 </div>
 
-${profNombre ? `<div class="prof-bar">
-  <span class="prof-bar-val">${profTitulo || profNombre}</span>
-  ${profMP ? '<span class="prof-bar-sep">|</span><span class="prof-bar-val">' + profMP + '</span>' : ''}
-  ${profEspec ? '<span class="prof-bar-sep">|</span><span class="prof-bar-val" style="font-weight:400;color:#64748b">' + profEspec + '</span>' : ''}
+<!-- PACIENTE -->
+<div class="paciente-bar">
+  <div class="pac-chip">
+    <span class="pac-chip-label">Paciente</span>
+    <span class="pac-chip-val">${nombre}</span>
+  </div>
+  ${edad ? `<div class="pac-divider"></div>
+  <div class="pac-chip">
+    <span class="pac-chip-label">Edad</span>
+    <span class="pac-chip-val">${edad}</span>
+  </div>` : ''}
+  ${p.sexo ? `<div class="pac-divider"></div>
+  <div class="pac-chip">
+    <span class="pac-chip-label">Sexo</span>
+    <span class="pac-sexo-badge ${p.sexo==='Femenino'?'f':'m'}">${p.sexo==='Femenino'?'♀':'♂'} ${p.sexo}</span>
+  </div>` : ''}
+  ${nCols ? `<div class="pac-divider"></div>
+  <div class="pac-chip">
+    <span class="pac-chip-label">Evaluaciones</span>
+    <span class="pac-chip-val">${nCols}</span>
+  </div>` : ''}
+</div>
+
+<!-- PROFESIONAL -->
+${profNombre ? `<div class="prof-strip">
+  <span class="prof-strip-name">${profTitulo || profNombre}</span>
+  ${profMP ? `<span class="prof-strip-sep">·</span><span class="prof-strip-mp">M.P. ${profMP}</span>` : ''}
+  ${profEspec ? `<span class="prof-strip-sep">·</span><span class="prof-strip-esp">${profEspec}</span>` : ''}
 </div>` : ''}
 
-<table>
-  <thead>
-    <tr>
-      <th>Medición</th>
-      ${thCols}
-    </tr>
-  </thead>
-  <tbody>
-    ${trRows}
-  </tbody>
-</table>
+<!-- CUERPO -->
+<div class="body-wrap">
+  <div class="table-wrap">
+    <div class="table-caption">
+      <span class="table-caption-title">📊 Evolución de mediciones</span>
+      <span class="table-caption-badge">${nCols} control${nCols!==1?'es':''}</span>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>Medición</th>
+          ${thCols}
+          ${nCols>=2?'<th class="tend-th">Tendencia</th>':''}
+        </tr>
+      </thead>
+      <tbody>
+        ${trRowsGrouped}
+      </tbody>
+    </table>
+  </div>
 
-<p class="footer">Generado el ${new Date().toLocaleDateString('es-AR', {day:'2-digit',month:'2-digit',year:'numeric'})} · Evaluación cardiometabólica</p>
+  <div class="leyenda">
+    <div class="ley-item"><div class="ley-dot alerta"></div> Valor fuera de rango</div>
+    <div class="ley-item"><div class="ley-dot ok"></div> Tendencia favorable (▼)</div>
+    <div class="ley-item"><div class="ley-dot tend"></div> Tendencia desfavorable (▲)</div>
+  </div>
+
+  <div class="report-footer">
+    <span class="footer-brand">URCyM · Evaluaciones Cardiometabólicas</span>
+    <span>Generado el ${fechaHoy} · Documento de uso médico exclusivo</span>
+  </div>
+</div>
+
 </body>
 </html>`;
 
