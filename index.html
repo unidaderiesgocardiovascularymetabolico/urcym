@@ -1194,6 +1194,8 @@
           <button class="ag-btn-tasks" id="ag-btn-tasks" title="Tareas por profesional">&#9989; Tareas</button>
           <button id="ag-btn-aranceles" style="background:none;border:1px solid #059669;border-radius:6px;padding:5px 10px;font-size:12px;color:#059669;cursor:pointer;font-family:inherit;" title="Configurar aranceles por consulta">💲 Aranceles</button>
           <button onclick="agRecuperarLocalStorage()" style="background:none;border:1px solid #b45309;border-radius:6px;padding:5px 10px;font-size:12px;color:#b45309;cursor:pointer;font-family:inherit;" title="Si se perdieron turnos: fusiona el caché local con Supabase">🔁 Recuperar turnos</button>
+          <button id="ag-btn-refresh" onclick="agRefreshManual()" style="background:none;border:1px solid #0369a1;border-radius:6px;padding:5px 10px;font-size:12px;color:#0369a1;cursor:pointer;font-family:inherit;" title="Actualizar agenda desde la nube (útil si otro profesional agregó turnos)">🔄 Actualizar</button>
+          <span id="ag-last-refresh" style="font-size:10px;color:#9ca3af;align-self:center;white-space:nowrap;"></span>
         </div>
         <div class="ag-legend">
           <div class="ag-legend-item"><div class="ag-legend-bar" style="background:#7F77DD"></div>Guerrero</div>
@@ -12155,6 +12157,90 @@ loadAranceles();
 
 loadBlocked();
 loadLocal();  // async, carga en background y llama renderGrid al final
+
+// ═══ AUTO-REFRESH: sincroniza con Supabase cada 60 segundos ═══
+(function(){
+  var REFRESH_INTERVAL = 60000; // 60 segundos
+  var _refreshTimer = null;
+
+  function _actualizarHoraRefresh(){
+    var el = document.getElementById('ag-last-refresh');
+    if(!el) return;
+    var now = new Date();
+    var hh = now.getHours().toString().padStart(2,'0');
+    var mm = now.getMinutes().toString().padStart(2,'0');
+    el.textContent = 'Actualizado ' + hh + ':' + mm;
+  }
+
+  async function _silentRefresh(){
+    try{
+      var rows = await sb.from('urcym_agenda_config').select('key,value')
+        .in('key',['turnos','nl_blocks','disp_blocks','inst_blocks','offered_slots','blocked_slots']);
+      if(!rows.data) return;
+      var changed = false;
+      rows.data.forEach(function(row){
+        try{
+          if(row.key==='turnos'){
+            var nuevosTurnos = JSON.parse(row.value);
+            if(JSON.stringify(nuevosTurnos) !== JSON.stringify(turnos)){
+              turnos = nuevosTurnos;
+              try{localStorage.setItem(LS_T, row.value);}catch(e){}
+              changed = true;
+            }
+          }
+          if(row.key==='nl_blocks'){
+            var n=JSON.parse(row.value);
+            if(JSON.stringify(n)!==JSON.stringify(nlBlocks)){nlBlocks=n;try{localStorage.setItem(LS_NL,row.value);}catch(e){}changed=true;}
+          }
+          if(row.key==='disp_blocks'){
+            var d=JSON.parse(row.value);
+            if(JSON.stringify(d)!==JSON.stringify(dispBlocks)){dispBlocks=d;try{localStorage.setItem(LS_D,row.value);}catch(e){}changed=true;}
+          }
+          if(row.key==='inst_blocks'){
+            var i=JSON.parse(row.value);
+            if(JSON.stringify(i)!==JSON.stringify(instBlocks)){instBlocks=i;try{localStorage.setItem(LS_INST,row.value);}catch(e){}changed=true;}
+          }
+          if(row.key==='offered_slots'){try{offeredSlots=JSON.parse(row.value);localStorage.setItem(LS_OFFERED,row.value);}catch(e){}}
+          if(row.key==='blocked_slots'){try{
+            var bs=JSON.parse(row.value);
+            Object.keys(bs).forEach(function(k){if(bs[k]===true)bs[k]={label:''};});
+            blockedSlots=bs;localStorage.setItem(LS_BLOCKED,row.value);
+          }catch(e){}}
+        }catch(e){}
+      });
+      if(changed) renderGrid();
+      _actualizarHoraRefresh();
+    }catch(e){
+      console.warn('[URCyM] auto-refresh error',e);
+    }
+  }
+
+  // Función pública para el botón manual
+  window.agRefreshManual = async function(){
+    var btn = document.getElementById('ag-btn-refresh');
+    if(btn){ btn.disabled=true; btn.textContent='⏳ Actualizando...'; }
+    await _silentRefresh();
+    if(btn){ btn.disabled=false; btn.textContent='🔄 Actualizar'; }
+    // Reiniciar el timer para que no recargue dos veces seguidas
+    clearInterval(_refreshTimer);
+    _refreshTimer = setInterval(_silentRefresh, REFRESH_INTERVAL);
+  };
+
+  // Iniciar auto-refresh 5 seg después de cargar (para no pisar el loadLocal inicial)
+  setTimeout(function(){
+    _actualizarHoraRefresh();
+    _refreshTimer = setInterval(_silentRefresh, REFRESH_INTERVAL);
+  }, 5000);
+
+  // También refrescar cuando la pestaña vuelve a estar activa (ej: volviste después de un rato)
+  document.addEventListener('visibilitychange', function(){
+    if(document.visibilityState === 'visible'){
+      _silentRefresh();
+    }
+  });
+})();
+// ═══ FIN AUTO-REFRESH ═══
+
 })();
 
 // ═══ AUTOCOMPLETE PACIENTE EN AGENDA ═══
