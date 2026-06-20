@@ -2961,14 +2961,14 @@
       </div>
       <div>
         <label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-soft);display:block;margin-bottom:6px">Motivo del estudio</label>
-        <div style="display:flex;gap:8px">
-          <label style="flex:1;display:flex;align-items:center;gap:7px;padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;cursor:pointer;font-size:13px;font-weight:600;color:var(--text);transition:all .18s" id="mdpa_motivo_dx_lbl">
-            <input type="radio" name="mdpa_nuevo_motivo" id="mdpa_nuevo_motivo_dx" value="diagnostico" style="accent-color:var(--blue)"/>
+        <div style="display:flex;gap:6px">
+          <label style="flex:1;display:flex;align-items:center;gap:5px;padding:7px 8px;border:1.5px solid var(--border);border-radius:9px;cursor:pointer;font-size:11px;font-weight:600;color:var(--text)" id="mdpa_motivo_dx_lbl">
+            <input type="radio" name="mdpa_nuevo_motivo" id="mdpa_nuevo_motivo_dx" value="diagnostico" style="accent-color:var(--blue);margin:0;flex-shrink:0"/>
             🔍 Diagnóstico
           </label>
-          <label style="flex:1;display:flex;align-items:center;gap:7px;padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;cursor:pointer;font-size:13px;font-weight:600;color:var(--text);transition:all .18s" id="mdpa_motivo_tto_lbl">
-            <input type="radio" name="mdpa_nuevo_motivo" id="mdpa_nuevo_motivo_tto" value="control_tratamiento" style="accent-color:var(--blue)"/>
-            💊 Control de tto.
+          <label style="flex:1;display:flex;align-items:center;gap:5px;padding:7px 8px;border:1.5px solid var(--border);border-radius:9px;cursor:pointer;font-size:11px;font-weight:600;color:var(--text)" id="mdpa_motivo_tto_lbl">
+            <input type="radio" name="mdpa_nuevo_motivo" id="mdpa_nuevo_motivo_tto" value="control_tratamiento" style="accent-color:var(--blue);margin:0;flex-shrink:0"/>
+            💊 Eval. terapéutica
           </label>
         </div>
       </div>
@@ -4734,7 +4734,49 @@ function renderTabsPacientes(dniActivo) {
     const tab = document.createElement('div');
     tab.className = 'nav-tab patient-nav-tab' + (String(t.dni) === String(dniActivo) ? ' active' : '');
     tab.title = t.nombre + ' · DNI ' + t.dni;
-    tab.onclick = function(){ activarTabPaciente(t.dni); };
+    tab.dataset.dni = t.dni;
+    // Click para activar (solo si no fue un drag)
+    tab.onclick = function(ev){ if(!tab._wasDragged) activarTabPaciente(t.dni); tab._wasDragged = false; };
+    // ── Drag & Drop ──
+    tab.draggable = true;
+    tab.style.cursor = 'grab';
+    tab.addEventListener('dragstart', function(ev) {
+      tab._wasDragged = false;
+      ev.dataTransfer.effectAllowed = 'move';
+      ev.dataTransfer.setData('text/plain', t.dni);
+      setTimeout(function(){ tab.style.opacity = '0.45'; }, 0);
+    });
+    tab.addEventListener('dragend', function() {
+      tab.style.opacity = '';
+      nav.querySelectorAll('.patient-nav-tab').forEach(function(el){ el.classList.remove('drag-over'); el.style.outline = ''; });
+    });
+    tab.addEventListener('dragover', function(ev) {
+      ev.preventDefault();
+      ev.dataTransfer.dropEffect = 'move';
+      const draggingDni = ev.dataTransfer.getData('text/plain') || nav.querySelector('[style*="opacity: 0"]')?.dataset.dni;
+      if(tab.dataset.dni !== draggingDni) {
+        nav.querySelectorAll('.patient-nav-tab').forEach(function(el){ el.style.outline = ''; });
+        tab.style.outline = '2px solid var(--blue)';
+      }
+    });
+    tab.addEventListener('dragleave', function() {
+      tab.style.outline = '';
+    });
+    tab.addEventListener('drop', function(ev) {
+      ev.preventDefault();
+      tab.style.outline = '';
+      const dniDragged = ev.dataTransfer.getData('text/plain');
+      const dniTarget  = t.dni;
+      if(!dniDragged || dniDragged === dniTarget) return;
+      tab._wasDragged = true;
+      // Reordenar el array
+      const fromIdx = pacienteTabsAbiertas.findIndex(x => String(x.dni) === String(dniDragged));
+      const toIdx   = pacienteTabsAbiertas.findIndex(x => String(x.dni) === String(dniTarget));
+      if(fromIdx === -1 || toIdx === -1) return;
+      const [moved] = pacienteTabsAbiertas.splice(fromIdx, 1);
+      pacienteTabsAbiertas.splice(toIdx, 0, moved);
+      renderTabsPacientes(dniActivo);
+    });
     const span = document.createElement('span');
     span.className = 'patient-tab-name';
     const tieneBorrador = sessionStorage.getItem('urcym_tab_' + t.dni) !== null;
@@ -6547,6 +6589,8 @@ async function guardarAntYVolver() {
 async function abrirEvolucion(dni) {
   const p = pacientesData.find(x=>String(x.dni)===String(dni));
   if(!p) return;
+  // Guardar el DNI anterior ANTES de pisar pacienteActual (evita bug de duplicación entre pestañas)
+  const _dniAnterior = pacienteActual ? String(pacienteActual.dni) : null;
   pacienteActual = p;
   abrirTabPaciente(p);
   document.getElementById('evol_nombre').textContent = p.apellido + ', ' + p.nombre;
@@ -6575,9 +6619,8 @@ async function abrirEvolucion(dni) {
     actualizarIMC();
   }
   // Limpiar PREVENT solo si es un paciente distinto al que ya estaba abierto
-  const _prevDniActual = pacienteActual ? String(pacienteActual.dni) : null;
-  const _prevDniNuevo  = String(p.dni);
-  if(_prevDniActual !== _prevDniNuevo) {
+  // Nota: se usa _dniAnterior (capturado antes de pisar pacienteActual) para comparar correctamente
+  if(_dniAnterior !== String(p.dni)) {
     ['prev_edad','prev_sexo','prev_tas','prev_ct','prev_hdl','prev_glu','prev_egfr'].forEach(id=>{
       const el=document.getElementById(id); if(el){el.value='';el.style.background='';el.style.borderColor='';}
     });
@@ -6597,15 +6640,16 @@ async function abrirEvolucion(dni) {
   if(hayBorradorSesion) {
     // Restaurar desde sessionStorage (más reciente que el borrador en Supabase)
     _restaurarEstadoPestana(p.dni);
+    // Solo precargar PREVENT si venía de un borrador (el usuario ya había trabajado con él)
+    setTimeout(precargarPREVENT, 800);
   } else {
     await restaurarBorradorEvol(p.dni);
+    // Paciente nuevo sin borrador: PREVENT arranca vacío, el usuario lo completa manualmente
   }
   showPage('evolucion');
   switchPacMainTab('evol');
   await window.actualizarEncabezadoVariable(p.dni);
   await cargarSnapshotInicial(p.dni);
-  // Precargar PREVENT con datos disponibles del paciente
-  setTimeout(precargarPREVENT, 800);
   // Conectar auto-guardado en sessionStorage al editor
   setTimeout(function() {
     const ed = document.getElementById('evol_editor');
