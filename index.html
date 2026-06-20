@@ -2882,7 +2882,7 @@
           <div class="mdpa-empty-sub">Hacé clic en <strong>+ Nuevo estudio</strong> para cargar el primero</div>
         </div>
         <div id="mdpa_contenido" style="display:none">
-          <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap">
             <div style="font-size:11px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--text-soft)">Fecha inicio:</div>
             <input type="date" id="mdpa_fecha_inicio" oninput="mdpaActualizarPill()" style="padding:5px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;font-family:var(--font-main);background:white;outline:none"/>
             <div class="mdpa-dias-selector">
@@ -2892,6 +2892,17 @@
               </select>
             </div>
             <div id="mdpa_guardado_badge" style="display:none;background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:3px 10px;font-size:11px;font-weight:600;color:#16a34a">✓ Guardado</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap;background:var(--gray);border:1px solid var(--border);border-radius:10px;padding:8px 12px">
+            <div style="display:flex;align-items:center;gap:7px">
+              <span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-soft)">Motivo:</span>
+              <span id="mdpa_motivo_display" style="font-size:12px;font-weight:600;color:var(--text)">—</span>
+            </div>
+            <div style="width:1px;height:16px;background:var(--border)"></div>
+            <div style="display:flex;align-items:center;gap:7px;flex:1;min-width:180px">
+              <span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-soft)">💊 Fármacos:</span>
+              <input type="text" id="mdpa_farmacos_input" placeholder="Sin fármacos registrados" oninput="mdpaActualizarFarmacos()" style="flex:1;padding:3px 8px;border:1.5px solid var(--border);border-radius:7px;font-size:12px;font-family:var(--font-main);background:white;outline:none;min-width:160px"/>
+            </div>
           </div>
           <div class="mdpa-layout">
             <div>
@@ -2947,6 +2958,24 @@
         <select id="mdpa_nuevo_dias" style="width:100%;padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:14px;font-family:var(--font-main);background:white;outline:none">
           <option value="4">4 días</option><option value="5">5 días</option><option value="6">6 días</option><option value="7" selected>7 días</option>
         </select>
+      </div>
+      <div>
+        <label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-soft);display:block;margin-bottom:6px">Motivo del estudio</label>
+        <div style="display:flex;gap:8px">
+          <label style="flex:1;display:flex;align-items:center;gap:7px;padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;cursor:pointer;font-size:13px;font-weight:600;color:var(--text);transition:all .18s" id="mdpa_motivo_dx_lbl">
+            <input type="radio" name="mdpa_nuevo_motivo" id="mdpa_nuevo_motivo_dx" value="diagnostico" style="accent-color:var(--blue)"/>
+            🔍 Diagnóstico
+          </label>
+          <label style="flex:1;display:flex;align-items:center;gap:7px;padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;cursor:pointer;font-size:13px;font-weight:600;color:var(--text);transition:all .18s" id="mdpa_motivo_tto_lbl">
+            <input type="radio" name="mdpa_nuevo_motivo" id="mdpa_nuevo_motivo_tto" value="control_tratamiento" style="accent-color:var(--blue)"/>
+            💊 Control de tto.
+          </label>
+        </div>
+      </div>
+      <div>
+        <label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-soft);display:block;margin-bottom:6px">Fármacos utilizados</label>
+        <input type="text" id="mdpa_nuevo_farmacos" placeholder="Ej: Enalapril 10mg, Amlodipina 5mg" style="width:100%;padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;font-family:var(--font-main);background:white;outline:none;box-sizing:border-box"/>
+        <span style="font-size:10px;color:var(--text-soft);margin-top:4px;display:block">Separados por coma si son varios</span>
       </div>
     </div>
     <div style="display:flex;gap:10px;margin-top:22px">
@@ -9049,6 +9078,16 @@ function mdpaSeleccionarEstudio(i) {
   if(fi) fi.value = est.fecha_inicio || '';
   const nd = document.getElementById('mdpa_ndias');
   if(nd) nd.value = String(est.n_dias || 7);
+  // Motivo
+  const motivoEl = document.getElementById('mdpa_motivo_display');
+  if(motivoEl) {
+    if(est.motivo === 'diagnostico') { motivoEl.textContent = '🔍 Diagnóstico'; motivoEl.style.color = 'var(--blue)'; }
+    else if(est.motivo === 'control_tratamiento') { motivoEl.textContent = '💊 Control de tratamiento'; motivoEl.style.color = '#1D9E75'; }
+    else { motivoEl.textContent = '—'; motivoEl.style.color = 'var(--text-soft)'; }
+  }
+  // Fármacos
+  const farmEl = document.getElementById('mdpa_farmacos_input');
+  if(farmEl) farmEl.value = est.farmacos || '';
   mdpaRenderTabla();
   mdpaRenderPills();
 }
@@ -9058,6 +9097,12 @@ function mdpaActualizarPill() {
   const fi = document.getElementById('mdpa_fecha_inicio');
   if(fi) mdpaEstudios[mdpaIdx].fecha_inicio = fi.value;
   mdpaRenderPills();
+}
+
+function mdpaActualizarFarmacos() {
+  if(mdpaIdx < 0) return;
+  const farmEl = document.getElementById('mdpa_farmacos_input');
+  if(farmEl) mdpaEstudios[mdpaIdx].farmacos = farmEl.value;
 }
 
 function mdpaTogglePP() {
@@ -9229,10 +9274,19 @@ function mdpaNuevoEstudio() {
 function mdpaCrearEstudio() {
   const fn = document.getElementById('mdpa_nuevo_fecha');
   const nd = document.getElementById('mdpa_nuevo_dias');
+  const ff = document.getElementById('mdpa_nuevo_farmacos');
+  const motDx  = document.getElementById('mdpa_nuevo_motivo_dx');
+  const motTto = document.getElementById('mdpa_nuevo_motivo_tto');
   const fecha = fn ? fn.value : '';
   const nDias = nd ? parseInt(nd.value) || 7 : 7;
+  const farmacos = ff ? ff.value.trim() : '';
+  const motivo = motDx && motDx.checked ? 'diagnostico' : (motTto && motTto.checked ? 'control_tratamiento' : '');
   if(!fecha) { alert('Ingresá la fecha de inicio del estudio'); return; }
-  mdpaEstudios.unshift({ id: 'new_' + Date.now(), fecha_inicio: fecha, n_dias: nDias, tomas: {} });
+  mdpaEstudios.unshift({ id: 'new_' + Date.now(), fecha_inicio: fecha, n_dias: nDias, tomas: {}, farmacos: farmacos, motivo: motivo });
+  // Limpiar campos para la próxima vez
+  if(ff) ff.value = '';
+  if(motDx) motDx.checked = false;
+  if(motTto) motTto.checked = false;
   document.getElementById('mdpa_modal_nuevo').classList.remove('open');
   mdpaRenderPills();
   mdpaMostrarEmpty(false);
@@ -9249,6 +9303,8 @@ async function mdpaGuardar() {
   const payload = {
     paciente_dni: mdpaPacDni, fecha_inicio: est.fecha_inicio,
     n_dias: est.n_dias, tomas: JSON.stringify(est.tomas),
+    farmacos: est.farmacos || '',
+    motivo: est.motivo || '',
     updated_at: new Date().toISOString()
   };
   try {
@@ -9376,6 +9432,10 @@ td{padding:5px 6px;text-align:center;border-bottom:1px solid #f3f4f6}
   <div class="hbox"><div class="hbox-l">Edad</div><div class="hbox-v">${edad}</div></div>
   <div class="hbox"><div class="hbox-l">Inicio del estudio</div><div class="hbox-v">${fechaIni}</div></div>
   <div class="hbox"><div class="hbox-l">Duración</div><div class="hbox-v">${nDias} días</div></div>
+</div>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:14px">
+  <div class="hbox" style="background:#f0fdf4;border-color:#86efac"><div class="hbox-l" style="color:#16a34a">Motivo del estudio</div><div class="hbox-v" style="color:#15803d;font-size:12px">${est.motivo === 'diagnostico' ? '🔍 Diagnóstico' : est.motivo === 'control_tratamiento' ? '💊 Control de tratamiento' : '—'}</div></div>
+  <div class="hbox" style="background:#faf5ff;border-color:#d8b4fe"><div class="hbox-l" style="color:#7e22ce">Fármacos utilizados</div><div class="hbox-v" style="color:#581c87;font-size:12px">${est.farmacos || '—'}</div></div>
 </div>
 <div class="dx-box ${esHTA ? 'dx-alta' : 'dx-normal'}">
   <div><div class="dx-l">${esHTA ? '⚠ HTA domiciliaria detectada' : '✓ Presión domiciliaria normal'}</div>
