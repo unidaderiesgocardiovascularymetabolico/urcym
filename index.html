@@ -5558,18 +5558,13 @@ function generarPDF(tipo) {
   const doc = new jsPDF({ unit: 'mm', format: 'a5', orientation: 'portrait' });
   const PW = 148, PH = 210, ML = 12, MR = 12, W = PW - ML - MR;
 
-  // Leer firma: checkbox sí/no, firma siempre del usuario logueado
-  const firmaCheckId = tipo === 'receta' ? 'firma_receta_check' : 'firma_ind_check';
-  const firmaChecked = document.getElementById(firmaCheckId) && document.getElementById(firmaCheckId).checked;
+  // Firma automática según profesional logueado
   const _uname = (u && (u.id || u.name || '')).toLowerCase();
   const _autoKey = _uname.includes('omar') || _uname === 'ob' ? 'omar' : 'barbara';
-  const firmaKey = firmaChecked ? _autoKey : 'ninguna';
+  const firmaKey = _autoKey;
 
-  // Leer tipo de hoja (URCyM u Otro)
-  const pdfTipoSelId = tipo === 'receta' ? 'rec_tipo_hoja' : 'ind_tipo_hoja';
-  const pdfTipoSel = document.getElementById(pdfTipoSelId);
-  const usarOtro = pdfTipoSel && pdfTipoSel.value === 'otro'
-    && (_uname.includes('barbara') || _uname.includes('guerrero') || _uname.includes('omar') || _uname.includes('bertani'));
+  // Siempre usar hoja del profesional
+  const usarOtro = true;
 
   const headerEndY = usarOtro ? _pdfHeaderOtro(doc, u, PW, ML) : _pdfHeader(doc, u, PW, ML);
   const hoy = new Date().toLocaleDateString('es-AR',
@@ -7287,10 +7282,8 @@ function generarPDFIndicacionesEvol() {
   const indEl3 = document.getElementById('evol_indicaciones_editor');
   const txt = indEl3 ? indEl3.innerText.trim() : '';
   if(!txt) { alert('No hay indicaciones para generar.'); return; }
-  const _tipoHojaEl = document.getElementById('evol_ind_tipo_hoja');
-  const _usarOtroEvol = _tipoHojaEl && _tipoHojaEl.value === 'otro';
   _getLogoPNG(function() {
-    const { doc, filename } = _crearPDFIndicacionesEvol(txt, _usarOtroEvol);
+    const { doc, filename } = _crearPDFIndicacionesEvol(txt, true);
     doc.save(filename);
   });
 }
@@ -7305,44 +7298,56 @@ function _crearPDFIndicacionesEvol(txt, usarOtro) {
   const doc = new jsPDF({ unit:'mm', format:'a5', orientation:'portrait' });
   const PW = 148, PH = 210, ML = 10, MR = 10, CW = PW - ML - MR;
 
-  const headerEndY = usarOtro ? _pdfHeaderOtro(doc, u, PW, ML) : _pdfHeader(doc, u, PW, ML);
-  _pdfPatientBar(doc, p, hoy, PW, ML, MR, headerEndY);
+  // Siempre usar hoja del profesional + firma automática
+  const _unameEvol = (u && (u.id || u.name || '')).toLowerCase();
+  const _firmaKeyEvol = (_unameEvol.includes('omar') || _unameEvol === 'ob') ? 'omar' : 'barbara';
 
-  let curY = headerEndY + 18;
+  const _hdrY = _pdfHeaderOtro(doc, u, PW, ML);
+  _pdfPatientBar(doc, p, hoy, PW, ML, MR, _hdrY);
+
+  let curY = _hdrY + 18;
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(9);
+  doc.setFontSize(8);
   doc.setTextColor(..._C.oscuro);
   doc.text('Indicaciones para el paciente:', ML, curY);
   doc.setLineWidth(0.2); doc.setDrawColor(..._C.gris);
   doc.line(ML, curY + 2, ML + 62, curY + 2);
   curY += 8;
 
-  // Zona disponible hasta la firma (más compacta ahora)
-  const firmaZoneTop = PH - 56 - 2;  // firma empieza en PH-56
+  const firmaZoneTop = PH - 56 - 2;
+  const maxYMidEvol = PH - 22;
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(9);
+  doc.setFontSize(8);
   doc.setTextColor(35, 35, 35);
-  const lineH = 5.2;
+  const lineH = 4.6;
 
   function _addIndPage() {
-    if(usarOtro) { _pdfFooterOtro(doc, u, PW, PH); } else { _pdfFooter(doc, PW, PH); }
+    // Indicador continúa
+    doc.setFont('helvetica', 'italic');
+    doc.setFontSize(7);
+    doc.setTextColor(140, 140, 155);
+    doc.text('↓  continúa en la página siguiente', PW / 2, PH - 16 - 7, { align: 'center' });
+    _pdfFooterOtro(doc, u, PW, PH);
     doc.addPage();
-    const newHY = usarOtro ? _pdfHeaderOtro(doc, u, PW, ML) : _pdfHeader(doc, u, PW, ML);
+    const newHY = _pdfHeaderOtro(doc, u, PW, ML);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(35, 35, 35);
     return newHY + 8;
   }
 
   txt.split('\n').map(l => l.trim()).filter(Boolean).forEach(item => {
     const itemLines = doc.splitTextToSize('• ' + item, CW - 4);
     itemLines.forEach((ln, idx) => {
-      if(curY > firmaZoneTop) { curY = _addIndPage(); }
+      if(curY > maxYMidEvol) { curY = _addIndPage(); }
       doc.text(ln, ML + (idx > 0 ? 4 : 0), curY);
       curY += lineH;
     });
     curY += 1;
   });
 
-  _pdfFirma(doc, u, PW, PH, ML, 'ninguna');
-  if(usarOtro) { _pdfFooterOtro(doc, u, PW, PH); } else { _pdfFooter(doc, PW, PH); }
+  _pdfFirma(doc, u, PW, PH, ML, _firmaKeyEvol);
+  _pdfFooterOtro(doc, u, PW, PH);
 
   return { doc, filename, hoy };
 }
@@ -7352,10 +7357,8 @@ function enviarMailIndicacionesEvol() {
   const indEl2 = document.getElementById('evol_indicaciones_editor');
   const txt = indEl2 ? indEl2.innerText.trim() : '';
   if(!txt || !p.email) { alert(!txt?'Sin indicaciones.':'El paciente no tiene email registrado.'); return; }
-  const _tipoHojaEl2 = document.getElementById('evol_ind_tipo_hoja');
-  const _usarOtroEvol2 = _tipoHojaEl2 && _tipoHojaEl2.value === 'otro';
   _getLogoPNG(function() {
-    const { doc, filename, hoy } = _crearPDFIndicacionesEvol(txt, _usarOtroEvol2);
+    const { doc, filename, hoy } = _crearPDFIndicacionesEvol(txt, true);
     doc.save(filename);
     const u = users[selectedUser];
     setTimeout(() => {
