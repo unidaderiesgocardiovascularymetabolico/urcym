@@ -5298,6 +5298,22 @@ function _pdfPatientBar(doc, p, fechaStr, PW, ML, MR, headerEndY) {
 /* ─────────────────────────────────────────────────── */
 /*  FIRMA Y SELLO                                      */
 /* ─────────────────────────────────────────────────── */
+// Cache de proporciones reales de las firmas (cargadas al inicio)
+const _firmaRatios = {};
+(function _preloadFirmas() {
+  const firmas = { barbara: firmaBarbaraB64, omar: firmaOmarB64 };
+  Object.entries(firmas).forEach(([key, b64]) => {
+    if (!b64) return;
+    const img = new Image();
+    img.onload = function() {
+      if (img.naturalWidth > 0) {
+        _firmaRatios[key] = img.naturalHeight / img.naturalWidth;
+      }
+    };
+    img.src = b64;
+  });
+})();
+
 function _pdfFirma(doc, u, PW, PH, ML, firmaKey) {
   // Solo muestra la firma del profesional logueado si eligió incluirla
   if (!firmaKey || firmaKey === 'ninguna') return;
@@ -5311,14 +5327,21 @@ function _pdfFirma(doc, u, PW, PH, ML, firmaKey) {
                  : null;
   if (firmaB64) {
     try {
-      // Calcular alto proporcional para no estirar la imagen
-      const img = new Image();
-      img.src = firmaB64;
-      const ratio = img.naturalHeight && img.naturalWidth
-        ? img.naturalHeight / img.naturalWidth
-        : 0.5;
-      const FH = Math.min(FW * ratio, 28); // máximo 28 mm de alto
-      doc.addImage(firmaB64, 'JPEG', FX, FY, FW, FH, '', 'NONE', 0);
+      // Usar ratio precalculado; si aún no está listo usar el natural de jsPDF
+      const ratio = _firmaRatios[firmaKey] || null;
+      let FH;
+      if (ratio) {
+        FH = Math.min(FW * ratio, 28); // máximo 28 mm de alto
+      } else {
+        // Fallback: dejar que jsPDF calcule automáticamente con w y h = 0
+        // Pasamos w fijo y h=0 para que jsPDF mantenga proporción original
+        FH = 0; // jsPDF calcula automáticamente cuando FH=0
+      }
+      if (FH === 0) {
+        doc.addImage(firmaB64, 'JPEG', FX, FY, FW, 0, '', 'NONE', 0);
+      } else {
+        doc.addImage(firmaB64, 'JPEG', FX, FY, FW, FH, '', 'NONE', 0);
+      }
     } catch(e) {}
   }
   // Sin línea de firma — nunca
