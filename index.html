@@ -2593,16 +2593,9 @@
               style="border-radius:0 0 10px 10px;min-height:120px"></div>
             <div class="evol-ind-actions">
               <button class="btn btn-secondary" onclick="volcarIndicacionesAlEditor()" style="width:auto;margin:0;padding:7px 16px;font-size:12px">↑ Volcar a evolución</button>
-              <div id="evol_ind_tipo_hoja_wrap" style="display:none;align-items:center;gap:8px;font-size:12px;color:var(--text-soft)">
-                <input type="hidden" id="evol_ind_tipo_hoja" value="urcym">
-                <label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-weight:500;color:var(--text)">
-                  <input type="radio" name="evol_ind_tipo_hoja_opt" value="urcym" checked style="accent-color:#3089ca;"
-                    onchange="document.getElementById('evol_ind_tipo_hoja').value='urcym'"> URCyM
-                </label>
-                <label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-weight:500;color:var(--text)">
-                  <input type="radio" name="evol_ind_tipo_hoja_opt" value="otro" style="accent-color:#3089ca;"
-                    onchange="document.getElementById('evol_ind_tipo_hoja').value='otro'"> Otra hoja
-                </label>
+              <div id="evol_ind_firma_wrap" style="display:none;align-items:center;gap:6px;font-size:12px;color:var(--text-soft)">
+                <input type="checkbox" id="evol_firma_ind_check" style="accent-color:#3089ca;width:15px;height:15px">
+                <label for="evol_firma_ind_check" style="cursor:pointer;font-weight:500;color:var(--text)">Incluir firma</label>
               </div>
               <button class="btn btn-teal" onclick="generarPDFIndicacionesEvol()" style="width:auto;margin:0;padding:7px 16px;font-size:12px">⬇ PDF</button>
               <button class="btn" onclick="enviarMailIndicacionesEvol()" style="width:auto;margin:0;padding:7px 16px;font-size:12px;background:var(--gray);border:1.5px solid var(--border);color:var(--text)">✉ Email</button>
@@ -4854,15 +4847,14 @@ function showPage(page) {
     if(page === 'evolucion') {
       evolPage.style.display = 'block';
       evolPage.classList.add('active');
-      // Mostrar selector tipo hoja solo para Guerrero y Bertani
+      // Mostrar checkbox firma solo para Guerrero y Bertani
       var _uEvol = (selectedUser || '').toLowerCase();
       var _esBGOB = _uEvol === 'barbara' || _uEvol === 'omar';
-      var _evolIndWrap = document.getElementById('evol_ind_tipo_hoja_wrap');
-      if(_evolIndWrap) { _evolIndWrap.style.display = _esBGOB ? 'flex' : 'none'; }
-      // Resetear selección
-      var _evolIndHidden = document.getElementById('evol_ind_tipo_hoja');
-      if(_evolIndHidden) _evolIndHidden.value = 'urcym';
-      document.querySelectorAll('input[name="evol_ind_tipo_hoja_opt"]').forEach(function(r){ r.checked = r.value === 'urcym'; });
+      var _evolFirmaWrap = document.getElementById('evol_ind_firma_wrap');
+      if(_evolFirmaWrap) { _evolFirmaWrap.style.display = _esBGOB ? 'flex' : 'none'; }
+      // Resetear checkbox
+      var _evolFirmaCheck = document.getElementById('evol_firma_ind_check');
+      if(_evolFirmaCheck) _evolFirmaCheck.checked = false;
     } else {
       evolPage.style.display = 'none';
       evolPage.classList.remove('active');
@@ -5309,15 +5301,25 @@ function _pdfPatientBar(doc, p, fechaStr, PW, ML, MR, headerEndY) {
 function _pdfFirma(doc, u, PW, PH, ML, firmaKey) {
   // Solo muestra la firma del profesional logueado si eligió incluirla
   if (!firmaKey || firmaKey === 'ninguna') return;
-  const MR = 12, FW = 48;
+  const MR = 8;         // más pegado al borde derecho
+  const FW = 48;        // ancho fijo
   const FX = PW - MR - FW;
-  const FY = PH - 56;
+  const FY = PH - 50;   // más abajo (era PH-56)
   // Usar solo la firma del usuario actual
   const firmaB64 = (firmaKey === 'barbara') ? firmaBarbaraB64
                  : (firmaKey === 'omar')    ? firmaOmarB64
                  : null;
   if (firmaB64) {
-    try { doc.addImage(firmaB64, 'JPEG', FX, FY, FW, 34, '', 'NONE', 0); } catch(e) {}
+    try {
+      // Calcular alto proporcional para no estirar la imagen
+      const img = new Image();
+      img.src = firmaB64;
+      const ratio = img.naturalHeight && img.naturalWidth
+        ? img.naturalHeight / img.naturalWidth
+        : 0.5;
+      const FH = Math.min(FW * ratio, 28); // máximo 28 mm de alto
+      doc.addImage(firmaB64, 'JPEG', FX, FY, FW, FH, '', 'NONE', 0);
+    } catch(e) {}
   }
   // Sin línea de firma — nunca
 }
@@ -7317,9 +7319,11 @@ function _crearPDFIndicacionesEvol(txt, usarOtro) {
   const doc = new jsPDF({ unit:'mm', format:'a5', orientation:'portrait' });
   const PW = 148, PH = 210, ML = 10, MR = 10, CW = PW - ML - MR;
 
-  // Siempre usar hoja del profesional + firma automática
+  // Siempre usar hoja del profesional; firma solo si el checkbox está marcado
   const _unameEvol = (u && (u.id || u.name || '')).toLowerCase();
-  const _firmaKeyEvol = (_unameEvol.includes('omar') || _unameEvol === 'ob') ? 'omar' : 'barbara';
+  const _firmaKeyBase = (_unameEvol.includes('omar') || _unameEvol === 'ob') ? 'omar' : 'barbara';
+  const _firmaCheckEl = document.getElementById('evol_firma_ind_check');
+  const _firmaKeyEvol = (_firmaCheckEl && _firmaCheckEl.checked) ? _firmaKeyBase : 'ninguna';
 
   const _hdrY = _pdfHeaderOtro(doc, u, PW, ML);
   _pdfPatientBar(doc, p, hoy, PW, ML, MR, _hdrY);
