@@ -5387,85 +5387,104 @@ function _colorProfesionalOtro(u) {
 /*  ENCABEZADO "OTRO" (color por profesional, texto blanco/gris) */
 /* ─────────────────────────────────────────────────── */
 function _pdfHeaderOtro(doc, u, PW, ML) {
-  const HH = 34;
+  const HH = 38;
   const profColor = _colorProfesionalOtro(u);
+  const profColorDark = [Math.max(0, profColor[0]-18), Math.max(0, profColor[1]-10), Math.max(0, profColor[2]-8)];
+  const profColorAccent = [Math.min(255, profColor[0]+45), Math.min(255, profColor[1]+35), Math.min(255, profColor[2]+55)];
   const BLANCO = [255, 255, 255];
-  const GRIS_CLARO = [205, 205, 215];
-  const GRIS_LINEA = [150, 150, 165];
+  const BLANCO_SEMI = [215, 215, 230];
+  const BLANCO_TENUE = [165, 165, 188];
+  const GRIS_LINEA = [130, 130, 155];
 
-  // Fondo del header con el color del profesional
-  doc.setFillColor(...profColor);
+  // Fondo degradado simulado: zona izquierda más oscura, zona derecha más clara
+  doc.setFillColor(...profColorDark);
   doc.rect(0, 0, PW, HH, 'F');
-
-  // Banda izquierda con el color del profesional — acento vertical
   doc.setFillColor(...profColor);
-  doc.rect(0, 0, 3.5, HH, 'F');
+  doc.rect(PW * 0.38, 0, PW * 0.62, HH, 'F');
 
-  // Nombre profesional — blanco, jerarquía principal
-  doc.setFont('helvetica', 'bold'); doc.setFontSize(12);
+  // Acento lateral izquierdo luminoso
+  doc.setFillColor(...profColorAccent);
+  doc.rect(0, 0, 4, HH, 'F');
+
+  // Círculo decorativo — esquina derecha
+  doc.setFillColor(...profColorDark);
+  doc.circle(PW - 17, HH / 2, 11, 'F');
+  doc.setFillColor(...profColorAccent);
+  doc.circle(PW - 17, HH / 2, 7, 'F');
+
+  // Nombre del profesional
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(13);
   doc.setTextColor(...BLANCO);
-  doc.text(u.titulo || u.name || '', ML + 2, 10);
+  doc.text(u.titulo || u.name || '', ML + 2, 11);
 
-  // Línea decorativa fina bajo el nombre — gris claro
-  doc.setDrawColor(...GRIS_LINEA); doc.setLineWidth(0.25);
+  // Subrayado decorativo bajo el nombre
+  doc.setDrawColor(...BLANCO_TENUE); doc.setLineWidth(0.2);
   const nombreW = doc.getTextWidth(u.titulo || u.name || '');
-  doc.line(ML + 2, 12.5, ML + 2 + nombreW, 12.5);
+  doc.line(ML + 2, 13.5, ML + 2 + nombreW + 2, 13.5);
 
-  // Matrícula — gris claro
+  // Matrícula
   doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5);
-  doc.setTextColor(...GRIS_CLARO);
-  doc.text(u.mp || '', ML + 2, 17.5);
+  doc.setTextColor(...BLANCO_SEMI);
+  doc.text(u.mp || '', ML + 2, 19);
 
-  // Especialidades — una por línea, gris claro
+  // Especialidades
   const specs = Array.isArray(u.especialidades)
     ? u.especialidades
     : (u.role || '').split(/[·|\/]/).map(s => s.trim()).filter(Boolean);
   doc.setFont('helvetica', 'normal'); doc.setFontSize(6.5);
-  doc.setTextColor(...GRIS_CLARO);
-  let sY = 22;
-  specs.forEach(s => { if(sY < HH - 1) { doc.text(s, ML + 2, sY); sY += 4; } });
+  doc.setTextColor(...BLANCO_TENUE);
+  let sY = 24.5;
+  specs.forEach(s => { if(sY < HH - 2) { doc.text(s, ML + 2, sY); sY += 4; } });
 
-  // Línea inferior — gris claro, ancho completo
-  doc.setDrawColor(...GRIS_LINEA); doc.setLineWidth(0.35);
+  // Línea inferior
+  doc.setDrawColor(...GRIS_LINEA); doc.setLineWidth(0.3);
   doc.line(0, HH, PW, HH);
 
-  return HH + 5;
+  return HH + 6;
 }
 /* ─────────────────────────────────────────────────── */
 /*  PIE "OTRO" (color por profesional, texto blanco/gris) */
 /* ─────────────────────────────────────────────────── */
 function _pdfFooterOtro(doc, u, PW, PH) {
-  const FH = 16, FY = PH - FH;
+  const FH = 18, FY = PH - FH;
   const profColor = _colorProfesionalOtro(u);
+  const profColorDark = [Math.max(0, profColor[0]-18), Math.max(0, profColor[1]-10), Math.max(0, profColor[2]-8)];
+  const profColorAccent = [Math.min(255, profColor[0]+45), Math.min(255, profColor[1]+35), Math.min(255, profColor[2]+55)];
   const BLANCO = [255, 255, 255];
-  const GRIS_CLARO = [200, 200, 212];
-  const GRIS_LINEA = [150, 150, 165];
+  const BLANCO_SEMI = [200, 200, 215];
+  const BLANCO_TENUE = [155, 155, 178];
 
-  // Fondo con el color del profesional
+  // Fondo degradado — espejo del header
   doc.setFillColor(...profColor);
   doc.rect(0, FY, PW, FH, 'F');
+  doc.setFillColor(...profColorDark);
+  doc.rect(0, FY, PW * 0.38, FH, 'F');
 
-  // Línea superior — gris claro, separador
-  doc.setDrawColor(...GRIS_LINEA); doc.setLineWidth(0.25);
+  // Acento izquierdo
+  doc.setFillColor(...profColorAccent);
+  doc.rect(0, FY, 4, FH, 'F');
+
+  // Línea superior separadora
+  doc.setDrawColor(...BLANCO_TENUE); doc.setLineWidth(0.2);
   doc.line(0, FY, PW, FY);
 
-  // "Evaluaciones cardiometabólicas" — centrado, gris claro
+  // "Evaluaciones cardiometabólicas" — izquierda
   doc.setFont('helvetica', 'normal'); doc.setFontSize(6);
-  doc.setTextColor(...GRIS_CLARO);
-  doc.text('Evaluaciones cardiometabólicas', PW / 2, FY + 5.5, { align: 'center' });
+  doc.setTextColor(...BLANCO_TENUE);
+  doc.text('Evaluaciones cardiometabólicas', 8, FY + 6.5);
 
-  // Línea separadora interna — gris claro
-  doc.setDrawColor(...GRIS_LINEA); doc.setLineWidth(0.2);
-  doc.line(12, FY + 7.2, PW - 12, FY + 7.2);
+  // Línea interna
+  doc.setDrawColor(...BLANCO_TENUE); doc.setLineWidth(0.15);
+  doc.line(8, FY + 8.5, PW - 8, FY + 8.5);
 
-  // Email del profesional — centrado, blanco, jerarquía principal
+  // Email — centrado, blanco
   const uName = (u && (u.id || u.name || '')).toLowerCase();
   const email = (uName.includes('omar') || uName.includes('bertani'))
     ? 'dr.bertaniomar@gmail.com'
     : 'dra.guerrerobarbara@gmail.com';
   doc.setFont('helvetica', 'bold'); doc.setFontSize(6.5);
   doc.setTextColor(...BLANCO);
-  doc.text(email, PW / 2, FY + 12, { align: 'center' });
+  doc.text(email, PW / 2, FY + 14.5, { align: 'center' });
 }
 /* ─────────────────────────────────────────────────── */
 /* ─────────────────────────────────────────────────── */
@@ -9472,68 +9491,232 @@ function mdpaImprimirInforme() {
   const ppTH2 = showPP ? '<th style="background:#fce4f3;color:#e91e8c">SIS</th><th style="background:#fce4f3;color:#e91e8c;border-right:1px solid #e5e7eb">DIA</th>' : '';
   const ppRes = showPP ? `<tr><td class="rl">Prom. sistólica prandial</td><td class="rv">${fmt(sisPPR)}</td></tr><tr><td class="rl">Prom. diastólica prandial</td><td class="rv">${fmt(diaPPR)}</td></tr>` : '';
 
-  const html = `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"/><title>MDPA — ${nombre}</title>
-<style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:'Segoe UI',Arial,sans-serif;font-size:11px;color:#111;background:#fff;padding:20px 26px}
-h1{font-size:16px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;margin-bottom:2px}.sub{font-size:11px;color:#555;margin-bottom:14px}
-.hgrid{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px;margin-bottom:14px}
-.hbox{background:#f0f9ff;border:1px solid #bae6fd;border-radius:5px;padding:7px 10px}
-.hbox-l{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#0369a1;margin-bottom:2px}
-.hbox-v{font-size:13px;font-weight:700;color:#0c4a6e}
-.dx-box{border-radius:8px;padding:10px 14px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center}
-.dx-normal{background:#f0fdf4;border:1px solid #86efac}.dx-alta{background:#fef2f2;border:1px solid #fca5a5}
-.dx-l{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em}
-.dx-normal .dx-l{color:#16a34a}.dx-alta .dx-l{color:#dc2626}
-.dx-v{font-size:17px;font-weight:800}.dx-normal .dx-v{color:#16a34a}.dx-alta .dx-v{color:#dc2626}
-.dx-sub{font-size:10px;color:#6b7280;font-style:italic}
-.layout{display:grid;grid-template-columns:1fr 200px;gap:16px;align-items:start}
-table{border-collapse:collapse;width:100%;font-size:10.5px}
-th{padding:6px 6px;text-align:center;font-size:9.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase}
-td{padding:5px 6px;text-align:center;border-bottom:1px solid #f3f4f6}
-.res-table{width:100%;border-collapse:collapse;font-size:10.5px}
-.res-table td.rl{text-align:left;color:#374151;padding:5px 8px;border-bottom:1px solid #f3f4f6}
-.res-table td.rv{text-align:right;font-weight:700;font-size:13px;color:#1e3a5f;padding:5px 8px;border-bottom:1px solid #f3f4f6}
-.res-sep{height:2px;background:#e5e7eb}
-.footer{margin-top:14px;font-size:9px;color:#9ca3af;text-align:right}
-@media print{body{padding:8px 12px}@page{margin:10mm 12mm}}</style></head><body>
-<h1>MDPA — Monitoreo Domiciliario de la Presión Arterial</h1>
-<p class="sub">URCyM — Unidad de Riesgo Cardiovascular y Metabólico</p>
-<div class="hgrid">
-  <div class="hbox"><div class="hbox-l">Paciente</div><div class="hbox-v">${nombre}</div></div>
-  <div class="hbox"><div class="hbox-l">Edad</div><div class="hbox-v">${edad}</div></div>
-  <div class="hbox"><div class="hbox-l">Inicio del estudio</div><div class="hbox-v">${fechaIni}</div></div>
-  <div class="hbox"><div class="hbox-l">Duración</div><div class="hbox-v">${nDias} días</div></div>
+  const profMDPA = currentUser ? users[currentUser] : null;
+  const profNombreMDPA = profMDPA ? (profMDPA.titulo || profMDPA.name || '') : '';
+  const profMPMDPA    = profMDPA ? (profMDPA.mp || '') : '';
+  const profEspecMDPA = profMDPA ? (profMDPA.role || '') : '';
+  const fechaHoyMDPA  = new Date().toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'});
+
+  const html = `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"/>
+<title>MDPA — ${nombre}</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Inter',sans-serif;font-size:11px;color:#1e293b;background:#f8fafc;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+
+  /* ── HEADER ── */
+  .report-header{background:linear-gradient(135deg,#0c4a6e 0%,#1e3a5f 60%,#312e81 100%);color:white;padding:24px 32px 20px;display:flex;align-items:center;gap:20px}
+  .logo-circle{width:52px;height:52px;border-radius:50%;background:rgba(255,255,255,.15);border:2px solid rgba(255,255,255,.3);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:22px}
+  .header-text{flex:1}
+  .header-title{font-size:20px;font-weight:800;letter-spacing:.02em;line-height:1.1}
+  .header-sub{font-size:11px;color:rgba(255,255,255,.7);margin-top:3px;letter-spacing:.04em;text-transform:uppercase}
+  .header-fecha{text-align:right;font-size:10px;color:rgba(255,255,255,.6);line-height:1.7}
+  .header-fecha strong{display:block;font-size:12px;color:rgba(255,255,255,.9);font-weight:600}
+
+  /* ── PACIENTE ── */
+  .paciente-bar{background:white;border-bottom:3px solid #0c4a6e;padding:14px 32px;display:flex;align-items:center;gap:24px;flex-wrap:wrap}
+  .pac-chip{display:flex;flex-direction:column}
+  .pac-chip-label{font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#94a3b8;margin-bottom:2px}
+  .pac-chip-val{font-size:13px;font-weight:700;color:#0c4a6e}
+  .pac-divider{width:1px;height:32px;background:#e2e8f0;flex-shrink:0}
+
+  /* ── PROFESIONAL ── */
+  .prof-strip{background:#f0f9ff;border-left:4px solid #0369a1;padding:10px 32px;display:flex;align-items:center;gap:10px;font-size:10.5px}
+  .prof-strip-name{font-weight:700;color:#0c4a6e;font-size:11.5px}
+  .prof-strip-sep{color:#bae6fd;font-size:14px}
+  .prof-strip-mp{color:#0369a1;font-weight:600}
+  .prof-strip-esp{color:#64748b;font-style:italic}
+
+  /* ── CUERPO ── */
+  .body-wrap{padding:20px 32px 28px}
+
+  /* ── CHIPS RESUMEN ── */
+  .info-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px}
+  .info-chip{background:white;border:1px solid #e2e8f0;border-radius:10px;padding:10px 14px;box-shadow:0 1px 3px rgba(0,0,0,.05)}
+  .info-chip-label{font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#94a3b8;margin-bottom:3px}
+  .info-chip-val{font-size:13px;font-weight:700;color:#0c4a6e}
+  .info-grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px}
+  .chip-motivo{background:#f0fdf4;border:1px solid #86efac;border-radius:10px;padding:10px 14px}
+  .chip-motivo .info-chip-label{color:#16a34a}
+  .chip-motivo .info-chip-val{color:#15803d;font-size:12px}
+  .chip-farmacos{background:#faf5ff;border:1px solid #d8b4fe;border-radius:10px;padding:10px 14px}
+  .chip-farmacos .info-chip-label{color:#7e22ce}
+  .chip-farmacos .info-chip-val{color:#581c87;font-size:12px}
+
+  /* ── DIAGNÓSTICO ── */
+  .dx-box{border-radius:10px;padding:14px 18px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+  .dx-normal{background:#f0fdf4;border:1.5px solid #86efac}
+  .dx-alta{background:#fef2f2;border:1.5px solid #fca5a5}
+  .dx-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em}
+  .dx-normal .dx-label{color:#16a34a}.dx-alta .dx-label{color:#dc2626}
+  .dx-sub{font-size:9.5px;color:#6b7280;font-style:italic;margin-top:3px}
+  .dx-val{font-size:18px;font-weight:800}
+  .dx-normal .dx-val{color:#16a34a}.dx-alta .dx-val{color:#dc2626}
+
+  /* ── LAYOUT PRINCIPAL ── */
+  .layout{display:grid;grid-template-columns:1fr 210px;gap:16px;align-items:start}
+
+  /* ── TABLA DATOS ── */
+  .table-wrap{background:white;border-radius:10px;box-shadow:0 1px 4px rgba(0,0,0,.07);overflow:hidden;border:1px solid #e2e8f0}
+  .table-caption{padding:10px 14px 8px;background:white;border-bottom:1px solid #f1f5f9;display:flex;align-items:center;gap:8px}
+  .table-caption-title{font-size:11.5px;font-weight:700;color:#1e293b;flex:1}
+  .table-caption-badge{background:#dbeafe;color:#1d4ed8;font-size:9px;font-weight:700;padding:2px 8px;border-radius:20px;text-transform:uppercase;letter-spacing:.06em}
+  table{border-collapse:collapse;width:100%;font-size:10.5px}
+  th{background:#0c4a6e;color:rgba(255,255,255,.95);padding:8px 8px;text-align:center;font-weight:600;font-size:9px;letter-spacing:.04em;text-transform:uppercase;white-space:nowrap}
+  th.th-mat{background:#1e4e8c}
+  th.th-ves{background:#1a6641}
+  th.th-pp{background:#6b3a8e}
+  td{padding:5px 6px;text-align:center;border-bottom:1px solid #f1f5f9;color:#334155}
+  td.col-dia{font-weight:600;color:#1e293b;background:#f8fafc;text-align:left;padding-left:10px;white-space:nowrap;border-right:1px solid #e2e8f0}
+  td.col-toma{color:#94a3b8;font-size:10px;border-right:1px solid #e2e8f0}
+  td.alerta{color:#dc2626;font-weight:700;background:#fff5f5}
+  tr:nth-child(even) td:not(.col-dia){background:#fafbfc}
+
+  /* ── PANEL RESULTADOS ── */
+  .res-panel{background:white;border-radius:10px;box-shadow:0 1px 4px rgba(0,0,0,.07);overflow:hidden;border:1px solid #e2e8f0}
+  .res-header{background:#0c4a6e;color:white;padding:8px 12px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em}
+  .res-row{display:flex;justify-content:space-between;align-items:center;padding:6px 12px;border-bottom:1px solid #f1f5f9}
+  .res-row:last-child{border-bottom:none}
+  .res-row-sep{height:3px;background:linear-gradient(90deg,#0c4a6e,#312e81)}
+  .res-label{font-size:9.5px;color:#64748b}
+  .res-val{font-size:13px;font-weight:700;color:#0c4a6e}
+  .res-sub-header{background:#f1f5f9;padding:5px 12px;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#475569}
+
+  /* ── FOOTER ── */
+  .report-footer{margin-top:18px;padding-top:10px;border-top:1px solid #e2e8f0;display:flex;align-items:center;justify-content:space-between;font-size:8.5px;color:#94a3b8}
+  .footer-brand{font-weight:700;color:#64748b;letter-spacing:.04em;text-transform:uppercase}
+
+  @media print{
+    body{background:white}
+    @page{margin:8mm 10mm;size:A4}
+    .report-header,.res-header,.res-row-sep{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  }
+</style></head><body>
+
+<!-- HEADER -->
+<div class="report-header">
+  <div class="logo-circle">🩺</div>
+  <div class="header-text">
+    <div class="header-title">MDPA — Monitoreo Domiciliario</div>
+    <div class="header-sub">Evaluación Cardiometabólica</div>
+  </div>
+  <div class="header-fecha">
+    <strong>${fechaHoyMDPA}</strong>
+    Duración: ${nDias} días
+  </div>
 </div>
-<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:14px">
-  <div class="hbox" style="background:#f0fdf4;border-color:#86efac"><div class="hbox-l" style="color:#16a34a">Motivo del estudio</div><div class="hbox-v" style="color:#15803d;font-size:12px">${est.motivo === 'diagnostico' ? '🔍 Diagnóstico' : est.motivo === 'control_tratamiento' ? '💊 Control de tratamiento' : '—'}</div></div>
-  <div class="hbox" style="background:#faf5ff;border-color:#d8b4fe"><div class="hbox-l" style="color:#7e22ce">Fármacos utilizados</div><div class="hbox-v" style="color:#581c87;font-size:12px">${est.farmacos || '—'}</div></div>
+
+<!-- PACIENTE -->
+<div class="paciente-bar">
+  <div class="pac-chip">
+    <span class="pac-chip-label">Paciente</span>
+    <span class="pac-chip-val">${nombre}</span>
+  </div>
+  ${edad ? `<div class="pac-divider"></div>
+  <div class="pac-chip">
+    <span class="pac-chip-label">Edad</span>
+    <span class="pac-chip-val">${edad}</span>
+  </div>` : ''}
+  <div class="pac-divider"></div>
+  <div class="pac-chip">
+    <span class="pac-chip-label">Inicio del estudio</span>
+    <span class="pac-chip-val">${fechaIni}</span>
+  </div>
 </div>
-<div class="dx-box ${esHTA ? 'dx-alta' : 'dx-normal'}">
-  <div><div class="dx-l">${esHTA ? '⚠ HTA domiciliaria detectada' : '✓ Presión domiciliaria normal'}</div>
-  <div class="dx-sub">Promedio diagnóstico (sin día 1) · umbral ≥135/85 mmHg</div></div>
-  <div class="dx-v">${fmt(sisDx)} / ${fmt(diaDx)} mmHg</div>
+
+${profNombreMDPA ? `<div class="prof-strip">
+  <span class="prof-strip-name">${profNombreMDPA}</span>
+  ${profMPMDPA ? `<span class="prof-strip-sep">·</span><span class="prof-strip-mp">${profMPMDPA}</span>` : ''}
+  ${profEspecMDPA ? `<span class="prof-strip-sep">·</span><span class="prof-strip-esp">${profEspecMDPA}</span>` : ''}
+</div>` : ''}
+
+<!-- CUERPO -->
+<div class="body-wrap">
+
+  <!-- Motivo y fármacos -->
+  <div class="info-grid2">
+    <div class="chip-motivo">
+      <div class="info-chip-label">Motivo del estudio</div>
+      <div class="info-chip-val">${est.motivo === 'diagnostico' ? '🔍 Diagnóstico' : est.motivo === 'control_tratamiento' ? '💊 Control de tratamiento' : '—'}</div>
+    </div>
+    <div class="chip-farmacos">
+      <div class="info-chip-label">Fármacos utilizados</div>
+      <div class="info-chip-val">${est.farmacos || '—'}</div>
+    </div>
+  </div>
+
+  <!-- Diagnóstico -->
+  <div class="dx-box ${esHTA ? 'dx-alta' : 'dx-normal'}">
+    <div>
+      <div class="dx-label">${esHTA ? '⚠ HTA domiciliaria detectada' : '✓ Presión domiciliaria normal'}</div>
+      <div class="dx-sub">Promedio diagnóstico (sin día 1) · umbral ≥135/85 mmHg</div>
+    </div>
+    <div class="dx-val">${fmt(sisDx)} / ${fmt(diaDx)} <span style="font-size:13px;font-weight:500">mmHg</span></div>
+  </div>
+
+  <!-- Tabla + Panel resultados -->
+  <div class="layout">
+    <div class="table-wrap">
+      <div class="table-caption">
+        <span class="table-caption-title">📋 Registro de tomas</span>
+        <span class="table-caption-badge">${nDias} días</span>
+      </div>
+      <table><thead>
+        <tr>
+          <th rowspan="2" style="text-align:left;padding-left:10px;border-right:1px solid rgba(255,255,255,.2)">Día</th>
+          <th rowspan="2" style="border-right:1px solid rgba(255,255,255,.2);opacity:.7">Toma</th>
+          <th colspan="2" class="th-mat">MATUTINA<br><span style="font-weight:400;font-size:8px">SIS / DIA</span></th>
+          ${ppTH1}
+          <th colspan="2" class="th-ves">VESPERTINA<br><span style="font-weight:400;font-size:8px">SIS / DIA</span></th>
+        </tr>
+        <tr>
+          <th class="th-mat">SIS</th><th class="th-mat" style="border-right:1px solid rgba(255,255,255,.15)">DIA</th>
+          ${ppTH2}
+          <th class="th-ves">SIS</th><th class="th-ves">DIA</th>
+        </tr>
+      </thead><tbody>${filasToma}</tbody></table>
+    </div>
+
+    <div class="res-panel">
+      <div class="res-header">📊 Resultados</div>
+      <div class="res-row">
+        <span class="res-label">Prom. SIS total</span>
+        <span class="res-val">${fmt(sisTotal)}</span>
+      </div>
+      <div class="res-row">
+        <span class="res-label">Prom. DIA total</span>
+        <span class="res-val">${fmt(diaTotal)}</span>
+      </div>
+      <div class="res-row-sep"></div>
+      <div class="res-sub-header">Matutina</div>
+      <div class="res-row">
+        <span class="res-label" style="color:#1e4e8c">SIS matutina</span>
+        <span class="res-val">${fmt(sisMatR)}</span>
+      </div>
+      <div class="res-row">
+        <span class="res-label" style="color:#1e4e8c">DIA matutina</span>
+        <span class="res-val">${fmt(diaMatR)}</span>
+      </div>
+      ${ppRes}
+      <div class="res-row-sep"></div>
+      <div class="res-sub-header">Vespertina</div>
+      <div class="res-row">
+        <span class="res-label" style="color:#1a6641">SIS vespertina</span>
+        <span class="res-val">${fmt(sisVesR)}</span>
+      </div>
+      <div class="res-row">
+        <span class="res-label" style="color:#1a6641">DIA vespertina</span>
+        <span class="res-val">${fmt(diaVesR)}</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="report-footer">
+    <span class="footer-brand">Evaluaciones Cardiometabólicas</span>
+    <span>Generado el ${fechaHoyMDPA} · Documento de uso médico exclusivo</span>
+  </div>
 </div>
-<div class="layout">
-  <table><thead>
-    <tr><th rowspan="2" style="text-align:left;border-right:1px solid #e5e7eb">Día</th>
-    <th rowspan="2" style="border-right:1px solid #e5e7eb;color:#6b7280">Toma</th>
-    <th colspan="2" style="background:#e8f3fc;color:#1e6aab">MATUTINA<br><span style="font-weight:400">SIS / DIA</span></th>
-    ${ppTH1}<th colspan="2" style="background:#e8f9f0;color:#15803d">VESPERTINA<br><span style="font-weight:400">SIS / DIA</span></th></tr>
-    <tr><th style="background:#e8f3fc;color:#1e6aab">SIS</th><th style="background:#e8f3fc;color:#1e6aab;border-right:1px solid #e5e7eb">DIA</th>
-    ${ppTH2}<th style="background:#e8f9f0;color:#15803d">SIS</th><th style="background:#e8f9f0;color:#15803d">DIA</th></tr>
-  </thead><tbody>${filasToma}</tbody></table>
-  <div><table class="res-table">
-    <tr><td colspan="2" style="background:#1e3a5f;color:white;font-weight:700;padding:7px 8px;font-size:10px;text-transform:uppercase;letter-spacing:.05em">Resultados</td></tr>
-    <tr><td class="rl">Prom. sistólica TOTAL</td><td class="rv">${fmt(sisTotal)}</td></tr>
-    <tr><td class="rl">Prom. diastólica TOTAL</td><td class="rv">${fmt(diaTotal)}</td></tr>
-    <tr><td colspan="2" class="res-sep"></td></tr>
-    <tr><td class="rl" style="color:#1e6aab">Prom. SIS matutina</td><td class="rv">${fmt(sisMatR)}</td></tr>
-    <tr><td class="rl" style="color:#1e6aab">Prom. DIA matutina</td><td class="rv">${fmt(diaMatR)}</td></tr>
-    ${ppRes}
-    <tr><td class="rl" style="color:#15803d">Prom. SIS vespertina</td><td class="rv">${fmt(sisVesR)}</td></tr>
-    <tr><td class="rl" style="color:#15803d">Prom. DIA vespertina</td><td class="rv">${fmt(diaVesR)}</td></tr>
-  </table></div>
-</div>
-<p class="footer">Generado el ${new Date().toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'})} · URCyM</p>
+
 </body></html>`;
 
   const win = window.open('', '_blank', 'width=960,height=720');
