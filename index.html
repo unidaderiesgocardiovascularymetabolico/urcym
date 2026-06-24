@@ -7231,17 +7231,17 @@ async function volcarActualizacion() {
   const prev = editor.querySelector('.bloque-actualizacion'); if(prev) prev.remove();
   const tmp = document.createElement('div'); tmp.innerHTML = bloque;
   editor.insertBefore(tmp.firstChild, editor.firstChild);
+  marcarDirty('evol');
 
-  // 2. Guardar en Supabase y actualizar encabezado
+  // 2. Guardar en Supabase
   if(pacienteActual) {
     const dni = pacienteActual.dni;
-    // Guardar cada ítem de tratamiento
+
     for(const item of updTtoItems) {
       if(item.accion === 'se suspende') {
         await sb.from('medicacion').update({activo:false})
           .eq('dni_paciente', dni).ilike('farmaco', item.farmaco);
       } else if(item.accion === 'se cambia dosis') {
-        // Inactivar todas las entradas activas de ese fármaco e insertar con nueva dosis
         await sb.from('medicacion').update({activo:false})
           .eq('dni_paciente', dni).ilike('farmaco', item.farmaco);
         await sb.from('medicacion').insert({
@@ -7254,33 +7254,45 @@ async function volcarActualizacion() {
           fecha_inicio: fechaHoy()
         });
       } else {
-        // Marcar como inactivo si ya existe (para no duplicar)
+        // se agrega
         await sb.from('medicacion').update({activo:false})
           .eq('dni_paciente', dni).ilike('farmaco', item.farmaco);
-        if(item.accion !== 'se suspende') {
-          await sb.from('medicacion').insert({
-            dni_paciente: dni,
-            grupo: item.grupo || 'Otro',
-            farmaco: item.farmaco,
-            dosis: item.dosis || '',
-            frecuencia: item.frecuencia || '',
-            activo: true,
-            fecha_inicio: fechaHoy()
-          });
-        }
+        await sb.from('medicacion').insert({
+          dni_paciente: dni,
+          grupo: item.grupo || 'Otro',
+          farmaco: item.farmaco,
+          dosis: item.dosis || '',
+          frecuencia: item.frecuencia || '',
+          activo: true,
+          fecha_inicio: fechaHoy()
+        });
       }
     }
     if(act) await sb.from('paciente_clinica').update({actividad_fisica: act}).eq('dni_paciente', dni);
     if(ali) await sb.from('paciente_clinica').update({alimentacion: ali}).eq('dni_paciente', dni);
 
-    // 3. Actualizar encabezado variable y snapshot
-    await window.actualizarEncabezadoVariable(dni);
+    // 3. Leer datos frescos de Supabase
     const [cr, mr] = await Promise.all([
       sb.from('paciente_clinica').select('*').eq('dni_paciente', dni).maybeSingle(),
-      sb.from('medicacion').select('*').eq('dni_paciente', dni).eq('activo', true)
+      sb.from('medicacion').select('*').eq('dni_paciente', dni).eq('activo', true).order('grupo')
     ]);
-    if(cr.data) evolClinicaSnapshot = { clinica: cr.data, medicacion: mr.data || [] };
+
+    // 4. Actualizar snapshot global y encabezado variable inmediatamente
+    const snapFresco = {
+      clinica: (cr.data) || (evolClinicaSnapshot && evolClinicaSnapshot.clinica) || null,
+      medicacion: mr.data || []
+    };
+    evolClinicaSnapshot = snapFresco;
+    window.actualizarEncabezadoVariable(snapFresco);
   }
+
+  // 5. Limpiar panel
+  updTtoItems = [];
+  renderTtoUpd();
+  document.getElementById('upd_actividad').value = '';
+  document.getElementById('upd_alimentacion').value = '';
+  document.getElementById('upd_tto_accion').value = 'se agrega';
+  actualizarModoPanelTto();
 }
 
 
