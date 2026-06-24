@@ -2520,6 +2520,7 @@
                   <select id="upd_tto_accion" onchange="actualizarModoPanelTto()" style="padding:6px 8px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;font-family:var(--font-main);background:white">
                     <option value="se agrega">Se agrega</option>
                     <option value="se suspende">Se suspende</option>
+                    <option value="se cambia dosis">Se cambia dosis</option>
                   </select>
                   <!-- Modo AGREGA: grupo + fármaco + dosis + frecuencia -->
                   <div id="upd_modo_agrega" style="display:contents">
@@ -2544,10 +2545,19 @@
                       <option value="cada 30 días">cada 30 días</option>
                     </select>
                   </div>
-                  <!-- Modo MODIFICA/SUSPENDE: medicación actual -->
+                  <!-- Modo SUSPENDE: medicación actual -->
                   <div id="upd_modo_medactual" style="display:none;grid-column:2/-1">
                     <select id="upd_tto_medactual" style="width:100%;padding:6px 8px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;font-family:var(--font-main);background:white">
                       <option value="">Seleccioná la medicación actual...</option>
+                    </select>
+                  </div>
+                  <!-- Modo CAMBIA DOSIS: medicación actual + nueva dosis -->
+                  <div id="upd_modo_cambiadosis" style="display:none;grid-column:2/-1;gap:6px;grid-template-columns:1fr 1fr">
+                    <select id="upd_tto_medcambio" onchange="poblarDosisNuevaUpd(this.value)" style="padding:6px 8px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;font-family:var(--font-main);background:white">
+                      <option value="">Seleccioná el medicamento...</option>
+                    </select>
+                    <select id="upd_tto_dosisnueva" style="padding:6px 8px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;font-family:var(--font-main);background:white">
+                      <option value="">Nueva dosis...</option>
                     </select>
                   </div>
                 </div>
@@ -7107,17 +7117,21 @@ function poblarDosisUpd(farmaco) {
 
 function actualizarModoPanelTto() {
   const accion = document.getElementById('upd_tto_accion').value;
-  const modoAgrega = document.getElementById('upd_modo_agrega');
   const modoMed = document.getElementById('upd_modo_medactual');
+  const modoCambia = document.getElementById('upd_modo_cambiadosis');
   const esAgrega = accion === 'se agrega';
-  // Toggle visibility via inline style on children
+  const esSuspende = accion === 'se suspende';
+  const esCambiaDosis = accion === 'se cambia dosis';
+
+  // Mostrar/ocultar selectores de "agregar"
   ['upd_tto_grupo','upd_tto_farmaco','upd_tto_dosis','upd_tto_frecuencia'].forEach(id => {
     const el = document.getElementById(id);
     if(el) el.style.display = esAgrega ? '' : 'none';
   });
-  if(modoMed) modoMed.style.display = esAgrega ? 'none' : 'grid-column:2/-1';
-  if(!esAgrega) {
-    // Poblar con medicación actual del paciente
+
+  // Modo SUSPENDE
+  if(modoMed) modoMed.style.display = 'none';
+  if(esSuspende) {
     const sel = document.getElementById('upd_tto_medactual');
     if(sel && evolClinicaSnapshot && evolClinicaSnapshot.medicacion) {
       sel.innerHTML = '<option value="">Seleccioná la medicación actual...</option>' +
@@ -7126,9 +7140,32 @@ function actualizarModoPanelTto() {
         ).join('');
     }
     if(modoMed) modoMed.style.display = 'block';
-  } else {
-    if(modoMed) modoMed.style.display = 'none';
   }
+
+  // Modo CAMBIA DOSIS
+  if(modoCambia) modoCambia.style.display = 'none';
+  if(esCambiaDosis) {
+    const selMed = document.getElementById('upd_tto_medcambio');
+    if(selMed && evolClinicaSnapshot && evolClinicaSnapshot.medicacion) {
+      selMed.innerHTML = '<option value="">Seleccioná el medicamento...</option>' +
+        evolClinicaSnapshot.medicacion.map(m =>
+          '<option value="'+m.farmaco+'|'+m.dosis+'|'+m.grupo+'">'+m.farmaco+' '+m.dosis+'</option>'
+        ).join('');
+    }
+    // Limpiar dosis nueva
+    const selDosis = document.getElementById('upd_tto_dosisnueva');
+    if(selDosis) selDosis.innerHTML = '<option value="">Nueva dosis...</option>';
+    if(modoCambia) modoCambia.style.display = 'grid';
+  }
+}
+
+function poblarDosisNuevaUpd(val) {
+  const selDosis = document.getElementById('upd_tto_dosisnueva');
+  if(!selDosis) return;
+  const farmaco = (val || '').split('|')[0];
+  const dosis = DOSIS_MED[farmaco] || [];
+  selDosis.innerHTML = '<option value="">Nueva dosis...</option>' +
+    dosis.map(d => '<option value="'+d+'">'+d+'</option>').join('');
 }
 
 function agregarTtoUpd() {
@@ -7143,6 +7180,15 @@ function agregarTtoUpd() {
     document.getElementById('upd_tto_farmaco').value = '';
     poblarDosisUpd('');
     document.getElementById('upd_tto_frecuencia').value = '';
+  } else if(accion === 'se cambia dosis') {
+    const selMed = document.getElementById('upd_tto_medcambio');
+    const selDosis = document.getElementById('upd_tto_dosisnueva');
+    const parts = (selMed.value||'').split('|');
+    farmaco = parts[0]; grupo = parts[2]||'Otro';
+    dosis = selDosis.value;
+    if(!farmaco || !dosis) return;
+    selMed.value = '';
+    selDosis.innerHTML = '<option value="">Nueva dosis...</option>';
   } else {
     const sel = document.getElementById('upd_tto_medactual');
     const parts = (sel.value||'').split('|');
@@ -7194,6 +7240,19 @@ async function volcarActualizacion() {
       if(item.accion === 'se suspende') {
         await sb.from('medicacion').update({activo:false})
           .eq('dni_paciente', dni).ilike('farmaco', item.farmaco);
+      } else if(item.accion === 'se cambia dosis') {
+        // Inactivar todas las entradas activas de ese fármaco e insertar con nueva dosis
+        await sb.from('medicacion').update({activo:false})
+          .eq('dni_paciente', dni).ilike('farmaco', item.farmaco);
+        await sb.from('medicacion').insert({
+          dni_paciente: dni,
+          grupo: item.grupo || 'Otro',
+          farmaco: item.farmaco,
+          dosis: item.dosis || '',
+          frecuencia: item.frecuencia || '',
+          activo: true,
+          fecha_inicio: fechaHoy()
+        });
       } else {
         // Marcar como inactivo si ya existe (para no duplicar)
         await sb.from('medicacion').update({activo:false})
