@@ -2582,8 +2582,7 @@
               </div>
             </div>
             <div class="evol-update-btn" style="display:flex;gap:8px;align-items:center">
-              <button id="btn_volcar_upd" class="btn btn-teal" onclick="volcarActualizacion()" style="width:auto;margin:0;padding:8px 20px;font-size:13px;opacity:.45;transition:all .25s" disabled>↓ Volcar y actualizar</button>
-              <button id="btn_cancelar_upd" onclick="cancelarActualizacion()" style="display:none;padding:8px 16px;border:1.5px solid var(--red);border-radius:12px;background:var(--red-light);color:var(--red);font-size:13px;font-weight:600;cursor:pointer;font-family:var(--font-main);transition:all .2s">✕ Cancelar</button>
+              <button id="btn_cancelar_upd" onclick="cancelarActualizacion()" style="display:none;padding:8px 16px;border:1.5px solid var(--red);border-radius:12px;background:var(--red-light);color:var(--red);font-size:13px;font-weight:600;cursor:pointer;font-family:var(--font-main);transition:all .2s">✕ Deshacer cambios</button>
             </div>
           </div>
 
@@ -6564,8 +6563,14 @@ async function guardarClinica() {
             // Actualizar el bloque clínico existente con los nuevos datos
             prev.replaceWith(tmp.firstChild);
           } else {
-            // Primera vez: insertar al inicio (el texto manual queda debajo)
+            // Primera vez: insertar al inicio y agregar párrafo vacío limpio después
             editor.insertBefore(tmp.firstChild, editor.firstChild);
+            // Párrafo vacío para que el cursor no herede el estilo del bloque clínico
+            const parrafoLimpio = document.createElement('div');
+            parrafoLimpio.className = 'evol-texto-libre';
+            parrafoLimpio.style.cssText = 'font-family:Arial,sans-serif;font-size:10pt;color:#333;line-height:1.7;min-height:1.2em';
+            parrafoLimpio.innerHTML = '<br>';
+            editor.insertBefore(parrafoLimpio, editor.childNodes[1] || null);
           }
         }
       }
@@ -7572,6 +7577,7 @@ function agregarTtoUpd() {
   updTtoItems.push({ accion, grupo, farmaco, dosis, frecuencia: frec, texto });
   renderTtoUpd();
   checkPanelActivo();
+  volcarActualizacion();
 }
 
 function renderTtoUpd() {
@@ -7743,6 +7749,7 @@ function confirmarModalHabitos() {
 
   cerrarModalHabitos();
   checkPanelActivo();
+  if(_habDatos) volcarActualizacion();
 }
 
 function quitarTtoUpd(i) { updTtoItems.splice(i,1); renderTtoUpd(); checkPanelActivo(); }
@@ -7773,14 +7780,8 @@ function checkPanelActivo() {
   if(btnAgregar)  btnAgregar.classList.toggle('pendiente', hayPend);
   if(hintAgregar) hintAgregar.style.display = hayPend ? 'inline' : 'none';
 
-  const hayVolcar = hayTto || hayHab;
-  const btnVolcar = document.getElementById('btn_volcar_upd');
-  if(btnVolcar) {
-    btnVolcar.disabled = !hayVolcar;
-    btnVolcar.classList.toggle('activo', hayVolcar);
-  }
   const btnCancelar = document.getElementById('btn_cancelar_upd');
-  if(btnCancelar) btnCancelar.style.display = (hayVolcar || hayPend) ? 'inline-block' : 'none';
+  if(btnCancelar) btnCancelar.style.display = (hayTto || hayHab || hayPend) ? 'inline-block' : 'none';
 
   // Resumen en el botón del panel
   const resumen = document.getElementById('upd_hab_resumen');
@@ -7808,6 +7809,8 @@ function cancelarActualizacion() {
   document.getElementById('upd_tto_accion').value = 'se agrega';
   actualizarModoPanelTto();
   _habDatos = null;
+  const prevBloque = document.getElementById('evol_editor')?.querySelector('.bloque-actualizacion');
+  if(prevBloque) prevBloque.remove();
   checkPanelActivo();
 }
 
@@ -7848,11 +7851,27 @@ async function volcarActualizacion() {
     if(partes.length) lines.push('<strong>Alimentación:</strong> ' + partes.join(' · '));
   }
 
-  const bloque = '<div class="bloque-actualizacion" style="font-family:Arial,sans-serif;font-size:10pt;color:#333;border:1px solid #d0e4f5;padding:8px 10px;border-radius:6px;margin-bottom:10px;line-height:1.9"><strong>Actualización de esta consulta:</strong><br>' + lines.join('<br>') + '</div>';
+  // Sin borde ni caja — texto plano integrado en el editor
+  const bloque = '<div class="bloque-actualizacion" style="font-family:Arial,sans-serif;font-size:10pt;color:#333;line-height:1.9">' + lines.join('<br>') + '</div>';
   const editor = document.getElementById('evol_editor');
   const prev = editor.querySelector('.bloque-actualizacion'); if(prev) prev.remove();
   const tmp = document.createElement('div'); tmp.innerHTML = bloque;
-  editor.insertBefore(tmp.firstChild, editor.firstChild);
+  // Insertar después del bloque clínico y del párrafo libre, antes del texto manual
+  const bloqueClinico = editor.querySelector('.bloque-clinico');
+  const parrafoLibre  = editor.querySelector('.evol-texto-libre');
+  const ancla = parrafoLibre || bloqueClinico;
+  if(ancla && ancla.nextSibling) {
+    editor.insertBefore(tmp.firstChild, ancla.nextSibling);
+  } else if(ancla) {
+    editor.appendChild(tmp.firstChild);
+  } else {
+    editor.insertBefore(tmp.firstChild, editor.firstChild);
+  }
+  // Cursor al final del editor
+  editor.focus();
+  const sel = window.getSelection(); sel.removeAllRanges();
+  const range = document.createRange(); range.selectNodeContents(editor); range.collapse(false);
+  sel.addRange(range);
   marcarDirty('evol');
 
   // 2. Guardar en Supabase
