@@ -7697,87 +7697,83 @@ function abrirModalHabitos() {
   const diasNueva = document.getElementById('hab_nueva_dias');
   if(diasNueva) _crearDiasBtns(diasNueva);
 
-  // Datos anteriores – actividad
+  // Fuente de datos: primero lo que ya se cargó en la sesión actual (_habDatos),
+  // si no hay, los datos guardados en Supabase (evolClinicaSnapshot)
   const prev = evolClinicaSnapshot?.clinica;
-  if(prev?.hab_actividad_json) {
-    try {
-      const pa = JSON.parse(prev.hab_actividad_json);
-      // pa puede ser array (nuevo formato) o objeto (formato viejo)
-      let txt = '';
-      if(Array.isArray(pa)) {
-        txt = pa.map(a => [a.tipo, a.intensidad, a.minutos ? a.minutos+'min/ses' : '', a.dias ? a.dias+'días/sem' : ''].filter(Boolean).join(' ')).join(' | ');
-      } else {
-        txt = [pa.deporte, pa.intensidad, pa.minutos ? pa.minutos+'min/ses':'' , pa.dias ? pa.dias+'días/sem':''].filter(Boolean).join(' · ');
-      }
-      document.getElementById('hab_act_anterior_txt').textContent = txt || '—';
-      document.getElementById('hab_act_anterior_box').style.display = 'block';
-    } catch(e){ document.getElementById('hab_act_anterior_box').style.display='none'; }
-  } else {
-    document.getElementById('hab_act_anterior_box').style.display = 'none';
+
+  // ── Determinar fuente de actividad ──────────────────────────────────────────
+  let fuenteAct = null;
+  if (_habDatos?.act) {
+    fuenteAct = _habDatos.act; // sesión actual tiene prioridad
+  } else if (prev?.hab_actividad_json) {
+    try { fuenteAct = JSON.parse(prev.hab_actividad_json); } catch(e) {}
   }
 
-  // Datos anteriores – alimentación
-  if(prev?.hab_alimentacion_json) {
-    try {
-      const pal = JSON.parse(prev.hab_alimentacion_json);
-      const partes = [];
-      if(pal.hiposodica) partes.push('Hiposódica: '+pal.hiposodica);
-      if(pal.frutas) partes.push('Frutas: '+pal.frutas+'/día');
-      if(pal.verduras) partes.push('Verduras: '+pal.verduras+'/día');
-      if(pal.lacteos) partes.push('Lácteos: '+pal.lacteos+'/día');
-      if(pal.pescado) partes.push('Pescado: '+pal.pescado+'/sem');
-      if(pal.c_rojas) partes.push('C.rojas: '+pal.c_rojas+'/sem');
-      if(pal.legumbres) partes.push('Legumbres: '+pal.legumbres+'/sem');
-      if(pal.pollo_cerdo) partes.push('Pollo/cerdo: '+pal.pollo_cerdo);
-      if(pal.edulc) partes.push(pal.edulc);
-      if(pal.social) partes.push('Alim.social: '+pal.social);
-      if(pal.notas) partes.push(pal.notas);
-      document.getElementById('hab_ali_anterior_txt').textContent = partes.join(' · ') || '—';
-      document.getElementById('hab_ali_anterior_box').style.display = 'block';
-    } catch(e){ document.getElementById('hab_ali_anterior_box').style.display='none'; }
-  } else {
-    document.getElementById('hab_ali_anterior_box').style.display = 'none';
+  // ── Determinar fuente de alimentación ───────────────────────────────────────
+  let fuenteAli = null;
+  if (_habDatos?.ali) {
+    fuenteAli = _habDatos.ali;
+  } else if (prev?.hab_alimentacion_json) {
+    try { fuenteAli = JSON.parse(prev.hab_alimentacion_json); } catch(e) {}
   }
 
-  // Pre-cargar actividades si ya existen en sesión
-  if(_habDatos?.act?.actividades) {
-    _actItems = JSON.parse(JSON.stringify(_habDatos.act.actividades));
-  } else {
-    _actItems = [];
-  }
-  renderActItems();
+  // ── Ocultar los recuadros "Última consulta" (ya pre-cargamos los campos) ────
+  document.getElementById('hab_act_anterior_box').style.display = 'none';
+  document.getElementById('hab_ali_anterior_box').style.display = 'none';
 
-  // Pre-cargar alimentación
-  if(_habDatos?.ali) {
-    const al = _habDatos.ali;
-    const radio = (name, val) => { const r = document.querySelector('input[name="'+name+'"][value="'+val+'"]'); if(r) r.checked=true; };
-    radio('hab_upd_hiposodica', al.hiposodica||'');
-    radio('hab_upd_edulc', al.edulc||'');
-    radio('hab_upd_pollo_cerdo', al.pollo_cerdo||'');
-    radio('hab_upd_ali_social', al.social||'');
-    radio('hab_upd_ali_cambio', al.cambio||'');
-    ['frutas','verduras','lacteos','pescado','c_rojas','legumbres'].forEach(k=>{
-      const el = document.getElementById('hab_upd_'+k); if(el) el.value = al[k]||'';
-    });
-    const notasEl = document.getElementById('hab_upd_ali_notas'); if(notasEl) notasEl.value = al.notas||'';
-  }
+  // ── Pre-cargar actividad ─────────────────────────────────────────────────────
+  // Limpiar primero
+  _actItems = [];
+  document.querySelectorAll('input[name="hab_upd_pausas"]').forEach(r => r.checked = false);
+  const pasosEl = document.getElementById('hab_upd_pasos'); if(pasosEl) pasosEl.value = '';
+  document.querySelectorAll('input[name="hab_upd_pasos_obj"]').forEach(r => r.checked = false);
+  const pasosCustomEl = document.getElementById('hab_upd_pasos_obj_custom'); if(pasosCustomEl) pasosCustomEl.value = '';
+  document.querySelectorAll('input[name="hab_upd_act_cambio"]').forEach(r => r.checked = false);
+  const actNotasEl = document.getElementById('hab_upd_act_notas'); if(actNotasEl) actNotasEl.value = '';
 
-  // Pre-cargar comparación, pausas, pasos y notas de actividad
-  if(_habDatos?.act) {
-    const a = _habDatos.act;
-    const radio = (name, val) => { const r = document.querySelector('input[name="'+name+'"][value="'+val+'"]'); if(r) r.checked=true; };
-    radio('hab_upd_act_cambio', a.cambio||'');
-    if(a.pausas) radio('hab_upd_pausas', a.pausas);
-    if(a.pasos) {
-      const el = document.getElementById('hab_upd_pasos'); if(el) el.value = a.pasos;
+  if (fuenteAct) {
+    const a = fuenteAct;
+    const radio = (name, val) => { if(!val) return; const r = document.querySelector('input[name="'+name+'"][value="'+val+'"]'); if(r) r.checked=true; };
+
+    // Actividades (array nuevo formato)
+    if (a.actividades && a.actividades.length) {
+      _actItems = JSON.parse(JSON.stringify(a.actividades));
     }
-    if(a.pasosObj) {
+    if (a.pausas)  radio('hab_upd_pausas', a.pausas);
+    if (a.pasos)   { const el = document.getElementById('hab_upd_pasos'); if(el) el.value = a.pasos; }
+    if (a.pasosObj) {
       const isCustom = !['5000','7500','10000',''].includes(String(a.pasosObj));
       radio('hab_upd_pasos_obj', isCustom ? 'custom' : String(a.pasosObj));
       if(isCustom) { const el = document.getElementById('hab_upd_pasos_obj_custom'); if(el) el.value = a.pasosObj; }
     }
-    calcularObjetivoPasos();
-    const notasEl = document.getElementById('hab_upd_act_notas'); if(notasEl) notasEl.value = a.notas||'';
+    if (a.cambio)  radio('hab_upd_act_cambio', a.cambio);
+    if (a.notas)   { const el = document.getElementById('hab_upd_act_notas'); if(el) el.value = a.notas; }
+  }
+  renderActItems();
+  calcularObjetivoPasos();
+
+  // ── Pre-cargar alimentación ──────────────────────────────────────────────────
+  // Limpiar primero
+  ['hab_upd_hiposodica','hab_upd_edulc','hab_upd_pollo_cerdo','hab_upd_ali_social','hab_upd_ali_cambio'].forEach(name => {
+    document.querySelectorAll('input[name="'+name+'"]').forEach(r => r.checked = false);
+  });
+  ['frutas','verduras','lacteos','pescado','c_rojas','legumbres'].forEach(k => {
+    const el = document.getElementById('hab_upd_'+k); if(el) el.value = '';
+  });
+  const aliNotasEl = document.getElementById('hab_upd_ali_notas'); if(aliNotasEl) aliNotasEl.value = '';
+
+  if (fuenteAli) {
+    const al = fuenteAli;
+    const radio = (name, val) => { if(!val) return; const r = document.querySelector('input[name="'+name+'"][value="'+val+'"]'); if(r) r.checked=true; };
+    radio('hab_upd_hiposodica', al.hiposodica||'');
+    radio('hab_upd_edulc',      al.edulc||'');
+    radio('hab_upd_pollo_cerdo',al.pollo_cerdo||'');
+    radio('hab_upd_ali_social', al.social||'');
+    radio('hab_upd_ali_cambio', al.cambio||'');
+    ['frutas','verduras','lacteos','pescado','c_rojas','legumbres'].forEach(k => {
+      const el = document.getElementById('hab_upd_'+k); if(el) el.value = al[k]||'';
+    });
+    if(al.notas) { const el = document.getElementById('hab_upd_ali_notas'); if(el) el.value = al.notas; }
   }
 
   document.getElementById('modal_habitos_upd').style.display = 'flex';
