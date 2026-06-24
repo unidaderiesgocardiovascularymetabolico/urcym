@@ -3481,33 +3481,51 @@ function mostrarModalPestanasDirty(tabs, opts) {
     if(subEl)    subEl.textContent    = opts.subtitulo || 'Las siguientes pestañas tienen datos modificados. ¿Qué querés guardar?';
 
     // Botón secundario dinámico
-    const btnSec = document.getElementById('modalGP_soloEvol');
-    if(btnSec) btnSec.textContent = opts.btnSecundarioLabel || 'Cerrar sin guardar';
+    const btnSecOld = document.getElementById('modalGP_soloEvol');
+    if(btnSecOld) btnSecOld.textContent = opts.btnSecundarioLabel || 'Cerrar sin guardar';
 
+    // Construir filas — una por pestaña
     lista.innerHTML = '';
     tabs.forEach(tab => {
       const row = document.createElement('label');
-      row.style.cssText = 'display:flex;align-items:center;gap:10px;padding:10px 14px;border:1.5px solid var(--border);border-radius:10px;cursor:pointer;font-size:13px;font-family:var(--font-main);transition:background .15s';
-      row.innerHTML = `<input type="checkbox" checked data-key="${tab.key}" style="accent-color:var(--teal);width:16px;height:16px;flex-shrink:0"> <span>Guardar cambios en <strong>${tab.label}</strong></span>`;
-      row.querySelector('input').addEventListener('change', function(){ row.style.background = this.checked ? 'var(--teal-light)' : ''; });
-      row.style.background = 'var(--teal-light)';
+      row.style.cssText = 'display:flex;align-items:center;gap:10px;padding:10px 14px;border:1.5px solid var(--border);border-radius:10px;cursor:pointer;font-size:13px;font-family:var(--font-main);transition:background .15s;background:var(--teal-light)';
+      const chk = document.createElement('input');
+      chk.type = 'checkbox';
+      chk.checked = true;
+      chk.dataset.key = tab.key;
+      chk.style.cssText = 'accent-color:var(--teal);width:16px;height:16px;flex-shrink:0';
+      chk.addEventListener('change', function() {
+        row.style.background = this.checked ? 'var(--teal-light)' : '';
+      });
+      const txt = document.createElement('span');
+      txt.innerHTML = `Guardar cambios en <strong>${tab.label}</strong>`;
+      row.appendChild(chk);
+      row.appendChild(txt);
       lista.appendChild(row);
     });
+
     modal.style.display = 'flex';
 
     const cleanup = (elegidas) => { modal.style.display = 'none'; resolve(elegidas); };
+
+    // Clonar botones para limpiar todos los listeners acumulados de llamadas anteriores
+    ['modalGP_guardarTodo','modalGP_soloEvol','modalGP_cancelar'].forEach(id => {
+      const old = document.getElementById(id);
+      if(!old) return;
+      const fresh = old.cloneNode(true);
+      old.parentNode.replaceChild(fresh, old);
+    });
 
     document.getElementById('modalGP_guardarTodo').onclick = () => {
       cleanup(new Set(tabs.map(t => t.key)));
     };
     document.getElementById('modalGP_soloEvol').onclick = () => {
-      // Si opts.btnSecundarioGuarda=true guarda los tildados; de lo contrario no guarda nada
       if(opts.btnSecundarioGuarda) {
         const elegidas = new Set();
         lista.querySelectorAll('input[data-key]').forEach(inp => { if(inp.checked) elegidas.add(inp.dataset.key); });
         cleanup(elegidas);
       } else {
-        cleanup(new Set()); // descarta todo
+        cleanup(new Set());
       }
     };
     document.getElementById('modalGP_cancelar').onclick = () => cleanup(null);
