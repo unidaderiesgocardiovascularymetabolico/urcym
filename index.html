@@ -3466,10 +3466,24 @@ function mostrarGuardModal(msg) {
 // Modal para elegir qué pestañas guardar antes de guardar evolución.
 // tabs: [{key, label, fn}]
 // Devuelve: Set de keys a guardar, o null si canceló.
-function mostrarModalPestanasDirty(tabs) {
+// opts: { titulo, subtitulo, btnSecundarioLabel, btnSecundarioGuarda }
+// Devuelve Set de keys a guardar, o null si canceló.
+function mostrarModalPestanasDirty(tabs, opts) {
+  opts = opts || {};
   return new Promise(resolve => {
     const modal = document.getElementById('modalGuardarPestanas');
     const lista = document.getElementById('modalGP_lista');
+
+    // Título / subtítulo dinámico
+    const tituloEl = document.getElementById('modalGP_titulo');
+    const subEl    = document.getElementById('modalGP_subtitulo');
+    if(tituloEl) tituloEl.textContent = opts.titulo    || '⚠️ Cambios sin guardar';
+    if(subEl)    subEl.textContent    = opts.subtitulo || 'Las siguientes pestañas tienen datos modificados. ¿Qué querés guardar?';
+
+    // Botón secundario dinámico
+    const btnSec = document.getElementById('modalGP_soloEvol');
+    if(btnSec) btnSec.textContent = opts.btnSecundarioLabel || 'Cerrar sin guardar';
+
     lista.innerHTML = '';
     tabs.forEach(tab => {
       const row = document.createElement('label');
@@ -3487,10 +3501,14 @@ function mostrarModalPestanasDirty(tabs) {
       cleanup(new Set(tabs.map(t => t.key)));
     };
     document.getElementById('modalGP_soloEvol').onclick = () => {
-      const elegidas = new Set();
-      lista.querySelectorAll('input[data-key]').forEach(inp => { if(inp.checked) elegidas.add(inp.dataset.key); });
-      // "Solo evolución" = no guardar ninguna pestaña
-      cleanup(new Set());
+      // Si opts.btnSecundarioGuarda=true guarda los tildados; de lo contrario no guarda nada
+      if(opts.btnSecundarioGuarda) {
+        const elegidas = new Set();
+        lista.querySelectorAll('input[data-key]').forEach(inp => { if(inp.checked) elegidas.add(inp.dataset.key); });
+        cleanup(elegidas);
+      } else {
+        cleanup(new Set()); // descarta todo
+      }
     };
     document.getElementById('modalGP_cancelar').onclick = () => cleanup(null);
   });
@@ -4850,18 +4868,48 @@ async function activarTabPaciente(dni) {
   else showPage('pacientes');
 }
 
-function cerrarTabPaciente(ev, dni) {
+async function cerrarTabPaciente(ev, dni) {
   if(ev) { ev.preventDefault(); ev.stopPropagation(); }
-  // Si la pestaña tiene borrador sin guardar, pedir confirmación
-  const tieneBorrador = sessionStorage.getItem('urcym_tab_' + dni) !== null;
+
   const esPacienteActual = pacienteActual && String(pacienteActual.dni) === String(dni);
+  const tieneBorrador    = sessionStorage.getItem('urcym_tab_' + dni) !== null;
   const tieneEditorConTexto = esPacienteActual &&
     !!document.getElementById('evol_editor')?.innerText?.trim();
-  if(tieneBorrador || tieneEditorConTexto) {
-    const nombre = (pacienteTabsAbiertas.find(t => String(t.dni) === String(dni)) || {}).nombre || 'este paciente';
-    const ok = confirm('La evolución de ' + nombre + ' tiene cambios sin guardar.\n\n¿Cerrar igual sin guardar?');
-    if(!ok) return;
+
+  // Armar lista de pestañas con datos sin guardar (solo para el paciente activo)
+  const tabsPendientes = [];
+  if(esPacienteActual) {
+    if(_dirty.lab)  tabsPendientes.push({key:'lab',  label:'Laboratorio',   fn: ()=>guardarDatosPac('lab_tabla_wrap').then(()=>limpiarDirty('lab'))});
+    if(_dirty.ant)  tabsPendientes.push({key:'ant',  label:'Antropometría', fn: ()=>guardarDatosPac('ant_tabla_wrap').then(()=>limpiarDirty('ant'))});
+    if(_dirty.est)  tabsPendientes.push({key:'est',  label:'Estudios',      fn: ()=>guardarDatosPac('est_tabla_wrap').then(()=>limpiarDirty('est'))});
+    if(_dirty.vac)  tabsPendientes.push({key:'vac',  label:'Vacunación',    fn: ()=>guardarVacunacion()});
+    if(_dirty.mdpa) tabsPendientes.push({key:'mdpa', label:'MDPA',          fn: ()=>mdpaGuardar()});
   }
+
+  const hayAlgo = tabsPendientes.length > 0 || tieneBorrador || tieneEditorConTexto;
+
+  if(hayAlgo) {
+    if(tabsPendientes.length > 0) {
+      // Hay tablas con cambios → mostrar modal con checkboxes
+      const nombre = (pacienteTabsAbiertas.find(t => String(t.dni) === String(dni)) || {}).nombre || 'este paciente';
+      const elegidas = await mostrarModalPestanasDirty(tabsPendientes, {
+        titulo: '⚠️ Cambios sin guardar',
+        subtitulo: `Hay datos modificados en la historia de ${nombre}. ¿Qué querés guardar antes de cerrar?`,
+        btnSecundarioLabel: 'Cerrar sin guardar',
+        btnSecundarioGuarda: false
+      });
+      if(elegidas === null) return; // canceló
+      for(const tab of tabsPendientes) {
+        if(elegidas.has(tab.key)) await tab.fn();
+      }
+    } else {
+      // Solo hay borrador de evolución → confirm simple
+      const nombre = (pacienteTabsAbiertas.find(t => String(t.dni) === String(dni)) || {}).nombre || 'este paciente';
+      const ok = confirm('La evolución de ' + nombre + ' tiene cambios sin guardar.\n\n¿Cerrar igual sin guardar?');
+      if(!ok) return;
+    }
+  }
+
   _limpiarEstadoPestana(dni);
   pacienteTabsAbiertas = pacienteTabsAbiertas.filter(t => String(t.dni) !== String(dni));
   renderTabsPacientes(pacienteActual && pacienteActual.dni);
@@ -6934,26 +6982,37 @@ async function _hcEliminarEntrada(id, fechaStr) {
 }
 
 async function volverDesdeEvolucion() {
-  const hayDirtyTablas = _dirty.lab || _dirty.ant || _dirty.est;
+  const hayDirtyTablas = _dirty.lab || _dirty.ant || _dirty.est || _dirty.vac || _dirty.mdpa;
   const editorConTexto = !!document.getElementById('evol_editor').innerText.trim();
   const hayDirtyEvol = _dirty.evol || editorConTexto;
 
-  if(hayDirtyTablas || hayDirtyEvol) {
-    let msg = 'Tenés cambios sin guardar. ¿Qué querés hacer antes de salir?';
-    if(hayDirtyTablas && !hayDirtyEvol) msg = 'Hay datos de tablas sin guardar. ¿Qué querés hacer?';
-    if(!hayDirtyTablas && hayDirtyEvol) msg = 'La evolución no fue guardada. ¿Qué querés hacer?';
-    const accion = await mostrarGuardModal(msg);
+  if(hayDirtyTablas) {
+    // Hay pestañas con datos sin guardar → modal con checkboxes
+    const tabsPendientes = [];
+    if(_dirty.lab)  tabsPendientes.push({key:'lab',  label:'Laboratorio',   fn: ()=>guardarDatosPac('lab_tabla_wrap').then(()=>limpiarDirty('lab'))});
+    if(_dirty.ant)  tabsPendientes.push({key:'ant',  label:'Antropometría', fn: ()=>guardarDatosPac('ant_tabla_wrap').then(()=>limpiarDirty('ant'))});
+    if(_dirty.est)  tabsPendientes.push({key:'est',  label:'Estudios',      fn: ()=>guardarDatosPac('est_tabla_wrap').then(()=>limpiarDirty('est'))});
+    if(_dirty.vac)  tabsPendientes.push({key:'vac',  label:'Vacunación',    fn: ()=>guardarVacunacion()});
+    if(_dirty.mdpa) tabsPendientes.push({key:'mdpa', label:'MDPA',          fn: ()=>mdpaGuardar()});
+    const elegidas = await mostrarModalPestanasDirty(tabsPendientes, {
+      titulo: '⚠️ Cambios sin guardar',
+      subtitulo: 'Hay pestañas con datos modificados. ¿Qué querés guardar antes de volver?',
+      btnSecundarioLabel: 'Volver sin guardar',
+      btnSecundarioGuarda: false
+    });
+    if(elegidas === null) return; // canceló
+    for(const tab of tabsPendientes) {
+      if(elegidas.has(tab.key)) await tab.fn();
+    }
+    if(pacienteActual) _guardarEstadoPestana(pacienteActual.dni);
+  } else if(hayDirtyEvol) {
+    const accion = await mostrarGuardModal('La evolución no fue guardada. ¿Qué querés hacer?');
     if(accion === 'cancelar') return;
     if(accion === 'guardar') {
       await guardarEvolucion();
       return;
     }
-    // Descartar: conservar borrador en sessionStorage para recuperar desde la pestaña
     if(pacienteActual) _guardarEstadoPestana(pacienteActual.dni);
-    // Guardar tablas con cambios para no perder datos
-    if(_dirty.lab && labDatos.columnas && labDatos.columnas.length) await guardarDatosPac('lab_tabla_wrap');
-    if(_dirty.ant && antDatos.columnas && antDatos.columnas.length) await guardarDatosPac('ant_tabla_wrap');
-    if(_dirty.est && estDatos.columnas && estDatos.columnas.length) await guardarDatosPac('est_tabla_wrap');
   }
   showPage('pacientes');
 }
@@ -6971,7 +7030,12 @@ async function guardarEvolucion() {
   if(_dirty.mdpa) tabsPendientes.push({key:'mdpa', label:'MDPA',           fn: ()=>mdpaGuardar()});
 
   if(tabsPendientes.length > 0) {
-    const elegidas = await mostrarModalPestanasDirty(tabsPendientes);
+    const elegidas = await mostrarModalPestanasDirty(tabsPendientes, {
+      titulo: '⚠️ Guardar evolución',
+      subtitulo: 'Hay pestañas con datos modificados. ¿Qué querés guardar junto con la evolución?',
+      btnSecundarioLabel: 'Solo evolución',
+      btnSecundarioGuarda: false
+    });
     if(elegidas === null) return; // canceló
     for(const tab of tabsPendientes) {
       if(elegidas.has(tab.key)) await tab.fn();
@@ -10319,12 +10383,12 @@ ${profNombreMDPA ? `<div class="prof-strip">
 <!-- Modal: guardar pestañas pendientes antes de guardar evolución -->
 <div id="modalGuardarPestanas" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;align-items:center;justify-content:center">
   <div style="background:white;border-radius:16px;padding:28px 32px;max-width:420px;width:92%;box-shadow:0 20px 60px rgba(0,0,0,.2)">
-    <div style="font-family:var(--font-display);font-size:16px;font-weight:700;color:var(--text);margin-bottom:6px">⚠️ Cambios sin guardar</div>
-    <div style="font-size:13px;color:var(--text-soft);margin-bottom:18px;line-height:1.5">Las siguientes pestañas tienen datos modificados. ¿Qué querés guardar junto con la evolución?</div>
+    <div id="modalGP_titulo" style="font-family:var(--font-display);font-size:16px;font-weight:700;color:var(--text);margin-bottom:6px">⚠️ Cambios sin guardar</div>
+    <div id="modalGP_subtitulo" style="font-size:13px;color:var(--text-soft);margin-bottom:18px;line-height:1.5">Las siguientes pestañas tienen datos modificados. ¿Qué querés guardar?</div>
     <div id="modalGP_lista" style="display:flex;flex-direction:column;gap:8px;margin-bottom:20px"></div>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
       <button id="modalGP_guardarTodo" style="flex:1;padding:10px 14px;border:none;border-radius:9px;background:var(--teal);color:white;font-size:13px;font-weight:700;cursor:pointer;font-family:var(--font-main)">💾 Guardar todo</button>
-      <button id="modalGP_soloEvol" style="flex:1;padding:10px 14px;border:1.5px solid var(--border);border-radius:9px;background:white;color:var(--text);font-size:13px;cursor:pointer;font-family:var(--font-main)">Solo evolución</button>
+      <button id="modalGP_soloEvol" style="flex:1;padding:10px 14px;border:1.5px solid var(--border);border-radius:9px;background:white;color:var(--text);font-size:13px;cursor:pointer;font-family:var(--font-main)">Cerrar sin guardar</button>
       <button id="modalGP_cancelar" style="width:100%;padding:9px;border:none;border-radius:9px;background:var(--gray);color:var(--text-soft);font-size:12px;cursor:pointer;font-family:var(--font-main);margin-top:2px">Cancelar</button>
     </div>
   </div>
