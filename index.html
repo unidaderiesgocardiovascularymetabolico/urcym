@@ -4897,9 +4897,9 @@ async function cerrarTabPaciente(ev, dni) {
   // Armar lista de pestañas con datos sin guardar (solo para el paciente activo)
   const tabsPendientes = [];
   if(esPacienteActual) {
-    if(_dirty.lab)  tabsPendientes.push({key:'lab',  label:'Laboratorio',   fn: ()=>guardarDatosPac('lab_tabla_wrap').then(()=>limpiarDirty('lab'))});
-    if(_dirty.ant)  tabsPendientes.push({key:'ant',  label:'Antropometría', fn: ()=>guardarDatosPac('ant_tabla_wrap').then(()=>limpiarDirty('ant'))});
-    if(_dirty.est)  tabsPendientes.push({key:'est',  label:'Estudios',      fn: ()=>guardarDatosPac('est_tabla_wrap').then(()=>limpiarDirty('est'))});
+    if(_dirty.lab)  tabsPendientes.push({key:'lab',  label:'Laboratorio',   fn: ()=>guardarLabYVolver()});
+    if(_dirty.ant)  tabsPendientes.push({key:'ant',  label:'Antropometría', fn: ()=>guardarAntYVolver()});
+    if(_dirty.est)  tabsPendientes.push({key:'est',  label:'Estudios',      fn: ()=>guardarEstYVolver()});
     if(_dirty.vac)  tabsPendientes.push({key:'vac',  label:'Vacunación',    fn: ()=>guardarVacunacion()});
     if(_dirty.mdpa) tabsPendientes.push({key:'mdpa', label:'MDPA',          fn: ()=>mdpaGuardar()});
   }
@@ -6541,11 +6541,12 @@ function setActiveSidebarLeft(el) {
 async function switchPacMainTab(tab) {
   if(_tabActivo !== tab) {
     const fromTab = _tabActivo;
-    // Auto-guardar SOLO si hay cambios reales en esa pestaña
-    if(fromTab === 'lab' && _dirty.lab) await guardarDatosPac('lab_tabla_wrap');
-    else if(fromTab === 'ant' && _dirty.ant) await guardarDatosPac('ant_tabla_wrap');
-    else if(fromTab === 'est' && _dirty.est) await guardarDatosPac('est_tabla_wrap');
-    limpiarDirty(fromTab);
+    // Auto-guardar a Supabase al cambiar de pestaña, pero NO limpiar dirty:
+    // el dirty se conserva para que el modal al cerrar/volver pregunte por todos los pendientes
+    if(fromTab === 'lab' && _dirty.lab) { await guardarDatosPac('lab_tabla_wrap'); sincronizarRO(); }
+    else if(fromTab === 'ant' && _dirty.ant) { await guardarDatosPac('ant_tabla_wrap'); sincronizarRO(); }
+    else if(fromTab === 'est' && _dirty.est) { await guardarDatosPac('est_tabla_wrap'); sincronizarRO(); }
+    // dirty se limpia solo cuando el usuario guarda explícitamente (modal o guardarEvolucion)
   }
   // Al salir de mdpa, resetear el interior para que no reaparezca
   if(_tabActivo === 'mdpa' && tab !== 'mdpa') {
@@ -7011,9 +7012,9 @@ async function volverDesdeEvolucion() {
   if(hayDirtyTablas) {
     // Hay pestañas con datos sin guardar → modal con checkboxes
     const tabsPendientes = [];
-    if(_dirty.lab)  tabsPendientes.push({key:'lab',  label:'Laboratorio',   fn: ()=>guardarDatosPac('lab_tabla_wrap').then(()=>limpiarDirty('lab'))});
-    if(_dirty.ant)  tabsPendientes.push({key:'ant',  label:'Antropometría', fn: ()=>guardarDatosPac('ant_tabla_wrap').then(()=>limpiarDirty('ant'))});
-    if(_dirty.est)  tabsPendientes.push({key:'est',  label:'Estudios',      fn: ()=>guardarDatosPac('est_tabla_wrap').then(()=>limpiarDirty('est'))});
+    if(_dirty.lab)  tabsPendientes.push({key:'lab',  label:'Laboratorio',   fn: ()=>guardarLabYVolver()});
+    if(_dirty.ant)  tabsPendientes.push({key:'ant',  label:'Antropometría', fn: ()=>guardarAntYVolver()});
+    if(_dirty.est)  tabsPendientes.push({key:'est',  label:'Estudios',      fn: ()=>guardarEstYVolver()});
     if(_dirty.vac)  tabsPendientes.push({key:'vac',  label:'Vacunación',    fn: ()=>guardarVacunacion()});
     if(_dirty.mdpa) tabsPendientes.push({key:'mdpa', label:'MDPA',          fn: ()=>mdpaGuardar()});
     const elegidas = await mostrarModalPestanasDirty(tabsPendientes, {
@@ -7045,9 +7046,9 @@ async function guardarEvolucion() {
 
   // — Chequear pestañas con cambios sin guardar —
   const tabsPendientes = [];
-  if(_dirty.lab)  tabsPendientes.push({key:'lab',  label:'Laboratorio',    fn: ()=>guardarDatosPac('lab_tabla_wrap').then(()=>limpiarDirty('lab'))});
-  if(_dirty.ant)  tabsPendientes.push({key:'ant',  label:'Antropometría',  fn: ()=>guardarDatosPac('ant_tabla_wrap').then(()=>limpiarDirty('ant'))});
-  if(_dirty.est)  tabsPendientes.push({key:'est',  label:'Estudios',       fn: ()=>guardarDatosPac('est_tabla_wrap').then(()=>limpiarDirty('est'))});
+  if(_dirty.lab)  tabsPendientes.push({key:'lab',  label:'Laboratorio',    fn: ()=>guardarLabYVolver()});
+  if(_dirty.ant)  tabsPendientes.push({key:'ant',  label:'Antropometría',  fn: ()=>guardarAntYVolver()});
+  if(_dirty.est)  tabsPendientes.push({key:'est',  label:'Estudios',       fn: ()=>guardarEstYVolver()});
   if(_dirty.vac)  tabsPendientes.push({key:'vac',  label:'Vacunación',     fn: ()=>guardarVacunacion()});
   if(_dirty.mdpa) tabsPendientes.push({key:'mdpa', label:'MDPA',           fn: ()=>mdpaGuardar()});
 
