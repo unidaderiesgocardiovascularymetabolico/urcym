@@ -6688,6 +6688,8 @@ async function guardarClinica() {
         }
       }
     } catch(e) { console.warn('generarTextoClinico:', e); }
+    if (evolClinicaSnapshot?.clinica?.hab_actividad_json)    clinicaData.hab_actividad_json    = evolClinicaSnapshot.clinica.hab_actividad_json;
+    if (evolClinicaSnapshot?.clinica?.hab_alimentacion_json) clinicaData.hab_alimentacion_json = evolClinicaSnapshot.clinica.hab_alimentacion_json;
     evolClinicaSnapshot = { clinica: clinicaData, medicacion: meds };
     // Insertar fila en evoluciones solo con el snapshot para que el historial del relojito lo vea
     try {
@@ -7481,6 +7483,18 @@ async function guardarEvolucion() {
     btnGuardar.textContent = '💾 Guardar evolución';
     return;
   }
+  // Persistir hab_* antes de cerrar el paciente
+  try {
+    const _hA = evolClinicaSnapshot?.clinica?.hab_actividad_json;
+    const _hL = evolClinicaSnapshot?.clinica?.hab_alimentacion_json;
+    if (_hA || _hL) {
+      const _hu = {dni_paciente: p.dni};
+      if(_hA) _hu.hab_actividad_json    = _hA;
+      if(_hL) _hu.hab_alimentacion_json = _hL;
+      await sb.from('paciente_clinica').upsert(_hu,{onConflict:'dni_paciente'});
+    }
+  } catch(e){ console.warn('guardarEvolucion hab:', e); }
+
   limpiarDirty('evol');
   // Limpiar borrador de sessionStorage al guardar evolución real
   _limpiarEstadoPestana(p.dni);
@@ -7736,50 +7750,27 @@ async function abrirModalHabitos() {
   const diasNueva = document.getElementById('hab_nueva_dias');
   if(diasNueva) _crearDiasBtns(diasNueva);
 
-  // Fuente de datos: primero lo que ya se cargó en la sesión actual (_habDatos),
-  // si no hay, los datos guardados en Supabase (evolClinicaSnapshot o consulta directa)
-  let prev = evolClinicaSnapshot?.clinica;
-
-  // Si el snapshot no tiene los campos hab_*, los buscamos directamente en paciente_clinica
-  if (
-    !_habDatos?.act && !_habDatos?.ali &&
-    !(prev?.hab_actividad_json) && !(prev?.hab_alimentacion_json) &&
-    pacienteActual?.dni
-  ) {
+  // ── Fuente: siempre desde BD (datos permanentes del paciente) ──
+  let fuenteAct = null, fuenteAli = null;
+  if (evolClinicaSnapshot?.clinica?.hab_actividad_json)
+    try { fuenteAct = JSON.parse(evolClinicaSnapshot.clinica.hab_actividad_json); } catch(e) {}
+  if (evolClinicaSnapshot?.clinica?.hab_alimentacion_json)
+    try { fuenteAli = JSON.parse(evolClinicaSnapshot.clinica.hab_alimentacion_json); } catch(e) {}
+  if ((!fuenteAct || !fuenteAli) && pacienteActual?.dni) {
     try {
-      const { data: habRow } = await sb
-        .from('paciente_clinica')
-        .select('hab_actividad_json, hab_alimentacion_json')
-        .eq('dni_paciente', pacienteActual.dni)
-        .maybeSingle();
-      if (habRow) {
-        // Enriquecer el snapshot en memoria para que futuras aperturas no necesiten otra consulta
-        if (evolClinicaSnapshot?.clinica) {
-          if (habRow.hab_actividad_json)  evolClinicaSnapshot.clinica.hab_actividad_json  = habRow.hab_actividad_json;
-          if (habRow.hab_alimentacion_json) evolClinicaSnapshot.clinica.hab_alimentacion_json = habRow.hab_alimentacion_json;
-        }
-        prev = { ...(prev || {}), ...habRow };
+      const {data:_hr} = await sb.from('paciente_clinica')
+        .select('hab_actividad_json,hab_alimentacion_json')
+        .eq('dni_paciente', pacienteActual.dni).maybeSingle();
+      if (_hr) {
+        if (!evolClinicaSnapshot) evolClinicaSnapshot = {clinica:{},medicacion:[]};
+        if (!evolClinicaSnapshot.clinica) evolClinicaSnapshot.clinica = {};
+        if (_hr.hab_actividad_json)    { evolClinicaSnapshot.clinica.hab_actividad_json    = _hr.hab_actividad_json;    if(!fuenteAct) try{fuenteAct=JSON.parse(_hr.hab_actividad_json);}catch(e){} }
+        if (_hr.hab_alimentacion_json) { evolClinicaSnapshot.clinica.hab_alimentacion_json = _hr.hab_alimentacion_json; if(!fuenteAli) try{fuenteAli=JSON.parse(_hr.hab_alimentacion_json);}catch(e){} }
       }
-    } catch(e) { console.warn('[abrirModalHabitos] fetch hab desde BD:', e); }
+    } catch(e) { console.warn('[abrirModalHabitos] BD:', e); }
   }
 
-  // ── Determinar fuente de actividad ──────────────────────────────────────────
-  let fuenteAct = null;
-  if (_habDatos?.act) {
-    fuenteAct = _habDatos.act; // sesión actual tiene prioridad
-  } else if (prev?.hab_actividad_json) {
-    try { fuenteAct = JSON.parse(prev.hab_actividad_json); } catch(e) {}
-  }
-
-  // ── Determinar fuente de alimentación ───────────────────────────────────────
-  let fuenteAli = null;
-  if (_habDatos?.ali) {
-    fuenteAli = _habDatos.ali;
-  } else if (prev?.hab_alimentacion_json) {
-    try { fuenteAli = JSON.parse(prev.hab_alimentacion_json); } catch(e) {}
-  }
-
-  // ── Ocultar los recuadros "Última consulta" (ya pre-cargamos los campos) ────
+  // ── Ocultar los recuadros "Última consulta" ────
   document.getElementById('hab_act_anterior_box').style.display = 'none';
   document.getElementById('hab_ali_anterior_box').style.display = 'none';
 
@@ -7898,14 +7889,23 @@ function renderActItems() {
       return `<button type="button" style="${bStyle}" onclick="_habToggleDia(${i},${di+1})">${lbl}</button>`;
     }).join('');
     return `<div style="padding:10px 14px;border:1.5px solid ${c.border};border-radius:10px;background:${c.bg}">
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
         <span style="font-size:13px;font-weight:700;color:${c.txt}">${a.tipo}</span>
-        <span style="font-size:11px;color:#888">${[a.intensidad, a.minutos ? a.minutos+'min/ses':'', minSem ? '→ '+minSem+'min/sem':''].filter(Boolean).join(' · ')}</span>
+        ${a.intensidad ? `<span style="font-size:10px;font-weight:600;padding:2px 8px;border-radius:10px;background:${c.border};color:${c.txt}">${a.intensidad}</span>` : ''}
+        ${minSem ? `<span style="font-size:11px;color:#888">→ ${minSem} min/sem</span>` : ''}
         <button type="button" onclick="quitarActividadHab(${i})" style="margin-left:auto;border:none;background:none;color:#ccc;font-size:18px;cursor:pointer;padding:0 2px;line-height:1">×</button>
       </div>
-      <div style="display:flex;align-items:center;gap:6px">
-        <span style="font-size:10px;color:#888;font-weight:600;text-transform:uppercase;letter-spacing:.04em;margin-right:2px">Días:</span>
-        ${diaButtons}
+      <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+        <div style="display:flex;align-items:center;gap:6px">
+          <span style="font-size:10px;color:#888;font-weight:700;text-transform:uppercase;letter-spacing:.04em">Min/ses:</span>
+          <input type="number" min="1" max="300" value="${a.minutos||''}" placeholder="45"
+            style="width:58px;padding:4px 6px;border:1.5px solid ${c.border};border-radius:7px;font-size:13px;font-family:var(--font-main);text-align:center;background:white;color:#333"
+            onchange="_habSetMinutos(${i},this.value)" onblur="_habSetMinutos(${i},this.value)">
+        </div>
+        <div style="display:flex;align-items:center;gap:5px">
+          <span style="font-size:10px;color:#888;font-weight:700;text-transform:uppercase;letter-spacing:.04em">Días:</span>
+          ${diaButtons}
+        </div>
       </div>
     </div>`;
   }).join('');
@@ -8066,8 +8066,21 @@ function confirmarModalHabitos() {
   if(hayAli) _habDatos.ali = { hiposodica, edulc, frutas, verduras, lacteos, pescado, c_rojas, legumbres, pollo_cerdo, social, cambio: aliCambio, notas: aliNotas };
   if(!hayAct && !hayAli) _habDatos = null;
 
+  // Guardar en paciente_clinica AL INSTANTE
+  (async function(){
+    if(!_habDatos || !pacienteActual?.dni) return;
+    const _upd = {dni_paciente: pacienteActual.dni};
+    if(_habDatos.act) _upd.hab_actividad_json    = JSON.stringify(_habDatos.act);
+    if(_habDatos.ali) _upd.hab_alimentacion_json = JSON.stringify(_habDatos.ali);
+    if(Object.keys(_upd).length <= 1) return;
+    try { await sb.from('paciente_clinica').upsert(_upd,{onConflict:'dni_paciente'}); } catch(e){}
+    if(!evolClinicaSnapshot) evolClinicaSnapshot={clinica:{},medicacion:[]};
+    if(!evolClinicaSnapshot.clinica) evolClinicaSnapshot.clinica={};
+    if(_habDatos.act) evolClinicaSnapshot.clinica.hab_actividad_json    = JSON.stringify(_habDatos.act);
+    if(_habDatos.ali) evolClinicaSnapshot.clinica.hab_alimentacion_json = JSON.stringify(_habDatos.ali);
+  })();
+
   cerrarModalHabitos();
-  // Volcar inmediatamente al editor y Supabase
   volcarActualizacion();
 }
 
@@ -8240,11 +8253,17 @@ async function volcarActualizacion() {
         await sb.from('medicacion').insert({ dni_paciente:dni, grupo:item.grupo||'Otro', farmaco:item.farmaco, dosis:item.dosis||'', frecuencia:item.frecuencia||'', activo:true, fecha_inicio:fechaHoy() });
       }
     }
-    if(_habDatos?.act) {
-      await sb.from('paciente_clinica').update({ hab_actividad_json: JSON.stringify(_habDatos.act) }).eq('dni_paciente', dni);
-    }
-    if(_habDatos?.ali) {
-      await sb.from('paciente_clinica').update({ hab_alimentacion_json: JSON.stringify(_habDatos.ali) }).eq('dni_paciente', dni);
+    if(_habDatos?.act || _habDatos?.ali) {
+      const _hu = {dni_paciente: dni};
+      if(_habDatos?.act) _hu.hab_actividad_json    = JSON.stringify(_habDatos.act);
+      if(_habDatos?.ali) _hu.hab_alimentacion_json = JSON.stringify(_habDatos.ali);
+      try {
+        await sb.from('paciente_clinica').upsert(_hu,{onConflict:'dni_paciente'});
+        if(!evolClinicaSnapshot) evolClinicaSnapshot={clinica:{},medicacion:[]};
+        if(!evolClinicaSnapshot.clinica) evolClinicaSnapshot.clinica={};
+        if(_habDatos?.act) evolClinicaSnapshot.clinica.hab_actividad_json    = _hu.hab_actividad_json;
+        if(_habDatos?.ali) evolClinicaSnapshot.clinica.hab_alimentacion_json = _hu.hab_alimentacion_json;
+      } catch(e){ console.warn('[hab upsert]',e); }
     }
 
     const [cr, mr] = await Promise.all([
@@ -16998,14 +17017,17 @@ guardarClinica=async function(){
   await _origGuardarCli();
   if(hab&&typeof pacienteActual!=='undefined'&&pacienteActual){
     var dni=pacienteActual.dni;
-    if(hab.act) await sb.from('paciente_clinica').update({hab_actividad_json:JSON.stringify(hab.act)}).eq('dni_paciente',dni);
-    if(hab.ali) await sb.from('paciente_clinica').update({hab_alimentacion_json:JSON.stringify(hab.ali)}).eq('dni_paciente',dni);
-    // Asegurar que evolClinicaSnapshot exista y tenga los campos hab_*
-    if(typeof evolClinicaSnapshot!=='undefined'){
-      if(!evolClinicaSnapshot) evolClinicaSnapshot={clinica:{},medicacion:[]};
-      if(!evolClinicaSnapshot.clinica) evolClinicaSnapshot.clinica={};
-      if(hab.act) evolClinicaSnapshot.clinica.hab_actividad_json=JSON.stringify(hab.act);
-      if(hab.ali) evolClinicaSnapshot.clinica.hab_alimentacion_json=JSON.stringify(hab.ali);
+    if(hab.act||hab.ali){
+      var _hu={dni_paciente:dni};
+      if(hab.act) _hu.hab_actividad_json=JSON.stringify(hab.act);
+      if(hab.ali) _hu.hab_alimentacion_json=JSON.stringify(hab.ali);
+      sb.from('paciente_clinica').upsert(_hu,{onConflict:'dni_paciente'}).then(function(r){if(r.error)console.warn('[patch hab]',r.error.message);});
+    }
+    if(typeof evolClinicaSnapshot==='undefined'||!evolClinicaSnapshot) evolClinicaSnapshot={clinica:{},medicacion:[]};
+    if(!evolClinicaSnapshot.clinica) evolClinicaSnapshot.clinica={};
+    if(hab.act) evolClinicaSnapshot.clinica.hab_actividad_json=JSON.stringify(hab.act);
+    if(hab.ali) evolClinicaSnapshot.clinica.hab_alimentacion_json=JSON.stringify(hab.ali);
+    {
       // Re-volcar al bloque clinico en la evolucion con los nuevos datos de habitos
       try{
         var textoAct=generarTextoClinico(evolClinicaSnapshot.clinica, evolClinicaSnapshot.medicacion||[]);
@@ -17080,7 +17102,6 @@ async function imprimirInformeHabitos() {
   const p = pacienteActual;
   if (!p) { alert('Sin paciente activo.'); return; }
 
-  // Cargar historial de evoluciones con clinica_snapshot
   let historial = [];
   try {
     const { data } = await sb.from('evoluciones')
@@ -17103,39 +17124,20 @@ async function imprimirInformeHabitos() {
     }
   } catch(e) { console.warn('imprimirInformeHabitos:', e); }
 
-  // También incluir el estado actual (snapshot en memoria)
+  // Incluir estado actual si difiere del último
   const snapActual = evolClinicaSnapshot?.clinica;
   if (snapActual) {
-    const actAct = snapActual.hab_actividad_json ? (() => { try { return JSON.parse(snapActual.hab_actividad_json); } catch(e) { return null; }})() : null;
-    const aliAct = snapActual.hab_alimentacion_json ? (() => { try { return JSON.parse(snapActual.hab_alimentacion_json); } catch(e) { return null; }})() : null;
-    if (actAct || aliAct) {
-      const yaEsta = historial.some(h => {
-        try {
-          const hAct = JSON.stringify(h.act);
-          const hAli = JSON.stringify(h.ali);
-          return hAct === JSON.stringify(actAct) && hAli === JSON.stringify(aliAct);
-        } catch(e) { return false; }
-      });
-      if (!yaEsta) historial.push({ fecha: new Date().toISOString(), act: actAct, ali: aliAct, actual: true });
+    const actA = snapActual.hab_actividad_json ? (() => { try { return JSON.parse(snapActual.hab_actividad_json); } catch(e) { return null; }})() : null;
+    const aliA = snapActual.hab_alimentacion_json ? (() => { try { return JSON.parse(snapActual.hab_alimentacion_json); } catch(e) { return null; }})() : null;
+    if (actA || aliA) {
+      const last = historial[historial.length - 1];
+      if (!last || JSON.stringify(last.act) !== JSON.stringify(actA) || JSON.stringify(last.ali) !== JSON.stringify(aliA))
+        historial.push({ fecha: new Date().toISOString(), act: actA, ali: aliA, actual: true });
     }
   }
 
-  // Deduplicar: si dos entradas consecutivas son iguales, quedarse con la última
-  const dedup = [];
-  historial.forEach((h, i) => {
-    if (i === 0) { dedup.push(h); return; }
-    const prev = dedup[dedup.length - 1];
-    if (JSON.stringify(prev.act) === JSON.stringify(h.act) &&
-        JSON.stringify(prev.ali) === JSON.stringify(h.ali)) {
-      dedup[dedup.length - 1] = h; // reemplazar con más reciente
-    } else {
-      dedup.push(h);
-    }
-  });
+  if (!historial.length) { alert('No hay datos de hábitos registrados para este paciente.'); return; }
 
-  if (!dedup.length) { alert('No hay datos de hábitos registrados para este paciente.'); return; }
-
-  // ── Datos del profesional ──────────────────────────────────────────
   const cu = window._cu || (typeof users !== 'undefined' && window._su ? (users[window._su] || {}) : {});
   const profNombre = cu.titulo || cu.name || '';
   const profMP     = cu.mp || '';
@@ -17146,248 +17148,128 @@ async function imprimirInformeHabitos() {
 
   const nombre   = (p.apellido || '') + ', ' + (p.nombre || '');
   const fnac     = p.fecha_nacimiento || p.fnac || '';
-  const edad     = fnac ? (new Date().getFullYear() - new Date(fnac + 'T12:00:00').getFullYear()) + ' años' : '';
-  const fechaHoy = new Date().toLocaleDateString('es-AR', { day:'2-digit', month:'long', year:'numeric' });
+  const edad     = fnac ? (new Date().getFullYear() - new Date(fnac+'T12:00:00').getFullYear()) + ' años' : '';
+  const fechaHoy = new Date().toLocaleDateString('es-AR',{day:'2-digit',month:'long',year:'numeric'});
+  const fmtF = iso => { try { return new Date(iso).toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'2-digit'}); } catch(e){return '';} };
 
-  const fmtFecha = iso => {
-    try { return new Date(iso).toLocaleDateString('es-AR', { day:'2-digit', month:'2-digit', year:'2-digit' }); }
-    catch(e) { return ''; }
-  };
-
-  // ── OMS calc ──────────────────────────────────────────────────────
-  const calcOMS = (act) => {
-    if (!act || !act.actividades || !act.actividades.length) return null;
-    let minMod = 0, minInt = 0, minLeve = 0, diasFuerza = 0;
+  const calcOMS = act => {
+    if (!act?.actividades?.length) return null;
+    let minMod=0,minInt=0,minLeve=0,diasF=0;
     act.actividades.forEach(a => {
-      if (!a.minutos || !a.dias) return;
-      const ms = a.minutos * a.dias;
-      if (a.intensidad === 'moderada') minMod += ms;
-      else if (a.intensidad === 'intensa') { minInt += ms; minMod += ms * 2; }
-      else minLeve += ms;
-      if (['Gym – Fuerza','Gym – Mixto'].includes(a.tipo)) diasFuerza += a.dias;
+      if(!a.minutos||!a.dias) return;
+      const ms=a.minutos*a.dias;
+      if(a.intensidad==='moderada') minMod+=ms;
+      else if(a.intensidad==='intensa'){minInt+=ms;minMod+=ms*2;}
+      else minLeve+=ms;
+      if(['Gym – Fuerza','Gym – Mixto'].includes(a.tipo)) diasF+=a.dias;
     });
-    const pct = Math.min(100, Math.round(minMod / 150 * 100));
-    return { minMod, minInt, minLeve, diasFuerza, pct };
+    return {minMod,minInt,minLeve,diasF,pct:Math.min(100,Math.round(minMod/150*100))};
   };
 
-  // ── Render bloque actividad ────────────────────────────────────────
-  const renderAct = (act, oms) => {
-    if (!act) return '<span style="color:#94a3b8;font-style:italic">Sin datos</span>';
-    const lines = [];
-    if (act.actividades && act.actividades.length) {
-      act.actividades.forEach(a => {
-        const parts = [a.tipo];
-        if (a.intensidad) parts.push('<em>' + a.intensidad + '</em>');
-        if (a.minutos) parts.push(a.minutos + 'min/ses');
-        if (a.dias) parts.push(a.dias + 'd/sem');
-        if (a.minutos && a.dias) parts.push('→ ' + (a.minutos * a.dias) + 'min/sem');
-        lines.push('<span class="act-item">' + parts.join(' ') + '</span>');
-      });
-    }
-    if (act.pausas === 'si') lines.push('<span class="chip chip-green">Pausas activas ✓</span>');
-    else if (act.pausas === 'no') lines.push('<span class="chip chip-red">Sin pausas activas</span>');
-    if (act.pasos) {
-      let ps = act.pasos + ' pasos/día';
-      if (act.pasosObj) ps += ' (obj: ' + act.pasosObj + ')';
-      lines.push('<span class="chip chip-blue">' + ps + '</span>');
-    }
-    if (oms) {
-      const col = oms.pct >= 100 ? '#16a34a' : oms.pct >= 50 ? '#d97706' : '#dc2626';
-      const icon = oms.pct >= 100 ? '✅' : oms.pct >= 50 ? '⚠️' : '❌';
-      lines.push('<div class="oms-bar-wrap"><div class="oms-bar-fill" style="width:' + oms.pct + '%;background:' + col + '"></div></div><span class="oms-label" style="color:' + col + '">' + icon + ' ' + oms.pct + '% OMS (' + oms.minMod + ' min/sem equiv.)</span>');
-    }
-    if (act.cambio && act.cambio !== '') lines.push('<span class="chip chip-gray">vs. anterior: ' + act.cambio + '</span>');
-    if (act.notas) lines.push('<div class="nota-txt">📝 ' + act.notas + '</div>');
-    return lines.join('') || '<span style="color:#94a3b8;font-style:italic">Sin actividad registrada</span>';
+  const renderAct = (act,oms) => {
+    if(!act) return '<em style="color:#94a3b8">Sin datos</em>';
+    let h='';
+    if(act.actividades?.length) act.actividades.forEach(a=>{
+      const p2=[a.tipo];
+      if(a.intensidad) p2.push('<em>'+a.intensidad+'</em>');
+      if(a.minutos) p2.push(a.minutos+'min/ses');
+      if(a.dias) p2.push(a.dias+'d/sem');
+      if(a.minutos&&a.dias) p2.push('→'+(a.minutos*a.dias)+'min/sem');
+      h+='<div class="act-item">'+p2.join(' ')+'</div>';
+    });
+    if(act.pausas==='si') h+='<span class="chip cg">Pausas activas ✓</span>';
+    else if(act.pausas==='no') h+='<span class="chip cr">Sin pausas activas</span>';
+    if(act.pasos){let ps=act.pasos+' pasos/día';if(act.pasosObj)ps+=' (obj:'+act.pasosObj+')';h+='<span class="chip cb">'+ps+'</span>';}
+    if(oms){const col=oms.pct>=100?'#16a34a':oms.pct>=50?'#d97706':'#dc2626';const ico=oms.pct>=100?'✅':oms.pct>=50?'⚠️':'❌';
+      h+='<div class="oms-wrap"><div class="oms-fill" style="width:'+oms.pct+'%;background:'+col+'"></div></div>'
+       +'<span style="font-size:9.5px;font-weight:700;color:'+col+'">'+ico+' '+oms.pct+'% OMS ('+oms.minMod+' min/sem)</span>';}
+    if(act.cambio&&act.cambio!=='') h+='<span class="chip cy">vs. anterior: '+act.cambio+'</span>';
+    if(act.notas) h+='<div class="nota">📝 '+act.notas+'</div>';
+    return h||'<em style="color:#94a3b8">Sin actividad</em>';
   };
 
-  // ── Render bloque alimentación ─────────────────────────────────────
-  const renderAli = (ali) => {
-    if (!ali) return '<span style="color:#94a3b8;font-style:italic">Sin datos</span>';
-    const chips = [];
-    if (ali.hiposodica) chips.push({ txt: 'Hiposódica: ' + ali.hiposodica, cls: ali.hiposodica === 'cumple' ? 'chip-green' : 'chip-red' });
-    if (ali.edulc && ali.edulc !== '') chips.push({ txt: 'Edulcorante: ' + ali.edulc, cls: ali.edulc === 'ninguno' ? 'chip-green' : 'chip-gray' });
-    const freq = [
-      { k:'frutas',   l:'Frutas',    u:'/día' },
-      { k:'verduras', l:'Verduras',  u:'/día' },
-      { k:'lacteos',  l:'Lácteos',   u:'/día' },
-      { k:'pescado',  l:'Pescado',   u:'/sem' },
-      { k:'c_rojas',  l:'C. rojas',  u:'/sem' },
-      { k:'legumbres',l:'Legumbres', u:'/sem' },
-    ];
-    freq.forEach(f => { if (ali[f.k]) chips.push({ txt: f.l + ': ' + ali[f.k] + f.u, cls: 'chip-blue' }); });
-    if (ali.pollo_cerdo === 'si') chips.push({ txt: 'Pollo/cerdo ✓', cls: 'chip-green' });
-    if (ali.social === 'si') chips.push({ txt: 'Alim. social ✓', cls: 'chip-green' });
-    else if (ali.social === 'no') chips.push({ txt: 'Sin alim. social', cls: 'chip-gray' });
-    if (ali.cambio && ali.cambio !== '') chips.push({ txt: 'vs. anterior: ' + ali.cambio, cls: 'chip-gray' });
-    let html2 = chips.map(c => '<span class="chip ' + c.cls + '">' + c.txt + '</span>').join('');
-    if (ali.notas) html2 += '<div class="nota-txt">📝 ' + ali.notas + '</div>';
-    return html2 || '<span style="color:#94a3b8;font-style:italic">Sin datos registrados</span>';
+  const renderAli = ali => {
+    if(!ali) return '<em style="color:#94a3b8">Sin datos</em>';
+    let h='';
+    if(ali.hiposodica) h+='<span class="chip '+(ali.hiposodica==='cumple'?'cg':'cr')+'">Hiposódica: '+ali.hiposodica+'</span>';
+    if(ali.edulc&&ali.edulc!=='') h+='<span class="chip '+(ali.edulc==='ninguno'?'cg':'cy')+'">Edulcorante: '+ali.edulc+'</span>';
+    [{k:'frutas',l:'Frutas',u:'/día'},{k:'verduras',l:'Verduras',u:'/día'},{k:'lacteos',l:'Lácteos',u:'/día'},
+     {k:'pescado',l:'Pescado',u:'/sem'},{k:'c_rojas',l:'C.rojas',u:'/sem'},{k:'legumbres',l:'Legumbres',u:'/sem'}
+    ].forEach(f=>{if(ali[f.k])h+='<span class="chip cb">'+f.l+': '+ali[f.k]+f.u+'</span>';});
+    if(ali.pollo_cerdo==='si') h+='<span class="chip cg">Pollo/cerdo ✓</span>';
+    if(ali.social==='si') h+='<span class="chip cg">Alim. social ✓</span>';
+    else if(ali.social==='no') h+='<span class="chip cy">Sin alim. social</span>';
+    if(ali.cambio&&ali.cambio!=='') h+='<span class="chip cy">vs. anterior: '+ali.cambio+'</span>';
+    if(ali.notas) h+='<div class="nota">📝 '+ali.notas+'</div>';
+    return h||'<em style="color:#94a3b8">Sin datos</em>';
   };
 
-  // ── Bloques de consultas ───────────────────────────────────────────
-  const bloques = dedup.map((h, i) => {
-    const oms = calcOMS(h.act);
-    const esActual = h.actual ? ' <span class="badge-actual">Actual</span>' : '';
-    return `<div class="consulta-block ${i % 2 === 1 ? 'alt' : ''}">
-      <div class="consulta-header">
-        <span class="consulta-num">Consulta ${i + 1}</span>
-        <span class="consulta-fecha">${fmtFecha(h.fecha)}${esActual}</span>
+  const bloques = historial.map((h,i)=>{
+    const oms=calcOMS(h.act);
+    return `<div class="bloque">
+      <div class="bloque-hdr">
+        <span class="num">Consulta ${i+1}</span>
+        <span class="fecha">${fmtF(h.fecha)}${h.actual?' <span class="badge-act">Actual</span>':''}</span>
       </div>
-      <div class="consulta-body">
-        <div class="hab-col">
-          <div class="hab-col-title">🏃 Actividad física</div>
-          <div class="hab-col-content">${renderAct(h.act, oms)}</div>
-        </div>
-        <div class="hab-col">
-          <div class="hab-col-title">🥗 Alimentación</div>
-          <div class="hab-col-content">${renderAli(h.ali)}</div>
-        </div>
+      <div class="bloque-body">
+        <div class="col"><div class="col-title">🏃 Actividad física</div><div class="col-content">${renderAct(h.act,oms)}</div></div>
+        <div class="col"><div class="col-title">🥗 Alimentación</div><div class="col-content">${renderAli(h.ali)}</div></div>
       </div>
     </div>`;
   }).join('');
 
-  // ── HTML completo ─────────────────────────────────────────────────
-  const reportHTML = `<!DOCTYPE html>
-<html lang="es">
-<head>
-<meta charset="UTF-8"/>
+  const reportHTML = `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"/>
 <title>Informe Hábitos — ${nombre}</title>
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
-  *{box-sizing:border-box;margin:0;padding:0}
-  body{font-family:'Inter',sans-serif;font-size:11px;color:#1e293b;background:#f8fafc;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-
-  /* HEADER */
-  .report-header{background:linear-gradient(135deg,#134e4a 0%,#0f766e 60%,#0d9488 100%);color:white;padding:24px 32px 20px;display:flex;align-items:center;gap:20px}
-  .logo-circle{width:52px;height:52px;border-radius:50%;background:rgba(255,255,255,.15);border:2px solid rgba(255,255,255,.3);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:22px}
-  .header-text{flex:1}
-  .header-title{font-size:20px;font-weight:800;letter-spacing:.02em;line-height:1.1}
-  .header-sub{font-size:11px;color:rgba(255,255,255,.7);margin-top:3px;letter-spacing:.04em;text-transform:uppercase}
-  .header-fecha{text-align:right;font-size:10px;color:rgba(255,255,255,.6);line-height:1.7}
-  .header-fecha strong{display:block;font-size:12px;color:rgba(255,255,255,.9);font-weight:600}
-
-  /* PACIENTE */
-  .paciente-bar{background:white;border-bottom:3px solid #0f766e;padding:14px 32px;display:flex;align-items:center;gap:24px;flex-wrap:wrap}
-  .pac-chip{display:flex;flex-direction:column}
-  .pac-chip-label{font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#94a3b8;margin-bottom:2px}
-  .pac-chip-val{font-size:13px;font-weight:700;color:#134e4a}
-  .pac-divider{width:1px;height:32px;background:#e2e8f0;flex-shrink:0}
-  .pac-sexo-badge{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:20px;font-size:10px;font-weight:600}
-  .pac-sexo-badge.f{background:#fce7f3;color:#be185d}
-  .pac-sexo-badge.m{background:#eff6ff;color:#1d4ed8}
-
-  /* PROFESIONAL */
-  .prof-strip{background:#f0fdfa;border-left:4px solid #0f766e;padding:10px 32px;display:flex;align-items:center;gap:10px;font-size:10.5px}
-  .prof-strip-name{font-weight:700;color:#134e4a;font-size:11.5px}
-  .prof-strip-sep{color:#99f6e4;font-size:14px}
-  .prof-strip-mp{color:#0f766e;font-weight:600}
-  .prof-strip-esp{color:#64748b;font-style:italic}
-
-  /* BODY */
-  .body-wrap{padding:20px 32px 28px}
-  .section-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#64748b;margin-bottom:12px;display:flex;align-items:center;gap:8px}
-  .section-title::after{content:'';flex:1;height:1px;background:#e2e8f0}
-
-  /* CONSULTA BLOCK */
-  .consulta-block{background:white;border-radius:12px;border:1px solid #e2e8f0;margin-bottom:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.06)}
-  .consulta-block.alt{background:#fafffe}
-  .consulta-header{background:linear-gradient(90deg,#134e4a,#0f766e);color:white;padding:8px 16px;display:flex;align-items:center;justify-content:space-between}
-  .consulta-num{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase}
-  .consulta-fecha{font-size:11px;color:rgba(255,255,255,.85);font-weight:500}
-  .consulta-body{display:grid;grid-template-columns:1fr 1fr;gap:0}
-  .hab-col{padding:12px 16px;border-right:1px solid #f1f5f9}
-  .hab-col:last-child{border-right:none}
-  .hab-col-title{font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#0f766e;margin-bottom:8px;padding-bottom:5px;border-bottom:1px solid #e2e8f0}
-  .hab-col-content{display:flex;flex-direction:column;gap:4px}
-
-  /* CHIPS Y ITEMS */
-  .act-item{display:block;font-size:11px;color:#1e293b;padding:3px 0;border-bottom:1px solid #f8fafc}
-  .act-item em{font-style:normal;font-weight:600;color:#0f766e}
-  .chip{display:inline-block;padding:2px 8px;border-radius:12px;font-size:9.5px;font-weight:600;margin:2px 2px 2px 0}
-  .chip-green{background:#dcfce7;color:#166534}
-  .chip-red{background:#fee2e2;color:#991b1b}
-  .chip-blue{background:#dbeafe;color:#1d4ed8}
-  .chip-gray{background:#f1f5f9;color:#475569}
-  .nota-txt{font-size:9.5px;color:#64748b;font-style:italic;margin-top:4px;padding:4px 8px;background:#f8fafc;border-left:2px solid #cbd5e1;border-radius:0 4px 4px 0}
-  .badge-actual{background:#fef3c7;color:#92400e;font-size:8.5px;font-weight:700;padding:1px 6px;border-radius:10px;margin-left:6px}
-
-  /* OMS BAR */
-  .oms-bar-wrap{height:6px;background:#e5e7eb;border-radius:99px;overflow:hidden;margin:5px 0 2px;width:100%}
-  .oms-bar-fill{height:100%;border-radius:99px;transition:width .3s}
-  .oms-label{font-size:9.5px;font-weight:700}
-
-  /* FOOTER */
-  .report-footer{margin-top:20px;padding-top:12px;border-top:1px solid #e2e8f0;display:flex;align-items:center;justify-content:space-between;font-size:8.5px;color:#94a3b8}
-  .footer-brand{font-weight:700;color:#64748b;letter-spacing:.04em;text-transform:uppercase}
-
-  @media print{
-    body{background:white}
-    @page{margin:8mm 10mm;size:A4}
-    .consulta-block{break-inside:avoid}
-    .report-header,.consulta-header{-webkit-print-color-adjust:exact;print-color-adjust:exact}
-  }
-</style>
-</head>
-<body>
-
-<!-- HEADER -->
-<div class="report-header">
-  <div class="logo-circle">🏃</div>
-  <div class="header-text">
-    <div class="header-title">Seguimiento de Hábitos</div>
-    <div class="header-sub">Actividad física &amp; Alimentación · URCyM</div>
-  </div>
-  <div class="header-fecha">
-    <strong>${fechaHoy}</strong>
-    ${dedup.length} consulta${dedup.length !== 1 ? 's' : ''} registrada${dedup.length !== 1 ? 's' : ''}
-  </div>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Inter',sans-serif;font-size:11px;color:#1e293b;background:#f8fafc;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.hdr{background:linear-gradient(135deg,#134e4a,#0d9488);color:white;padding:22px 32px;display:flex;align-items:center;gap:18px}
+.hdr-icon{width:50px;height:50px;border-radius:50%;background:rgba(255,255,255,.15);border:2px solid rgba(255,255,255,.3);display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0}
+.hdr-text{flex:1}.hdr-title{font-size:19px;font-weight:800}.hdr-sub{font-size:10px;color:rgba(255,255,255,.7);margin-top:2px;text-transform:uppercase;letter-spacing:.05em}
+.hdr-right{text-align:right;font-size:10px;color:rgba(255,255,255,.65);line-height:1.8}.hdr-right strong{display:block;font-size:12px;color:white}
+.pac-bar{background:white;border-bottom:3px solid #0f766e;padding:13px 32px;display:flex;align-items:center;gap:22px;flex-wrap:wrap}
+.pac-chip{display:flex;flex-direction:column}.pac-chip-label{font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#94a3b8;margin-bottom:2px}
+.pac-chip-val{font-size:13px;font-weight:700;color:#134e4a}.pac-div{width:1px;height:30px;background:#e2e8f0}
+.prof{background:#f0fdfa;border-left:4px solid #0f766e;padding:9px 32px;display:flex;align-items:center;gap:10px;font-size:10.5px}
+.prof-name{font-weight:700;color:#134e4a;font-size:11.5px}.prof-sep{color:#99f6e4;font-size:14px}.prof-mp{color:#0f766e;font-weight:600}.prof-esp{color:#64748b;font-style:italic}
+.body{padding:18px 32px 28px}
+.bloque{background:white;border-radius:11px;border:1px solid #e2e8f0;margin-bottom:11px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.06);break-inside:avoid}
+.bloque-hdr{background:linear-gradient(90deg,#134e4a,#0f766e);color:white;padding:7px 16px;display:flex;align-items:center;justify-content:space-between}
+.num{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em}.fecha{font-size:10.5px;color:rgba(255,255,255,.85)}
+.badge-act{background:#fef3c7;color:#92400e;font-size:8px;font-weight:700;padding:1px 6px;border-radius:10px;margin-left:5px}
+.bloque-body{display:grid;grid-template-columns:1fr 1fr}
+.col{padding:11px 15px;border-right:1px solid #f1f5f9}.col:last-child{border-right:none}
+.col-title{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#0f766e;margin-bottom:7px;padding-bottom:5px;border-bottom:1px solid #e2e8f0}
+.col-content{display:flex;flex-direction:column;gap:3px}
+.act-item{font-size:11px;color:#1e293b;padding:2px 0;border-bottom:1px solid #f8fafc}.act-item em{font-style:normal;font-weight:600;color:#0f766e}
+.chip{display:inline-block;padding:2px 7px;border-radius:12px;font-size:9.5px;font-weight:600;margin:2px 2px 2px 0}
+.cg{background:#dcfce7;color:#166534}.cr{background:#fee2e2;color:#991b1b}.cb{background:#dbeafe;color:#1d4ed8}.cy{background:#fef9c3;color:#713f12}
+.nota{font-size:9.5px;color:#64748b;font-style:italic;margin-top:3px;padding:3px 8px;background:#f8fafc;border-left:2px solid #cbd5e1;border-radius:0 4px 4px 0}
+.oms-wrap{height:6px;background:#e5e7eb;border-radius:99px;overflow:hidden;margin:5px 0 2px;width:100%}
+.oms-fill{height:100%;border-radius:99px}
+.footer{margin-top:18px;padding-top:11px;border-top:1px solid #e2e8f0;display:flex;justify-content:space-between;font-size:8px;color:#94a3b8}
+.footer-brand{font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.04em}
+@media print{body{background:white}@page{margin:8mm 10mm;size:A4}.bloque{break-inside:avoid}.hdr,.bloque-hdr{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+</style></head><body>
+<div class="hdr"><div class="hdr-icon">🏃</div><div class="hdr-text"><div class="hdr-title">Seguimiento de Hábitos</div><div class="hdr-sub">Actividad física &amp; Alimentación · URCyM</div></div>
+<div class="hdr-right"><strong>${fechaHoy}</strong>${historial.length} consulta${historial.length!==1?'s':''}</div></div>
+<div class="pac-bar">
+  <div class="pac-chip"><span class="pac-chip-label">Paciente</span><span class="pac-chip-val">${nombre}</span></div>
+  ${edad?`<div class="pac-div"></div><div class="pac-chip"><span class="pac-chip-label">Edad</span><span class="pac-chip-val">${edad}</span></div>`:''}
+  ${p.sexo?`<div class="pac-div"></div><div class="pac-chip"><span class="pac-chip-label">Sexo</span><span class="pac-chip-val">${p.sexo}</span></div>`:''}
 </div>
+${profNombre?`<div class="prof"><span class="prof-name">${profNombre}</span>${profMP?`<span class="prof-sep">·</span><span class="prof-mp">M.P. ${profMP}</span>`:''} ${profEspec?`<span class="prof-sep">·</span><span class="prof-esp">${profEspec}</span>`:''}</div>`:''}
+<div class="body">${bloques}
+<div class="footer"><span class="footer-brand">URCyM · Hábitos Saludables</span><span>Generado el ${fechaHoy} · Documento de uso médico exclusivo</span></div>
+</div></body></html>`;
 
-<!-- PACIENTE -->
-<div class="paciente-bar">
-  <div class="pac-chip">
-    <span class="pac-chip-label">Paciente</span>
-    <span class="pac-chip-val">${nombre}</span>
-  </div>
-  ${edad ? `<div class="pac-divider"></div>
-  <div class="pac-chip">
-    <span class="pac-chip-label">Edad</span>
-    <span class="pac-chip-val">${edad}</span>
-  </div>` : ''}
-  ${p.sexo ? `<div class="pac-divider"></div>
-  <div class="pac-chip">
-    <span class="pac-chip-label">Sexo</span>
-    <span class="pac-sexo-badge ${p.sexo === 'Femenino' ? 'f' : 'm'}">${p.sexo === 'Femenino' ? '♀' : '♂'} ${p.sexo}</span>
-  </div>` : ''}
-</div>
-
-<!-- PROFESIONAL -->
-${profNombre ? `<div class="prof-strip">
-  <span class="prof-strip-name">${profNombre}</span>
-  ${profMP ? `<span class="prof-strip-sep">·</span><span class="prof-strip-mp">M.P. ${profMP}</span>` : ''}
-  ${profEspec ? `<span class="prof-strip-sep">·</span><span class="prof-strip-esp">${profEspec}</span>` : ''}
-</div>` : ''}
-
-<!-- CUERPO -->
-<div class="body-wrap">
-  <div class="section-title">Evolución por consulta</div>
-  ${bloques}
-  <div class="report-footer">
-    <span class="footer-brand">URCyM · Hábitos Saludables</span>
-    <span>Generado el ${fechaHoy} · Documento de uso médico exclusivo</span>
-  </div>
-</div>
-
-</body>
-</html>`;
-
-  const win = window.open('', '_blank', 'width=900,height=700');
-  if (!win) { alert('Bloqueador de popups activo. Permitir para este sitio.'); return; }
+  const win = window.open('','_blank','width=900,height=700');
+  if(!win){alert('Bloqueador de popups activo.');return;}
   win.document.write(reportHTML);
   win.document.close();
   win.focus();
-  setTimeout(() => win.print(), 500);
+  setTimeout(()=>win.print(),500);
 }
 </script>
 
