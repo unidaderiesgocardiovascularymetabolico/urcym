@@ -3294,6 +3294,7 @@
     <!-- Footer -->
     <div style="padding:16px 24px;border-top:1px solid #e5eaf0;display:flex;justify-content:space-between;align-items:center;background:#f8fbfe;border-radius:0 0 20px 20px;margin-top:16px">
       <button onclick="cerrarModalHabitos()" style="padding:9px 20px;border:1.5px solid #dde3ec;border-radius:10px;background:white;font-size:13px;color:#666;cursor:pointer;font-family:var(--font-main)">Cancelar</button>
+      <button onclick="imprimirInformeHabitos()" style="padding:9px 18px;border:1.5px solid #16a34a;border-radius:10px;background:#f0fdf4;color:#16a34a;font-size:13px;font-weight:600;cursor:pointer;font-family:var(--font-main)">🖨️ Informe paciente</button>
       <button onclick="confirmarModalHabitos()" style="padding:9px 24px;border:none;border-radius:10px;background:#2a9496;color:white;font-size:13px;font-weight:700;cursor:pointer;font-family:var(--font-main);box-shadow:0 4px 14px rgba(42,148,150,.3)">✓ Confirmar y agregar a evolución</button>
     </div>
 
@@ -6510,8 +6511,45 @@ function generarTextoClinico(c, meds) {
   if(c.alcohol_social) habParts.push('Alcohol social');
   else if(!c.alcohol) habParts.push('No alcohol');
   else { const gr=Math.round((c.alcohol_cerveza||0)*13+(c.alcohol_vino||0)*14+(c.alcohol_fernet||0)*22+(c.alcohol_blanca||0)*14+(c.alcohol_whisky||0)*14); habParts.push('Alcohol: '+gr+'g/sem'); }
-  if(c.actividad_fisica) habParts.push('Act. física: '+c.actividad_fisica);
-  if(c.alimentacion) habParts.push('Alimentación: '+c.alimentacion);
+  // Actividad física: usar nuevo campo JSON si existe, si no el campo texto legado
+  if(c.hab_actividad_json) {
+    try {
+      var actJ = JSON.parse(c.hab_actividad_json);
+      var actParts = [];
+      if(actJ.actividades && actJ.actividades.length) {
+        actParts = actJ.actividades.map(function(a){
+          var s = a.tipo;
+          if(a.intensidad) s += ' '+a.intensidad;
+          if(a.minutos)    s += ' '+a.minutos+'min';
+          if(a.dias)       s += ' '+a.dias+'d/sem';
+          return s;
+        });
+      }
+      if(actJ.pausas==='si')  actParts.push('pausas activas');
+      if(actJ.pasos)          actParts.push(actJ.pasos+' pasos/día');
+      if(actParts.length) habParts.push('Act. física: '+actParts.join(', '));
+      else if(actJ.notas)    habParts.push('Act. física: '+actJ.notas);
+    } catch(e) { if(c.actividad_fisica) habParts.push('Act. física: '+c.actividad_fisica); }
+  } else if(c.actividad_fisica) {
+    habParts.push('Act. física: '+c.actividad_fisica);
+  }
+  // Alimentación: usar nuevo campo JSON si existe, si no el campo texto legado
+  if(c.hab_alimentacion_json) {
+    try {
+      var aliJ = JSON.parse(c.hab_alimentacion_json);
+      var aliParts = [];
+      if(aliJ.hiposodica)  aliParts.push('hiposódica '+aliJ.hiposodica);
+      if(aliJ.edulc && aliJ.edulc!=='') aliParts.push('edulc: '+aliJ.edulc);
+      var frecItems = ['frutas','verduras','lacteos','pescado','c_rojas','legumbres'];
+      frecItems.forEach(function(k){ if(aliJ[k]) aliParts.push(k+' '+aliJ[k]+'p/sem'); });
+      if(aliJ.pollo_cerdo==='si') aliParts.push('pollo/cerdo ✓');
+      if(aliJ.social==='si')      aliParts.push('alimentación social ✓');
+      if(aliParts.length) habParts.push('Alimentación: '+aliParts.join(', '));
+      else if(aliJ.notas) habParts.push('Alimentación: '+aliJ.notas);
+    } catch(e) { if(c.alimentacion) habParts.push('Alimentación: '+c.alimentacion); }
+  } else if(c.alimentacion) {
+    habParts.push('Alimentación: '+c.alimentacion);
+  }
   if(habParts.length) lines.push('HÁBITOS: '+habParts.join(' · '));
   if(c.cardio_notas) lines.push('NOTAS CARDIOMETABÓLICAS: '+c.cardio_notas);
   if(c.gineco_notas) lines.push('NOTAS GINECOLÓGICAS: '+c.gineco_notas);
@@ -7693,14 +7731,37 @@ function _crearDiasBtns(contenedor) {
   });
 }
 
-function abrirModalHabitos() {
+async function abrirModalHabitos() {
   // Inicializar botones de días del formulario nuevo
   const diasNueva = document.getElementById('hab_nueva_dias');
   if(diasNueva) _crearDiasBtns(diasNueva);
 
   // Fuente de datos: primero lo que ya se cargó en la sesión actual (_habDatos),
-  // si no hay, los datos guardados en Supabase (evolClinicaSnapshot)
-  const prev = evolClinicaSnapshot?.clinica;
+  // si no hay, los datos guardados en Supabase (evolClinicaSnapshot o consulta directa)
+  let prev = evolClinicaSnapshot?.clinica;
+
+  // Si el snapshot no tiene los campos hab_*, los buscamos directamente en paciente_clinica
+  if (
+    !_habDatos?.act && !_habDatos?.ali &&
+    !(prev?.hab_actividad_json) && !(prev?.hab_alimentacion_json) &&
+    pacienteActual?.dni
+  ) {
+    try {
+      const { data: habRow } = await sb
+        .from('paciente_clinica')
+        .select('hab_actividad_json, hab_alimentacion_json')
+        .eq('dni_paciente', pacienteActual.dni)
+        .maybeSingle();
+      if (habRow) {
+        // Enriquecer el snapshot en memoria para que futuras aperturas no necesiten otra consulta
+        if (evolClinicaSnapshot?.clinica) {
+          if (habRow.hab_actividad_json)  evolClinicaSnapshot.clinica.hab_actividad_json  = habRow.hab_actividad_json;
+          if (habRow.hab_alimentacion_json) evolClinicaSnapshot.clinica.hab_alimentacion_json = habRow.hab_alimentacion_json;
+        }
+        prev = { ...(prev || {}), ...habRow };
+      }
+    } catch(e) { console.warn('[abrirModalHabitos] fetch hab desde BD:', e); }
+  }
 
   // ── Determinar fuente de actividad ──────────────────────────────────────────
   let fuenteAct = null;
@@ -7739,6 +7800,8 @@ function abrirModalHabitos() {
     // Actividades (array nuevo formato)
     if (a.actividades && a.actividades.length) {
       _actItems = JSON.parse(JSON.stringify(a.actividades));
+      // Asegurar diasArr en cada item (si el JSON no lo tiene, init vacío para re-selección)
+      _actItems.forEach(function(item){ if(!Array.isArray(item.diasArr)) item.diasArr = []; });
     }
     if (a.pausas)  radio('hab_upd_pausas', a.pausas);
     if (a.pasos)   { const el = document.getElementById('hab_upd_pasos'); if(el) el.value = a.pasos; }
@@ -7822,15 +7885,28 @@ function renderActItems() {
   // Colores por intensidad
   const colInt = { leve: {bg:'#f0f9ff',border:'#bae6fd',txt:'#0369a1'}, moderada: {bg:'#fffbeb',border:'#fde68a',txt:'#92400e'}, intensa: {bg:'#fff1f2',border:'#fecdd3',txt:'#be123c'}, '': {bg:'#f8fbfe',border:'#dde3ec',txt:'#666'} };
 
+  const DIAS_LABELS_H = ['L','M','X','J','V','S','D'];
   lista.innerHTML = _actItems.map((a,i) => {
     const c = colInt[a.intensidad] || colInt[''];
     const minSem = a.minutos && a.dias ? a.minutos * a.dias : null;
-    return `<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border:1.5px solid ${c.border};border-radius:10px;background:${c.bg}">
-      <div style="flex:1;min-width:0">
+    const diasArr = Array.isArray(a.diasArr) ? a.diasArr : [];
+    const diaButtons = DIAS_LABELS_H.map((lbl,di) => {
+      const sel = diasArr.includes(di+1);
+      const bStyle = sel
+        ? 'width:26px;height:26px;border-radius:50%;border:1.5px solid #2a9496;background:#2a9496;color:white;font-size:10px;font-weight:700;cursor:pointer;font-family:var(--font-main)'
+        : 'width:26px;height:26px;border-radius:50%;border:1.5px solid #dde3ec;background:white;color:#666;font-size:10px;font-weight:700;cursor:pointer;font-family:var(--font-main)';
+      return `<button type="button" style="${bStyle}" onclick="_habToggleDia(${i},${di+1})">${lbl}</button>`;
+    }).join('');
+    return `<div style="padding:10px 14px;border:1.5px solid ${c.border};border-radius:10px;background:${c.bg}">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
         <span style="font-size:13px;font-weight:700;color:${c.txt}">${a.tipo}</span>
-        <span style="font-size:11px;color:#888;margin-left:8px">${[a.intensidad, a.minutos ? a.minutos+'min/ses':'', a.dias ? a.dias+'días/sem':'', minSem ? '→ '+minSem+'min/sem':''].filter(Boolean).join(' · ')}</span>
+        <span style="font-size:11px;color:#888">${[a.intensidad, a.minutos ? a.minutos+'min/ses':'', minSem ? '→ '+minSem+'min/sem':''].filter(Boolean).join(' · ')}</span>
+        <button type="button" onclick="quitarActividadHab(${i})" style="margin-left:auto;border:none;background:none;color:#ccc;font-size:18px;cursor:pointer;padding:0 2px;line-height:1">×</button>
       </div>
-      <button type="button" onclick="quitarActividadHab(${i})" style="border:none;background:none;color:#ccc;font-size:18px;cursor:pointer;padding:0 4px;line-height:1">×</button>
+      <div style="display:flex;align-items:center;gap:6px">
+        <span style="font-size:10px;color:#888;font-weight:600;text-transform:uppercase;letter-spacing:.04em;margin-right:2px">Días:</span>
+        ${diaButtons}
+      </div>
     </div>`;
   }).join('');
 
@@ -11053,7 +11129,7 @@ ${profNombreMDPA ? `<div class="prof-strip">
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
             <div>
               <label style="font-size:11px;font-weight:600;color:#666;display:block;margin-bottom:5px">Tipo</label>
-              <select id="fh_nueva_tipo" style="width:100%;padding:7px 10px;border:1.5px solid #dde3ec;border-radius:8px;font-size:13px;font-family:var(--font-main);background:white">
+              <select id="fh_nueva_tipo" onchange="onFHTipoActividadChange()" style="width:100%;padding:7px 10px;border:1.5px solid #dde3ec;border-radius:8px;font-size:13px;font-family:var(--font-main);background:white">
                 <option value="">Seleccioná...</option>
                 <option value="Caminata">Caminata</option>
                 <option value="Running / Trote">Running / Trote</option>
@@ -11089,6 +11165,10 @@ ${profNombreMDPA ? `<div class="prof-strip">
           </div>
         </div>
         <div id="fh_act_lista" style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px"></div>
+
+        <!-- Resumen automático OMS - Datos Clínicos -->
+        <div id="fh_act_resumen_oms" style="display:none;border-radius:12px;padding:12px 16px;margin-bottom:14px;font-size:12px">
+        </div>
         <div style="background:#f8fbfe;border:1.5px solid #dde3ec;border-radius:12px;padding:14px 16px;margin-bottom:14px;display:grid;grid-template-columns:1fr 1fr;gap:14px">
           <div style="grid-column:1/-1;font-size:11px;font-weight:700;color:#2a9496;text-transform:uppercase;letter-spacing:.05em">Hábitos diarios</div>
           <div>
@@ -11104,6 +11184,18 @@ ${profNombreMDPA ? `<div class="prof-strip">
             <div style="display:flex;align-items:center;gap:8px">
               <input type="number" id="fh_pasos" min="0" max="99999" placeholder="ej: 7500" style="width:110px;padding:7px 10px;border:1.5px solid #dde3ec;border-radius:8px;font-size:14px;font-family:var(--font-main);background:white;text-align:center">
               <span style="font-size:12px;color:#888">pasos/día</span>
+            </div>
+          </div>
+          <!-- Objetivo pactado pasos — Datos Clínicos -->
+          <div style="grid-column:1/-1">
+            <label style="font-size:11px;font-weight:600;color:#666;display:block;margin-bottom:6px">Objetivo pactado</label>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+              <label style="display:flex;align-items:center;gap:4px;font-size:12px;cursor:pointer;padding:5px 10px;border:1.5px solid #dde3ec;border-radius:8px;background:#f8fbfe"><input type="radio" name="fhcli_pasos_obj" value="" onchange="calcularFHObjetivoPasos()"> Sin objetivo</label>
+              <label style="display:flex;align-items:center;gap:4px;font-size:12px;cursor:pointer;padding:5px 10px;border:1.5px solid #dde3ec;border-radius:8px;background:#f8fbfe"><input type="radio" name="fhcli_pasos_obj" value="5000" onchange="calcularFHObjetivoPasos()"> 5.000</label>
+              <label style="display:flex;align-items:center;gap:4px;font-size:12px;cursor:pointer;padding:5px 10px;border:1.5px solid #dde3ec;border-radius:8px;background:#f8fbfe"><input type="radio" name="fhcli_pasos_obj" value="7500" onchange="calcularFHObjetivoPasos()"> 7.500</label>
+              <label style="display:flex;align-items:center;gap:4px;font-size:12px;cursor:pointer;padding:5px 10px;border:1.5px solid #dde3ec;border-radius:8px;background:#f8fbfe"><input type="radio" name="fhcli_pasos_obj" value="10000" onchange="calcularFHObjetivoPasos()"> 10.000</label>
+              <label style="display:flex;align-items:center;gap:4px;font-size:12px;cursor:pointer;padding:5px 10px;border:1.5px solid #dde3ec;border-radius:8px;background:#f8fbfe"><input type="radio" name="fhcli_pasos_obj" value="custom" onchange="calcularFHObjetivoPasos()"> Otro: <input type="number" id="fh_pasos_obj_custom" min="1000" max="30000" placeholder="ej:8000" onclick="document.querySelector('input[name=fhcli_pasos_obj][value=custom]').checked=true;calcularFHObjetivoPasos()" oninput="document.querySelector('input[name=fhcli_pasos_obj][value=custom]').checked=true;calcularFHObjetivoPasos()" style="width:80px;padding:4px 6px;border:1px solid #dde3ec;border-radius:6px;font-size:12px;font-family:var(--font-main)"></label>
+              <div id="fh_pasos_badge" style="display:none;font-size:11px;font-weight:700;padding:4px 10px;border-radius:20px"></div>
             </div>
           </div>
         </div>
@@ -16686,11 +16778,83 @@ function quitarActividadFH(i){ _fhActItems.splice(i,1); _renderFHLista(); }
 
 function _renderFHLista(){
   var c = document.getElementById('fh_act_lista'); if(!c) return;
-  if(!_fhActItems.length){ c.innerHTML=''; return; }
+  var resBox = document.getElementById('fh_act_resumen_oms');
+  if(!_fhActItems.length){
+    c.innerHTML='<div style="text-align:center;padding:12px;font-size:12px;color:#aaa;border:1.5px dashed #dde3ec;border-radius:10px">Ninguna actividad cargada aún</div>';
+    if(resBox) resBox.style.display='none';
+    return;
+  }
+  var colInt = {leve:{bg:'#f0f9ff',border:'#bae6fd',txt:'#0369a1'},moderada:{bg:'#fffbeb',border:'#fde68a',txt:'#92400e'},intensa:{bg:'#fff1f2',border:'#fecdd3',txt:'#be123c'},'':{bg:'#f8fbfe',border:'#dde3ec',txt:'#666'}};
+  var DIAS_LABELS = ['L','M','X','J','V','S','D'];
   c.innerHTML = _fhActItems.map(function(a,i){
-    var d=[a.tipo,a.intensidad,a.minutos?a.minutos+'min/ses':'',a.dias?a.dias+'días/sem':''].filter(Boolean).join(' · ');
-    return '<div style="display:flex;align-items:center;gap:10px;background:#f0faf8;border:1px solid #bbf7d0;border-radius:9px;padding:8px 12px;font-size:12px;color:#166534"><span style="flex:1">'+d+'</span><button type="button" onclick="quitarActividadFH('+i+')" style="border:none;background:none;color:#dc2626;font-size:15px;cursor:pointer;line-height:1">×</button></div>';
+    var cl = colInt[a.intensidad||''] || colInt[''];
+    var minSem = (a.minutos && a.dias) ? a.minutos * a.dias : null;
+    // Botones de días editables inline
+    var diasArr = Array.isArray(a.diasArr) ? a.diasArr : [];
+    // Si no tiene diasArr pero tiene dias (número), no podemos saber cuáles — los dejamos vacíos para que elija
+    var diaButtons = DIAS_LABELS.map(function(lbl,di){
+      var sel = diasArr.indexOf(di+1) !== -1;
+      var bStyle = sel
+        ? 'width:26px;height:26px;border-radius:50%;border:1.5px solid #2a9496;background:#2a9496;color:white;font-size:10px;font-weight:700;cursor:pointer;font-family:var(--font-main)'
+        : 'width:26px;height:26px;border-radius:50%;border:1.5px solid #dde3ec;background:white;color:#666;font-size:10px;font-weight:700;cursor:pointer;font-family:var(--font-main)';
+      return '<button type="button" style="'+bStyle+'" onclick="_fhToggleDia('+i+','+( di+1)+')" title="'+lbl+'">'+lbl+'</button>';
+    }).join('');
+    return '<div style="padding:10px 14px;border:1.5px solid '+cl.border+';border-radius:10px;background:'+cl.bg+'">'
+      +'<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">'
+      +'<span style="font-size:13px;font-weight:700;color:'+cl.txt+'">'+a.tipo+'</span>'
+      +'<span style="font-size:11px;color:#888">'+[a.intensidad, a.minutos?a.minutos+'min/ses':'', minSem?'→ '+minSem+'min/sem':''].filter(Boolean).join(' · ')+'</span>'
+      +'<button type="button" onclick="quitarActividadFH('+i+')" style="margin-left:auto;border:none;background:none;color:#ccc;font-size:18px;cursor:pointer;padding:0 2px;line-height:1">×</button>'
+      +'</div>'
+      +'<div style="display:flex;align-items:center;gap:6px">'
+      +'<span style="font-size:10px;color:#888;font-weight:600;text-transform:uppercase;letter-spacing:.04em;margin-right:2px">Días:</span>'
+      +diaButtons
+      +'</div>'
+      +'</div>';
   }).join('');
+  // Calcular resumen OMS
+  var minMod=0,minInt=0,minLeve=0,diasFuerza=0;
+  _fhActItems.forEach(function(a){
+    if(!a.minutos||!a.dias) return;
+    var ms=a.minutos*a.dias;
+    if(a.intensidad==='moderada') minMod+=ms;
+    else if(a.intensidad==='intensa'){minInt+=ms; minMod+=ms*2;}
+    else if(a.intensidad==='leve') minLeve+=ms;
+    if(['Gym – Fuerza','Gym – Mixto'].includes(a.tipo)) diasFuerza+=a.dias;
+  });
+  var pct=Math.min(100,Math.round(minMod/150*100));
+  var colorBarra=pct>=100?'#22c55e':pct>=50?'#f59e0b':'#ef4444';
+  var iconObj=pct>=100?'✅':pct>=50?'⚠️':'❌';
+  var msgObj=pct>=100?'Cumple objetivos OMS':pct>=50?'Actividad insuficiente':'Sedentarismo o actividad muy baja';
+  if(resBox){
+    resBox.style.display='block';
+    resBox.style.background=pct>=100?'#f0faf4':pct>=50?'#fffbeb':'#fff5f5';
+    resBox.style.border='1.5px solid '+(pct>=100?'#bbf7d0':pct>=50?'#fde68a':'#fecaca');
+    resBox.innerHTML='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">'
+      +'<strong style="font-size:12px;color:#333">📊 Resumen semanal</strong>'
+      +'<span style="font-size:11px;font-weight:700;color:'+colorBarra+'">'+iconObj+' '+msgObj+'</span>'
+      +'</div>'
+      +'<div style="display:flex;gap:16px;font-size:12px;margin-bottom:8px;flex-wrap:wrap">'
+      +'<span>🟡 Leve: <strong>'+minLeve+' min/sem</strong></span>'
+      +'<span>🟠 Moderada: <strong>'+(minMod-(minInt*2>0?minInt*2:0))+' min/sem</strong></span>'
+      +'<span>🔴 Intensa: <strong>'+minInt+' min/sem</strong></span>'
+      +'<span>⚡ Equiv. mod.: <strong>'+minMod+' / 150 min</strong></span>'
+      +(diasFuerza?'<span>💪 Fuerza: <strong>'+diasFuerza+' días/sem '+(diasFuerza>=2?'✅':'(falta para OMS)')+'</strong></span>':'')
+      +'</div>'
+      +'<div style="background:#e5e7eb;border-radius:99px;height:8px;overflow:hidden">'
+      +'<div style="height:100%;width:'+pct+'%;background:'+colorBarra+';border-radius:99px;transition:width .4s"></div>'
+      +'</div>'
+      +'<div style="font-size:10px;color:#888;margin-top:4px;text-align:right">'+pct+'% del objetivo OMS</div>';
+  }
+}
+
+function _fhToggleDia(itemIdx, diaNum) {
+  var a = _fhActItems[itemIdx]; if(!a) return;
+  if(!Array.isArray(a.diasArr)) a.diasArr = [];
+  var idx = a.diasArr.indexOf(diaNum);
+  if(idx === -1) a.diasArr.push(diaNum);
+  else a.diasArr.splice(idx, 1);
+  a.dias = a.diasArr.length;
+  _renderFHLista();
 }
 
 // Pre-carga la tab desde el snapshot en memoria al abrir Datos Clínicos
@@ -16699,7 +16863,7 @@ function precargarTabActAli(){
   ['fh_pasos','fh_frutas','fh_verduras','fh_lacteos','fh_pescado','fh_c_rojas','fh_legumbres'].forEach(function(id){
     var e=document.getElementById(id); if(e) e.value='';
   });
-  ['fhcli_pausas','fhcli_hiposodica','fhcli_edulc','fhcli_pollo_cerdo','fhcli_ali_social'].forEach(function(n){
+  ['fhcli_pausas','fhcli_hiposodica','fhcli_edulc','fhcli_pollo_cerdo','fhcli_ali_social','fhcli_pasos_obj'].forEach(function(n){
     document.querySelectorAll('input[name="'+n+'"]').forEach(function(r){r.checked=false;});
   });
   document.querySelectorAll('#fhpanel_act input[name="fhcli_int"]').forEach(function(r){r.checked=false;});
@@ -16712,9 +16876,20 @@ function precargarTabActAli(){
   if(snap.hab_actividad_json){
     try{
       var a=JSON.parse(snap.hab_actividad_json);
-      if(a.actividades&&a.actividades.length){_fhActItems=a.actividades;_renderFHLista();}
+      if(a.actividades&&a.actividades.length){
+        _fhActItems=a.actividades;
+        _fhActItems.forEach(function(item){ if(!Array.isArray(item.diasArr)) item.diasArr = []; });
+        _renderFHLista();
+      }
       if(a.pausas){var rp=document.querySelector('input[name="fhcli_pausas"][value="'+a.pausas+'"]');if(rp)rp.checked=true;}
       if(a.pasos){var ep=document.getElementById('fh_pasos');if(ep)ep.value=a.pasos;}
+      if(a.pasosObj){
+        var isC=['5000','7500','10000',''].indexOf(String(a.pasosObj))===-1;
+        var rpo=document.querySelector('input[name="fhcli_pasos_obj"][value="'+(isC?'custom':String(a.pasosObj))+'"]');
+        if(rpo)rpo.checked=true;
+        if(isC){var epoc=document.getElementById('fh_pasos_obj_custom');if(epoc)epoc.value=a.pasosObj;}
+      }
+      if(typeof calcularFHObjetivoPasos==='function') calcularFHObjetivoPasos();
       if(a.notas){var en=document.getElementById('fh_act_notas');if(en)en.value=a.notas;}
     }catch(e){}
   }
@@ -16749,10 +16924,12 @@ function leerTabActAli(){
   var pollo_cerdo=(document.querySelector('input[name="fhcli_pollo_cerdo"]:checked')||{}).value||'';
   var social    =(document.querySelector('input[name="fhcli_ali_social"]:checked')||{}).value||'';
   var aliNotas  =((document.getElementById('fh_ali_notas')||{}).value||'').trim();
+  var pasosObjRadio=(document.querySelector('input[name="fhcli_pasos_obj"]:checked')||{}).value||'';
+  var pasosObj=pasosObjRadio==='custom'?(document.getElementById('fh_pasos_obj_custom')||{}).value||'':pasosObjRadio;
   var hayAct=_fhActItems.length>0||pausas||pasos||actNotas;
   var hayAli=hiposodica||edulc||frutas||verduras||lacteos||pescado||c_rojas||legumbres||pollo_cerdo||social||aliNotas;
   var res={};
-  if(hayAct) res.act={actividades:_fhActItems,pausas:pausas,pasos:pasos,pasosObj:'',cambio:'',notas:actNotas};
+  if(hayAct) res.act={actividades:_fhActItems,pausas:pausas,pasos:pasos,pasosObj:pasosObj,cambio:'',notas:actNotas};
   if(hayAli) res.ali={hiposodica:hiposodica,edulc:edulc,frutas:frutas,verduras:verduras,lacteos:lacteos,
                       pescado:pescado,c_rojas:c_rojas,legumbres:legumbres,pollo_cerdo:pollo_cerdo,
                       social:social,cambio:'',notas:aliNotas};
@@ -16823,15 +17000,395 @@ guardarClinica=async function(){
     var dni=pacienteActual.dni;
     if(hab.act) await sb.from('paciente_clinica').update({hab_actividad_json:JSON.stringify(hab.act)}).eq('dni_paciente',dni);
     if(hab.ali) await sb.from('paciente_clinica').update({hab_alimentacion_json:JSON.stringify(hab.ali)}).eq('dni_paciente',dni);
-    if(typeof evolClinicaSnapshot!=='undefined'&&evolClinicaSnapshot&&evolClinicaSnapshot.clinica){
+    // Asegurar que evolClinicaSnapshot exista y tenga los campos hab_*
+    if(typeof evolClinicaSnapshot!=='undefined'){
+      if(!evolClinicaSnapshot) evolClinicaSnapshot={clinica:{},medicacion:[]};
+      if(!evolClinicaSnapshot.clinica) evolClinicaSnapshot.clinica={};
       if(hab.act) evolClinicaSnapshot.clinica.hab_actividad_json=JSON.stringify(hab.act);
       if(hab.ali) evolClinicaSnapshot.clinica.hab_alimentacion_json=JSON.stringify(hab.ali);
+      // Re-volcar al bloque clinico en la evolucion con los nuevos datos de habitos
+      try{
+        var textoAct=generarTextoClinico(evolClinicaSnapshot.clinica, evolClinicaSnapshot.medicacion||[]);
+        if(textoAct){
+          var editor=document.getElementById('evol_editor');
+          if(editor){
+            var tmp=document.createElement('div'); tmp.innerHTML=textoAct;
+            var prevBloque=editor.querySelector('.bloque-clinico');
+            if(prevBloque) prevBloque.replaceWith(tmp.firstChild);
+          }
+        }
+      }catch(e){ console.warn('[guardarClinica patch] re-volcar texto clinico:', e); }
     }
     precargarModalHabitosUpd(hab);
   }
 };
 // ══════════════════════════════════════════════════════════════════════════════
 
+
+// ── Funciones nuevas: auto-intensidad FH, objetivo pasos FH, toggle días ──────
+
+function onFHTipoActividadChange() {
+  var tipo = document.getElementById('fh_nueva_tipo').value;
+  var intSug = _intSugerida[tipo] || '';
+  if(intSug) {
+    var r = document.querySelector('#fhpanel_act input[name="fhcli_int"][value="'+intSug+'"]');
+    if(r) r.checked = true;
+  } else {
+    document.querySelectorAll('#fhpanel_act input[name="fhcli_int"]').forEach(function(r){ r.checked=false; });
+  }
+}
+
+function calcularFHObjetivoPasos() {
+  var pasos = parseInt(document.getElementById('fh_pasos')?.value) || 0;
+  var objRadio = document.querySelector('input[name="fhcli_pasos_obj"]:checked');
+  var objVal = objRadio ? objRadio.value : '';
+  var objetivo = 0;
+  if(objVal === 'custom') objetivo = parseInt(document.getElementById('fh_pasos_obj_custom')?.value) || 0;
+  else objetivo = parseInt(objVal) || 0;
+  var badge = document.getElementById('fh_pasos_badge');
+  if(!badge) return;
+  if(!objetivo || !pasos) { badge.style.display='none'; return; }
+  var diff = pasos - objetivo;
+  var pct  = Math.round(pasos/objetivo*100);
+  badge.style.display = 'inline-block';
+  if(diff >= 0) {
+    badge.style.background='#dcfce7'; badge.style.color='#166534';
+    badge.textContent = '✅ +'+diff+' pasos ('+pct+'%)';
+  } else {
+    badge.style.background='#fef3c7'; badge.style.color='#92400e';
+    badge.textContent = '⚠️ '+diff+' pasos ('+pct+'%)';
+  }
+}
+
+
+// Toggle días inline en lista de Actualización clínica
+function _habToggleDia(itemIdx, diaNum) {
+  var a = _actItems[itemIdx]; if(!a) return;
+  if(!Array.isArray(a.diasArr)) a.diasArr = [];
+  var idx = a.diasArr.indexOf(diaNum);
+  if(idx === -1) a.diasArr.push(diaNum);
+  else a.diasArr.splice(idx, 1);
+  a.dias = a.diasArr.length;
+  renderActItems();
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ═══════════════════════════════════════════════════════════════════
+// INFORME DE HÁBITOS — Actividad física & Alimentación
+// ═══════════════════════════════════════════════════════════════════
+async function imprimirInformeHabitos() {
+  const p = pacienteActual;
+  if (!p) { alert('Sin paciente activo.'); return; }
+
+  // Cargar historial de evoluciones con clinica_snapshot
+  let historial = [];
+  try {
+    const { data } = await sb.from('evoluciones')
+      .select('fecha_hora, clinica_snapshot')
+      .eq('dni_paciente', p.dni)
+      .not('clinica_snapshot', 'is', null)
+      .order('fecha_hora', { ascending: true });
+    if (data) {
+      historial = data.map(row => {
+        try {
+          const snap = JSON.parse(row.clinica_snapshot);
+          const c = snap.clinica || snap;
+          return {
+            fecha: row.fecha_hora,
+            act: c.hab_actividad_json ? JSON.parse(c.hab_actividad_json) : null,
+            ali: c.hab_alimentacion_json ? JSON.parse(c.hab_alimentacion_json) : null,
+          };
+        } catch(e) { return null; }
+      }).filter(h => h && (h.act || h.ali));
+    }
+  } catch(e) { console.warn('imprimirInformeHabitos:', e); }
+
+  // También incluir el estado actual (snapshot en memoria)
+  const snapActual = evolClinicaSnapshot?.clinica;
+  if (snapActual) {
+    const actAct = snapActual.hab_actividad_json ? (() => { try { return JSON.parse(snapActual.hab_actividad_json); } catch(e) { return null; }})() : null;
+    const aliAct = snapActual.hab_alimentacion_json ? (() => { try { return JSON.parse(snapActual.hab_alimentacion_json); } catch(e) { return null; }})() : null;
+    if (actAct || aliAct) {
+      const yaEsta = historial.some(h => {
+        try {
+          const hAct = JSON.stringify(h.act);
+          const hAli = JSON.stringify(h.ali);
+          return hAct === JSON.stringify(actAct) && hAli === JSON.stringify(aliAct);
+        } catch(e) { return false; }
+      });
+      if (!yaEsta) historial.push({ fecha: new Date().toISOString(), act: actAct, ali: aliAct, actual: true });
+    }
+  }
+
+  // Deduplicar: si dos entradas consecutivas son iguales, quedarse con la última
+  const dedup = [];
+  historial.forEach((h, i) => {
+    if (i === 0) { dedup.push(h); return; }
+    const prev = dedup[dedup.length - 1];
+    if (JSON.stringify(prev.act) === JSON.stringify(h.act) &&
+        JSON.stringify(prev.ali) === JSON.stringify(h.ali)) {
+      dedup[dedup.length - 1] = h; // reemplazar con más reciente
+    } else {
+      dedup.push(h);
+    }
+  });
+
+  if (!dedup.length) { alert('No hay datos de hábitos registrados para este paciente.'); return; }
+
+  // ── Datos del profesional ──────────────────────────────────────────
+  const cu = window._cu || (typeof users !== 'undefined' && window._su ? (users[window._su] || {}) : {});
+  const profNombre = cu.titulo || cu.name || '';
+  const profMP     = cu.mp || '';
+  const _suId = (window._su || '').toLowerCase();
+  const profEspec = _suId === 'barbara' ? 'Hipertensión · Dislipemias · Adiposopatía'
+                  : _suId === 'omar'    ? 'Hipertensión · Diabetes'
+                  : (cu.especialidades || []).join(' · ') || cu.role || '';
+
+  const nombre   = (p.apellido || '') + ', ' + (p.nombre || '');
+  const fnac     = p.fecha_nacimiento || p.fnac || '';
+  const edad     = fnac ? (new Date().getFullYear() - new Date(fnac + 'T12:00:00').getFullYear()) + ' años' : '';
+  const fechaHoy = new Date().toLocaleDateString('es-AR', { day:'2-digit', month:'long', year:'numeric' });
+
+  const fmtFecha = iso => {
+    try { return new Date(iso).toLocaleDateString('es-AR', { day:'2-digit', month:'2-digit', year:'2-digit' }); }
+    catch(e) { return ''; }
+  };
+
+  // ── OMS calc ──────────────────────────────────────────────────────
+  const calcOMS = (act) => {
+    if (!act || !act.actividades || !act.actividades.length) return null;
+    let minMod = 0, minInt = 0, minLeve = 0, diasFuerza = 0;
+    act.actividades.forEach(a => {
+      if (!a.minutos || !a.dias) return;
+      const ms = a.minutos * a.dias;
+      if (a.intensidad === 'moderada') minMod += ms;
+      else if (a.intensidad === 'intensa') { minInt += ms; minMod += ms * 2; }
+      else minLeve += ms;
+      if (['Gym – Fuerza','Gym – Mixto'].includes(a.tipo)) diasFuerza += a.dias;
+    });
+    const pct = Math.min(100, Math.round(minMod / 150 * 100));
+    return { minMod, minInt, minLeve, diasFuerza, pct };
+  };
+
+  // ── Render bloque actividad ────────────────────────────────────────
+  const renderAct = (act, oms) => {
+    if (!act) return '<span style="color:#94a3b8;font-style:italic">Sin datos</span>';
+    const lines = [];
+    if (act.actividades && act.actividades.length) {
+      act.actividades.forEach(a => {
+        const parts = [a.tipo];
+        if (a.intensidad) parts.push('<em>' + a.intensidad + '</em>');
+        if (a.minutos) parts.push(a.minutos + 'min/ses');
+        if (a.dias) parts.push(a.dias + 'd/sem');
+        if (a.minutos && a.dias) parts.push('→ ' + (a.minutos * a.dias) + 'min/sem');
+        lines.push('<span class="act-item">' + parts.join(' ') + '</span>');
+      });
+    }
+    if (act.pausas === 'si') lines.push('<span class="chip chip-green">Pausas activas ✓</span>');
+    else if (act.pausas === 'no') lines.push('<span class="chip chip-red">Sin pausas activas</span>');
+    if (act.pasos) {
+      let ps = act.pasos + ' pasos/día';
+      if (act.pasosObj) ps += ' (obj: ' + act.pasosObj + ')';
+      lines.push('<span class="chip chip-blue">' + ps + '</span>');
+    }
+    if (oms) {
+      const col = oms.pct >= 100 ? '#16a34a' : oms.pct >= 50 ? '#d97706' : '#dc2626';
+      const icon = oms.pct >= 100 ? '✅' : oms.pct >= 50 ? '⚠️' : '❌';
+      lines.push('<div class="oms-bar-wrap"><div class="oms-bar-fill" style="width:' + oms.pct + '%;background:' + col + '"></div></div><span class="oms-label" style="color:' + col + '">' + icon + ' ' + oms.pct + '% OMS (' + oms.minMod + ' min/sem equiv.)</span>');
+    }
+    if (act.cambio && act.cambio !== '') lines.push('<span class="chip chip-gray">vs. anterior: ' + act.cambio + '</span>');
+    if (act.notas) lines.push('<div class="nota-txt">📝 ' + act.notas + '</div>');
+    return lines.join('') || '<span style="color:#94a3b8;font-style:italic">Sin actividad registrada</span>';
+  };
+
+  // ── Render bloque alimentación ─────────────────────────────────────
+  const renderAli = (ali) => {
+    if (!ali) return '<span style="color:#94a3b8;font-style:italic">Sin datos</span>';
+    const chips = [];
+    if (ali.hiposodica) chips.push({ txt: 'Hiposódica: ' + ali.hiposodica, cls: ali.hiposodica === 'cumple' ? 'chip-green' : 'chip-red' });
+    if (ali.edulc && ali.edulc !== '') chips.push({ txt: 'Edulcorante: ' + ali.edulc, cls: ali.edulc === 'ninguno' ? 'chip-green' : 'chip-gray' });
+    const freq = [
+      { k:'frutas',   l:'Frutas',    u:'/día' },
+      { k:'verduras', l:'Verduras',  u:'/día' },
+      { k:'lacteos',  l:'Lácteos',   u:'/día' },
+      { k:'pescado',  l:'Pescado',   u:'/sem' },
+      { k:'c_rojas',  l:'C. rojas',  u:'/sem' },
+      { k:'legumbres',l:'Legumbres', u:'/sem' },
+    ];
+    freq.forEach(f => { if (ali[f.k]) chips.push({ txt: f.l + ': ' + ali[f.k] + f.u, cls: 'chip-blue' }); });
+    if (ali.pollo_cerdo === 'si') chips.push({ txt: 'Pollo/cerdo ✓', cls: 'chip-green' });
+    if (ali.social === 'si') chips.push({ txt: 'Alim. social ✓', cls: 'chip-green' });
+    else if (ali.social === 'no') chips.push({ txt: 'Sin alim. social', cls: 'chip-gray' });
+    if (ali.cambio && ali.cambio !== '') chips.push({ txt: 'vs. anterior: ' + ali.cambio, cls: 'chip-gray' });
+    let html2 = chips.map(c => '<span class="chip ' + c.cls + '">' + c.txt + '</span>').join('');
+    if (ali.notas) html2 += '<div class="nota-txt">📝 ' + ali.notas + '</div>';
+    return html2 || '<span style="color:#94a3b8;font-style:italic">Sin datos registrados</span>';
+  };
+
+  // ── Bloques de consultas ───────────────────────────────────────────
+  const bloques = dedup.map((h, i) => {
+    const oms = calcOMS(h.act);
+    const esActual = h.actual ? ' <span class="badge-actual">Actual</span>' : '';
+    return `<div class="consulta-block ${i % 2 === 1 ? 'alt' : ''}">
+      <div class="consulta-header">
+        <span class="consulta-num">Consulta ${i + 1}</span>
+        <span class="consulta-fecha">${fmtFecha(h.fecha)}${esActual}</span>
+      </div>
+      <div class="consulta-body">
+        <div class="hab-col">
+          <div class="hab-col-title">🏃 Actividad física</div>
+          <div class="hab-col-content">${renderAct(h.act, oms)}</div>
+        </div>
+        <div class="hab-col">
+          <div class="hab-col-title">🥗 Alimentación</div>
+          <div class="hab-col-content">${renderAli(h.ali)}</div>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+
+  // ── HTML completo ─────────────────────────────────────────────────
+  const reportHTML = `<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"/>
+<title>Informe Hábitos — ${nombre}</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Inter',sans-serif;font-size:11px;color:#1e293b;background:#f8fafc;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+
+  /* HEADER */
+  .report-header{background:linear-gradient(135deg,#134e4a 0%,#0f766e 60%,#0d9488 100%);color:white;padding:24px 32px 20px;display:flex;align-items:center;gap:20px}
+  .logo-circle{width:52px;height:52px;border-radius:50%;background:rgba(255,255,255,.15);border:2px solid rgba(255,255,255,.3);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:22px}
+  .header-text{flex:1}
+  .header-title{font-size:20px;font-weight:800;letter-spacing:.02em;line-height:1.1}
+  .header-sub{font-size:11px;color:rgba(255,255,255,.7);margin-top:3px;letter-spacing:.04em;text-transform:uppercase}
+  .header-fecha{text-align:right;font-size:10px;color:rgba(255,255,255,.6);line-height:1.7}
+  .header-fecha strong{display:block;font-size:12px;color:rgba(255,255,255,.9);font-weight:600}
+
+  /* PACIENTE */
+  .paciente-bar{background:white;border-bottom:3px solid #0f766e;padding:14px 32px;display:flex;align-items:center;gap:24px;flex-wrap:wrap}
+  .pac-chip{display:flex;flex-direction:column}
+  .pac-chip-label{font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#94a3b8;margin-bottom:2px}
+  .pac-chip-val{font-size:13px;font-weight:700;color:#134e4a}
+  .pac-divider{width:1px;height:32px;background:#e2e8f0;flex-shrink:0}
+  .pac-sexo-badge{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:20px;font-size:10px;font-weight:600}
+  .pac-sexo-badge.f{background:#fce7f3;color:#be185d}
+  .pac-sexo-badge.m{background:#eff6ff;color:#1d4ed8}
+
+  /* PROFESIONAL */
+  .prof-strip{background:#f0fdfa;border-left:4px solid #0f766e;padding:10px 32px;display:flex;align-items:center;gap:10px;font-size:10.5px}
+  .prof-strip-name{font-weight:700;color:#134e4a;font-size:11.5px}
+  .prof-strip-sep{color:#99f6e4;font-size:14px}
+  .prof-strip-mp{color:#0f766e;font-weight:600}
+  .prof-strip-esp{color:#64748b;font-style:italic}
+
+  /* BODY */
+  .body-wrap{padding:20px 32px 28px}
+  .section-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#64748b;margin-bottom:12px;display:flex;align-items:center;gap:8px}
+  .section-title::after{content:'';flex:1;height:1px;background:#e2e8f0}
+
+  /* CONSULTA BLOCK */
+  .consulta-block{background:white;border-radius:12px;border:1px solid #e2e8f0;margin-bottom:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+  .consulta-block.alt{background:#fafffe}
+  .consulta-header{background:linear-gradient(90deg,#134e4a,#0f766e);color:white;padding:8px 16px;display:flex;align-items:center;justify-content:space-between}
+  .consulta-num{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase}
+  .consulta-fecha{font-size:11px;color:rgba(255,255,255,.85);font-weight:500}
+  .consulta-body{display:grid;grid-template-columns:1fr 1fr;gap:0}
+  .hab-col{padding:12px 16px;border-right:1px solid #f1f5f9}
+  .hab-col:last-child{border-right:none}
+  .hab-col-title{font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#0f766e;margin-bottom:8px;padding-bottom:5px;border-bottom:1px solid #e2e8f0}
+  .hab-col-content{display:flex;flex-direction:column;gap:4px}
+
+  /* CHIPS Y ITEMS */
+  .act-item{display:block;font-size:11px;color:#1e293b;padding:3px 0;border-bottom:1px solid #f8fafc}
+  .act-item em{font-style:normal;font-weight:600;color:#0f766e}
+  .chip{display:inline-block;padding:2px 8px;border-radius:12px;font-size:9.5px;font-weight:600;margin:2px 2px 2px 0}
+  .chip-green{background:#dcfce7;color:#166534}
+  .chip-red{background:#fee2e2;color:#991b1b}
+  .chip-blue{background:#dbeafe;color:#1d4ed8}
+  .chip-gray{background:#f1f5f9;color:#475569}
+  .nota-txt{font-size:9.5px;color:#64748b;font-style:italic;margin-top:4px;padding:4px 8px;background:#f8fafc;border-left:2px solid #cbd5e1;border-radius:0 4px 4px 0}
+  .badge-actual{background:#fef3c7;color:#92400e;font-size:8.5px;font-weight:700;padding:1px 6px;border-radius:10px;margin-left:6px}
+
+  /* OMS BAR */
+  .oms-bar-wrap{height:6px;background:#e5e7eb;border-radius:99px;overflow:hidden;margin:5px 0 2px;width:100%}
+  .oms-bar-fill{height:100%;border-radius:99px;transition:width .3s}
+  .oms-label{font-size:9.5px;font-weight:700}
+
+  /* FOOTER */
+  .report-footer{margin-top:20px;padding-top:12px;border-top:1px solid #e2e8f0;display:flex;align-items:center;justify-content:space-between;font-size:8.5px;color:#94a3b8}
+  .footer-brand{font-weight:700;color:#64748b;letter-spacing:.04em;text-transform:uppercase}
+
+  @media print{
+    body{background:white}
+    @page{margin:8mm 10mm;size:A4}
+    .consulta-block{break-inside:avoid}
+    .report-header,.consulta-header{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  }
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div class="report-header">
+  <div class="logo-circle">🏃</div>
+  <div class="header-text">
+    <div class="header-title">Seguimiento de Hábitos</div>
+    <div class="header-sub">Actividad física &amp; Alimentación · URCyM</div>
+  </div>
+  <div class="header-fecha">
+    <strong>${fechaHoy}</strong>
+    ${dedup.length} consulta${dedup.length !== 1 ? 's' : ''} registrada${dedup.length !== 1 ? 's' : ''}
+  </div>
+</div>
+
+<!-- PACIENTE -->
+<div class="paciente-bar">
+  <div class="pac-chip">
+    <span class="pac-chip-label">Paciente</span>
+    <span class="pac-chip-val">${nombre}</span>
+  </div>
+  ${edad ? `<div class="pac-divider"></div>
+  <div class="pac-chip">
+    <span class="pac-chip-label">Edad</span>
+    <span class="pac-chip-val">${edad}</span>
+  </div>` : ''}
+  ${p.sexo ? `<div class="pac-divider"></div>
+  <div class="pac-chip">
+    <span class="pac-chip-label">Sexo</span>
+    <span class="pac-sexo-badge ${p.sexo === 'Femenino' ? 'f' : 'm'}">${p.sexo === 'Femenino' ? '♀' : '♂'} ${p.sexo}</span>
+  </div>` : ''}
+</div>
+
+<!-- PROFESIONAL -->
+${profNombre ? `<div class="prof-strip">
+  <span class="prof-strip-name">${profNombre}</span>
+  ${profMP ? `<span class="prof-strip-sep">·</span><span class="prof-strip-mp">M.P. ${profMP}</span>` : ''}
+  ${profEspec ? `<span class="prof-strip-sep">·</span><span class="prof-strip-esp">${profEspec}</span>` : ''}
+</div>` : ''}
+
+<!-- CUERPO -->
+<div class="body-wrap">
+  <div class="section-title">Evolución por consulta</div>
+  ${bloques}
+  <div class="report-footer">
+    <span class="footer-brand">URCyM · Hábitos Saludables</span>
+    <span>Generado el ${fechaHoy} · Documento de uso médico exclusivo</span>
+  </div>
+</div>
+
+</body>
+</html>`;
+
+  const win = window.open('', '_blank', 'width=900,height=700');
+  if (!win) { alert('Bloqueador de popups activo. Permitir para este sitio.'); return; }
+  win.document.write(reportHTML);
+  win.document.close();
+  win.focus();
+  setTimeout(() => win.print(), 500);
+}
 </script>
 
 </body>
