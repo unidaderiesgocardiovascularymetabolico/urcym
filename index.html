@@ -6686,6 +6686,9 @@ async function cargarDatosClinica(dni) {
 
   const { data } = await sb.from('paciente_clinica').select('*').eq('dni_paciente',dni).maybeSingle();
   if(!data){agregarFilaMed();return;}
+  // Actualizar evolClinicaSnapshot con los datos frescos de este paciente
+  if(!evolClinicaSnapshot) evolClinicaSnapshot={clinica:{},medicacion:[]};
+  evolClinicaSnapshot.clinica = data;
   ['hta','hta2','dis','erc','obe','sob','masld','dbt2','dbt1','dbt_otro','predbt','hiperu','atero_subcl','eap','iam','acv','fa','sahos','epoc','icc','hvi','albuminuria','rp_dbt','neu_dbt','ms','pe','rciu','ppt','sop','dbtg','htag','ms_gineco','menopausia'].forEach(d=>{const el=document.getElementById('dx_'+d);if(el)el.checked=!!data['dx_'+d];});
   ['hta','dbt','obe','dis','iam','acv','erc','ms'].forEach(d=>{const el=document.getElementById('fam_'+d);if(el)el.checked=!!data['fam_'+d];});
   // GPAC
@@ -6759,6 +6762,12 @@ async function cargarDatosClinica(dni) {
   const tabNotes = document.getElementById('tab_notas_generales');
   if(tabNotes) tabNotes.value = data.tab_notas || '';
   await cargarMedicacion(dni);
+  // Sincronizar evolClinicaSnapshot.medicacion con los datos frescos del paciente
+  try {
+    const mrFresh = await sb.from('medicacion').select('*').eq('dni_paciente', dni).eq('activo', true).order('grupo');
+    if(!evolClinicaSnapshot) evolClinicaSnapshot={clinica:data,medicacion:[]};
+    evolClinicaSnapshot.medicacion = mrFresh.data || [];
+  } catch(e) {}
 }
 
 ['modalPaciente','modalReceta','modalIndicaciones','modalHistorialDx','modalHistorialMed','modalLabRO'].forEach(id=>{
@@ -8551,9 +8560,9 @@ function formatIndCmd(cmd, val) {
 }
 
 
-function abrirModalClinica() {
+async function abrirModalClinica() {
   if(!pacienteActual) return;
-  cargarDatosClinica(pacienteActual.dni);
+  await cargarDatosClinica(pacienteActual.dni);
   document.getElementById('modalClinica').classList.add('open');
 }
 
@@ -16930,9 +16939,25 @@ function precargarModalHabitosUpd(hab){
   _habDatos=hab;
 }
 
-// Parche abrirModalClinica → pre-carga la tab al abrir
+// Parche abrirModalClinica → pre-carga la tab al abrir (esperando a que cargarDatosClinica termine)
 var _origAbrirCli=abrirModalClinica;
-abrirModalClinica=function(){ _origAbrirCli(); precargarTabActAli(); };
+abrirModalClinica=async function(){
+  // Primero limpiamos los campos de actividad/alimentación para que no queden datos del paciente anterior
+  _fhActItems=[]; _renderFHLista();
+  ['fh_pasos','fh_frutas','fh_verduras','fh_lacteos','fh_pescado','fh_c_rojas','fh_legumbres'].forEach(function(id){
+    var e=document.getElementById(id); if(e) e.value='';
+  });
+  ['fhcli_pausas','fhcli_hiposodica','fhcli_edulc','fhcli_pollo_cerdo','fhcli_ali_social','fhcli_pasos_obj'].forEach(function(n){
+    document.querySelectorAll('input[name="'+n+'"]').forEach(function(r){r.checked=false;});
+  });
+  document.querySelectorAll('#fhpanel_act input[name="fhcli_int"]').forEach(function(r){r.checked=false;});
+  var ea=document.getElementById('fh_act_notas'); if(ea) ea.value='';
+  var ei=document.getElementById('fh_ali_notas'); if(ei) ei.value='';
+  // Esperar a que carguen los datos clínicos del paciente actual (incluyendo el snapshot)
+  await _origAbrirCli();
+  // Ahora sí precargar con el snapshot del paciente correcto
+  precargarTabActAli();
+};
 
 // Parche guardarClinica → al guardar, escribe en Supabase y pre-carga "Cambios en esta consulta"
 var _origGuardarCli=guardarClinica;
