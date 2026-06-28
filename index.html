@@ -1005,6 +1005,16 @@
 .mdpa-modal-bg.open{display:flex}
 .mdpa-modal{background:white;border-radius:18px;padding:28px;width:100%;max-width:380px;box-shadow:0 20px 60px rgba(0,0,0,.2);animation:fadeUp .25s ease}
 .mdpa-modal-title{font-family:var(--font-display);font-size:16px;font-weight:700;color:var(--text);margin-bottom:20px}
+/* Modal informe previo MDPA */
+.mdpa-informe-bg{display:none;position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:2000;align-items:center;justify-content:center;padding:16px;backdrop-filter:blur(3px)}
+.mdpa-informe-bg.open{display:flex}
+.mdpa-informe-wrap{background:#f8fafc;border-radius:18px;width:100%;max-width:860px;max-height:92vh;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 24px 80px rgba(0,0,0,.3);animation:fadeUp .25s ease both}
+.mdpa-informe-topbar{display:flex;align-items:center;justify-content:space-between;padding:14px 20px;border-bottom:1px solid var(--border);background:white;border-radius:18px 18px 0 0;flex-shrink:0}
+.mdpa-informe-topbar-info{display:flex;flex-direction:column}
+.mdpa-informe-topbar-title{font-family:var(--font-display);font-size:15px;font-weight:700;color:var(--text)}
+.mdpa-informe-topbar-sub{font-size:11px;color:var(--text-soft);margin-top:2px}
+.mdpa-informe-topbar-actions{display:flex;align-items:center;gap:8px}
+.mdpa-informe-body{overflow-y:auto;flex:1}
 /* ── fin MDPA STYLES ── */
 </style>
 </head>
@@ -2936,6 +2946,23 @@
 
     </div><!-- /page-evolucion -->
 </div><!-- /app -->
+
+<!-- MODAL INFORME MDPA PREVIO (solo lectura) -->
+<div class="mdpa-informe-bg" id="mdpa_informe_modal" onclick="if(event.target===this)mdpaInformeCerrar()">
+  <div class="mdpa-informe-wrap">
+    <div class="mdpa-informe-topbar">
+      <div class="mdpa-informe-topbar-info">
+        <div class="mdpa-informe-topbar-title">🩺 Informe MDPA</div>
+        <div class="mdpa-informe-topbar-sub" id="mdpa_informe_subtitulo">Estudio previo · Solo lectura</div>
+      </div>
+      <div class="mdpa-informe-topbar-actions">
+        <button onclick="mdpaInformeImprimir()" style="padding:7px 16px;border:1.5px solid var(--blue);border-radius:9px;background:var(--blue-light);color:var(--blue);font-size:12px;font-weight:600;cursor:pointer;font-family:var(--font-main)">🖨️ Imprimir</button>
+        <button onclick="mdpaInformeCerrar()" style="width:32px;height:32px;border:none;border-radius:50%;background:var(--gray);font-size:18px;cursor:pointer;color:var(--text-soft);display:flex;align-items:center;justify-content:center">✕</button>
+      </div>
+    </div>
+    <div class="mdpa-informe-body" id="mdpa_informe_contenido"></div>
+  </div>
+</div>
 
 <!-- MODAL NUEVO ESTUDIO MDPA -->
 <div class="mdpa-modal-bg" id="mdpa_modal_nuevo">
@@ -5330,16 +5357,10 @@ async function cargarPacientes() {
   // para poder ordenar correctamente por fecha de última evolución
   await precargarUltimasEvoluciones(pacientesData);
 
-  // Ordenar: por actividad más reciente (última evolución o última edición del paciente)
+  // Ordenar: por fecha de última evolución (más reciente primero); sin evolución van al final
   pacientesData.sort(function(a, b) {
-    const fa = Math.max(
-      ultimaEvolucionMap[a.dni] ? Date.parse(ultimaEvolucionMap[a.dni]) : 0,
-      Date.parse(a.updated_at || a.created_at || 0) || 0
-    );
-    const fb = Math.max(
-      ultimaEvolucionMap[b.dni] ? Date.parse(ultimaEvolucionMap[b.dni]) : 0,
-      Date.parse(b.updated_at || b.created_at || 0) || 0
-    );
+    const fa = ultimaEvolucionMap[a.dni] ? Date.parse(ultimaEvolucionMap[a.dni]) : 0;
+    const fb = ultimaEvolucionMap[b.dni] ? Date.parse(ultimaEvolucionMap[b.dni]) : 0;
     return fb - fa;
   });
 
@@ -5383,16 +5404,10 @@ function renderTabla(data) {
     cont.innerHTML = '<div class="empty-state"><div>👤</div><p>No hay pacientes registrados todavía.<br>Hacé clic en "+ Nuevo paciente" para agregar el primero.</p></div>';
     return;
   }
-  // Ordenar: por actividad más reciente (última evolución o última edición del paciente)
+  // Ordenar: por fecha de última evolución (más reciente primero); sin evolución van al final
   const sorted = [...data].sort(function(a, b) {
-    const fa = Math.max(
-      ultimaEvolucionMap[a.dni] ? Date.parse(ultimaEvolucionMap[a.dni]) : 0,
-      Date.parse(a.updated_at || a.created_at || 0) || 0
-    );
-    const fb = Math.max(
-      ultimaEvolucionMap[b.dni] ? Date.parse(ultimaEvolucionMap[b.dni]) : 0,
-      Date.parse(b.updated_at || b.created_at || 0) || 0
-    );
+    const fa = ultimaEvolucionMap[a.dni] ? Date.parse(ultimaEvolucionMap[a.dni]) : 0;
+    const fb = ultimaEvolucionMap[b.dni] ? Date.parse(ultimaEvolucionMap[b.dni]) : 0;
     return fb - fa;
   });
   cont.innerHTML = '<table><thead><tr><th>Apellido y nombre</th><th>DNI</th><th>Edad</th><th>Obra Social</th><th>Última evolución</th><th>Acciones</th></tr></thead><tbody>' +
@@ -10155,9 +10170,18 @@ function mdpaRenderPills() {
       ? new Date(est.fecha_inicio + 'T12:00:00').toLocaleDateString('es-AR', {day:'2-digit',month:'2-digit',year:'2-digit'})
       : 'Sin fecha';
     const pill = document.createElement('div');
-    pill.className = 'mdpa-estudio-pill' + (i === mdpaIdx ? ' active' : '');
-    pill.innerHTML = `<span onclick="mdpaSeleccionarEstudio(${i})">${fecha}</span>`
-      + `<button class="mdpa-pill-del" onclick="event.stopPropagation();mdpaConfirmarEliminar(${i})" title="Eliminar">×</button>`;
+    const esPrevio = i > 0; // índice 0 = más reciente = editable
+    pill.className = 'mdpa-estudio-pill' + (i === mdpaIdx && !esPrevio ? ' active' : '') + (esPrevio ? '' : (i === mdpaIdx ? ' active' : ''));
+    if(esPrevio) {
+      // Estudio previo: abre modal informe
+      pill.title = 'Ver informe del estudio previo';
+      pill.style.opacity = '.78';
+      pill.innerHTML = `<span onclick="mdpaAbrirInformePrevio(${i})" style="cursor:pointer">📄 ${fecha}</span>`;
+    } else {
+      // Estudio activo (el más reciente): comportamiento normal
+      pill.innerHTML = `<span onclick="mdpaSeleccionarEstudio(${i})">${fecha}</span>`
+        + `<button class="mdpa-pill-del" onclick="event.stopPropagation();mdpaConfirmarEliminar(${i})" title="Eliminar">×</button>`;
+    }
     cont.appendChild(pill);
   });
 }
@@ -10743,6 +10767,242 @@ ${profNombreMDPA ? `<div class="prof-strip">
   win.focus();
   setTimeout(() => win.print(), 450);
 }
+// ── Informe modal de estudio previo ──
+let _mdpaInformeEstudio = null; // el estudio que se está viendo en el modal
+
+function mdpaAbrirInformePrevio(i) {
+  const est = mdpaEstudios[i];
+  if(!est) return;
+  _mdpaInformeEstudio = est;
+  const modal = document.getElementById('mdpa_informe_modal');
+  const subtitulo = document.getElementById('mdpa_informe_subtitulo');
+  const contenido = document.getElementById('mdpa_informe_contenido');
+  if(!modal || !contenido) return;
+
+  // Subtítulo con fecha
+  const fecha = est.fecha_inicio
+    ? new Date(est.fecha_inicio + 'T12:00:00').toLocaleDateString('es-AR', {day:'2-digit',month:'long',year:'numeric'})
+    : 'Sin fecha';
+  if(subtitulo) subtitulo.textContent = 'Estudio del ' + fecha + ' · Solo lectura';
+
+  // Generar HTML del informe (embebido en el modal, sin popup)
+  contenido.innerHTML = _mdpaGenerarHTMLInforme(est, true);
+  modal.classList.add('open');
+}
+
+function mdpaInformeCerrar() {
+  const modal = document.getElementById('mdpa_informe_modal');
+  if(modal) modal.classList.remove('open');
+  _mdpaInformeEstudio = null;
+}
+
+function mdpaInformeImprimir() {
+  if(!_mdpaInformeEstudio) return;
+  const html = _mdpaGenerarHTMLInforme(_mdpaInformeEstudio, false);
+  const win = window.open('', '_blank', 'width=960,height=720');
+  if(!win) { alert('Bloqueador de popups activo. Permitir para este sitio.'); return; }
+  win.document.write(html);
+  win.document.close();
+  win.focus();
+  setTimeout(() => win.print(), 450);
+}
+
+function _mdpaGenerarHTMLInforme(est, modoModal) {
+  const p       = pacienteActual || {};
+  const nDias   = est.n_dias || 7;
+  const tomas   = est.tomas || {};
+  const showPP  = !!(est.tomas && Object.keys(est.tomas).some(k => k.includes('_pp_')));
+  const nombre  = ((p.apellido||'') + ', ' + (p.nombre||'')).trim().replace(/^,\s*/,'');
+  const fnac    = p.fecha_nacimiento || p.fnac || '';
+  const edad    = fnac ? (new Date().getFullYear() - new Date(fnac+'T12:00:00').getFullYear()) + ' años' : '';
+  const fechaIni = est.fecha_inicio
+    ? new Date(est.fecha_inicio+'T12:00:00').toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'})
+    : '—';
+  const fechaHoyStr = new Date().toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'});
+
+  const v   = key => { const val = tomas[key]; return (val !== undefined && val !== '' && !isNaN(val)) ? parseFloat(val) : null; };
+  const avg = arr  => arr.length ? +(arr.reduce((a,b)=>a+b,0)/arr.length).toFixed(1) : null;
+  const fmt = x    => x !== null ? String(x) : '—';
+
+  const sisMat=[], diaMat=[], sisPP=[], diaPP=[], sisVes=[], diaVes=[];
+  const sisMat_dx=[], diaMat_dx=[], sisPP_dx=[], diaPP_dx=[], sisVes_dx=[], diaVes_dx=[];
+  for(let d=1; d<=nDias; d++) {
+    for(let t=1; t<=2; t++) {
+      const sm=v(`d${d}_t${t}_mat_s`), dm=v(`d${d}_t${t}_mat_d`);
+      const sp=v(`d${d}_t${t}_pp_s`),  dp=v(`d${d}_t${t}_pp_d`);
+      const sv=v(`d${d}_t${t}_ves_s`), dv=v(`d${d}_t${t}_ves_d`);
+      if(sm!==null)sisMat.push(sm); if(dm!==null)diaMat.push(dm);
+      if(sp!==null)sisPP.push(sp);  if(dp!==null)diaPP.push(dp);
+      if(sv!==null)sisVes.push(sv); if(dv!==null)diaVes.push(dv);
+      if(d>1){
+        if(sm!==null)sisMat_dx.push(sm); if(dm!==null)diaMat_dx.push(dm);
+        if(sp!==null)sisPP_dx.push(sp);  if(dp!==null)diaPP_dx.push(dp);
+        if(sv!==null)sisVes_dx.push(sv); if(dv!==null)diaVes_dx.push(dv);
+      }
+    }
+  }
+  const sisTotal=avg([...sisMat,...sisPP,...sisVes]), diaTotal=avg([...diaMat,...diaPP,...diaVes]);
+  const sisDx=avg([...sisMat_dx,...sisPP_dx,...sisVes_dx]), diaDx=avg([...diaMat_dx,...diaPP_dx,...diaVes_dx]);
+  const sisMatR=avg(sisMat), diaMatR=avg(diaMat);
+  const sisPPR=avg(sisPP),   diaPPR=avg(diaPP);
+  const sisVesR=avg(sisVes), diaVesR=avg(diaVes);
+  const esHTA = sisDx !== null && diaDx !== null && (sisDx >= 135 || diaDx >= 85);
+
+  let filasToma = '';
+  for(let d=1; d<=nDias; d++) {
+    for(let t=1; t<=2; t++) {
+      const bg = d===1 ? 'background:#fffbf0' : (d%2===0 ? 'background:#fafcff' : '');
+      const sm=v(`d${d}_t${t}_mat_s`)??'—', dm=v(`d${d}_t${t}_mat_d`)??'—';
+      const sp=v(`d${d}_t${t}_pp_s`)??'—',  dp=v(`d${d}_t${t}_pp_d`)??'—';
+      const sv=v(`d${d}_t${t}_ves_s`)??'—', dv=v(`d${d}_t${t}_ves_d`)??'—';
+      const diaCell = t===1 ? `<td rowspan="2" style="${bg};font-weight:700;font-size:11px;color:#374151;border-right:1px solid #e5e7eb;padding:5px 8px;vertical-align:middle">DÍA ${d}</td>` : '';
+      const ppCell  = showPP ? `<td style="${bg}">${sp}</td><td style="${bg};border-right:1px solid #e5e7eb">${dp}</td>` : '';
+      filasToma += `<tr>${diaCell}<td style="${bg};font-size:10px;color:#6b7280;border-right:1px solid #e5e7eb;padding:5px 8px">Toma ${t}</td><td style="${bg}">${sm}</td><td style="${bg};border-right:1px solid #e5e7eb">${dm}</td>${ppCell}<td style="${bg}">${sv}</td><td style="${bg}">${dv}</td></tr>`;
+    }
+  }
+  const ppTH1 = showPP ? '<th colspan="2" style="background:#6b3a8e;color:white">postPRANDIAL<br><span style="font-weight:400">SIS / DIA</span></th>' : '';
+  const ppTH2 = showPP ? '<th style="background:#6b3a8e;color:white">SIS</th><th style="background:#6b3a8e;color:white;border-right:1px solid rgba(255,255,255,.15)">DIA</th>' : '';
+  const ppRes = showPP ? `<tr><td class="rl">Prom. sistólica prandial</td><td class="rv">${fmt(sisPPR)}</td></tr><tr><td class="rl">Prom. diastólica prandial</td><td class="rv">${fmt(diaPPR)}</td></tr>` : '';
+
+  const profObj   = currentUser ? currentUser : null;
+  const profNombre = profObj ? (profObj.titulo || profObj.name || '') : '';
+  const profMP     = profObj ? (profObj.mp || '') : '';
+  const profEspec  = profObj ? (profObj.role || '') : '';
+
+  // En modo modal no incluimos doctype/html/head (va embebido)
+  const estilos = `
+    *{box-sizing:border-box;margin:0;padding:0}
+    body,div{font-family:'Inter',sans-serif;font-size:11px;color:#1e293b}
+    .rh{background:linear-gradient(135deg,#0c4a6e 0%,#1e3a5f 60%,#312e81 100%);color:white;padding:20px 24px;display:flex;align-items:center;gap:16px;${modoModal?'border-radius:0':''};}
+    .rh-ico{width:44px;height:44px;border-radius:50%;background:rgba(255,255,255,.15);border:2px solid rgba(255,255,255,.3);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:20px}
+    .rh-txt{flex:1}.rh-title{font-size:17px;font-weight:800;letter-spacing:.02em}
+    .rh-sub{font-size:10px;color:rgba(255,255,255,.7);margin-top:2px;text-transform:uppercase;letter-spacing:.04em}
+    .rh-fecha{text-align:right;font-size:10px;color:rgba(255,255,255,.6);line-height:1.7}
+    .rh-fecha strong{display:block;font-size:12px;color:rgba(255,255,255,.9)}
+    .pac-bar{background:white;border-bottom:3px solid #0c4a6e;padding:12px 24px;display:flex;align-items:center;gap:20px;flex-wrap:wrap}
+    .pac-chip{display:flex;flex-direction:column}
+    .pac-lbl{font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#94a3b8;margin-bottom:2px}
+    .pac-val{font-size:13px;font-weight:700;color:#0c4a6e}
+    .pac-div{width:1px;height:28px;background:#e2e8f0;flex-shrink:0}
+    .prof-strip{background:#f0f9ff;border-left:4px solid #0369a1;padding:8px 24px;display:flex;align-items:center;gap:8px;font-size:10.5px}
+    .prof-name{font-weight:700;color:#0c4a6e;font-size:11px}
+    .prof-sep{color:#bae6fd;font-size:13px}
+    .prof-mp{color:#0369a1;font-weight:600}
+    .prof-esp{color:#64748b;font-style:italic}
+    .body{padding:16px 24px 24px}
+    .info2{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}
+    .chip{border-radius:10px;padding:10px 14px}
+    .chip-lbl{font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;margin-bottom:3px}
+    .chip-val{font-size:12px;font-weight:700}
+    .chip-mot{background:#f0fdf4;border:1px solid #86efac}.chip-mot .chip-lbl{color:#16a34a}.chip-mot .chip-val{color:#15803d}
+    .chip-far{background:#faf5ff;border:1px solid #d8b4fe}.chip-far .chip-lbl{color:#7e22ce}.chip-far .chip-val{color:#581c87}
+    .dx-box{border-radius:10px;padding:12px 16px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center}
+    .dx-norm{background:#f0fdf4;border:1.5px solid #86efac}.dx-alta{background:#fef2f2;border:1.5px solid #fca5a5}
+    .dx-lbl{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em}
+    .dx-norm .dx-lbl{color:#16a34a}.dx-alta .dx-lbl{color:#dc2626}
+    .dx-sub{font-size:9px;color:#6b7280;font-style:italic;margin-top:2px}
+    .dx-val{font-size:17px;font-weight:800}
+    .dx-norm .dx-val{color:#16a34a}.dx-alta .dx-val{color:#dc2626}
+    .layout{display:grid;grid-template-columns:1fr 190px;gap:14px;align-items:start}
+    .tw{background:white;border-radius:10px;overflow:hidden;border:1px solid #e2e8f0;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+    .tw-cap{padding:8px 12px;border-bottom:1px solid #f1f5f9;display:flex;align-items:center;gap:8px;background:white}
+    .tw-cap-t{font-size:11px;font-weight:700;color:#1e293b;flex:1}
+    .tw-cap-b{background:#dbeafe;color:#1d4ed8;font-size:9px;font-weight:700;padding:2px 7px;border-radius:20px;text-transform:uppercase;letter-spacing:.06em}
+    table{border-collapse:collapse;width:100%;font-size:10.5px}
+    th{background:#0c4a6e;color:rgba(255,255,255,.95);padding:7px 7px;text-align:center;font-weight:600;font-size:9px;letter-spacing:.04em;text-transform:uppercase;white-space:nowrap}
+    th.th-mat{background:#1e4e8c}
+    th.th-ves{background:#1a6641}
+    td{padding:4px 6px;text-align:center;border-bottom:1px solid #f1f5f9;color:#334155}
+    td.col-dia{font-weight:600;color:#1e293b;background:#f8fafc;text-align:left;padding-left:8px;white-space:nowrap;border-right:1px solid #e2e8f0}
+    td.col-toma{color:#94a3b8;font-size:10px;border-right:1px solid #e2e8f0}
+    .rp{background:white;border-radius:10px;overflow:hidden;border:1px solid #e2e8f0;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+    .rp-hdr{background:#0c4a6e;color:white;padding:8px 12px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em}
+    .rr{display:flex;justify-content:space-between;align-items:center;padding:5px 12px;border-bottom:1px solid #f1f5f9}
+    .rr:last-child{border-bottom:none}
+    .rr-sep{height:3px;background:linear-gradient(90deg,#0c4a6e,#312e81)}
+    .rl{font-size:9.5px;color:#64748b}
+    .rv{font-size:13px;font-weight:700;color:#0c4a6e}
+    .rr-sub{background:#f1f5f9;padding:4px 12px;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#475569}
+    .footer{margin-top:16px;padding-top:10px;border-top:1px solid #e2e8f0;display:flex;align-items:center;justify-content:space-between;font-size:8.5px;color:#94a3b8}
+    .footer-brand{font-weight:700;color:#64748b;letter-spacing:.04em;text-transform:uppercase}
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+    @media print{body{background:white}@page{margin:8mm 10mm;size:A4}.rh,.rp-hdr,.rr-sep{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+  `;
+
+  const cuerpo = `
+<div class="rh">
+  <div class="rh-ico">🩺</div>
+  <div class="rh-txt">
+    <div class="rh-title">MDPA — Monitoreo Domiciliario</div>
+    <div class="rh-sub">Evaluación Cardiometabólica</div>
+  </div>
+  <div class="rh-fecha"><strong>${fechaHoyStr}</strong>Duración: ${nDias} días</div>
+</div>
+<div class="pac-bar">
+  <div class="pac-chip"><span class="pac-lbl">Paciente</span><span class="pac-val">${nombre}</span></div>
+  ${edad ? '<div class="pac-div"></div><div class="pac-chip"><span class="pac-lbl">Edad</span><span class="pac-val">'+edad+'</span></div>' : ''}
+  <div class="pac-div"></div>
+  <div class="pac-chip"><span class="pac-lbl">Inicio del estudio</span><span class="pac-val">${fechaIni}</span></div>
+</div>
+${profNombre ? `<div class="prof-strip"><span class="prof-name">${profNombre}</span>${profMP?`<span class="prof-sep">·</span><span class="prof-mp">${profMP}</span>`:''} ${profEspec?`<span class="prof-sep">·</span><span class="prof-esp">${profEspec}</span>`:''}</div>` : ''}
+<div class="body">
+  <div class="info2">
+    <div class="chip chip-mot"><div class="chip-lbl">Motivo del estudio</div><div class="chip-val">${est.motivo==='diagnostico'?'🔍 Diagnóstico':est.motivo==='control_tratamiento'?'💊 Control de tratamiento':'—'}</div></div>
+    <div class="chip chip-far"><div class="chip-lbl">Fármacos utilizados</div><div class="chip-val">${est.farmacos||'—'}</div></div>
+  </div>
+  <div class="dx-box ${esHTA?'dx-alta':'dx-norm'}">
+    <div>
+      <div class="dx-lbl">${esHTA?'⚠ HTA domiciliaria detectada':'✓ Presión domiciliaria normal'}</div>
+      <div class="dx-sub">Promedio diagnóstico (sin día 1) · umbral ≥135/85 mmHg</div>
+    </div>
+    <div class="dx-val">${fmt(sisDx)} / ${fmt(diaDx)} <span style="font-size:11px;font-weight:500">mmHg</span></div>
+  </div>
+  <div class="layout">
+    <div class="tw">
+      <div class="tw-cap"><span class="tw-cap-t">📋 Registro de tomas</span><span class="tw-cap-b">${nDias} días</span></div>
+      <table><thead>
+        <tr>
+          <th rowspan="2" style="text-align:left;padding-left:8px;border-right:1px solid rgba(255,255,255,.2)">Día</th>
+          <th rowspan="2" style="border-right:1px solid rgba(255,255,255,.2);opacity:.7">Toma</th>
+          <th colspan="2" class="th-mat">MATUTINA<br><span style="font-weight:400;font-size:8px">SIS / DIA</span></th>
+          ${ppTH1}
+          <th colspan="2" class="th-ves">VESPERTINA<br><span style="font-weight:400;font-size:8px">SIS / DIA</span></th>
+        </tr>
+        <tr>
+          <th class="th-mat">SIS</th><th class="th-mat" style="border-right:1px solid rgba(255,255,255,.15)">DIA</th>
+          ${ppTH2}
+          <th class="th-ves">SIS</th><th class="th-ves">DIA</th>
+        </tr>
+      </thead><tbody>${filasToma}</tbody></table>
+    </div>
+    <div class="rp">
+      <div class="rp-hdr">📊 Resultados</div>
+      <div class="rr"><span class="rl">Prom. SIS total</span><span class="rv">${fmt(sisTotal)}</span></div>
+      <div class="rr"><span class="rl">Prom. DIA total</span><span class="rv">${fmt(diaTotal)}</span></div>
+      <div class="rr-sep"></div>
+      <div class="rr-sub">Matutina</div>
+      <div class="rr"><span class="rl" style="color:#1e4e8c">SIS matutina</span><span class="rv">${fmt(sisMatR)}</span></div>
+      <div class="rr"><span class="rl" style="color:#1e4e8c">DIA matutina</span><span class="rv">${fmt(diaMatR)}</span></div>
+      ${ppRes}
+      <div class="rr-sep"></div>
+      <div class="rr-sub">Vespertina</div>
+      <div class="rr"><span class="rl" style="color:#1a6641">SIS vespertina</span><span class="rv">${fmt(sisVesR)}</span></div>
+      <div class="rr"><span class="rl" style="color:#1a6641">DIA vespertina</span><span class="rv">${fmt(diaVesR)}</span></div>
+    </div>
+  </div>
+  <div class="footer">
+    <span class="footer-brand">Evaluaciones Cardiometabólicas</span>
+    <span>Generado el ${fechaHoyStr} · Documento de uso médico exclusivo</span>
+  </div>
+</div>`;
+
+  if(modoModal) {
+    return `<style>${estilos}</style>${cuerpo}`;
+  } else {
+    return `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"/><title>MDPA — ${nombre}</title><style>${estilos}</style></head><body>${cuerpo}</body></html>`;
+  }
+}
+
 // ── fin MDPA ──
 </script>
 
