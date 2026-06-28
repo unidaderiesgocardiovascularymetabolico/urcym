@@ -943,6 +943,20 @@
 /* ══ MDPA STYLES ══ */
 .mdpa-topbar{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:16px}
 .mdpa-estudios-list{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+    /* ── Resumen visual estudios ── */
+    .est-resumen-grid{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:12px}
+    .est-card{border-radius:12px;border:1.5px solid var(--border);background:var(--white);padding:10px 14px;min-width:160px;max-width:240px;flex:1;cursor:default;transition:box-shadow .2s}
+    .est-card:hover{box-shadow:0 4px 16px rgba(48,137,202,.15)}
+    .est-card.sin-datos{background:var(--gray);opacity:.7}
+    .est-card-header{display:flex;align-items:center;gap:6px;margin-bottom:6px}
+    .est-card-icon{font-size:16px}
+    .est-card-titulo{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--text-soft);flex:1}
+    .est-card-estado{font-size:14px}
+    .est-card-fecha{font-size:11px;color:var(--text-soft);margin-bottom:6px}
+    .est-card-alterados{display:flex;flex-direction:column;gap:3px}
+    .est-alt-item{font-size:10.5px;background:var(--red-light);color:var(--red);border-radius:6px;padding:2px 7px;font-weight:600}
+    .est-card-ok{font-size:11px;color:#16a34a;font-weight:600}
+    .est-card-vacio{font-size:11px;color:var(--text-soft);font-style:italic}
 .mdpa-estudio-pill{display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:20px;font-size:12px;font-weight:600;border:1.5px solid var(--border);background:var(--gray);color:var(--text-soft);cursor:pointer;transition:all .18s;white-space:nowrap}
 .mdpa-estudio-pill:hover{border-color:var(--blue);color:var(--blue)}
 .mdpa-estudio-pill.active{background:var(--blue);border-color:var(--blue);color:white}
@@ -2417,6 +2431,20 @@
 
     <div class="page" id="page-evolucion">
 
+      <!-- BANNER DE RECUPERACIÓN (borrador de cierre inesperado) -->
+      <div id="banner-recuperacion" style="display:none;background:#fff8e1;border-bottom:2px solid #f59e0b;padding:10px 24px;align-items:center;gap:12px;flex-wrap:wrap;z-index:92;position:sticky;top:0">
+        <span style="font-size:18px">⚡</span>
+        <div style="flex:1;min-width:200px">
+          <span style="font-size:13px;font-weight:700;color:#92400e">Borrador recuperado</span>
+          <span id="banner-rec-fecha" style="font-size:12px;color:#b45309;margin-left:8px"></span>
+          <div style="font-size:12px;color:#78350f;margin-top:1px">La página se cerró sin guardar. ¿Querés restaurar los datos del borrador?</div>
+        </div>
+        <div style="display:flex;gap:8px;flex-shrink:0">
+          <button onclick="restaurarDraftLocal()" style="padding:7px 16px;border:none;border-radius:8px;background:#f59e0b;color:white;font-size:12px;font-weight:700;cursor:pointer;font-family:var(--font-main)">✅ Restaurar borrador</button>
+          <button onclick="descartarDraftLocal()" style="padding:7px 14px;border:1.5px solid #d97706;border-radius:8px;background:white;color:#92400e;font-size:12px;font-weight:600;cursor:pointer;font-family:var(--font-main)">🗑 Descartar</button>
+        </div>
+      </div>
+
       <!-- TOPBAR fijo -->
       <!-- TOPBAR fijo -->
       <div class="evol-topbar">
@@ -2843,7 +2871,7 @@
             <button onclick="abrirHistorialAnt()" class="btn-historial" id="hbtn_ant">📐 Ver evolución</button>
             <button onclick="imprimirInformeAnt()" class="btn-historial" style="background:#f0fdf4;border-color:#86efac;color:#16a34a">🖨️ Imprimir informe</button>
           </div>
-
+          <button onclick="abrirCargaHistorica('ant')" style="padding:5px 14px;border:1.5px solid var(--blue);border-radius:7px;background:var(--blue-light);color:var(--blue);font-size:12px;cursor:pointer;font-family:var(--font-main);font-weight:600">📅 Cargar antropometría histórico</button>
         </div>
         <div style="width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;margin-top:4px"><div id="evant_wrap" style="min-width:max-content"></div></div>
       </div>
@@ -2852,8 +2880,10 @@
       <div id="pmain-est" style="display:none;padding:16px 28px 20px;width:100%;box-sizing:border-box">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;gap:8px;flex-wrap:wrap">
           <span style="font-size:12px;color:var(--text-soft);font-style:italic">Estudios del paciente</span>
-
+          <button onclick="abrirCargaHistorica('est')" style="padding:5px 14px;border:1.5px solid var(--blue);border-radius:7px;background:var(--blue-light);color:var(--blue);font-size:12px;cursor:pointer;font-family:var(--font-main);font-weight:600">📅 Cargar estudios histórico</button>
         </div>
+        <!-- Resumen visual por categoría -->
+        <div id="est_resumen_grid" class="est-resumen-grid"></div>
         <div style="width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;margin-top:4px"><div id="evest_wrap" style="min-width:max-content"></div></div>
       </div><!-- /pmain-est -->
 
@@ -4394,12 +4424,6 @@ function renderTablaGenerica(datos, filas, wrapId, newColIdx) {
     h += '</td></tr>';
   }
   h += '</tbody></table>';
-  // Botón de carga histórica para ant y est
-  if(isAnt || isEst) {
-    const tipo = isAnt ? 'ant' : 'est';
-    const label = isAnt ? 'antropometría' : 'estudios';
-    h += '<div style="margin-top:12px"><button onclick="abrirCargaHistorica(\''+tipo+'\')" style="padding:5px 14px;border:1.5px solid var(--blue);border-radius:7px;background:var(--blue-light);color:var(--blue);font-size:12px;cursor:pointer;font-family:var(--font-main);font-weight:600">📅 Cargar '+label+' histórico</button></div>';
-  }
   wrap.innerHTML = h;
   // Scroll: solo ir al final cuando se agrega columna nueva (newColIdx explícito pasado)
   // Si no se pasó newColIdx es una re-render por edición → preservar posición
@@ -5022,6 +5046,120 @@ function _limpiarEstadoPestana(dni) {
   _marcarPestanaConBorrador(dni, false);
 }
 
+// ─── BORRADOR PERSISTENTE EN localStorage (sobrevive cierre de pestaña/apagón) ────
+// Guarda TODO en localStorage: evolución + tablas (lab/ant/mdpa) + campos numéricos
+function _guardarDraftLocal(dni) {
+  if(!dni) return;
+  try {
+    const editor    = document.getElementById('evol_editor');
+    const indEditor = document.getElementById('evol_indicaciones_editor');
+    const draft = {
+      ts: Date.now(),
+      html:         editor    ? editor.innerHTML    : '',
+      indicaciones: indEditor ? indEditor.innerHTML : '',
+      campos: {},
+      lab:  labDatos  ? JSON.parse(JSON.stringify(labDatos))  : null,
+      ant:  antDatos  ? JSON.parse(JSON.stringify(antDatos))  : null,
+      mdpa: null
+    };
+    ['evol_ta1s','evol_ta1d','evol_ta2s','evol_ta2d','evol_ta3s','evol_ta3d',
+     'evol_fc1','evol_fc2','evol_fc3','evol_peso','evol_talla','evol_cintura',
+     'evol_tap_s','evol_tap_d','evol_tap_fc','evol_prox_dias',
+     'prev_edad','prev_sexo','prev_tas','prev_ct','prev_hdl','prev_glu','prev_egfr'].forEach(id=>{
+      const el = document.getElementById(id);
+      if(el) draft.campos[id] = el.value || '';
+    });
+    ['prev_hta_tto','prev_estatina','prev_asa','prev_tabaco'].forEach(id=>{
+      const el = document.getElementById(id);
+      if(el) draft.campos[id] = el.checked || false;
+    });
+    // Capturar MDPA si existe
+    const mdpaEl = document.getElementById('mdpa_datos_json');
+    if(mdpaEl) draft.mdpa = mdpaEl.value || null;
+
+    const hayCambios = draft.html || draft.indicaciones ||
+      Object.values(draft.campos).some(v => v !== '' && v !== false);
+    if(hayCambios) {
+      localStorage.setItem('urcym_draft_' + dni, JSON.stringify(draft));
+    }
+  } catch(e) { console.warn('_guardarDraftLocal:', e); }
+}
+
+// Restaura borrador de localStorage al DOM
+function _restaurarDraftLocal(dni) {
+  if(!dni) return false;
+  try {
+    const raw = localStorage.getItem('urcym_draft_' + dni);
+    if(!raw) return false;
+    const draft = JSON.parse(raw);
+    const editor = document.getElementById('evol_editor');
+    if(editor && draft.html !== undefined) editor.innerHTML = draft.html;
+    const indEditor = document.getElementById('evol_indicaciones_editor');
+    if(indEditor && draft.indicaciones !== undefined) indEditor.innerHTML = draft.indicaciones;
+    Object.entries(draft.campos || {}).forEach(([id, val]) => {
+      const el = document.getElementById(id);
+      if(!el) return;
+      if(typeof val === 'boolean') el.checked = val;
+      else el.value = val;
+    });
+    if(draft.lab && labDatos) { Object.assign(labDatos, draft.lab); renderTablaGenerica(labDatos, LAB_FILAS, 'lab_tabla_wrap'); }
+    if(draft.ant && antDatos) { Object.assign(antDatos, draft.ant); renderTablaGenerica(antDatos, ANT_FILAS, 'ant_tabla_wrap'); }
+    actualizarPromedios();
+    actualizarIMC();
+    calcularPREVENT && calcularPREVENT();
+    return true;
+  } catch(e) { console.warn('_restaurarDraftLocal:', e); return false; }
+}
+
+// Elimina borrador de localStorage (al guardar real o descartar)
+function _limpiarDraftLocal(dni) {
+  if(!dni) return;
+  try { localStorage.removeItem('urcym_draft_' + dni); } catch(e) {}
+}
+
+// Devuelve el timestamp del borrador local (o null)
+function _tsDraftLocal(dni) {
+  if(!dni) return null;
+  try {
+    const raw = localStorage.getItem('urcym_draft_' + dni);
+    if(!raw) return null;
+    return JSON.parse(raw).ts || null;
+  } catch(e) { return null; }
+}
+
+// Handler del banner: restaurar borrador
+function restaurarDraftLocal() {
+  const dni = pacienteActual && pacienteActual.dni;
+  if(!dni) return;
+  if(_restaurarDraftLocal(dni)) {
+    _dirty.evol = true;
+    _marcarPestanaConBorrador(dni, true);
+  }
+  document.getElementById('banner-recuperacion').style.display = 'none';
+}
+
+// Handler del banner: descartar borrador
+function descartarDraftLocal() {
+  const dni = pacienteActual && pacienteActual.dni;
+  if(!dni) return;
+  if(confirm('¿Seguro que querés descartar el borrador recuperado? Esta acción no se puede deshacer.')) {
+    _limpiarDraftLocal(dni);
+    document.getElementById('banner-recuperacion').style.display = 'none';
+  }
+}
+
+// Auto-guardado periódico en localStorage (cada 30 seg)
+let _draftLocalTimer = null;
+function _iniciarAutoGuardadoLocal() {
+  if(_draftLocalTimer) clearInterval(_draftLocalTimer);
+  _draftLocalTimer = setInterval(function() {
+    if(pacienteActual && pacienteActual.dni) {
+      _guardarDraftLocal(pacienteActual.dni);
+    }
+  }, 30000);
+}
+_iniciarAutoGuardadoLocal();
+
 // Muestra/oculta el punto naranja "●" en la pestaña del paciente
 function _marcarPestanaConBorrador(dni, tiene) {
   document.querySelectorAll('.patient-nav-tab').forEach(tab => {
@@ -5046,11 +5184,16 @@ function _hayBorradoresSinGuardar() {
 function _autoGuardarEnSesion() {
   if(pacienteActual && pacienteActual.dni) {
     _guardarEstadoPestana(pacienteActual.dni);
+    _guardarDraftLocal(pacienteActual.dni);
   }
 }
 
 // Advertencia al cerrar/recargar pestaña del navegador
 window.addEventListener('beforeunload', function(e) {
+  // Guardar borrador en localStorage ANTES de salir (recuperable en próxima sesión)
+  if(pacienteActual && pacienteActual.dni) {
+    _guardarDraftLocal(pacienteActual.dni);
+  }
   if(_hayBorradoresSinGuardar() || _dirty.evol ||
      document.getElementById('evol_editor')?.innerText?.trim()) {
     e.preventDefault();
@@ -6913,10 +7056,109 @@ async function switchPacMainTab(tab) {
     if(!estDatos.extraFilas) estDatos.extraFilas = [];
     const newIdx = agregarSiNecesario(estDatos);
     renderTablaGenerica(estDatos, EST_FILAS, 'evest_wrap', newIdx);
+    renderEstResumen();
   }
   if(tab==='mdpa' && pacienteActual) {
     mdpaIniciar(pacienteActual.dni);
   }
+}
+
+// ===== RESUMEN VISUAL ESTUDIOS =====
+function renderEstResumen() {
+  const grid = document.getElementById('est_resumen_grid');
+  if(!grid) return;
+  const sexoPac = pacienteActual?.sexo === 'Femenino' ? 'F' : 'H';
+  const datos = estDatos;
+
+  // Categorías con sus iconos
+  const cats = [
+    {label:'ECOCARDIO',       icon:'❤️'},
+    {label:'ECG',             icon:'📈'},
+    {label:'DOPPLER CAROTÍDEO', icon:'🩸'},
+    {label:'MAPA',            icon:'🩺'},
+    {label:'ECO ABDOMINAL',   icon:'🔍'},
+  ];
+
+  // Mapear cada fila de EST_FILAS a su índice en datos.filas
+  // EST_FILAS tiene cat:true para separadores, datos.filas tiene índice = posición en EST_FILAS
+  let html = '';
+  cats.forEach(cat => {
+    // Encontrar rango de filas de esta categoría en EST_FILAS
+    let startFi = -1, endFi = -1;
+    let inCat = false;
+    EST_FILAS.forEach((f, fi) => {
+      if(f.cat && f.label === cat.label) { inCat = true; startFi = fi; return; }
+      if(f.cat && inCat) { endFi = fi; inCat = false; }
+    });
+    if(inCat) endFi = EST_FILAS.length;
+
+    // ¿Tiene algún dato en cualquier columna?
+    let tieneDatos = false;
+    let fechaMasReciente = '';
+    let alterados = [];
+
+    if(datos.columnas && datos.columnas.length && startFi >= 0) {
+      // Buscar columnas donde esta categoría tiene datos
+      datos.columnas.forEach((col, ci) => {
+        let catTieneDatoEstaCol = false;
+        for(let fi = startFi+1; fi < endFi; fi++) {
+          const v = (datos.filas[fi]||[])[ci];
+          if(v && v.toString().trim() !== '') {
+            catTieneDatoEstaCol = true;
+            tieneDatos = true;
+            break;
+          }
+        }
+        if(catTieneDatoEstaCol) {
+          // Actualizar fecha más reciente (columnas están ordenadas)
+          if(!fechaMasReciente || col > fechaMasReciente) fechaMasReciente = col;
+        }
+      });
+
+      // Buscar alterados en la columna más reciente con datos de esta cat
+      if(fechaMasReciente) {
+        const ci = datos.columnas.indexOf(fechaMasReciente);
+        for(let fi = startFi+1; fi < endFi; fi++) {
+          const f = EST_FILAS[fi];
+          if(!f || f.cat || !f.ref || !f.key) continue;
+          const v = (datos.filas[fi]||[])[ci];
+          if(v && v.toString().trim() !== '' && f.ref(v, sexoPac)) {
+            alterados.push({label: f.label, val: v, ref: f.refTxt||''});
+          }
+        }
+      }
+    }
+
+    // Formatear fecha
+    const fechaFmt = fechaMasReciente
+      ? fechaMasReciente.split('-').reverse().join('/')
+      : '';
+
+    // Construir tarjeta
+    html += `<div class="est-card${tieneDatos ? '' : ' sin-datos'}">`;
+    html += `<div class="est-card-header">`;
+    html += `<span class="est-card-icon">${cat.icon}</span>`;
+    html += `<span class="est-card-titulo">${cat.label}</span>`;
+    html += `<span class="est-card-estado">${tieneDatos ? '✅' : '❌'}</span>`;
+    html += `</div>`;
+    if(tieneDatos) {
+      html += `<div class="est-card-fecha">📅 ${fechaFmt}</div>`;
+      if(alterados.length) {
+        html += `<div class="est-card-alterados">`;
+        alterados.forEach(a => {
+          html += `<span class="est-alt-item">⚠️ ${a.label}: ${a.val}</span>`;
+        });
+        html += `</div>`;
+      } else {
+        html += `<div class="est-card-ok">✓ Sin alterados</div>`;
+      }
+    } else {
+      html += `<div class="est-card-vacio">Sin registros</div>`;
+    }
+    html += `</div>`;
+  });
+
+  grid.innerHTML = html;
 }
 
 // ===== VOLCAR ALTERADOS AL EDITOR =====
@@ -7043,6 +7285,7 @@ async function guardarEstYVolver() {
   volcarAlteradosAlEditor('est');
   agregarColumnaNueva(estDatos);
   renderTablaGenerica(estDatos, EST_FILAS, 'evest_wrap', estDatos.columnas.length - 1);
+  renderEstResumen();
   feedbackGuardado('button[onclick="guardarEstYVolver()"]');
 }
 
@@ -7104,6 +7347,9 @@ async function abrirEvolucion(dni) {
   }
 
   evolClinicaSnapshot = null;
+  // Ocultar banner de recuperación de consulta anterior
+  const _bannerRec = document.getElementById('banner-recuperacion');
+  if(_bannerRec) _bannerRec.style.display = 'none';
   // IMPORTANTE: cargar datos históricos PRIMERO, luego mostrar la página
   _savedCols.lab.clear(); _savedCols.ant.clear(); _savedCols.est.clear();
   await cargarDatosTablasEvol(p.dni);
@@ -7113,8 +7359,23 @@ async function abrirEvolucion(dni) {
     _restaurarEstadoPestana(p.dni);
     // Solo precargar PREVENT si venía de un borrador (el usuario ya había trabajado con él)
     setTimeout(precargarPREVENT, 800);
+    // También limpiar draft local porque el sesión es más reciente
+    _limpiarDraftLocal(p.dni);
   } else {
     await restaurarBorradorEvol(p.dni);
+    // Verificar si hay borrador persistente en localStorage (cierre inesperado)
+    const tsDraft = _tsDraftLocal(p.dni);
+    if(tsDraft) {
+      const banner = document.getElementById('banner-recuperacion');
+      const fechaEl = document.getElementById('banner-rec-fecha');
+      if(banner) {
+        const d = new Date(tsDraft);
+        const fmt = d.toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'}) +
+                    ' ' + d.toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'});
+        if(fechaEl) fechaEl.textContent = '— guardado el ' + fmt;
+        banner.style.display = 'flex';
+      }
+    }
     // Paciente nuevo sin borrador: PREVENT arranca vacío, el usuario lo completa manualmente
   }
   showPage('evolucion');
@@ -7360,15 +7621,23 @@ async function guardarEvolucion() {
   if(_dirty.mdpa) tabsPendientes.push({key:'mdpa', label:'MDPA',           fn: ()=>mdpaGuardar()});
 
   if(tabsPendientes.length > 0) {
+    // Agregar Evolución como opción (siempre marcada pero desactivable)
+    const editorConTexto = !!document.getElementById('evol_editor').innerText.trim();
+    if(editorConTexto || _dirty.evol) {
+      tabsPendientes.unshift({key:'evol', label:'Evolución (texto + campos)', fn: null});
+    }
     const elegidas = await mostrarModalPestanasDirty(tabsPendientes, {
-      titulo: '⚠️ Guardar evolución',
-      subtitulo: 'Hay pestañas con datos modificados. ¿Qué querés guardar junto con la evolución?',
-      btnSecundarioLabel: 'Solo evolución',
+      titulo: '💾 Guardar evolución',
+      subtitulo: 'Seleccioná qué datos guardar en esta consulta:',
+      btnSecundarioLabel: 'Cancelar',
       btnSecundarioGuarda: false
     });
     if(elegidas === null) return; // canceló
+    // Si deseleccionó Evolución, salir
+    if(tabsPendientes[0]?.key === 'evol' && !elegidas.has('evol')) return;
+    // Guardar solo las pestañas elegidas (excepto evol que se guarda abajo)
     for(const tab of tabsPendientes) {
-      if(elegidas.has(tab.key)) await tab.fn();
+      if(tab.key !== 'evol' && elegidas.has(tab.key)) await tab.fn();
     }
   }
 
@@ -7457,6 +7726,11 @@ async function guardarEvolucion() {
   _limpiarEstadoPestana(p.dni);
   // Limpiar borrador del editor al guardar evolución real
   await sb.from('paciente_tablas').delete().eq('dni_paciente', p.dni).eq('tipo','evol_borrador');
+  // Limpiar borrador persistente de localStorage
+  _limpiarDraftLocal(p.dni);
+  // Ocultar banner de recuperación si estaba visible
+  const bannerRec = document.getElementById('banner-recuperacion');
+  if(bannerRec) bannerRec.style.display = 'none';
   btnGuardar.textContent = '✅ Guardado';
   setTimeout(() => {
     btnGuardar.disabled = false;
@@ -9511,7 +9785,7 @@ async function guardarCargaHistorica() {
 
   if(tipo==='lab') { calcLabValues(datos, filas); renderTablaGenerica(datos, filas, wrapId, datos.columnas.length-1); renderLpa(); }
   else if(tipo==='ant') { calcAntValues(datos, filas); renderTablaGenerica(datos, filas, wrapId, datos.columnas.length-1); }
-  else renderTablaGenerica(datos, filas, wrapId, datos.columnas.length-1);
+  else { renderTablaGenerica(datos, filas, wrapId, datos.columnas.length-1); renderEstResumen(); }
 
   cerrarCargaHistorica();
 }
