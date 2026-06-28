@@ -3978,6 +3978,40 @@ const EST_FILAS = [
   {label:'Esteatosis',     key:'ecoabd_Est',   unidades:[''],     defU:0, ref:null},
   {label:'Litiasis vesic', key:'ecoabd_Lit',   unidades:[''],     defU:0, ref:null},
   {label:'Comentarios',    key:'ecoabd_Com',   unidades:[''],     defU:0, ref:null},
+  // ── ERGOMETRÍA
+  {cat:true, label:'ERGOMETRÍA'},
+  {label:'METS',               key:'ergo_METS',    unidades:[''],     defU:0, ref:null},
+  {label:'FC basal (lpm)',     key:'ergo_FCbas',   unidades:['lpm'],  defU:0, ref:null},
+  {label:'FC máxima (lpm)',    key:'ergo_FCmax',   unidades:['lpm'],  defU:0, ref:null},
+  {label:'% FC máx teórica',   key:'ergo_FCpct',   unidades:['%'],    defU:0, ref:(v)=>parseFloat(v)<85, refTxt:'<85%'},
+  {label:'PA máx (mmHg)',      key:'ergo_PAmax',   unidades:['mmHg'], defU:0, ref:(v)=>parseFloat(v)>=210, refTxt:'≥210 mmHg'},
+  {label:'Síntomas',           key:'ergo_Sint',    unidades:[''],     defU:0, ref:null},
+  {label:'ECG',                key:'ergo_ECG',     unidades:[''],     defU:0, ref:null},
+  {label:'Arritmias',          key:'ergo_Arrit',   unidades:[''],     defU:0, ref:null},
+  // ── FONDO DE OJO
+  {cat:true, label:'FONDO DE OJO'},
+  {label:'Nota',               key:'fdo_Nota',     unidades:[''],     defU:0, ref:null},
+  // ── TC ENCÉFALO
+  {cat:true, label:'TC ENCÉFALO'},
+  {label:'Nota',               key:'tc_enc_Nota',  unidades:[''],     defU:0, ref:null},
+  // ── RNM ENCÉFALO
+  {cat:true, label:'RNM ENCÉFALO'},
+  {label:'Nota',               key:'rnm_enc_Nota', unidades:[''],     defU:0, ref:null},
+  // ── SPECT CARDÍACO
+  {cat:true, label:'SPECT CARDÍACO'},
+  {label:'Nota',               key:'spect_Nota',   unidades:[''],     defU:0, ref:null},
+  // ── ECOSTRESS CARDÍACO
+  {cat:true, label:'ECOSTRESS CARDÍACO'},
+  {label:'Nota',               key:'ecost_Nota',   unidades:[''],     defU:0, ref:null},
+  // ── SCORE DE CALCIO CORONARIO
+  {cat:true, label:'SCORE CALCIO CORONARIO'},
+  {label:'Nota',               key:'scorcal_Nota', unidades:[''],     defU:0, ref:null},
+  // ── VOP
+  {cat:true, label:'VOP'},
+  {label:'Nota',               key:'vop_Nota',     unidades:[''],     defU:0, ref:null},
+  // ── CARDIOGRAFÍA
+  {cat:true, label:'CARDIOGRAFÍA'},
+  {label:'Nota',               key:'cardio_Nota',  unidades:[''],     defU:0, ref:null},
 ];
 
 
@@ -7017,6 +7051,7 @@ async function switchPacMainTab(tab) {
   setActiveSidebarLeft(sideIcon);
   const hoy = fechaHoy();
   if(tab==='vac') { renderVacunacion(); }
+  if(tab==='evol') { volcarTodosAlEditor(); }
   // Helper: agrega columna nueva solo si la última tiene datos (evita duplicar vacíos)
   const agregarSiNecesario = (datos) => {
     if(!datos.columnas) datos.columnas = [];
@@ -7072,11 +7107,20 @@ function renderEstResumen() {
 
   // Categorías con sus iconos
   const cats = [
-    {label:'ECOCARDIO',       icon:'❤️'},
-    {label:'ECG',             icon:'📈'},
-    {label:'DOPPLER CAROTÍDEO', icon:'🩸'},
-    {label:'MAPA',            icon:'🩺'},
-    {label:'ECO ABDOMINAL',   icon:'🔍'},
+    {label:'ECOCARDIO',              icon:'❤️'},
+    {label:'ECG',                    icon:'📈'},
+    {label:'DOPPLER CAROTÍDEO',      icon:'🩸'},
+    {label:'MAPA',                   icon:'🩺'},
+    {label:'ECO ABDOMINAL',          icon:'🔍'},
+    {label:'ERGOMETRÍA',             icon:'🏃'},
+    {label:'FONDO DE OJO',           icon:'👁️'},
+    {label:'TC ENCÉFALO',            icon:'🧠'},
+    {label:'RNM ENCÉFALO',           icon:'🧠'},
+    {label:'SPECT CARDÍACO',         icon:'☢️'},
+    {label:'ECOSTRESS CARDÍACO',     icon:'💓'},
+    {label:'SCORE CALCIO CORONARIO', icon:'🦴'},
+    {label:'VOP',                    icon:'〰️'},
+    {label:'CARDIOGRAFÍA',           icon:'📊'},
   ];
 
   // Mapear cada fila de EST_FILAS a su índice en datos.filas
@@ -7161,58 +7205,101 @@ function renderEstResumen() {
   grid.innerHTML = html;
 }
 
+// ===== VOLCAR TODOS LOS DATOS AL EDITOR =====
+function volcarTodosAlEditor() {
+  // Vuelca lab, ant y est de todas las columnas al editor de evolución
+  ['lab', 'ant', 'est'].forEach(tipo => volcarAlteradosAlEditor(tipo));
+}
+
 // ===== VOLCAR ALTERADOS AL EDITOR =====
 function volcarAlteradosAlEditor(tipo) {
   const datos = tipo === 'lab' ? labDatos : tipo === 'est' ? estDatos : antDatos;
   const filas = tipo === 'lab' ? LAB_FILAS : tipo === 'est' ? EST_FILAS : ANT_FILAS;
   if(!datos || !datos.columnas || !datos.columnas.length) return;
   const sexoPac = pacienteActual?.sexo === 'Femenino' ? 'F' : 'H';
-  // Tomar la última columna con datos (penúltima tras agregarColumnaNueva, o última si aún no se agregó)
-  const ultimaCol = datos.columnas.length - 1;
-  const fecha = datos.columnas[ultimaCol];
-  const alterados = [];
-  filas.forEach((f, fi) => {
-    if(f.cat || !f.ref || !f.key) return;
-    const val = (datos.filas[fi] || [])[ultimaCol] || '';
-    if(!val) return;
-    const storedU = datos.unidades && datos.unidades[f.key] ? datos.unidades[f.key] : (f.unidades && f.unidades[0]) || '';
-    const esAlerta = f.ref(val, sexoPac, storedU);
-    if(esAlerta) {
-      alterados.push({ label: f.label, val, unidad: storedU, refTxt: f.refTxt || '' });
+  const editor = document.getElementById('evol_editor');
+  if(!editor) return;
+  const titulo = tipo === 'lab' ? 'Laboratorio' : tipo === 'est' ? 'Estudios' : 'Antropometría';
+
+  // Todas las filas incluyendo extraFilas
+  const todasFilas = [...filas, ...(datos.extraFilas||[]).map(lbl=>({label:lbl,key:'extra_'+lbl,unidades:[''],defU:0,ref:null}))];
+
+  // Procesar cada columna con datos
+  datos.columnas.forEach((fecha, ci) => {
+    // Recopilar ítems: alterados numéricos + notas con valor + extraFilas con valor
+    const items = [];
+    todasFilas.forEach((f, fi) => {
+      if(f.cat || !f.key) return;
+      const val = (datos.filas[fi] || [])[ci];
+      if(!val || val.toString().trim() === '') return;
+      const storedU = datos.unidades && datos.unidades[f.key] ? datos.unidades[f.key] : (f.unidades && f.unidades[0]) || '';
+
+      // Incluir si: tiene ref y está alterado, O es campo de texto/nota (sin ref), O es extraFila
+      const esAlterado = f.ref && f.ref(val, sexoPac, storedU);
+      const esNota = !f.ref && !f.calc; // campos de texto libre (notas, síntomas, etc.)
+
+      if(esAlterado) {
+        items.push({
+          label: f.label, val: val.toString(), unidad: storedU,
+          refTxt: f.refTxt || '', tipo: 'alterado'
+        });
+      } else if(esNota) {
+        items.push({
+          label: f.label, val: val.toString(), unidad: '',
+          refTxt: '', tipo: 'nota'
+        });
+      }
+    });
+
+    if(!items.length) return;
+
+    const fechaStr = fecha ? new Date(fecha + 'T12:00:00').toLocaleDateString('es-AR', {day:'2-digit',month:'2-digit',year:'numeric'}) : '';
+
+    const lineas_html = items.map(a => {
+      if(a.tipo === 'alterado') {
+        return '<span style="color:var(--red);font-weight:700">⚠️ '+a.label+': '+a.val+(a.unidad?' '+a.unidad:'')+'</span>' +
+               (a.refTxt ? ' <span style="font-size:9pt;color:#888">(ref: '+a.refTxt+')</span>' : '');
+      } else {
+        return '<span style="color:#1a2535;font-weight:600">'+a.label+':</span> <span style="color:#334155">'+a.val+'</span>';
+      }
+    }).join('<br>');
+
+    const bloque = '<div class="bloque-alterados" data-tipo="'+tipo+'" data-fecha="'+(fecha||'')+'" style="font-family:Arial,sans-serif;font-size:10pt;color:#333;border-left:3px solid var(--red);padding:6px 10px;margin-bottom:10px;line-height:1.8">' +
+      '<strong style="font-size:10pt">'+titulo+(fechaStr?' — '+fechaStr:'')+':</strong><br>' + lineas_html + '</div>';
+
+    const prevMismoTipoFecha = editor.querySelector('.bloque-alterados[data-tipo="'+tipo+'"][data-fecha="'+(fecha||'')+'"]');
+    const tmp = document.createElement('div'); tmp.innerHTML = bloque;
+    if(prevMismoTipoFecha) {
+      prevMismoTipoFecha.replaceWith(tmp.firstChild);
+    } else {
+      // Insertar ordenado: buscar el bloque de este tipo con fecha anterior más cercana
+      const todosAlt = editor.querySelectorAll('.bloque-alterados[data-tipo="'+tipo+'"]');
+      let insertAncla = null;
+      todosAlt.forEach(b => {
+        const bFecha = b.getAttribute('data-fecha') || '';
+        if(bFecha <= fecha) insertAncla = b;
+      });
+      if(insertAncla && insertAncla.nextSibling) {
+        editor.insertBefore(tmp.firstChild, insertAncla.nextSibling);
+      } else if(insertAncla) {
+        editor.appendChild(tmp.firstChild);
+      } else {
+        // Insertar al inicio, o después del bloque clínico si existe
+        const bloqueClinico = editor.querySelector('.bloque-clinico');
+        const todosAltGlobal = editor.querySelectorAll('.bloque-alterados');
+        const anclaGlobal = todosAltGlobal.length > 0 ? todosAltGlobal[0]
+                          : bloqueClinico ? bloqueClinico
+                          : null;
+        if(anclaGlobal && anclaGlobal.nextSibling) {
+          editor.insertBefore(tmp.firstChild, anclaGlobal.nextSibling);
+        } else if(anclaGlobal) {
+          editor.appendChild(tmp.firstChild);
+        } else {
+          editor.insertBefore(tmp.firstChild, editor.firstChild);
+        }
+      }
     }
   });
-  if(!alterados.length) return; // Sin alterados, no hacer nada
-  const fechaStr = fecha ? new Date(fecha + 'T12:00:00').toLocaleDateString('es-AR', {day:'2-digit',month:'2-digit',year:'numeric'}) : '';
-  const titulo = tipo === 'lab' ? 'Laboratorio' : tipo === 'est' ? 'Estudios' : 'Antropometría';
-  const filas_html = alterados.map(a =>
-    '<span style="color:var(--red);font-weight:700">'+a.label+': '+a.val+(a.unidad?' '+a.unidad:'')+'</span>' +
-    (a.refTxt ? ' <span style="font-size:9pt;color:#888">(ref: '+a.refTxt+')</span>' : '')
-  ).join(' &nbsp;·&nbsp; ');
-  const claveBloque = tipo + '_' + (fecha || 'sin-fecha');
-  const bloque = '<div class="bloque-alterados" data-tipo="'+tipo+'" data-fecha="'+(fecha||'')+'" style="font-family:Arial,sans-serif;font-size:10pt;color:#333;border-left:3px solid var(--red);padding:6px 10px;margin-bottom:10px;line-height:2">' +
-    '<strong>'+titulo+' alterado'+(fechaStr?' ('+fechaStr+')':'')+':</strong><br>' + filas_html + '</div>';
-  const editor = document.getElementById('evol_editor');
-  // Si ya existe un bloque de este mismo tipo y fecha (re-guardar mismo día) → reemplazarlo
-  // Si es fecha/tipo nuevo → acumular (no borrar los anteriores)
-  const prevMismoTipoFecha = editor.querySelector('.bloque-alterados[data-tipo="'+tipo+'"][data-fecha="'+(fecha||'')+'"]');
-  const tmp = document.createElement('div'); tmp.innerHTML = bloque;
-  if(prevMismoTipoFecha) {
-    prevMismoTipoFecha.replaceWith(tmp.firstChild);
-  } else {
-    // Insertar después del último bloque-alterados existente, o después del bloque clínico, o al inicio
-    const todosAlt = editor.querySelectorAll('.bloque-alterados');
-    const bloqueClinico = editor.querySelector('.bloque-clinico');
-    const ancla = todosAlt.length > 0 ? todosAlt[todosAlt.length - 1]
-                : bloqueClinico ? bloqueClinico
-                : null;
-    if(ancla && ancla.nextSibling) {
-      editor.insertBefore(tmp.firstChild, ancla.nextSibling);
-    } else if(ancla) {
-      editor.appendChild(tmp.firstChild);
-    } else {
-      editor.insertBefore(tmp.firstChild, editor.firstChild);
-    }
-  }
 }
 
 
@@ -7261,16 +7348,8 @@ async function guardarLabYVolver() {
   sincronizarRO();
   limpiarDirty('lab');
   _colEditando = null;
-  // 2. Volcar alterados al editor
-  const sexoPac = pacienteActual?.sexo==='Femenino'?'F':'H';
-  const ci = labDatos.columnas.length - 1;
-  const alterados = LAB_FILAS.filter((f,fi) => {
-    if(!f.ref) return false;
-    const val = (labDatos.filas[fi]||[])[ci]||'';
-    const storedU = (labDatos.unidades&&labDatos.unidades[f.key])||(f.unidades||[''])[0];
-    return val && f.ref(val, sexoPac, storedU);
-  });
-  if(alterados.length > 0) volcarAlteradosAlEditor('lab');
+  // 2. Volcar al editor (alterados + notas de todas las columnas)
+  volcarAlteradosAlEditor('lab');
   // 3. Agregar nueva columna vacía al final y re-renderizar
   agregarColumnaNueva(labDatos);
   renderTablaGenerica(labDatos, LAB_FILAS, 'evlab_wrap', labDatos.columnas.length - 1);
@@ -9783,9 +9862,9 @@ async function guardarCargaHistorica() {
   await guardarDatosPac(tipo==='lab'?'lab_tabla_wrap':tipo==='ant'?'ant_tabla_wrap':'est_tabla_wrap');
   sincronizarRO();
 
-  if(tipo==='lab') { calcLabValues(datos, filas); renderTablaGenerica(datos, filas, wrapId, datos.columnas.length-1); renderLpa(); }
-  else if(tipo==='ant') { calcAntValues(datos, filas); renderTablaGenerica(datos, filas, wrapId, datos.columnas.length-1); }
-  else { renderTablaGenerica(datos, filas, wrapId, datos.columnas.length-1); renderEstResumen(); }
+  if(tipo==='lab') { calcLabValues(datos, filas); renderTablaGenerica(datos, filas, wrapId, datos.columnas.length-1); renderLpa(); volcarAlteradosAlEditor('lab'); }
+  else if(tipo==='ant') { calcAntValues(datos, filas); renderTablaGenerica(datos, filas, wrapId, datos.columnas.length-1); volcarAlteradosAlEditor('ant'); }
+  else { renderTablaGenerica(datos, filas, wrapId, datos.columnas.length-1); renderEstResumen(); volcarAlteradosAlEditor('est'); }
 
   cerrarCargaHistorica();
 }
