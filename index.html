@@ -4440,6 +4440,7 @@ function renderTablaGenerica(datos, filas, wrapId, newColIdx) {
         h += ' style="display:block;width:calc(100% - 8px);margin:0 auto;border:1.5px solid '+borderCol+';border-radius:6px;background:white;font-size:12px;font-family:var(--font-main);outline:none;color:'+valColor+';font-weight:'+valFw+';padding:4px 6px;resize:vertical;min-height:52px;line-height:1.4;box-sizing:border-box"';
         h += '>'+safeVal+'</textarea>';
       } else {
+        const borderCol = esAlerta ? 'var(--red)' : isActive ? '#1a9e6e' : 'var(--border)';
         h += '<input type="text" value="'+val+'" data-fi="'+fi+'" data-ci="'+ci+'" data-wrap="'+wrapId+'" oninput="actualizarCelda(this)" onfocus="destacarFila(this,true)" onblur="destacarFila(this,false)" onkeydown="navegarCeldaTabla(this,event)"';
         h += ' style="display:block;width:90%;margin:0 auto 2px;border:none;border-bottom:1.5px solid '+borderCol+';background:transparent;font-size:13px;text-align:center;font-family:var(--font-main);outline:none;color:'+valColor+';font-weight:'+valFw+';padding:2px 0"/>';
         if(uns.length > 1) {
@@ -7081,7 +7082,8 @@ async function switchPacMainTab(tab) {
   setActiveSidebarLeft(sideIcon);
   const hoy = fechaHoy();
   if(tab==='vac') { renderVacunacion(); }
-  if(tab==='evol') { volcarTodosAlEditor(); }
+  // NO se vuelca automáticamente al volver a la pestaña evolución.
+  // El volcado ocurre solo al guardar un lab/ant/est nuevo (preserva lo que el usuario escribió).
   // Helper: agrega columna nueva solo si la última tiene datos (evita duplicar vacíos)
   const agregarSiNecesario = (datos) => {
     if(!datos.columnas) datos.columnas = [];
@@ -7213,13 +7215,15 @@ function renderEstResumen() {
     html += `<div class="est-card-header">`;
     html += `<span class="est-card-icon">${cat.icon}</span>`;
     html += `<span class="est-card-titulo">${cat.label}</span>`;
-    html += `<span class="est-card-estado">${tieneDatos ? '✅' : '❌'}</span>`;
+    html += `<span class="est-card-estado">${tieneDatos ? '✅' : ''}</span>`;
     html += `</div>`;
     if(tieneDatos) {
       html += `<div class="est-card-fecha">📅 ${fechaFmt}</div>`;
-      if(alterados.length) {
+      // Filtrar alterados: excluir filas de tipo nota (texto libre), solo mostrar valores con ref
+      const alteradosConRef = alterados.filter(a => a.ref && a.ref !== '');
+      if(alteradosConRef.length) {
         html += `<div class="est-card-alterados">`;
-        alterados.forEach(a => {
+        alteradosConRef.forEach(a => {
           html += `<span class="est-alt-item">⚠️ ${a.label}: ${a.val}</span>`;
         });
         html += `</div>`;
@@ -7242,7 +7246,7 @@ function volcarTodosAlEditor() {
 }
 
 // ===== VOLCAR ALTERADOS AL EDITOR =====
-function volcarAlteradosAlEditor(tipo) {
+function volcarAlteradosAlEditor(tipo, columnaIdx) {
   const datos = tipo === 'lab' ? labDatos : tipo === 'est' ? estDatos : antDatos;
   const filas = tipo === 'lab' ? LAB_FILAS : tipo === 'est' ? EST_FILAS : ANT_FILAS;
   if(!datos || !datos.columnas || !datos.columnas.length) return;
@@ -7254,8 +7258,12 @@ function volcarAlteradosAlEditor(tipo) {
   // Todas las filas incluyendo extraFilas
   const todasFilas = [...filas, ...(datos.extraFilas||[]).map(lbl=>({label:lbl,key:'extra_'+lbl,unidades:[''],defU:0,ref:null}))];
 
-  // Procesar cada columna con datos
-  datos.columnas.forEach((fecha, ci) => {
+  // Si se especifica columnaIdx, procesar solo esa columna. Si no, procesar todas (comportamiento legacy).
+  const columnasAProcesar = (columnaIdx !== undefined && columnaIdx !== null)
+    ? [[datos.columnas[columnaIdx], columnaIdx]]
+    : datos.columnas.map((f, i) => [f, i]);
+
+  columnasAProcesar.forEach(([fecha, ci]) => {
     // Recopilar ítems: alterados numéricos + notas con valor + extraFilas con valor
     const items = [];
     todasFilas.forEach((f, fi) => {
@@ -7355,12 +7363,18 @@ function activarEdicionLab() {
 // Helper: agregar nueva columna vacía al final de datos (para mostrar después de guardar)
 function agregarColumnaNueva(datos) {
   const hoy = fechaHoy();
-  // Siempre agregar nueva columna al final — puede repetir fecha si se guarda varias veces el mismo día
+  // No agregar columna de hoy si ya existe una al final que esté vacía (evita duplicar)
+  const ultimaCi = datos.columnas.length - 1;
+  if(ultimaCi >= 0 && datos.columnas[ultimaCi] === hoy) {
+    const ultimaVacia = !datos.filas || datos.filas.every(f => !f || !f[ultimaCi] || f[ultimaCi].toString().trim() === '');
+    if(ultimaVacia) return;
+  }
   datos.columnas.push(hoy);
   // Agregar fila vacía para la nueva columna (no tocar filas existentes)
   const newCi = datos.columnas.length - 1;
   // Las filas ya están, solo asegurarse de que la nueva columna quede vacía
   if(datos.filas) datos.filas.forEach(f => { if(f) f[newCi] = ''; });
+}
 }
 
 function feedbackGuardado(selector) {
@@ -7373,13 +7387,14 @@ function feedbackGuardado(selector) {
 }
 
 async function guardarLabYVolver() {
-  // 1. Guardar datos actuales (sin la nueva columna vacía)
+  // 1. Guardar datos actuales
   await guardarDatosPac('lab_tabla_wrap');
   sincronizarRO();
   limpiarDirty('lab');
   _colEditando = null;
-  // 2. Volcar al editor (alterados + notas de todas las columnas)
-  volcarAlteradosAlEditor('lab');
+  // 2. Volcar al editor SOLO la columna recién guardada (índice actual = última columna)
+  const idxGuardado = labDatos.columnas.length - 1;
+  volcarAlteradosAlEditor('lab', idxGuardado);
   // 3. Agregar nueva columna vacía al final y re-renderizar
   agregarColumnaNueva(labDatos);
   renderTablaGenerica(labDatos, LAB_FILAS, 'evlab_wrap', labDatos.columnas.length - 1);
@@ -7391,7 +7406,8 @@ async function guardarEstYVolver() {
   await guardarDatosPac('est_tabla_wrap');
   sincronizarRO();
   limpiarDirty('est');
-  volcarAlteradosAlEditor('est');
+  const idxGuardado = estDatos.columnas.length - 1;
+  volcarAlteradosAlEditor('est', idxGuardado);
   agregarColumnaNueva(estDatos);
   renderTablaGenerica(estDatos, EST_FILAS, 'evest_wrap', estDatos.columnas.length - 1);
   renderEstResumen();
@@ -7402,7 +7418,8 @@ async function guardarAntYVolver() {
   await guardarDatosPac('ant_tabla_wrap');
   sincronizarRO();
   limpiarDirty('ant');
-  volcarAlteradosAlEditor('ant');
+  const idxGuardado = antDatos.columnas.length - 1;
+  volcarAlteradosAlEditor('ant', idxGuardado);
   agregarColumnaNueva(antDatos);
   renderTablaGenerica(antDatos, ANT_FILAS, 'evant_wrap', antDatos.columnas.length - 1);
   feedbackGuardado('button[onclick="guardarAntYVolver()"]');
@@ -7837,6 +7854,13 @@ async function guardarEvolucion() {
   await sb.from('paciente_tablas').delete().eq('dni_paciente', p.dni).eq('tipo','evol_borrador');
   // Limpiar borrador persistente de localStorage
   _limpiarDraftLocal(p.dni);
+  // Limpiar el DOM del editor INMEDIATAMENTE para que el autosave de 30s no lo re-escriba
+  (function(){
+    const _ed = document.getElementById('evol_editor');
+    if(_ed) _ed.innerHTML = '';
+    const _ie = document.getElementById('evol_indicaciones_editor');
+    if(_ie) _ie.innerHTML = '';
+  })();
   // Ocultar banner de recuperación si estaba visible
   const bannerRec = document.getElementById('banner-recuperacion');
   if(bannerRec) bannerRec.style.display = 'none';
@@ -7844,11 +7868,9 @@ async function guardarEvolucion() {
   setTimeout(() => {
     btnGuardar.disabled = false;
     btnGuardar.textContent = '💾 Guardar evolución';
-    // Limpiar el editor de evolución e indicaciones antes de cerrar la pestaña
-    const _evolEd = document.getElementById('evol_editor');
-    if(_evolEd) _evolEd.innerHTML = '';
-    const _indEd = document.getElementById('evol_indicaciones_editor');
-    if(_indEd) _indEd.innerHTML = '';
+    // Segunda limpieza por si el autosave volvió a escribir borradores en el intervalo
+    _limpiarEstadoPestana(p.dni);
+    _limpiarDraftLocal(p.dni);
     // Cerrar la pestaña del paciente y volver a la lista
     pacienteTabsAbiertas = pacienteTabsAbiertas.filter(t => String(t.dni) !== String(p.dni));
     pacienteActual = null;
@@ -9903,9 +9925,9 @@ async function guardarCargaHistorica() {
   await guardarDatosPac(tipo==='lab'?'lab_tabla_wrap':tipo==='ant'?'ant_tabla_wrap':'est_tabla_wrap');
   sincronizarRO();
 
-  if(tipo==='lab') { calcLabValues(datos, filas); renderTablaGenerica(datos, filas, wrapId, datos.columnas.length-1); renderLpa(); volcarAlteradosAlEditor('lab'); }
-  else if(tipo==='ant') { calcAntValues(datos, filas); renderTablaGenerica(datos, filas, wrapId, datos.columnas.length-1); volcarAlteradosAlEditor('ant'); }
-  else { renderTablaGenerica(datos, filas, wrapId, datos.columnas.length-1); renderEstResumen(); volcarAlteradosAlEditor('est'); }
+  if(tipo==='lab') { calcLabValues(datos, filas); renderTablaGenerica(datos, filas, wrapId, datos.columnas.length-1); renderLpa(); volcarAlteradosAlEditor('lab', pos); }
+  else if(tipo==='ant') { calcAntValues(datos, filas); renderTablaGenerica(datos, filas, wrapId, datos.columnas.length-1); volcarAlteradosAlEditor('ant', pos); }
+  else { renderTablaGenerica(datos, filas, wrapId, datos.columnas.length-1); renderEstResumen(); volcarAlteradosAlEditor('est', pos); }
 
   cerrarCargaHistorica();
 }
