@@ -10575,8 +10575,8 @@ async function mdpaIniciar(dni) {
     }
   } catch(e) { console.warn('MDPA: error cargando', e); }
   mdpaRenderPills();
-  if(mdpaEstudios.length > 0) { mdpaSeleccionarEstudio(0); }
-  else { mdpaMostrarEmpty(true); }
+  if(mdpaEstudios.length > 0) { mdpaMostrarEmpty(false); mdpaMostrarFormulario(false); mdpaMostrarBanner(true); }
+  else { mdpaMostrarEmpty(true); mdpaMostrarBanner(false); }
 }
 
 function mdpaRenderPills() {
@@ -10588,15 +10588,18 @@ function mdpaRenderPills() {
       ? new Date(est.fecha_inicio + 'T12:00:00').toLocaleDateString('es-AR', {day:'2-digit',month:'2-digit',year:'2-digit'})
       : 'Sin fecha';
     const pill = document.createElement('div');
-    const esPrevio = i > 0;
-    pill.className = 'mdpa-estudio-pill' + (i === mdpaIdx ? ' active' : '');
-    if(esPrevio) {
-      pill.title = 'Ver informe del estudio previo';
-      pill.style.cssText = 'opacity:.80;cursor:pointer;border-style:dashed';
-      pill.innerHTML = `<span onclick="mdpaAbrirInformePrevio(${i})" style="cursor:pointer;display:flex;align-items:center;gap:5px">📄 ${fecha}</span>`;
-    } else {
-      pill.innerHTML = `<span onclick="mdpaSeleccionarEstudio(${i})">${fecha}</span>`
+    const esEditable = (i === mdpaIdx && mdpaIdx >= 0); // solo el que está siendo editado ahora
+    pill.className = 'mdpa-estudio-pill' + (esEditable ? ' active' : '');
+    pill.style.cursor = 'pointer';
+    if(esEditable) {
+      // En edición: pill activa con botón eliminar
+      pill.title = 'Estudio en edición';
+      pill.innerHTML = `<span style="display:flex;align-items:center;gap:5px">✏️ ${fecha}</span>`
         + `<button class="mdpa-pill-del" onclick="event.stopPropagation();mdpaConfirmarEliminar(${i})" title="Eliminar">×</button>`;
+    } else {
+      // Todos los demás: solo lectura, abren modal informe
+      pill.title = 'Ver informe';
+      pill.innerHTML = `<span onclick="mdpaAbrirInformePrevio(${i})" style="display:flex;align-items:center;gap:5px">📄 ${fecha}</span>`;
     }
     cont.appendChild(pill);
   });
@@ -10605,8 +10608,26 @@ function mdpaRenderPills() {
 function mdpaMostrarEmpty(show) {
   const el = document.getElementById('mdpa_empty');
   const co = document.getElementById('mdpa_contenido');
-  if(el) el.style.display    = show ? 'block' : 'none';
-  if(co) co.style.display    = show ? 'none'  : 'block';
+  if(el) el.style.display = show ? 'block' : 'none';
+  if(co && show) co.style.display = 'none';
+}
+function mdpaMostrarFormulario(show) {
+  const co = document.getElementById('mdpa_contenido');
+  if(co) co.style.display = show ? 'block' : 'none';
+}
+function mdpaMostrarBanner(show) {
+  let ban = document.getElementById('mdpa_banner_seleccionar');
+  if(!ban) {
+    ban = document.createElement('div');
+    ban.id = 'mdpa_banner_seleccionar';
+    ban.style.cssText = 'display:none;text-align:center;padding:40px 20px;color:var(--text-soft);font-size:13px';
+    ban.innerHTML = '<div style="font-size:32px;margin-bottom:10px">📋</div>'
+      + '<div style="font-weight:600;color:var(--text);margin-bottom:6px">Estudios anteriores disponibles</div>'
+      + '<div>Hacé clic en una pill para ver el informe, o <strong>+ Nuevo estudio</strong> para cargar uno nuevo.</div>';
+    const empty = document.getElementById('mdpa_empty');
+    if(empty && empty.parentNode) empty.parentNode.insertBefore(ban, empty.nextSibling);
+  }
+  ban.style.display = show ? 'block' : 'none';
 }
 
 function mdpaSeleccionarEstudio(i) {
@@ -10835,6 +10856,8 @@ function mdpaCrearEstudio() {
   document.getElementById('mdpa_modal_nuevo').classList.remove('open');
   mdpaRenderPills();
   mdpaMostrarEmpty(false);
+  mdpaMostrarBanner(false);
+  mdpaMostrarFormulario(true);
   mdpaSeleccionarEstudio(0);
 }
 
@@ -10864,7 +10887,11 @@ async function mdpaGuardar() {
     limpiarDirty('mdpa');
     const badge = document.getElementById('mdpa_guardado_badge');
     if(badge) { badge.style.display = 'inline-block'; setTimeout(()=>badge.style.display='none', 3000); }
+    // Volver al estado de solo lectura: ocultar formulario, mostrar banner
+    mdpaIdx = -1;
     mdpaRenderPills();
+    mdpaMostrarFormulario(false);
+    mdpaMostrarBanner(true);
   } catch(e) { console.error('MDPA guardar error:', e); alert('Error al guardar: ' + (e.message || e)); }
 }
 
