@@ -4670,12 +4670,32 @@ function destacarFila(input, enfocar) {
 
 // Debounce timers para guardar sin bloquear el tipeo
 const _saveTimers = {};
+// Registro de wraps con guardado pendiente (para poder "flushear" antes de cambiar de paciente)
+const _pendingSaveWraps = new Set();
 function _debouncedSave(saveWrap) {
+  _pendingSaveWraps.add(saveWrap);
   clearTimeout(_saveTimers[saveWrap]);
   _saveTimers[saveWrap] = setTimeout(() => {
+    _pendingSaveWraps.delete(saveWrap);
     guardarDatosPac(saveWrap);
     sincronizarRO();
   }, 800);
+}
+
+// Fuerza el guardado inmediato de cualquier edición de lab/ant/est pendiente por debounce.
+// CRÍTICO: debe llamarse y esperarse (await) ANTES de reasignar pacienteActual/labDatos/etc,
+// porque guardarDatosPac() lee esas variables globales al momento de ejecutarse. Si no se
+// flushea antes del cambio de paciente, un guardado pendiente del paciente A puede terminar
+// grabándose con el DNI del paciente B (condición de carrera / contaminación cruzada de datos).
+async function _flushPendingSaves() {
+  if(_pendingSaveWraps.size === 0) return;
+  const wraps = Array.from(_pendingSaveWraps);
+  _pendingSaveWraps.clear();
+  for(const w of wraps) {
+    clearTimeout(_saveTimers[w]);
+    await guardarDatosPac(w);
+  }
+  sincronizarRO();
 }
 
 // Actualiza solo las celdas calculadas (●calc) directo en el DOM, sin reconstruir la tabla
@@ -7513,6 +7533,11 @@ async function guardarAntYVolver() {
 async function abrirEvolucion(dni) {
   const p = pacientesData.find(x=>String(x.dni)===String(dni));
   if(!p) return;
+  // IMPORTANTE: si hay guardados de lab/ant/est pendientes (debounce de 800ms) del paciente
+  // que se está dejando, hay que esperarlos a que terminen ANTES de tocar pacienteActual/labDatos.
+  // Si no, el guardado pendiente se ejecuta después y graba los datos del paciente anterior
+  // bajo el DNI del paciente nuevo (contaminación cruzada de datos clínicos entre pestañas).
+  await _flushPendingSaves();
   // Guardar el DNI anterior ANTES de pisar pacienteActual (evita bug de duplicación entre pestañas)
   const _dniAnterior = pacienteActual ? String(pacienteActual.dni) : null;
   pacienteActual = p;
@@ -7564,6 +7589,10 @@ async function abrirEvolucion(dni) {
   _savedCols.lab.clear(); _savedCols.ant.clear(); _savedCols.est.clear();
   await cargarDatosTablasEvol(p.dni);
   await cargarVacunacion(p.dni);
+  // Los datos recién cargados son la versión guardada en BD: ningún flag de "cambios sin guardar"
+  // debe sobrevivir de un paciente al otro (eran globales y se filtraban entre pestañas).
+  _dirty.lab = false; _dirty.ant = false; _dirty.est = false; _dirty.vac = false; _dirty.mdpa = false;
+  _tabDirty = false;
   if(hayBorradorSesion) {
     // Restaurar desde sessionStorage (más reciente que el borrador en Supabase)
     _restaurarEstadoPestana(p.dni);
@@ -18044,6 +18073,16 @@ ${profNombre?`<div class="prof"><span class="prof-name">${profNombre}</span>${pr
       <label>Contenido</label>
       <textarea id="doclibre_contenido" class="doc-libre-editor" placeholder="Escribí el contenido del documento aquí...&#10;&#10;Podés incluir diagnósticos, medicación actual, motivo de derivación, etc."></textarea>
     </div>
+    <div style="display:flex;gap:20px;margin-top:12px;align-items:center;flex-wrap:wrap">
+      <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text);cursor:pointer;font-weight:500">
+        <input type="checkbox" id="doclibre_fecha_check" style="accent-color:#3089ca;width:15px;height:15px" checked>
+        Incluir fecha
+      </label>
+      <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text);cursor:pointer;font-weight:500">
+        <input type="checkbox" id="doclibre_firma_check" style="accent-color:#3089ca;width:15px;height:15px">
+        Incluir firma
+      </label>
+    </div>
     <div class="form-actions" style="margin-top:16px">
       <button class="btn btn-secondary" style="flex:1;min-width:120px" onclick="document.getElementById('modalDocLibre').classList.remove('open')">Cancelar</button>
       <button class="btn btn-teal" style="flex:1;min-width:140px" onclick="generarPDFDocLibre()">📄 Descargar PDF</button>
@@ -18095,9 +18134,13 @@ ${profNombre?`<div class="prof"><span class="prof-name">${profNombre}</span>${pr
 
 <script>
 // ===== DOCUMENTO LIBRE =====
+// guarda el paciente activo cuando se abre el modal
+let _docLibrePaciente = null;
+
 function abrirDocumentoLibre(dni) {
   const p = pacientesData.find(x=>x.dni===dni);
   if(!p) return;
+  _docLibrePaciente = p;
   const hoy = fechaHoy ? fechaHoy() : new Date().toLocaleDateString('es-AR');
   const edad = p.fecha_nac ? calcEdad(p.fecha_nac) : '';
   const edadStr = edad ? ' · ' + edad + ' años' : '';
@@ -18107,62 +18150,103 @@ function abrirDocumentoLibre(dni) {
     + (edadStr ? ' &nbsp;·&nbsp; ' + edadStr : '')
     + ' &nbsp;·&nbsp; ' + hoy;
   document.getElementById('doclibre_contenido').value = '';
+  // reset checkboxes
+  const fc = document.getElementById('doclibre_fecha_check');
+  const sc = document.getElementById('doclibre_firma_check');
+  if(fc) fc.checked = true;
+  if(sc) sc.checked = false;
   document.getElementById('modalDocLibre').classList.add('open');
 }
 
 function generarPDFDocLibre() {
-  const hdr = document.getElementById('doclibre_header').innerText || '';
-  const tipo = document.getElementById('doclibre_tipo').value;
+  const p = _docLibrePaciente;
+  if(!p){ alert('No hay paciente seleccionado.'); return; }
+  const tipo    = document.getElementById('doclibre_tipo').value;
   const contenido = document.getElementById('doclibre_contenido').value.trim();
   if(!contenido){ alert('Escribí el contenido del documento antes de descargarlo.'); return; }
 
-  const hoy = hdr.split('·').pop()?.trim() || '';
-  const pacInfo = hdr;
+  const inclFecha = document.getElementById('doclibre_fecha_check')?.checked !== false;
+  const inclFirma = document.getElementById('doclibre_firma_check')?.checked === true;
 
-  const lineas = contenido.split('\n').map(l =>
-    '<p style="margin:0 0 4px;line-height:1.7">' + (l.trim() === '' ? '&nbsp;' : l.replace(/</g,'&lt;').replace(/>/g,'&gt;')) + '</p>'
-  ).join('');
+  _getLogoPNG(function() {
+    const { jsPDF } = window.jspdf;
+    const u = users[selectedUser];
+    const hoy = new Date().toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'});
+    const filename = tipo.replace(/\s+/g,'_') + '_' + p.apellido + '_' + hoy.replace(/\//g,'-') + '.pdf';
 
-  const html = `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"/>
-<title>${tipo}</title>
-<style>
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
-*{box-sizing:border-box;margin:0;padding:0}
-body{font-family:'Inter',sans-serif;font-size:12px;color:#1e293b;background:#f8fafc;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-.hdr{background:linear-gradient(135deg,#1f6aab,#3089ca);color:white;padding:22px 32px;display:flex;align-items:center;gap:18px}
-.hdr-title{font-size:19px;font-weight:800;margin-bottom:3px}
-.hdr-sub{font-size:10px;color:rgba(255,255,255,.75);text-transform:uppercase;letter-spacing:.06em}
-.pac-bar{background:white;border-bottom:3px solid #1f6aab;padding:12px 32px;font-size:11px;color:#475569}
-.pac-bar strong{font-size:13px;font-weight:700;color:#1e293b}
-.body{padding:24px 32px 32px}
-.tipo-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#3089ca;margin-bottom:14px}
-.content-box{background:white;border-radius:10px;border:1px solid #e2e8f0;padding:20px 24px;font-size:12px;line-height:1.8;color:#1e293b;box-shadow:0 1px 3px rgba(0,0,0,.06)}
-.footer{margin-top:20px;padding-top:10px;border-top:1px solid #e2e8f0;display:flex;justify-content:space-between;font-size:8px;color:#94a3b8}
-@media print{body{background:white}@page{margin:10mm 12mm;size:A4}.content-box{box-shadow:none}}
-</style></head><body>
-<div class="hdr">
-  <div>
-    <div class="hdr-title">${tipo}</div>
-    <div class="hdr-sub">Evaluaciones cardiometabólicas · Documento clínico</div>
-  </div>
-</div>
-<div class="pac-bar"><strong>${pacInfo}</strong></div>
-<div class="body">
-  <div class="tipo-label">${tipo}</div>
-  <div class="content-box">${lineas}</div>
-  <div class="footer">
-    <span>Evaluaciones cardiometabólicas</span>
-    <span>Documento de uso médico exclusivo · Generado el ${hoy}</span>
-  </div>
-</div>
-</body></html>`;
+    const doc = new jsPDF({ unit:'mm', format:'a4', orientation:'portrait' });
+    const PW = 210, PH = 297, ML = 12, MR = 12, CW = PW - ML - MR;
 
-  const win = window.open('','_blank','width=900,height=700');
-  if(!win){alert('Bloqueador de popups activo.');return;}
-  win.document.write(html);
-  win.document.close();
-  win.focus();
-  setTimeout(()=>win.print(),500);
+    // Membrete del profesional
+    const headerEndY = _pdfHeaderOtro(doc, u, PW, ML);
+    // Barra de paciente (con o sin fecha)
+    const fechaMostrar = inclFecha ? hoy : '';
+    const bY = headerEndY, bH = 10;
+    const nombre = ((p.apellido ? p.apellido.toUpperCase() + ', ' : '') + (p.nombre || '')).trim();
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(9);
+    doc.setTextColor(..._C.oscuro);
+    doc.text(nombre, ML + 4, bY + 5.5);
+    if(p.dni) {
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5);
+      doc.setTextColor(..._C.suave);
+      doc.text('DNI ' + p.dni, ML + 4, bY + 9.2);
+    }
+    if(fechaMostrar) {
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5);
+      doc.setTextColor(..._C.suave);
+      doc.text(fechaMostrar, PW - MR - 3, bY + 7, { align: 'right' });
+    }
+    let curY = bY + bH + 4;
+
+    // Etiqueta tipo de documento
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(8);
+    doc.setTextColor(..._C.azulTxt);
+    doc.text(tipo.toUpperCase(), ML, curY);
+    doc.setLineWidth(0.2); doc.setDrawColor(..._C.gris);
+    doc.line(ML, curY + 1.5, ML + doc.getTextWidth(tipo.toUpperCase()) + 2, curY + 1.5);
+    curY += 7;
+
+    // Contenido libre
+    const firmaZoneTop = PH - 56 - 4;
+    const maxYMid = PH - 22;
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(9);
+    doc.setTextColor(35, 35, 35);
+    const lineH = 5.0;
+
+    function _addDocLibrePage() {
+      doc.setFont('helvetica', 'italic'); doc.setFontSize(7);
+      doc.setTextColor(140, 140, 155);
+      doc.text('↓  continúa en la página siguiente', PW / 2, PH - 16 - 7, { align: 'center' });
+      _pdfFooterOtro(doc, u, PW, PH);
+      doc.addPage();
+      const nHY = _pdfHeaderOtro(doc, u, PW, ML);
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(9);
+      doc.setTextColor(35, 35, 35);
+      return nHY + 8;
+    }
+
+    const lineas = contenido.split('\n');
+    lineas.forEach(linea => {
+      const wrapped = doc.splitTextToSize(linea === '' ? '' : linea, CW);
+      wrapped.forEach((ln, idx) => {
+        const maxY = inclFirma ? firmaZoneTop : maxYMid;
+        if(curY > maxY) { curY = _addDocLibrePage(); }
+        if(ln !== '') doc.text(ln, ML, curY);
+        curY += lineH;
+      });
+      // línea en blanco entre párrafos (si la línea original estaba vacía)
+      if(linea === '') curY += lineH * 0.4;
+    });
+
+    // Firma
+    const _unameDoc = (u && (u.id || u.name || '')).toLowerCase();
+    const _firmaKeyBase = (_unameDoc.includes('omar') || _unameDoc === 'ob') ? 'omar' : 'barbara';
+    const firmaKey = inclFirma ? _firmaKeyBase : 'ninguna';
+    _pdfFirma(doc, u, PW, PH, ML, firmaKey);
+    _pdfFooterOtro(doc, u, PW, PH);
+
+    doc.save(filename);
+  });
 }
 
 // ===== PLANTILLAS HC =====
