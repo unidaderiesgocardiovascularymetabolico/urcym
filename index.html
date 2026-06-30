@@ -10647,6 +10647,23 @@ async function guardarEvolucionHistorica() {
   });
 })();
 
+// ─── LIMPIEZA DE SERVICE WORKER VIEJO ──────────────────────────────────────
+// El Service Worker quedó desactivado (ver comentario abajo), pero algunos
+// navegadores ya lo tienen instalado de una versión anterior y siguen
+// sirviendo el index.html cacheado aunque se suba uno nuevo. Este bloque
+// se autoejecuta una vez por carga, desregistra cualquier SW activo y borra
+// sus caches, así cada usuario se "autocura" sin tener que limpiar nada a mano.
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.getRegistrations().then(regs => {
+      regs.forEach(reg => reg.unregister());
+    });
+    if (window.caches && caches.keys) {
+      caches.keys().then(keys => keys.forEach(k => caches.delete(k)));
+    }
+  });
+}
+
 // Activar cuando sw.js esté subido al repositorio
 // if('serviceWorker' in navigator) {
 //   window.addEventListener('load', () => {
