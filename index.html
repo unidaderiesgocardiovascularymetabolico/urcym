@@ -6952,14 +6952,30 @@ async function guardarClinica() {
     if (evolClinicaSnapshot?.clinica?.hab_actividad_json)    clinicaData.hab_actividad_json    = evolClinicaSnapshot.clinica.hab_actividad_json;
     if (evolClinicaSnapshot?.clinica?.hab_alimentacion_json) clinicaData.hab_alimentacion_json = evolClinicaSnapshot.clinica.hab_alimentacion_json;
     evolClinicaSnapshot = { clinica: clinicaData, medicacion: meds };
-    // Insertar fila en evoluciones solo con el snapshot para que el historial del relojito lo vea
+    // Guardar snapshot para que el historial del relojito lo vea.
+    // IMPORTANTE: si ya existe una evolución de HOY para este paciente (recién evolucionado,
+    // o un guardado previo de este mismo modal), actualizamos esa fila en vez de insertar una
+    // nueva — evita que quede una entrada vacía duplicada con fecha de hoy en "Historias previas".
     try {
-      await sb.from('evoluciones').insert({
-        dni_paciente: dni,
-        fecha_hora: new Date().toISOString(),
-        contenido_html: '',
-        clinica_snapshot: JSON.stringify(evolClinicaSnapshot)
-      });
+      const inicioHoy = new Date(); inicioHoy.setHours(0,0,0,0);
+      const { data: evolHoy } = await sb.from('evoluciones')
+        .select('id')
+        .eq('dni_paciente', dni)
+        .gte('fecha_hora', inicioHoy.toISOString())
+        .order('fecha_hora', {ascending:false})
+        .limit(1);
+      if(evolHoy && evolHoy.length) {
+        await sb.from('evoluciones').update({
+          clinica_snapshot: JSON.stringify(evolClinicaSnapshot)
+        }).eq('id', evolHoy[0].id);
+      } else {
+        await sb.from('evoluciones').insert({
+          dni_paciente: dni,
+          fecha_hora: new Date().toISOString(),
+          contenido_html: '',
+          clinica_snapshot: JSON.stringify(evolClinicaSnapshot)
+        });
+      }
     } catch(snapErr) { console.warn('[guardarClinica] snapshot insert:', snapErr); }
     cerrarModal('modalClinica');
     window.actualizarEncabezadoVariable(evolClinicaSnapshot);
@@ -7540,6 +7556,8 @@ async function abrirEvolucion(dni) {
   await _flushPendingSaves();
   // Guardar el DNI anterior ANTES de pisar pacienteActual (evita bug de duplicación entre pestañas)
   const _dniAnterior = pacienteActual ? String(pacienteActual.dni) : null;
+  // Si quedó una píldora de "Datos clínicos minimizado" de otro paciente, se descarta
+  if(typeof _quitarChipMinimizado === 'function') _quitarChipMinimizado('modalClinica');
   pacienteActual = p;
   abrirTabPaciente(p);
   document.getElementById('evol_nombre').textContent = p.apellido + ', ' + p.nombre;
@@ -9111,6 +9129,7 @@ function formatIndCmd(cmd, val) {
 
 async function abrirModalClinica() {
   if(!pacienteActual) return;
+  if(typeof _quitarChipMinimizado === 'function') _quitarChipMinimizado('modalClinica');
   await cargarDatosClinica(pacienteActual.dni);
   document.getElementById('modalClinica').classList.add('open');
 }
@@ -10647,6 +10666,59 @@ async function guardarEvolucionHistorica() {
   });
 })();
 
+// ===== MINIMIZAR MODALES (ej: Datos clínicos durante Evolucionar) =====
+// Permite ocultar un modal SIN cerrarlo (sin recargar ni resetear sus datos),
+// para poder ir a completar algo en la historia clínica (página evolución) y
+// volver después exactamente donde se había dejado. Se muestra una "píldora"
+// flotante que restaura el modal al tocarla.
+function minimizarModal(id, label) {
+  const overlay = document.getElementById(id);
+  if(!overlay) return;
+  overlay.classList.remove('open');
+  _mostrarChipMinimizado(id, label || 'Ventana minimizada');
+}
+window.minimizarModal = minimizarModal;
+
+function restaurarModalMinimizado(id) {
+  const overlay = document.getElementById(id);
+  if(!overlay) return;
+  overlay.classList.add('open');
+  const chip = document.getElementById('chip-min-' + id);
+  if(chip) chip.remove();
+}
+window.restaurarModalMinimizado = restaurarModalMinimizado;
+
+function _quitarChipMinimizado(id) {
+  const chip = document.getElementById('chip-min-' + id);
+  if(chip) chip.remove();
+}
+window._quitarChipMinimizado = _quitarChipMinimizado;
+
+function _mostrarChipMinimizado(id, label) {
+  _quitarChipMinimizado(id);
+  const chip = document.createElement('div');
+  chip.id = 'chip-min-' + id;
+  chip.setAttribute('role','button');
+  chip.onclick = function(){ restaurarModalMinimizado(id); };
+  chip.style.cssText = 'position:fixed;bottom:24px;right:24px;z-index:500;background:var(--blue);color:white;'+
+    'padding:14px 18px;border-radius:50px;box-shadow:0 6px 20px rgba(48,137,202,.35);cursor:pointer;'+
+    'font-family:var(--font-main);font-weight:600;font-size:13px;display:flex;align-items:center;gap:10px;'+
+    'animation:fadeUp .25s ease;user-select:none';
+  chip.innerHTML = '📋 <span>' + label + '</span>' +
+    '<span style="opacity:.85;font-size:11px;font-weight:500;border-left:1px solid rgba(255,255,255,.4);padding-left:8px">tocá para continuar</span>';
+  document.body.appendChild(chip);
+}
+
+// Si el modal se cierra del todo (✕) o vuelve a abrirse con datos nuevos,
+// se descarta cualquier píldora minimizada que haya quedado de una edición anterior.
+(function() {
+  const origCerrar = window.cerrarModal;
+  window.cerrarModal = function(id) {
+    if(origCerrar) origCerrar(id);
+    _quitarChipMinimizado(id);
+  };
+})();
+
 // ─── LIMPIEZA DE SERVICE WORKER VIEJO ──────────────────────────────────────
 // El Service Worker quedó desactivado (ver comentario abajo), pero algunos
 // navegadores ya lo tienen instalado de una versión anterior y siguen
@@ -11631,7 +11703,10 @@ ${profNombre ? `<div class="prof-strip"><span class="prof-name">${profNombre}</s
   <div class="modal" style="max-width:920px;max-height:90vh;overflow-y:auto">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
       <div class="modal-title" style="margin:0">Datos clínicos</div>
-      <button onclick="cerrarModal('modalClinica')" style="background:none;border:none;font-size:22px;cursor:pointer;color:var(--text-soft)">✕</button>
+      <div style="display:flex;align-items:center;gap:6px">
+        <button onclick="minimizarModal('modalClinica','Datos clínicos')" title="Minimizar (podés seguir completando la historia clínica y volver después)" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--text-soft);line-height:1;padding:4px 6px;border-radius:8px" onmouseover="this.style.background='var(--gray)'" onmouseout="this.style.background='none'">🗕</button>
+        <button onclick="cerrarModal('modalClinica')" style="background:none;border:none;font-size:22px;cursor:pointer;color:var(--text-soft)">✕</button>
+      </div>
     </div>
 
     <!-- TABS -->
@@ -13766,7 +13841,34 @@ document.addEventListener('change',function(e){
 });
 
 (document.getElementById('ag-btn-delete')||{addEventListener:function(){}}).addEventListener('click',function(){
-  if(editKey&&turnos[editKey]){delete turnos[editKey];saveLocal();document.getElementById('ag-modal-bg').style.display='none';editKey=null;renderGrid();}
+  if(!editKey||!turnos[editKey])return;
+  var _tDel=turnos[editKey];
+  var _pkey=editKey.split('_');
+  var _dsDel=_pkey[0], _tmDel=_pkey[1], _profDel=_pkey[2]||_tDel.prof;
+  var _nombreDel=_tDel.paciente||'este turno';
+  if(!confirm('¿Eliminar el turno de '+_nombreDel+'? Esta acción no se puede deshacer.'))return;
+  delete turnos[editKey];
+  saveLocal();
+  document.getElementById('ag-modal-bg').style.display='none';
+  editKey=null;
+  renderGrid();
+  // Si el horario borrado cae dentro de una franja de disponibilidad vigente
+  // (y no está bloqueado ni es día no laborable), queda automáticamente
+  // como turno disponible para agendar de nuevo — no requiere acción extra,
+  // ya que renderGrid() recalcula los slots libres a partir de dispBlocks.
+  var _enFranja=getBlocksAt(dispBlocks,_dsDel,_tmDel,_profDel).length>0&&
+                !getBlocksAt(nlBlocks,_dsDel,_tmDel,_profDel).length;
+  var _msgEl=document.getElementById('urcym-save-ok-toast');
+  if(!_msgEl){
+    _msgEl=document.createElement('div');
+    _msgEl.id='urcym-save-ok-toast';
+    _msgEl.style.cssText='position:fixed;bottom:16px;right:20px;background:#16a34a;color:#fff;font-size:12px;font-weight:600;padding:8px 16px;border-radius:10px;z-index:99999;box-shadow:0 4px 16px rgba(0,0,0,.2);display:none;';
+    document.body.appendChild(_msgEl);
+  }
+  _msgEl.textContent=_enFranja?'✓ Turno eliminado — horario disponible de nuevo':'✓ Turno eliminado';
+  _msgEl.style.display='block';
+  clearTimeout(_msgEl._t);
+  _msgEl._t=setTimeout(function(){_msgEl.style.display='none';},2500);
 });
 
 // ═══ MODAL CONFIG v2: NO LABORABLES + DISPONIBILIDAD ═══
