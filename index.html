@@ -3391,6 +3391,7 @@
       <div class="form-group">
         <label>DNI * <span style="font-weight:400;font-size:11px;color:var(--text-soft)">(sin puntos ni espacios)</span></label>
         <input type="text" id="f_dni" placeholder="Ej: 30123456" maxlength="10" inputmode="numeric"/>
+        <div id="f_dni_hint" style="font-size:11px;color:var(--coral,#e25247);margin-top:4px;display:none">Si cambiás el DNI se van a migrar automáticamente todos los registros del paciente (evoluciones, medicación, estudios, turnos, etc.) al nuevo DNI.</div>
       </div>
       <div class="form-group">
         <label>Fecha de nacimiento *</label>
@@ -6391,6 +6392,7 @@ function abrirModalNuevo() {
   modoEdicion = false; dniEdicion = null; _nombreViejoEnAgenda = null;
   document.getElementById('modalTitulo').textContent = 'Nuevo Paciente';
   document.getElementById('f_dni').disabled = false;
+  document.getElementById('f_dni_hint').style.display = 'none';
   ['f_dni','f_apellido','f_nombre','f_email','f_telefono','f_afiliado','f_ocupacion'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('f_fecha').value='';
   document.getElementById('f_sexo').value='';
@@ -6412,7 +6414,8 @@ async function editarPaciente(dni) {
   _nombreViejoEnAgenda = (p.apellido + ', ' + p.nombre).trim();
   document.getElementById('modalTitulo').textContent = 'Editar Paciente';
   document.getElementById('f_dni').value = p.dni;
-  document.getElementById('f_dni').disabled = true;
+  document.getElementById('f_dni').disabled = false;
+  document.getElementById('f_dni_hint').style.display = 'block';
   document.getElementById('f_apellido').value = p.apellido;
   document.getElementById('f_nombre').value = p.nombre;
   document.getElementById('f_fecha').value = p.fecha_nacimiento;
@@ -6439,6 +6442,51 @@ function editarPacienteDesdeEvolucion() {
   editarPaciente(pacienteActual.dni);
 }
 
+// Migra las claves de almacenamiento local (borradores de evolución) ligadas a un DNI cuando este cambia
+function _migrarAlmacenLocalDni(dniViejo, dniNuevo) {
+  try {
+    const draft = localStorage.getItem('urcym_draft_' + dniViejo);
+    if(draft) {
+      localStorage.setItem('urcym_draft_' + dniNuevo, draft);
+      localStorage.removeItem('urcym_draft_' + dniViejo);
+    }
+  } catch(e) { console.warn('_migrarAlmacenLocalDni (draft):', e); }
+  try {
+    const tab = sessionStorage.getItem('urcym_tab_' + dniViejo);
+    if(tab) {
+      sessionStorage.setItem('urcym_tab_' + dniNuevo, tab);
+      sessionStorage.removeItem('urcym_tab_' + dniViejo);
+    }
+  } catch(e) { console.warn('_migrarAlmacenLocalDni (tab):', e); }
+}
+
+// Actualiza el dni_paciente de los turnos de agenda (guardados como JSON en urcym_agenda_config) cuando cambia el DNI
+async function _migrarDniEnAgenda(dniViejo, dniNuevo) {
+  try {
+    const cfgR = await sb.from('urcym_agenda_config').select('value').eq('key','turnos').maybeSingle();
+    if(!cfgR.data || !cfgR.data.value) return;
+    const turnosObj = JSON.parse(cfgR.data.value);
+    let huboCambios = false;
+    Object.keys(turnosObj).forEach(function(k) {
+      const t = turnosObj[k];
+      if(t && String(t.dni_paciente||'') === String(dniViejo)) {
+        turnosObj[k].dni_paciente = dniNuevo;
+        huboCambios = true;
+      }
+    });
+    if(huboCambios) {
+      await sb.from('urcym_agenda_config').upsert({key:'turnos', value:JSON.stringify(turnosObj)},{onConflict:'key'});
+      if(typeof turnos !== 'undefined') {
+        Object.keys(turnos).forEach(function(k) {
+          const t = turnos[k];
+          if(t && String(t.dni_paciente||'') === String(dniViejo)) turnos[k].dni_paciente = dniNuevo;
+        });
+        if(typeof renderAgenda === 'function') renderAgenda();
+      }
+    }
+  } catch(e) { console.warn('_migrarDniEnAgenda:', e); }
+}
+
 async function guardarPaciente() {
   // Limpiar DNI automáticamente: quitar puntos, espacios, guiones
   const dniRaw = document.getElementById('f_dni').value.replace(/[\.\s\-]/g,'').trim();
@@ -6455,6 +6503,29 @@ async function guardarPaciente() {
   if(!/^\d+$/.test(dni)) {
     errEl.textContent='El DNI debe contener solo números, sin puntos ni espacios.';
     errEl.style.display='block'; return;
+  }
+  if(modoEdicion && dni !== dniEdicion) {
+    // El usuario cambió el DNI del paciente: hay que migrarlo en la base ANTES de tocar el resto de los datos,
+    // para no dejar registros huérfanos (evoluciones, medicación, estudios, etc. quedan ligados por dni_paciente).
+    const { data: yaExiste } = await sb.from('pacientes').select('dni').eq('dni', dni).maybeSingle();
+    if(yaExiste) {
+      errEl.textContent = 'Ya existe otro paciente con ese DNI. No se pudo cambiar.';
+      errEl.style.display = 'block'; return;
+    }
+    const { error: errMigracion } = await sb.rpc('urcym_cambiar_dni_paciente', { p_dni_viejo: dniEdicion, p_dni_nuevo: dni });
+    if(errMigracion) {
+      errEl.textContent = 'No se pudo cambiar el DNI (no se modificó ningún dato): ' + errMigracion.message;
+      errEl.style.display = 'block'; return;
+    }
+    // La migración en la base salió bien: replicar el cambio en todo lo que vive del lado del cliente
+    const dniViejo = dniEdicion;
+    _migrarAlmacenLocalDni(dniViejo, dni);
+    await _migrarDniEnAgenda(dniViejo, dni);
+    const tabEntryDni = pacienteTabsAbiertas.find(t => String(t.dni) === String(dniViejo));
+    if(tabEntryDni) tabEntryDni.dni = dni;
+    const idxViejo = pacientesData.findIndex(x => x.dni === dniViejo);
+    if(idxViejo !== -1) pacientesData[idxViejo].dni = dni;
+    dniEdicion = dni; // a partir de acá, el resto del guardado opera sobre el DNI nuevo
   }
   const paciente = {
     dni, apellido, nombre, fecha_nacimiento:fecha,
