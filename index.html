@@ -409,6 +409,9 @@
     .evol-editor { background:white; border:1.5px solid var(--border); border-radius:0 0 12px 12px; padding:16px; min-height:320px; font-family:var(--font-main); font-size:14px; line-height:1.8; color:var(--text); outline:none; cursor:text; }
     .evol-editor:focus { border-color:var(--blue); box-shadow:0 0 0 3px var(--blue-glow); }
     .evol-editor:empty:before { content:attr(placeholder); color:#b0bcc9; pointer-events:none; }
+    /* Línea de escritura libre que queda tras volcar un bloque estructurado: fuerza formato normal
+       para que lo que se tipee a mano no herede negrita/color/tamaño del contenido volcado */
+    .evol-editor .linea-libre-evol { font-family:var(--font-main); font-size:14px; font-weight:normal; font-style:normal; color:var(--text); }
     /* Panel inferior de actualización clínica */
     .evol-update-panel { margin-top:14px; background:white; border:1.5px solid var(--border); border-radius:14px; padding:16px; }
     .evol-update-title { font-family:var(--font-display); font-size:11px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--text-soft); margin-bottom:10px; display:flex; align-items:center; gap:8px; }
@@ -451,8 +454,14 @@
     .evol-campo-row input:focus { border-color:var(--blue); background:white; }
     .evol-calc-result { width:88px; text-align:center; font-size:13px; font-weight:600; color:var(--text); }
     /* HC lectura */
-    .hc-entrada { background:white; border-radius:14px; border:1px solid var(--border); margin-bottom:16px; overflow:hidden; }
-    .hc-header { display:flex; align-items:center; gap:10px; padding:12px 16px; background:var(--gray); border-bottom:1px solid var(--border); flex-wrap:wrap; }
+    .hc-entrada { background:white; border-radius:14px; border:1px solid var(--border); border-left:5px solid var(--border); margin-bottom:16px; overflow:hidden; }
+    /* Coloreado alternado por bloque de evolución, para diferenciar claramente cada entrada de la siguiente */
+    .hc-entrada:nth-of-type(5n+1) { background:#eef6fc; border-left-color:#3089ca; }
+    .hc-entrada:nth-of-type(5n+2) { background:#eef9f2; border-left-color:#27ae60; }
+    .hc-entrada:nth-of-type(5n+3) { background:#fdf6ec; border-left-color:#e0923f; }
+    .hc-entrada:nth-of-type(5n+4) { background:#f6f0fa; border-left-color:#9b6bc7; }
+    .hc-entrada:nth-of-type(5n+5) { background:#fdf0f0; border-left-color:#e25247; }
+    .hc-header { display:flex; align-items:center; gap:10px; padding:12px 16px; background:rgba(255,255,255,.55); border-bottom:1px solid var(--border); flex-wrap:wrap; }
     .hc-header.med-barbara { background:#e8f3fc; border-bottom:2px solid #3089ca; }
     .hc-header.med-omar { background:#e8f5f0; border-bottom:2px solid #27ae60; }
     .hc-fecha { font-family:var(--font-display); font-size:13px; font-weight:700; color:var(--text); }
@@ -3033,6 +3042,10 @@
               <span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-soft)">💊 Fármacos:</span>
               <input type="text" id="mdpa_farmacos_input" placeholder="Sin fármacos registrados" oninput="mdpaActualizarFarmacos()" style="flex:1;padding:3px 8px;border:1.5px solid var(--border);border-radius:7px;font-size:12px;font-family:var(--font-main);background:white;outline:none;min-width:160px"/>
             </div>
+          </div>
+          <div style="display:flex;align-items:flex-start;gap:7px;margin-bottom:14px;background:var(--gray);border:1px solid var(--border);border-radius:10px;padding:8px 12px">
+            <span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-soft);white-space:nowrap;padding-top:4px">📝 Nota:</span>
+            <textarea id="mdpa_nota_input" placeholder="Nota clínica del estudio (aparece en el informe)" oninput="mdpaActualizarNota()" rows="2" style="flex:1;padding:5px 8px;border:1.5px solid var(--border);border-radius:7px;font-size:12px;font-family:var(--font-main);background:white;outline:none;resize:vertical;min-height:32px"></textarea>
           </div>
           <div class="mdpa-layout">
             <div>
@@ -7244,10 +7257,11 @@ async function guardarClinica() {
           } else {
             // Primera vez: insertar al inicio y agregar párrafo vacío limpio después
             editor.insertBefore(tmp.firstChild, editor.firstChild);
-            // Párrafo vacío para que el cursor no herede el estilo del bloque clínico
+            // Párrafo vacío con formato NORMAL (no Arial/10pt del bloque volcado), para que
+            // el cursor no herede el formato de lo volcado al escribir texto libre
             const parrafoLimpio = document.createElement('div');
-            parrafoLimpio.className = 'evol-texto-libre';
-            parrafoLimpio.style.cssText = 'font-family:Arial,sans-serif;font-size:10pt;color:#333;line-height:1.7;min-height:1.2em';
+            parrafoLimpio.className = 'evol-texto-libre linea-libre-evol';
+            parrafoLimpio.style.minHeight = '1.2em';
             parrafoLimpio.innerHTML = '<br>';
             editor.insertBefore(parrafoLimpio, editor.childNodes[1] || null);
           }
@@ -7679,9 +7693,33 @@ function renderEstResumen() {
 }
 
 // ===== VOLCAR TODOS LOS DATOS AL EDITOR =====
+// Tras volcar un bloque estructurado (lab/est/ant, TA, indicaciones, actualización de tto)
+// deja el cursor en una línea propia con formato normal (sin negrita/color/tamaño heredado),
+// para que lo que se escriba a mano libre a continuación NO copie el formato de lo volcado.
+function _asegurarLineaLibreEvol(editor) {
+  if(!editor) return;
+  let ultima = editor.lastElementChild;
+  if(!ultima || !ultima.classList || !ultima.classList.contains('linea-libre-evol')) {
+    ultima = document.createElement('div');
+    ultima.className = 'linea-libre-evol';
+    ultima.innerHTML = '<br>';
+    editor.appendChild(ultima);
+  }
+  try {
+    editor.focus();
+    const range = document.createRange();
+    const sel = window.getSelection();
+    range.selectNodeContents(ultima);
+    range.collapse(false);
+    sel.removeAllRanges();
+    sel.addRange(range);
+  } catch(e) { /* si falla el posicionamiento del cursor, el bloque igual queda insertado */ }
+}
+
 function volcarTodosAlEditor() {
   // Vuelca lab, ant y est de todas las columnas al editor de evolución
   ['lab', 'ant', 'est'].forEach(tipo => volcarAlteradosAlEditor(tipo));
+  _asegurarLineaLibreEvol(document.getElementById('evol_editor'));
 }
 
 // ===== VOLCAR ALTERADOS AL EDITOR =====
@@ -7777,6 +7815,7 @@ function volcarAlteradosAlEditor(tipo, columnaIdx) {
       }
     }
   });
+  _asegurarLineaLibreEvol(editor);
 }
 
 
@@ -9060,11 +9099,8 @@ async function volcarActualizacion() {
   } else {
     editor.insertBefore(tmp.firstChild, editor.firstChild);
   }
-  // Cursor al final del editor
-  editor.focus();
-  const sel = window.getSelection(); sel.removeAllRanges();
-  const range = document.createRange(); range.selectNodeContents(editor); range.collapse(false);
-  sel.addRange(range);
+  // Cursor al final del editor, en línea de formato normal (no hereda el formato de lo volcado)
+  _asegurarLineaLibreEvol(editor);
   marcarDirty('evol');
 
   // 2. Guardar en Supabase
@@ -9188,6 +9224,7 @@ function volcarIndicacionesAlEditor() {
   const prev = editor.querySelector('.bloque-indicaciones'); if(prev) prev.remove();
   const tmp = document.createElement('div'); tmp.innerHTML = bloque;
   editor.appendChild(tmp.firstChild);
+  _asegurarLineaLibreEvol(editor);
   // Limpiar el box de indicaciones tras volcar a evolución
   if(indEl) indEl.innerHTML = '';
 }
@@ -9430,6 +9467,7 @@ function volcarPromedioAlEditor() {
     const tmp = document.createElement('div'); tmp.innerHTML = html;
     editor.insertBefore(tmp.firstChild, editor.firstChild);
   }
+  _asegurarLineaLibreEvol(editor);
 }
 
 function actualizarIMC() {
@@ -11105,6 +11143,7 @@ async function mdpaIniciar(dni) {
         n_dias:       r.n_dias || 7,
         motivo:       r.motivo || '',
         farmacos:     r.farmacos || '',
+        nota:         r.nota || '',
         tomas:        typeof r.tomas === 'string' ? JSON.parse(r.tomas) : (r.tomas || {})
       }));
     }
@@ -11186,6 +11225,9 @@ function mdpaSeleccionarEstudio(i) {
   // Fármacos
   const farmEl = document.getElementById('mdpa_farmacos_input');
   if(farmEl) farmEl.value = est.farmacos || '';
+  // Nota
+  const notaEl = document.getElementById('mdpa_nota_input');
+  if(notaEl) notaEl.value = est.nota || '';
   mdpaRenderTabla();
   mdpaRenderPills();
 }
@@ -11202,6 +11244,13 @@ function mdpaActualizarFarmacos() {
   if(mdpaIdx < 0) return;
   const farmEl = document.getElementById('mdpa_farmacos_input');
   if(farmEl) mdpaEstudios[mdpaIdx].farmacos = farmEl.value;
+  marcarDirty('mdpa');
+}
+
+function mdpaActualizarNota() {
+  if(mdpaIdx < 0) return;
+  const notaEl = document.getElementById('mdpa_nota_input');
+  if(notaEl) mdpaEstudios[mdpaIdx].nota = notaEl.value;
   marcarDirty('mdpa');
 }
 
@@ -11383,7 +11432,7 @@ function mdpaCrearEstudio() {
   const farmacos = ff ? ff.value.trim() : '';
   const motivo = motDx && motDx.checked ? 'diagnostico' : (motTto && motTto.checked ? 'control_tratamiento' : '');
   if(!fecha) { alert('Ingresá la fecha de inicio del estudio'); return; }
-  mdpaEstudios.unshift({ id: 'new_' + Date.now(), fecha_inicio: fecha, n_dias: nDias, tomas: {}, farmacos: farmacos, motivo: motivo });
+  mdpaEstudios.unshift({ id: 'new_' + Date.now(), fecha_inicio: fecha, n_dias: nDias, tomas: {}, farmacos: farmacos, motivo: motivo, nota: '' });
   // Limpiar campos para la próxima vez
   if(ff) ff.value = '';
   if(motDx) motDx.checked = false;
@@ -11408,6 +11457,7 @@ async function mdpaGuardar() {
     n_dias: est.n_dias, tomas: JSON.stringify(est.tomas),
     farmacos: est.farmacos || '',
     motivo: est.motivo || '',
+    nota: est.nota || '',
     updated_at: new Date().toISOString()
   };
   try {
@@ -11525,7 +11575,7 @@ function mdpaImprimirInforme() {
 
   /* ── HEADER ── */
   .report-header{background:linear-gradient(135deg,#0c4a6e 0%,#1e3a5f 60%,#312e81 100%);color:white;padding:24px 32px 20px;display:flex;align-items:center;gap:20px}
-  .logo-circle{width:52px;height:52px;border-radius:50%;background:rgba(255,255,255,.15);border:2px solid rgba(255,255,255,.3);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:22px}
+  .logo-circle{width:64px;height:64px;border-radius:50%;background:rgba(255,255,255,.15);border:2px solid rgba(255,255,255,.3);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:36px}
   .header-text{flex:1}
   .header-title{font-size:20px;font-weight:800;letter-spacing:.02em;line-height:1.1}
   .header-sub{font-size:11px;color:rgba(255,255,255,.7);margin-top:3px;letter-spacing:.04em;text-transform:uppercase}
@@ -11663,6 +11713,11 @@ ${profNombreMDPA ? `<div class="prof-strip">
       <div class="info-chip-val">${est.farmacos || '—'}</div>
     </div>
   </div>
+
+  ${est.nota ? `<div style="background:#fffbeb;border:1px solid #fcd34d;border-radius:10px;padding:10px 14px;margin-bottom:14px">
+    <div class="info-chip-label" style="color:#b45309">📝 Nota</div>
+    <div class="info-chip-val" style="font-size:11.5px;font-weight:500;white-space:pre-wrap;color:#78350f">${est.nota}</div>
+  </div>` : ''}
 
   <!-- Diagnóstico -->
   <div class="dx-box ${esHTA ? 'dx-alta' : 'dx-normal'}">
@@ -11851,7 +11906,7 @@ function _mdpaGenerarHTMLInforme(est, modoModal) {
     *{box-sizing:border-box;margin:0;padding:0}
     body,div{font-family:'Inter',sans-serif;font-size:11px;color:#1e293b}
     .rh{background:linear-gradient(135deg,#0c4a6e 0%,#1e3a5f 60%,#312e81 100%);color:white;padding:20px 24px;display:flex;align-items:center;gap:16px;${modoModal?'border-radius:0':''};}
-    .rh-ico{width:44px;height:44px;border-radius:50%;background:rgba(255,255,255,.15);border:2px solid rgba(255,255,255,.3);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:20px}
+    .rh-ico{width:60px;height:60px;border-radius:50%;background:rgba(255,255,255,.15);border:2px solid rgba(255,255,255,.3);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:34px}
     .rh-txt{flex:1}.rh-title{font-size:17px;font-weight:800;letter-spacing:.02em}
     .rh-sub{font-size:10px;color:rgba(255,255,255,.7);margin-top:2px;text-transform:uppercase;letter-spacing:.04em}
     .rh-fecha{text-align:right;font-size:10px;color:rgba(255,255,255,.6);line-height:1.7}
@@ -11927,6 +11982,7 @@ ${profNombre ? `<div class="prof-strip"><span class="prof-name">${profNombre}</s
     <div class="chip chip-mot"><div class="chip-lbl">Motivo del estudio</div><div class="chip-val">${est.motivo==='diagnostico'?'🔍 Diagnóstico':est.motivo==='control_tratamiento'?'💊 Control de tratamiento':'—'}</div></div>
     <div class="chip chip-far"><div class="chip-lbl">Fármacos utilizados</div><div class="chip-val">${est.farmacos||'—'}</div></div>
   </div>
+  ${est.nota ? `<div class="chip" style="background:#fffbeb;border:1px solid #fcd34d;margin-bottom:14px"><div class="chip-lbl" style="color:#b45309">📝 Nota</div><div class="chip-val" style="font-size:11.5px;font-weight:500;white-space:pre-wrap;color:#78350f">${est.nota}</div></div>` : ''}
   <div class="dx-box ${esHTA?'dx-alta':'dx-norm'}">
     <div>
       <div class="dx-lbl">${esHTA?'⚠ HTA domiciliaria detectada':'✓ Presión domiciliaria normal'}</div>
