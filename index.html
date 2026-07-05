@@ -528,7 +528,14 @@
 
     /* page-evolucion vive fuera de .content, ocupa todo el ancho de #app */
     #page-evolucion { width:100%; }
-    #page-evolucion:not(.active) { display:none; }
+    #page-evolucion:not(.active) { display:none !important; }
+    #page-evolucion:not(.active) #pmain-lab,
+    #page-evolucion:not(.active) #pmain-ant,
+    #page-evolucion:not(.active) #pmain-est,
+    #page-evolucion:not(.active) #pmain-vac,
+    #page-evolucion:not(.active) #pmain-mdpa,
+    #page-evolucion:not(.active) #pmain-adip,
+    #page-evolucion:not(.active) #pmain-evol { display:none !important; }
     .evol-sidebar-left-icon:hover { background: var(--gray); border-color: var(--border); }
     .evol-sidebar-left-icon.active { background: var(--blue-light); border-color: var(--blue); }
     @media(max-width:680px) {
@@ -2722,6 +2729,13 @@
                 <input type="checkbox" id="evol_firma_ind_check" style="accent-color:#3089ca;width:15px;height:15px">
                 <label for="evol_firma_ind_check" style="cursor:pointer;font-weight:500;color:var(--text)">Incluir firma</label>
               </div>
+              <select id="evol_ind_direccion" title="Dirección en el pie de página" style="padding:6px 8px;border-radius:8px;border:1.5px solid var(--border);background:white;font-family:var(--font-main);font-size:11.5px;color:var(--text);outline:none;">
+                <option value="ninguna" selected>Sin dirección</option>
+                <option value="sapiens">SAPIENS (San Bernardo)</option>
+                <option value="cem">CEM (San Clemente del Tuyú)</option>
+                <option value="ceq">CEQ (Mar de Ajó)</option>
+                <option value="urcym">URCyM (Santa Teresita)</option>
+              </select>
               <button class="btn btn-teal" onclick="generarPDFIndicacionesEvol()" style="width:auto;margin:0;padding:7px 16px;font-size:12px">⬇ PDF</button>
               <button class="btn" onclick="enviarMailIndicacionesEvol()" style="width:auto;margin:0;padding:7px 16px;font-size:12px;background:var(--gray);border:1.5px solid var(--border);color:var(--text)">✉ Email</button>
             </div>
@@ -3762,6 +3776,16 @@
         <input type="checkbox" id="firma_ind_check" style="accent-color:#3089ca;width:15px;height:15px">
         Incluir firma
       </label>
+    </div>
+    <div class="form-group" style="margin-bottom:12px">
+      <label>Dirección en el pie de página</label>
+      <select id="ind_direccion" style="width:100%;padding:9px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--gray);font-family:var(--font-main);font-size:13px;color:var(--text);outline:none;">
+        <option value="ninguna" selected>Sin dirección</option>
+        <option value="sapiens">SAPIENS – Centro de rehabilitación e investigación multidisciplinaria (San Bernardo)</option>
+        <option value="cem">CEM – Centro de especialidades médicas (San Clemente del Tuyú)</option>
+        <option value="ceq">CEQ – Consultorio de especialidades quirúrgicas (Mar de Ajó)</option>
+        <option value="urcym">URCyM – Unidad de riesgo cardiovascular y metabólico (Santa Teresita)</option>
+      </select>
     </div>
     <div class="form-actions" style="flex-wrap:wrap;gap:8px">
       <button class="btn btn-secondary" style="flex:1;min-width:120px" onclick="cerrarModal('modalIndicaciones')">Cancelar</button>
@@ -5667,6 +5691,24 @@ function showPage(page) {
   if(page === 'finanzas' && currentUser && !currentUser.admin) {
     page = 'mis-pacientes';
   }
+
+  // SEGURIDAD: si no vamos a "evolucion", ocultar la ficha del paciente
+  // (y TODAS sus subtablas: lab, antropometría, estudios, vacunación, mdpa,
+  // adiposidad) de inmediato, antes de cualquier otra lógica. Esto evita que
+  // esas tablas queden "pegadas" visualmente en Inicio/Pacientes/Agenda/etc.
+  // por algún timing de otro script.
+  if(page !== 'evolucion') {
+    const evolPageEarly = document.getElementById('page-evolucion');
+    if(evolPageEarly) {
+      evolPageEarly.classList.remove('active');
+      evolPageEarly.style.display = 'none';
+      ['pmain-evol','pmain-lab','pmain-ant','pmain-est','pmain-vac','pmain-mdpa','pmain-adip'].forEach(function(id){
+        const panel = document.getElementById(id);
+        if(panel) panel.style.display = 'none';
+      });
+    }
+  }
+
   // Si se sale de evolución yendo a otra sección principal, guardar borrador en sesión
   if(page !== 'evolucion' && pacienteActual && pacienteActual.dni) {
     const editor = document.getElementById('evol_editor');
@@ -5994,6 +6036,8 @@ function abrirDocumento(tipo, dni) {
     if(indHidden) indHidden.value = 'urcym';
     var indRadios = document.querySelectorAll('input[name="ind_tipo_hoja_opt"]');
     indRadios.forEach(function(r){ r.checked = r.value === 'urcym'; });
+    var indDirSel = document.getElementById('ind_direccion');
+    if(indDirSel) indDirSel.value = 'ninguna';
     document.getElementById('modalIndicaciones').classList.add('open');
   }
 }
@@ -6135,10 +6179,11 @@ function _pdfPatientBar(doc, p, fechaStr, PW, ML, MR, headerEndY) {
 /* ─────────────────────────────────────────────────── */
 /*  FIRMA Y SELLO                                      */
 /* ─────────────────────────────────────────────────── */
-function _pdfFirma(doc, u, PW, PH, ML, firmaKey) {
+function _pdfFirma(doc, u, PW, PH, ML, firmaKey, pieAltura) {
   // Solo muestra la firma del profesional logueado si eligió incluirla
   if (!firmaKey || firmaKey === 'ninguna') return;
   const MR = 8;   // margen derecho en mm
+  const footerH = pieAltura || 18; // alto del pie (crece si incluye dirección)
   const firmaB64 = (firmaKey === 'barbara') ? firmaBarbaraB64
                  : (firmaKey === 'omar')    ? firmaOmarB64
                  : null;
@@ -6155,13 +6200,27 @@ function _pdfFirma(doc, u, PW, PH, ML, firmaKey) {
     const FW = (firmaKey === 'barbara') ? 26 : 32;
     const FH = FW * ratio;           // alto proporcional real
     const FX = PW - MR - FW;        // alineada a la derecha
-    const FY = PH - 18 - FH - 4;    // justo encima del footer (18mm), con 4mm de margen
+    const FY = PH - footerH - FH - 4;    // justo encima del footer, con 4mm de margen
 
     doc.addImage(firmaB64, 'JPEG', FX, FY, FW, FH, '', 'NONE', 0);
   } catch(e) {}
   // Sin línea de firma — nunca
 }
 
+/* ─────────────────────────────────────────────────── */
+/*  DIRECCIONES SELECCIONABLES PARA EL PIE DE PÁGINA   */
+/* ─────────────────────────────────────────────────── */
+const PIE_DIRECCIONES = {
+  sapiens: { nombre: 'SAPIENS', subtitulo: 'Centro de rehabilitación e investigación multidisciplinaria', direccion: 'Av. Costanera 2525, B7111 San Bernardo' },
+  cem:     { nombre: 'CEM', subtitulo: 'Centro de especialidades médicas', direccion: 'Calle 1 Nº 1553, San Clemente del Tuyú' },
+  ceq:     { nombre: 'CEQ', subtitulo: 'Consultorio de especialidades quirúrgicas', direccion: 'Marano 250, Mar de Ajó' },
+  urcym:   { nombre: 'URCyM', subtitulo: 'Unidad de riesgo cardiovascular y metabólico', direccion: 'Calle 2 Nº 1556, Santa Teresita' }
+};
+function _pieDireccionSeleccionada(selectId) {
+  const el = document.getElementById(selectId);
+  const val = el ? el.value : 'ninguna';
+  return PIE_DIRECCIONES[val] || null;
+}
 /* ─────────────────────────────────────────────────── */
 /*  PIE DE PÁGINA                                      */
 /* ─────────────────────────────────────────────────── */
@@ -6285,8 +6344,8 @@ function _pdfHeaderOtro(doc, u, PW, ML) {
 /* ─────────────────────────────────────────────────── */
 /*  PIE "OTRO" (color por profesional, texto blanco/gris) */
 /* ─────────────────────────────────────────────────── */
-function _pdfFooterOtro(doc, u, PW, PH) {
-  const FH = 18, FY = PH - FH;
+function _pdfFooterOtro(doc, u, PW, PH, direccion) {
+  const FH = direccion ? 24 : 18, FY = PH - FH;
   const profColor = _colorProfesionalOtro(u);
   const profColorDark = [Math.max(0, profColor[0]-18), Math.max(0, profColor[1]-10), Math.max(0, profColor[2]-8)];
   const profColorAccent = [Math.min(255, profColor[0]+45), Math.min(255, profColor[1]+35), Math.min(255, profColor[2]+55)];
@@ -6324,7 +6383,18 @@ function _pdfFooterOtro(doc, u, PW, PH) {
     : 'dra.guerrerobarbara@gmail.com';
   doc.setFont('helvetica', 'bold'); doc.setFontSize(6.5);
   doc.setTextColor(...BLANCO);
-  doc.text(email, PW / 2, FY + 14.5, { align: 'center' });
+  doc.text(email, PW / 2, direccion ? FY + 13.5 : FY + 14.5, { align: 'center' });
+
+  // Dirección seleccionada (opcional) — dos líneas centradas, debajo del email
+  if (direccion) {
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(5.6);
+    doc.setTextColor(...BLANCO_SEMI);
+    const linea1 = direccion.nombre + (direccion.subtitulo ? ' · ' + direccion.subtitulo : '');
+    doc.text(linea1, PW / 2, FY + 18, { align: 'center' });
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(5.6);
+    doc.setTextColor(...BLANCO_TENUE);
+    doc.text(direccion.direccion, PW / 2, FY + 21.3, { align: 'center' });
+  }
 }
 /* ─────────────────────────────────────────────────── */
 /* ─────────────────────────────────────────────────── */
@@ -6425,6 +6495,10 @@ function generarPDF(tipo) {
   // Siempre usar hoja del profesional
   const usarOtro = true;
 
+  // Dirección para el pie (solo aplica a "Indicaciones")
+  const direccionPie = (tipo === 'indicaciones') ? _pieDireccionSeleccionada('ind_direccion') : null;
+  const footerHPie = direccionPie ? 24 : 18;
+
   const headerEndY = usarOtro ? _pdfHeaderOtro(doc, u, PW, ML) : _pdfHeader(doc, u, PW, ML);
   const hoy = new Date().toLocaleDateString('es-AR',
     { day: '2-digit', month: '2-digit', year: 'numeric' });
@@ -6479,13 +6553,13 @@ function generarPDF(tipo) {
 
         function _addPageWithHeader() {
           // Indicador "continúa..." al pie de la página actual
-          const continY = usarOtro ? (PH - 16 - 7) : (PH - 56 - 2);
+          const continY = usarOtro ? (PH - footerHPie - 7) : (PH - 56 - 2);
           doc.setFont('helvetica', 'italic');
           doc.setFontSize(7);
           doc.setTextColor(140, 140, 155);
           doc.text('↓  continúa en la página siguiente', PW / 2, continY, { align: 'center' });
           // Footer en página actual antes de agregar nueva
-          if (usarOtro) { _pdfFooterOtro(doc, u, PW, PH); } else { _pdfFooter(doc, PW, PH); }
+          if (usarOtro) { _pdfFooterOtro(doc, u, PW, PH, direccionPie); } else { _pdfFooter(doc, PW, PH); }
           doc.addPage();
           const newHeaderEndY = usarOtro ? _pdfHeaderOtro(doc, u, PW, ML) : _pdfHeader(doc, u, PW, ML);
           return newHeaderEndY + 8;
@@ -6528,8 +6602,8 @@ function generarPDF(tipo) {
     }
   }
 
-  _pdfFirma(doc, u, PW, PH, ML, firmaKey);
-  if (usarOtro) { _pdfFooterOtro(doc, u, PW, PH); } else { _pdfFooter(doc, PW, PH); }
+  _pdfFirma(doc, u, PW, PH, ML, firmaKey, footerHPie);
+  if (usarOtro) { _pdfFooterOtro(doc, u, PW, PH, direccionPie); } else { _pdfFooter(doc, PW, PH); }
 
   const np = p ? (p.apellido || p.nombre || 'doc').replace(/\s+/g, '_') : 'doc';
   doc.save(`${tipo}_${np}_${hoy.replace(/\//g, '-')}.pdf`);
@@ -9148,6 +9222,8 @@ function _crearPDFIndicacionesEvol(txt, usarOtro) {
   const _firmaKeyBase = (_unameEvol.includes('omar') || _unameEvol === 'ob') ? 'omar' : 'barbara';
   const _firmaCheckEl = document.getElementById('evol_firma_ind_check');
   const _firmaKeyEvol = (_firmaCheckEl && _firmaCheckEl.checked) ? _firmaKeyBase : 'ninguna';
+  const direccionPie = _pieDireccionSeleccionada('evol_ind_direccion');
+  const footerHPie = direccionPie ? 24 : 18;
 
   const _hdrY = _pdfHeaderOtro(doc, u, PW, ML);
   _pdfPatientBar(doc, p, hoy, PW, ML, MR, _hdrY);
@@ -9173,8 +9249,8 @@ function _crearPDFIndicacionesEvol(txt, usarOtro) {
     doc.setFont('helvetica', 'italic');
     doc.setFontSize(7);
     doc.setTextColor(140, 140, 155);
-    doc.text('↓  continúa en la página siguiente', PW / 2, PH - 16 - 7, { align: 'center' });
-    _pdfFooterOtro(doc, u, PW, PH);
+    doc.text('↓  continúa en la página siguiente', PW / 2, PH - footerHPie - 7, { align: 'center' });
+    _pdfFooterOtro(doc, u, PW, PH, direccionPie);
     doc.addPage();
     const newHY = _pdfHeaderOtro(doc, u, PW, ML);
     doc.setFont('helvetica', 'normal');
@@ -9193,8 +9269,8 @@ function _crearPDFIndicacionesEvol(txt, usarOtro) {
     curY += 1;
   });
 
-  _pdfFirma(doc, u, PW, PH, ML, _firmaKeyEvol);
-  _pdfFooterOtro(doc, u, PW, PH);
+  _pdfFirma(doc, u, PW, PH, ML, _firmaKeyEvol, footerHPie);
+  _pdfFooterOtro(doc, u, PW, PH, direccionPie);
 
   return { doc, filename, hoy };
 }
@@ -18889,6 +18965,16 @@ ${profNombre?`<div class="prof"><span class="prof-name">${profNombre}</span>${pr
         Incluir firma
       </label>
     </div>
+    <div class="form-group" style="margin-top:10px">
+      <label>Dirección en el pie de página</label>
+      <select id="doclibre_direccion" style="width:100%;padding:9px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--gray);font-family:var(--font-main);font-size:13px;color:var(--text);outline:none;">
+        <option value="ninguna" selected>Sin dirección</option>
+        <option value="sapiens">SAPIENS – Centro de rehabilitación e investigación multidisciplinaria (San Bernardo)</option>
+        <option value="cem">CEM – Centro de especialidades médicas (San Clemente del Tuyú)</option>
+        <option value="ceq">CEQ – Consultorio de especialidades quirúrgicas (Mar de Ajó)</option>
+        <option value="urcym">URCyM – Unidad de riesgo cardiovascular y metabólico (Santa Teresita)</option>
+      </select>
+    </div>
     <div class="form-actions" style="margin-top:16px">
       <button class="btn btn-secondary" style="flex:1;min-width:120px" onclick="document.getElementById('modalDocLibre').classList.remove('open')">Cancelar</button>
       <button class="btn btn-teal" style="flex:1;min-width:140px" onclick="generarPDFDocLibre()">📄 Descargar PDF</button>
@@ -18961,6 +19047,8 @@ function abrirDocumentoLibre(dni) {
   const sc = document.getElementById('doclibre_firma_check');
   if(fc) fc.checked = true;
   if(sc) sc.checked = false;
+  const dc = document.getElementById('doclibre_direccion');
+  if(dc) dc.value = 'ninguna';
   document.getElementById('modalDocLibre').classList.add('open');
 }
 
@@ -18973,6 +19061,8 @@ function generarPDFDocLibre() {
 
   const inclFecha = document.getElementById('doclibre_fecha_check')?.checked !== false;
   const inclFirma = document.getElementById('doclibre_firma_check')?.checked === true;
+  const direccionPie = _pieDireccionSeleccionada('doclibre_direccion');
+  const footerHPie = direccionPie ? 24 : 18;
 
   _getLogoPNG(function() {
     const { jsPDF } = window.jspdf;
@@ -19022,8 +19112,8 @@ function generarPDFDocLibre() {
     function _addDocLibrePage() {
       doc.setFont('helvetica', 'italic'); doc.setFontSize(7);
       doc.setTextColor(140, 140, 155);
-      doc.text('↓  continúa en la página siguiente', PW / 2, PH - 16 - 7, { align: 'center' });
-      _pdfFooterOtro(doc, u, PW, PH);
+      doc.text('↓  continúa en la página siguiente', PW / 2, PH - footerHPie - 7, { align: 'center' });
+      _pdfFooterOtro(doc, u, PW, PH, direccionPie);
       doc.addPage();
       const nHY = _pdfHeaderOtro(doc, u, PW, ML);
       doc.setFont('helvetica', 'normal'); doc.setFontSize(9);
@@ -19048,8 +19138,8 @@ function generarPDFDocLibre() {
     const _unameDoc = (u && (u.id || u.name || '')).toLowerCase();
     const _firmaKeyBase = (_unameDoc.includes('omar') || _unameDoc === 'ob') ? 'omar' : 'barbara';
     const firmaKey = inclFirma ? _firmaKeyBase : 'ninguna';
-    _pdfFirma(doc, u, PW, PH, ML, firmaKey);
-    _pdfFooterOtro(doc, u, PW, PH);
+    _pdfFirma(doc, u, PW, PH, ML, firmaKey, footerHPie);
+    _pdfFooterOtro(doc, u, PW, PH, direccionPie);
 
     doc.save(filename);
   });
