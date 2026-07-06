@@ -4967,11 +4967,37 @@ function actualizarCeldaNota(textarea) {
   actualizarCelda(textarea);
 }
 
+// Archiva la versión actual (previa a un guardado) de una fila de paciente_tablas
+// (lab / est / ant / vac) en paciente_tablas_historial, para que nunca se pierda
+// un valor aunque el guardado siguiente sobreescriba la fila viva.
+// Requiere la tabla paciente_tablas_historial en Supabase (ver SQL provisto).
+async function _archivarPacienteTabla(dni, tipo) {
+  try {
+    const { data, error } = await sb.from('paciente_tablas')
+      .select('*')
+      .eq('dni_paciente', dni).eq('tipo', tipo)
+      .maybeSingle();
+    if(error) { console.warn('_archivarPacienteTabla select:', error); return; }
+    if(data && data.datos) {
+      const { error: errHist } = await sb.from('paciente_tablas_historial').insert({
+        dni_paciente: dni,
+        tipo,
+        datos: data.datos,
+        version_fecha: data.updated_at || null,
+        archivado_en: new Date().toISOString()
+      });
+      if(errHist) console.warn('_archivarPacienteTabla insert historial:', errHist);
+    }
+  } catch(e) { console.warn('_archivarPacienteTabla:', e); }
+}
+
 async function guardarDatosPac(wrapId) {
   const dni = pacHistoriaDni || pacienteActual?.dni;
   if(!dni) return;
   const tipo = ['lab_tabla_wrap','evlab_wrap'].includes(wrapId)?'lab':['est_tabla_wrap','evest_wrap'].includes(wrapId)?'est':'ant';
   const datos = tipo==='lab'?labDatos:tipo==='est'?estDatos:antDatos;
+  // Guardar en historial la versión que está por ser sobreescrita
+  await _archivarPacienteTabla(dni, tipo);
   const { error } = await sb.from('paciente_tablas').upsert(
     {dni_paciente:dni, tipo, datos:JSON.stringify(datos)},
     {onConflict:'dni_paciente,tipo'}
@@ -5408,7 +5434,9 @@ function _guardarDraftLocal(dni) {
       campos: {},
       lab:  labDatos  ? JSON.parse(JSON.stringify(labDatos))  : null,
       ant:  antDatos  ? JSON.parse(JSON.stringify(antDatos))  : null,
-      mdpa: null
+      mdpa: (mdpaPacDni === dni && mdpaEstudios && mdpaEstudios.length)
+        ? { estudios: JSON.parse(JSON.stringify(mdpaEstudios)), idx: mdpaIdx }
+        : null
     };
     ['evol_ta1s','evol_ta1d','evol_ta2s','evol_ta2d','evol_ta3s','evol_ta3d',
      'evol_fc1','evol_fc2','evol_fc3','evol_peso','evol_talla','evol_cintura',
@@ -5421,12 +5449,11 @@ function _guardarDraftLocal(dni) {
       const el = document.getElementById(id);
       if(el) draft.campos[id] = el.checked || false;
     });
-    // Capturar MDPA si existe
-    const mdpaEl = document.getElementById('mdpa_datos_json');
-    if(mdpaEl) draft.mdpa = mdpaEl.value || null;
+    // Capturar MDPA ya quedó resuelto arriba, directo desde mdpaEstudios en memoria
 
     const hayCambios = draft.html || draft.indicaciones ||
-      Object.values(draft.campos).some(v => v !== '' && v !== false);
+      Object.values(draft.campos).some(v => v !== '' && v !== false) ||
+      !!draft.mdpa;
     if(hayCambios) {
       localStorage.setItem('urcym_draft_' + dni, JSON.stringify(draft));
     }
@@ -5452,6 +5479,22 @@ function _restaurarDraftLocal(dni) {
     });
     if(draft.lab && labDatos) { Object.assign(labDatos, draft.lab); renderTablaGenerica(labDatos, LAB_FILAS, 'lab_tabla_wrap'); }
     if(draft.ant && antDatos) { Object.assign(antDatos, draft.ant); renderTablaGenerica(antDatos, ANT_FILAS, 'ant_tabla_wrap'); }
+    if(draft.mdpa && draft.mdpa.estudios && draft.mdpa.estudios.length) {
+      mdpaPacDni   = dni;
+      mdpaEstudios = draft.mdpa.estudios;
+      mdpaIdx      = typeof draft.mdpa.idx === 'number' ? draft.mdpa.idx : -1;
+      marcarDirty('mdpa');
+      // Si la pestaña MDPA está visible en este momento, refrescar su render también
+      if(_tabActivo === 'mdpa') {
+        mdpaRenderPills();
+        if(mdpaIdx >= 0) {
+          mdpaMostrarEmpty(false); mdpaMostrarBanner(false); mdpaMostrarFormulario(true);
+          mdpaSeleccionarEstudio(mdpaIdx);
+        } else {
+          mdpaMostrarEmpty(false); mdpaMostrarBanner(true); mdpaMostrarFormulario(false);
+        }
+      }
+    }
     actualizarPromedios();
     actualizarIMC();
     calcularPREVENT && calcularPREVENT();
@@ -5542,10 +5585,10 @@ window.addEventListener('beforeunload', function(e) {
   if(pacienteActual && pacienteActual.dni) {
     _guardarDraftLocal(pacienteActual.dni);
   }
-  if(_hayBorradoresSinGuardar() || _dirty.evol ||
+  if(_hayBorradoresSinGuardar() || _dirty.evol || _dirty.mdpa ||
      document.getElementById('evol_editor')?.innerText?.trim()) {
     e.preventDefault();
-    e.returnValue = '¿Querés salir? Hay evoluciones no guardadas.';
+    e.returnValue = '¿Querés salir? Hay datos no guardados (evolución y/o MDPA).';
     return e.returnValue;
   }
 });
@@ -10825,6 +10868,8 @@ async function guardarVacunacion() {
     const id = inp.getAttribute('onchange').match(/'([^']+)'/)[1];
     setVacNota(id, inp.value);
   });
+  // Guardar en historial la versión que está por ser sobreescrita
+  await _archivarPacienteTabla(dni, 'vac');
   const { error } = await sb.from('paciente_tablas').upsert({
     dni_paciente: dni, tipo: 'vac', datos: JSON.stringify(vacDatos)
   }, { onConflict: 'dni_paciente,tipo' });
@@ -11130,6 +11175,22 @@ let mdpaMostrarPP = false;
 let mdpaPacDni    = null;
 
 async function mdpaIniciar(dni) {
+  // Si es el mismo paciente y hay cambios sin guardar, preservar el estado en memoria
+  // (no volver a pedir a Supabase, que pisaría lo que el usuario tipeó al cambiar de pestaña)
+  if(mdpaPacDni === dni && _dirty.mdpa && mdpaEstudios.length > 0) {
+    mdpaRenderPills();
+    if(mdpaIdx >= 0) {
+      mdpaMostrarEmpty(false);
+      mdpaMostrarBanner(false);
+      mdpaMostrarFormulario(true);
+      mdpaSeleccionarEstudio(mdpaIdx);
+    } else {
+      mdpaMostrarEmpty(false);
+      mdpaMostrarBanner(true);
+      mdpaMostrarFormulario(false);
+    }
+    return;
+  }
   mdpaPacDni    = dni;
   mdpaEstudios  = [];
   mdpaIdx       = -1;
@@ -11449,6 +11510,31 @@ function mdpaCrearEstudio() {
   mdpaSeleccionarEstudio(0);
 }
 
+// Archiva el estado actual (en la BD) de un estudio MDPA en mdpa_estudios_historial
+// antes de que un update o delete lo modifique/borre. Requiere la tabla
+// mdpa_estudios_historial en Supabase (ver SQL provisto).
+async function _archivarMdpaEstudio(id) {
+  try {
+    const { data, error } = await sb.from('mdpa_estudios').select('*').eq('id', id).maybeSingle();
+    if(error) { console.warn('_archivarMdpaEstudio select:', error); return; }
+    if(data) {
+      const { error: errHist } = await sb.from('mdpa_estudios_historial').insert({
+        estudio_id: data.id,
+        paciente_dni: data.paciente_dni,
+        fecha_inicio: data.fecha_inicio,
+        n_dias: data.n_dias,
+        tomas: data.tomas,
+        farmacos: data.farmacos,
+        motivo: data.motivo,
+        nota: data.nota,
+        version_fecha: data.updated_at || null,
+        archivado_en: new Date().toISOString()
+      });
+      if(errHist) console.warn('_archivarMdpaEstudio insert historial:', errHist);
+    }
+  } catch(e) { console.warn('_archivarMdpaEstudio:', e); }
+}
+
 async function mdpaGuardar() {
   if(mdpaIdx < 0 || !mdpaPacDni) { alert('Sin estudio activo para guardar'); return; }
   const est = mdpaEstudios[mdpaIdx];
@@ -11467,6 +11553,8 @@ async function mdpaGuardar() {
   try {
     let result;
     if(est.id && !est.id.startsWith('new_')) {
+      // Guardar en historial la versión que está por ser sobreescrita
+      await _archivarMdpaEstudio(est.id);
       result = await sb.from('mdpa_estudios').update(payload).eq('id', est.id);
     } else {
       result = await sb.from('mdpa_estudios').insert(payload).select().single();
@@ -11498,7 +11586,11 @@ function mdpaEliminarEstudio() { if(mdpaIdx >= 0) mdpaConfirmarEliminar(mdpaIdx)
 async function mdpaEliminarPorIdx(i) {
   const est = mdpaEstudios[i];
   if(est.id && !est.id.startsWith('new_')) {
-    try { await sb.from('mdpa_estudios').delete().eq('id', est.id); } catch(e) { console.error('MDPA delete:', e); }
+    try {
+      // Guardar en historial el estudio antes de borrarlo definitivamente
+      await _archivarMdpaEstudio(est.id);
+      await sb.from('mdpa_estudios').delete().eq('id', est.id);
+    } catch(e) { console.error('MDPA delete:', e); }
   }
   mdpaEstudios.splice(i, 1);
   mdpaIdx = -1;
