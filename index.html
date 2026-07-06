@@ -19030,6 +19030,7 @@ ${profNombre?`<div class="prof"><span class="prof-name">${profNombre}</span>${pr
     </div>
     <div class="form-actions" style="margin-top:16px">
       <button class="btn btn-secondary" style="flex:1;min-width:120px" onclick="document.getElementById('modalDocLibre').classList.remove('open')">Cancelar</button>
+      <button class="btn btn-secondary" style="flex:1;min-width:140px" onclick="volcarDocLibreAEvolucion()">↑ Volcar a evolución</button>
       <button class="btn btn-teal" style="flex:1;min-width:140px" onclick="generarPDFDocLibre()">📄 Descargar PDF</button>
     </div>
   </div>
@@ -19082,18 +19083,25 @@ ${profNombre?`<div class="prof"><span class="prof-name">${profNombre}</span>${pr
 // guarda el paciente activo cuando se abre el modal
 let _docLibrePaciente = null;
 
+function _renderDocLibreHeader() {
+  const p = _docLibrePaciente;
+  if(!p) return;
+  const hoy = fechaHoy ? fechaHoy() : new Date().toLocaleDateString('es-AR');
+  const fnac = p.fecha_nacimiento || p.fnac || '';
+  const edad = fnac ? edadDesde(fnac) : '';
+  const fc = document.getElementById('doclibre_fecha_check');
+  const inclFecha = fc ? fc.checked : true;
+  const partes = ['<strong>' + p.apellido + ', ' + p.nombre + '</strong>'];
+  if(p.dni) partes.push('DNI ' + p.dni);
+  if(edad !== '' && edad !== null && !isNaN(edad)) partes.push(edad + ' años');
+  if(inclFecha) partes.push(hoy);
+  document.getElementById('doclibre_header').innerHTML = partes.join(' &nbsp;·&nbsp; ');
+}
+
 function abrirDocumentoLibre(dni) {
   const p = pacientesData.find(x=>x.dni===dni);
   if(!p) return;
   _docLibrePaciente = p;
-  const hoy = fechaHoy ? fechaHoy() : new Date().toLocaleDateString('es-AR');
-  const edad = p.fecha_nac ? calcEdad(p.fecha_nac) : '';
-  const edadStr = edad ? ' · ' + edad + ' años' : '';
-  document.getElementById('doclibre_header').innerHTML =
-    '<strong>' + p.apellido + ', ' + p.nombre + '</strong>'
-    + ' &nbsp;·&nbsp; DNI ' + p.dni
-    + (edadStr ? ' &nbsp;·&nbsp; ' + edadStr : '')
-    + ' &nbsp;·&nbsp; ' + hoy;
   document.getElementById('doclibre_contenido').value = '';
   // reset checkboxes
   const fc = document.getElementById('doclibre_fecha_check');
@@ -19102,7 +19110,30 @@ function abrirDocumentoLibre(dni) {
   if(sc) sc.checked = false;
   const dc = document.getElementById('doclibre_direccion');
   if(dc) dc.value = 'ninguna';
+  _renderDocLibreHeader();
+  if(fc && !fc._docLibreListener) {
+    fc.addEventListener('change', _renderDocLibreHeader);
+    fc._docLibreListener = true;
+  }
   document.getElementById('modalDocLibre').classList.add('open');
+}
+
+function volcarDocLibreAEvolucion() {
+  const p = _docLibrePaciente;
+  if(!p){ alert('No hay paciente seleccionado.'); return; }
+  const contenido = document.getElementById('doclibre_contenido').value.trim();
+  if(!contenido){ alert('Escribí el contenido del documento antes de volcarlo.'); return; }
+  const editor = document.getElementById('evol_editor');
+  if(!editor){ alert('No se encontró el editor de evolución.'); return; }
+  const tipo = document.getElementById('doclibre_tipo').value;
+  const hoy = fechaHoy ? fechaHoy() : new Date().toLocaleDateString('es-AR');
+  const lineasHtml = escHtml(contenido).replace(/\n/g, '<br>');
+  const bloque = '<div class="bloque-doclibre" style="font-family:Arial,sans-serif;font-size:10pt;color:#333;border-left:3px solid var(--blue);padding:6px 10px;margin-bottom:10px;line-height:1.8">'
+    + '<strong style="font-size:10pt">' + escHtml(tipo) + ' — ' + hoy + ':</strong><br>' + lineasHtml + '</div>';
+  const tmp = document.createElement('div'); tmp.innerHTML = bloque;
+  editor.appendChild(tmp.firstChild);
+  _asegurarLineaLibreEvol(editor);
+  document.getElementById('modalDocLibre').classList.remove('open');
 }
 
 function generarPDFDocLibre() {
@@ -19135,10 +19166,14 @@ function generarPDFDocLibre() {
     doc.setFont('helvetica', 'bold'); doc.setFontSize(9);
     doc.setTextColor(..._C.oscuro);
     doc.text(nombre, ML + 4, bY + 5.5);
-    if(p.dni) {
+    const fnacPdf = p.fecha_nacimiento || p.fnac || '';
+    const edadPdf = fnacPdf ? edadDesde(fnacPdf) : '';
+    const tieneEdad = edadPdf !== '' && edadPdf !== null && !isNaN(edadPdf);
+    const datosLinea = (p.dni ? 'DNI ' + p.dni : '') + (tieneEdad ? (p.dni ? '  ·  ' : '') + edadPdf + ' años' : '');
+    if(datosLinea) {
       doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5);
       doc.setTextColor(..._C.suave);
-      doc.text('DNI ' + p.dni, ML + 4, bY + 9.2);
+      doc.text(datosLinea, ML + 4, bY + 9.2);
     }
     if(fechaMostrar) {
       doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5);
