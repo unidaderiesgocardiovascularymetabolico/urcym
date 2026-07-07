@@ -6212,24 +6212,24 @@ function _pdfHeader(doc, u, PW, ML) {
 /* ─────────────────────────────────────────────────── */
 function _pdfPatientBar(doc, p, fechaStr, PW, ML, MR, headerEndY) {
   // Posicionado justo debajo del header
-  const bY = headerEndY || 30, bH = 9;
+  const bY = headerEndY || 30, bH = 13;
 
   const nombre = ((p.apellido ? p.apellido.toUpperCase() + ', ' : '') + (p.nombre || '')).trim();
-  doc.setFont('helvetica', 'bold'); doc.setFontSize(8.5);
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(13);
   doc.setTextColor(..._C.oscuro);
-  doc.text(nombre, ML + 4, bY + 4.5);
+  doc.text(nombre, ML + 4, bY + 6.5);
 
   if (p.dni) {
-    doc.setFont('helvetica', 'normal'); doc.setFontSize(7);
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(8);
     doc.setTextColor(..._C.suave);
-    doc.text('DNI ' + p.dni, ML + 4, bY + 8.2);
+    doc.text('DNI ' + p.dni, ML + 4, bY + 11.5);
   }
 
-  doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5);
-  doc.setTextColor(..._C.suave);
-  doc.text(fechaStr, PW - MR - 3, bY + 6.2, { align: 'right' });
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(9.5);
+  doc.setTextColor(..._C.azulTxt);
+  doc.text(fechaStr, PW - MR - 3, bY + 7, { align: 'right' });
 
-  return bY + bH + 3;   // ← Y donde empieza el contenido
+  return bY + bH + 6;   // ← Y donde empieza el contenido (más separado del nombre)
 }
 
 /* ─────────────────────────────────────────────────── */
@@ -6253,7 +6253,7 @@ function _pdfFirma(doc, u, PW, PH, ML, firmaKey, pieAltura) {
 
     // Ancho máximo en mm para que la firma no ocupe demasiado espacio
     // Barbara es casi cuadrada → usamos ancho menor para que no quede enorme
-    const FW = (firmaKey === 'barbara') ? 26 : 32;
+    const FW = (firmaKey === 'barbara') ? 34 : 40;
     const FH = FW * ratio;           // alto proporcional real
     const FX = PW - MR - FW;        // alineada a la derecha
     const FY = PH - footerH - FH - 4;    // justo encima del footer, con 4mm de margen
@@ -6560,8 +6560,8 @@ function generarPDF(tipo) {
     { day: '2-digit', month: '2-digit', year: 'numeric' });
   const cY = p ? _pdfPatientBar(doc, p, hoy, PW, ML, MR, headerEndY) : headerEndY;
 
-  // Zona disponible para contenido (hasta la firma, que empieza en PH-56)
-  const contentMaxY = PH - 56 - 2;
+  // Zona disponible para contenido (hasta la firma, que ahora es más grande)
+  const contentMaxY = PH - 90;
   const contentH = contentMaxY - cY;
 
   if (tipo === 'receta') {
@@ -6603,7 +6603,7 @@ function generarPDF(tipo) {
         let curY = cY + 13;
         const lineH = 4.6;
         // Usar máximo de altura: hasta zona de firma en última página
-        const firmaTopLast = PH - 56 - 4;
+        const firmaTopLast = PH - 90;
         // En páginas intermedias usar casi toda la hoja
         const maxYMid = PH - 22;
 
@@ -9317,7 +9317,7 @@ function _crearPDFIndicacionesEvol(txt, usarOtro) {
   doc.line(ML, curY + 2, ML + 62, curY + 2);
   curY += 8;
 
-  const firmaZoneTop = PH - 56 - 2;
+  const firmaZoneTop = PH - 90;
   const maxYMidEvol = PH - 22;
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8);
@@ -9342,7 +9342,8 @@ function _crearPDFIndicacionesEvol(txt, usarOtro) {
   txt.split('\n').map(l => l.trim()).filter(Boolean).forEach(item => {
     const itemLines = doc.splitTextToSize('• ' + item, CW - 4);
     itemLines.forEach((ln, idx) => {
-      if(curY > maxYMidEvol) { curY = _addIndPage(); }
+      const _maxYEvol = (_firmaKeyEvol !== 'ninguna') ? firmaZoneTop : maxYMidEvol;
+      if(curY > _maxYEvol) { curY = _addIndPage(); }
       doc.text(ln, ML + (idx > 0 ? 4 : 0), curY);
       curY += lineH;
     });
@@ -19253,26 +19254,26 @@ function generarPDFDocLibre() {
     const headerEndY = _pdfHeaderOtro(doc, u, PW, ML);
     // Barra de paciente (con o sin fecha)
     const fechaMostrar = inclFecha ? hoy : '';
-    const bY = headerEndY, bH = 10;
+    const bY = headerEndY, bH = 13;
     const nombre = ((p.apellido ? p.apellido.toUpperCase() + ', ' : '') + (p.nombre || '')).trim();
-    doc.setFont('helvetica', 'bold'); doc.setFontSize(9);
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(13);
     doc.setTextColor(..._C.oscuro);
-    doc.text(nombre, ML + 4, bY + 5.5);
+    doc.text(nombre, ML + 4, bY + 6.5);
     const fnacPdf = p.fecha_nacimiento || p.fnac || '';
     const edadPdf = fnacPdf ? edadDesde(fnacPdf) : '';
     const tieneEdad = edadPdf !== '' && edadPdf !== null && !isNaN(edadPdf);
     const datosLinea = (p.dni ? 'DNI ' + p.dni : '') + (tieneEdad ? (p.dni ? '  ·  ' : '') + edadPdf + ' años' : '');
     if(datosLinea) {
-      doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5);
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(8);
       doc.setTextColor(..._C.suave);
-      doc.text(datosLinea, ML + 4, bY + 9.2);
+      doc.text(datosLinea, ML + 4, bY + 11.5);
     }
     if(fechaMostrar) {
-      doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5);
-      doc.setTextColor(..._C.suave);
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(9.5);
+      doc.setTextColor(..._C.azulTxt);
       doc.text(fechaMostrar, PW - MR - 3, bY + 7, { align: 'right' });
     }
-    let curY = bY + bH + 4;
+    let curY = bY + bH + 7;
 
     // Etiqueta tipo de documento
     doc.setFont('helvetica', 'bold'); doc.setFontSize(8);
@@ -19283,7 +19284,7 @@ function generarPDFDocLibre() {
     curY += 7;
 
     // Contenido libre
-    const firmaZoneTop = PH - 56 - 4;
+    const firmaZoneTop = PH - 90;
     const maxYMid = PH - 22;
     doc.setFont('helvetica', 'normal'); doc.setFontSize(9);
     doc.setTextColor(35, 35, 35);
