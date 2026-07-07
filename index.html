@@ -19804,24 +19804,53 @@ function generarPDFDocLibre() {
 }
 
 // ===== PLANTILLAS HC =====
+// Se guardan en localStorage (caché rápida) Y en Supabase (fuente de verdad),
+// igual que las tareas, para que no se pierdan si se limpia el navegador o se cambia de equipo.
 const PHC_LS_KEY = 'urcym_phc_plantillas_v1';
+const PHC_SB_KEY = 'phc_plantillas_v1';
 let phcPlantillas = [];
 let phcEditIdx = null; // null = nueva, número = índice a editar
 
-function phcCargar() {
+// Carga inmediata desde localStorage (para no esperar red al abrir el panel)
+function phcCargarLocal() {
   try {
     const s = localStorage.getItem(PHC_LS_KEY);
     phcPlantillas = s ? JSON.parse(s) : [];
   } catch(e) { phcPlantillas = []; }
 }
+
+// Sincroniza contra Supabase (fuente de verdad) y actualiza la vista si cambió algo
+function phcSincronizar(cb) {
+  if(typeof sb === 'undefined' || !sb) { if(cb) cb(); return; }
+  sb.from('urcym_agenda_config').select('value').eq('key', PHC_SB_KEY).maybeSingle().then(function(r){
+    if(r && r.data && r.data.value) {
+      try {
+        phcPlantillas = JSON.parse(r.data.value);
+        try { localStorage.setItem(PHC_LS_KEY, r.data.value); } catch(e){}
+      } catch(e){}
+    }
+    if(cb) cb();
+  }).catch(function(e){
+    console.warn('[URCyM] phcSincronizar error', e);
+    if(cb) cb();
+  });
+}
+
 function phcGuardar() {
   try { localStorage.setItem(PHC_LS_KEY, JSON.stringify(phcPlantillas)); } catch(e){}
+  if(typeof sb === 'undefined' || !sb) return;
+  sb.from('urcym_agenda_config')
+    .upsert({ key: PHC_SB_KEY, value: JSON.stringify(phcPlantillas) }, { onConflict: 'key' })
+    .then(function(r){ if(r && r.error) console.warn('[URCyM] phcGuardar error', r.error); })
+    .catch(function(e){ console.warn('[URCyM] phcGuardar error', e); });
 }
 
 function abrirPlantillasHC() {
-  phcCargar();
+  phcCargarLocal();
   phcRenderLista();
   document.getElementById('phc-bg').style.display = 'flex';
+  // refresca contra Supabase por si se editó desde otro equipo/navegador
+  phcSincronizar(phcRenderLista);
 }
 function cerrarPlantillasHC() {
   document.getElementById('phc-bg').style.display = 'none';
