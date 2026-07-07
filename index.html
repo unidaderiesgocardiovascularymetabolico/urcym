@@ -16978,6 +16978,64 @@ window.cargarProxConsultas = cargarProxConsultas;
 })();
 </script>
 <script>
+// Insignia flotante con el nombre del paciente: visible SIEMPRE que estemos
+// dentro de "Evolucionar" (cualquier pestaña con scroll, o cualquier modal
+// abierto encima — Datos clínicos, Previas, Laboratorio, Documento libre,
+// Carga histórica, Hábitos, Historial Dx/Med, etc.) sin importar el scroll
+// interno de ese modal.
+(function(){
+  var badge, nombreEl;
+
+  function crearBadge(){
+    if (badge) return;
+    badge = document.createElement('div');
+    badge.id = 'evol_float_badge';
+    badge.style.cssText = 'display:none;position:fixed;top:14px;right:18px;z-index:100000;'
+      + 'align-items:center;gap:8px;background:#fff;border:1.5px solid var(--border,#e2e8f0);'
+      + 'border-radius:12px;padding:7px 16px;box-shadow:0 8px 24px rgba(0,0,0,.18);'
+      + 'font-family:var(--font-main,inherit);cursor:default;pointer-events:none;';
+    badge.innerHTML =
+      '<span style="font-size:9px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:#8a94a6">Paciente</span>'
+      + '<span id="evol_float_badge_nombre" style="font-family:var(--font-display,inherit);font-size:14px;font-weight:700;color:var(--blue,#3089ca);white-space:nowrap"></span>';
+    document.body.appendChild(badge);
+    nombreEl = document.getElementById('evol_float_badge_nombre');
+  }
+
+  // IDs de modales que no usan la clase .modal-overlay/.open (manejan su
+  // propia visibilidad con style.display directamente)
+  var MODALES_MANUALES = ['modal_carga_historica', 'modal_habitos_upd'];
+
+  function hayModalAbierto(){
+    if (document.querySelector('.modal-overlay.open')) return true;
+    for (var i = 0; i < MODALES_MANUALES.length; i++) {
+      var el = document.getElementById(MODALES_MANUALES[i]);
+      if (el && window.getComputedStyle(el).display !== 'none') return true;
+    }
+    return false;
+  }
+
+  function actualizarBadgeFlotante(){
+    crearBadge();
+    var evolPage = document.getElementById('page-evolucion');
+    var enEvolucion = evolPage && evolPage.classList.contains('active');
+    var origen = document.getElementById('evol_nombre');
+    var nombre = origen ? origen.textContent.trim() : '';
+    var mostrar = enEvolucion && !!nombre && hayModalAbierto();
+    if (mostrar) {
+      nombreEl.textContent = nombre;
+      badge.style.display = 'flex';
+    } else {
+      badge.style.display = 'none';
+    }
+  }
+
+  var obs = new MutationObserver(function(){ actualizarBadgeFlotante(); });
+  obs.observe(document.body, { attributes: true, attributeFilter: ['class', 'style'], subtree: true });
+
+  actualizarBadgeFlotante();
+})();
+</script>
+<script>
 /* ══════════════════════════════════════════════════════
    MÓDULO FINANZAS URCyM
    Tablas Supabase requeridas:
