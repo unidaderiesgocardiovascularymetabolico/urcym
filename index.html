@@ -4390,8 +4390,15 @@ function renderTablaReadonly(datos, filas, wrapId) {
   if(wrapId === 'rolab_wrap' || wrapId === 'labro_wrap') calcLabValues(datos, filas);
   if(wrapId === 'roant_wrap') calcAntValues(datos, filas);
 
-  // Solo mostrar filas que tienen al menos un valor
-  const tieneValor = (fi) => datos.columnas.some((_,ci) => {
+  // Ocultar columnas totalmente vacías (ej: la columna "por cargar" recién creada, sin datos aún)
+  const colIdxConValor = datos.columnas.map((_,ci) => ci).filter(ci =>
+    datos.filas.some(fila => fila && fila[ci] && fila[ci].toString().trim() !== '')
+  );
+  const colsVisibles = colIdxConValor.length ? colIdxConValor : datos.columnas.map((_,ci)=>ci);
+  const fechasVisibles = colsVisibles.map(ci => datos.columnas[ci]);
+
+  // Solo mostrar filas que tienen al menos un valor (considerando solo columnas visibles)
+  const tieneValor = (fi) => colsVisibles.some(ci => {
     const v = (datos.filas[fi]||[])[ci];
     return v && v.toString().trim() !== '';
   });
@@ -4415,14 +4422,14 @@ function renderTablaReadonly(datos, filas, wrapId) {
   filasVisibles.forEach(({f, fi, esCat}) => {
     if(esCat) return;
     const storedU = (datos.unidades&&datos.unidades[f.key]) || (f.unidades||[''])[0];
-    datos.columnas.forEach((_,ci) => {
+    colsVisibles.forEach(ci => {
       const val = (datos.filas[fi]||[])[ci]||'';
       if(val && f.ref && f.ref(val, sexoPac, storedU)) nAlertas++;
     });
   });
 
   let h = '<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">';
-  h += '<span style="font-size:12px;color:var(--text-soft)">'+datos.columnas.length+' fecha'+(datos.columnas.length>1?'s':'')+' &middot; '+filasVisibles.filter(x=>!x.esCat).length+' parámetros</span>';
+  h += '<span style="font-size:12px;color:var(--text-soft)">'+fechasVisibles.length+' fecha'+(fechasVisibles.length>1?'s':'')+' &middot; '+filasVisibles.filter(x=>!x.esCat).length+' parámetros</span>';
   if(nAlertas>0) h += '<span style="background:var(--red-light);color:var(--red);font-size:11px;font-weight:700;padding:2px 10px;border-radius:20px">⚠️ '+nAlertas+' valor'+(nAlertas>1?'es':'')+' alterado'+(nAlertas>1?'s':'')+'</span>';
   h += '</div>';
 
@@ -4430,26 +4437,26 @@ function renderTablaReadonly(datos, filas, wrapId) {
   h += '<thead><tr>';
   h += '<th style="background:var(--blue);color:white;padding:8px 14px;text-align:left;font-size:11px;font-weight:700;position:sticky;left:0;z-index:2;min-width:180px;border-right:2px solid rgba(255,255,255,.3)">Parámetro</th>';
   h += '<th style="background:var(--blue);color:white;padding:8px 8px;text-align:center;font-size:11px;min-width:64px;border-right:1px solid rgba(255,255,255,.2)">Unidad</th>';
-  datos.columnas.forEach(c => {
+  fechasVisibles.forEach(c => {
     h += '<th style="background:var(--blue);color:white;padding:8px 12px;text-align:center;font-size:11px;font-weight:600;min-width:90px;border-left:1px solid rgba(255,255,255,.2)">'+new Date(c+'T12:00:00').toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'})+'</th>';
   });
   h += '</tr></thead><tbody>';
 
   filasVisibles.forEach(({f, fi, esCat}) => {
     if(esCat) {
-      h += '<tr><td colspan="'+(2+datos.columnas.length)+'" style="background:#dbeafe;color:var(--blue);font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;padding:5px 14px;border:1px solid var(--border)">'+f.label+'</td></tr>';
+      h += '<tr><td colspan="'+(2+fechasVisibles.length)+'" style="background:#dbeafe;color:var(--blue);font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;padding:5px 14px;border:1px solid var(--border)">'+f.label+'</td></tr>';
       return;
     }
     const storedU = (datos.unidades&&datos.unidades[f.key]) || (f.unidades||[''])[0];
     const isCalc = !!f.calc;
-    const rowAlert = datos.columnas.some((_,ci) => {
+    const rowAlert = colsVisibles.some(ci => {
       const v = (datos.filas[fi]||[])[ci]||'';
       return v && f.ref && f.ref(v, sexoPac, storedU);
     });
     h += '<tr>';
     h += '<td style="padding:5px 14px;border:1px solid var(--border);font-size:12px;font-weight:'+(isCalc?'500':'600')+';position:sticky;left:0;background:'+(rowAlert?'#fff0f0':(isCalc?'#f0f8ff':'white'))+';z-index:1;color:'+(isCalc?'var(--teal)':'var(--text)')+'">'+f.label+(isCalc?' <span style=\'font-size:9px;color:var(--teal)\'>●</span>':'')+'</td>';
     h += '<td style="padding:5px 8px;border:1px solid var(--border);text-align:center;background:#fafafa;font-size:11px;color:var(--text-soft)">'+storedU+'</td>';
-    datos.columnas.forEach((_,ci) => {
+    colsVisibles.forEach(ci => {
       const val = (datos.filas[fi]||[])[ci]||'';
       const esAlerta = val && f.ref && f.ref(val, sexoPac, storedU);
       const refTxtSexo = esAlerta && f.refTxt ? (() => {
@@ -4739,7 +4746,7 @@ function renderTablaGenerica(datos, filas, wrapId, newColIdx) {
       h += '</div>';
     }
     // Todas las columnas tienen input de fecha editable
-    h += '<input type="date" value="'+c+'" data-ci="'+ci+'" data-wrap="'+wrapId+'" onchange="actualizarFechaCol(this)"';
+    h += '<input type="date" lang="es-AR" value="'+c+'" data-ci="'+ci+'" data-wrap="'+wrapId+'" onchange="actualizarFechaCol(this)"';
     h += ' style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.5);color:white;border-radius:5px;font-size:10px;padding:2px 4px;width:106px;color-scheme:dark"/>';
     h += '</th>';
   });
@@ -18648,12 +18655,17 @@ function imprimirInformeAnt() {
   const keyToFi = {};
   ANT_FILAS.forEach((f, i) => { keyToFi[f.key] = i; });
 
-  // Columnas disponibles
-  const cols   = datos.columnas;   // array de fechas ISO
+  // Columnas disponibles — se excluye cualquier columna sin ningún valor cargado
+  // (típicamente la columna "nueva carga" que se agrega automáticamente al abrir la pestaña)
+  const colIdxConDatos = datos.columnas.map((_,ci) => ci).filter(ci =>
+    datos.filas.some(fila => fila && fila[ci] && fila[ci].toString().trim() !== '')
+  );
+  const colsIdx = colIdxConDatos.length ? colIdxConDatos : datos.columnas.map((_,ci)=>ci);
+  const cols   = colsIdx.map(ci => datos.columnas[ci]);   // array de fechas ISO (solo con datos)
   const nCols  = cols.length;
 
-  // Función auxiliar: valor en [fila_index][col_index]
-  const val = (fi, ci) => (datos.filas[fi] || [])[ci] || '';
+  // Función auxiliar: valor en [fila_index][col_index] — ci es posición dentro de `cols`
+  const val = (fi, ci) => (datos.filas[fi] || [])[colsIdx[ci]] || '';
 
   // ── Encabezado paciente ──────────────────────────────────────────────────
   const nombre = (p.apellido || '') + ', ' + (p.nombre || '');
