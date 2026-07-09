@@ -2625,6 +2625,7 @@
           <div class="evol-sidebar-left" id="evol_sidebar_left">
             <div class="evol-sidebar-left-icon" title="Receta" onclick="abrirDocumento('receta', pacienteActual?.dni)">💊</div>
             <div class="evol-sidebar-left-icon" title="Resumen Historia Clínica" onclick="pacienteActual && abrirHistoriaClinica(pacienteActual.dni)">📖</div>
+            <div class="evol-sidebar-left-icon" title="Antropometría (solo lectura)" onclick="pacienteActual && abrirAntropometriaSoloLectura(pacienteActual.dni)">📐</div>
             <div class="evol-sidebar-left-icon" title="WhatsApp" onclick="pacienteActual?.telefono && window.open('https://wa.me/54'+pacienteActual.telefono.replace(/\D/g,''))">💬</div>
             <div class="evol-sidebar-left-icon" title="Documento libre (resumen / derivación)" onclick="pacienteActual && abrirDocumentoLibre(pacienteActual.dni)">📄</div>
             <div class="evol-sidebar-left-icon" title="Plantillas de historia clínica" onclick="abrirPlantillasHC()">🗂️</div>
@@ -3895,6 +3896,35 @@
   </div>
 </div>
 
+<!-- MODAL ANTROPOMETRÍA (SOLO LECTURA, DESDE EVOLUCIÓN) -->
+<style>
+  .antinf-hdr{
+    font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.06em;
+    color:white; background:linear-gradient(90deg,#134e4a,#0f766e);
+    padding:9px 14px; border-radius:10px 10px 0 0;
+  }
+  .antinf-tabla-wrap{overflow-x:auto; -webkit-overflow-scrolling:touch; border-radius:0 0 10px 10px; overflow:hidden; border:1px solid var(--border); border-top:none;}
+  .antinf-tabla{border-collapse:collapse; font-size:12px; white-space:nowrap; width:100%; min-width:100%;}
+  .antinf-tabla th, .antinf-tabla td{padding:7px 12px; border:1px solid var(--border); text-align:center;}
+  .antinf-tabla thead th{background:#134e4a; color:white; font-weight:600; font-size:10.5px;}
+  .antinf-tabla thead th:first-child{text-align:left; position:sticky; left:0; background:#134e4a; min-width:150px;}
+  .antinf-tabla tbody td:first-child{text-align:left; font-weight:600; color:var(--text); position:sticky; left:0; background:#fafcfe;}
+  .antinf-tabla tbody tr:nth-child(even) td{background:#f0fdfa;}
+  .antinf-tabla tbody tr:nth-child(even) td:first-child{background:#e6f9f7;}
+  .antinf-calc-dot{font-size:9px; color:#0f766e;}
+  .antinf-nota{font-size:10.5px; color:var(--text-soft); margin-top:8px; font-style:italic;}
+</style>
+<div class="modal-overlay" id="modalAntroSoloLectura">
+  <div class="modal" style="max-width:900px;max-height:88vh;overflow-y:auto">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+      <div class="modal-title" style="margin:0">📐 Antropometría — solo lectura</div>
+      <button onclick="cerrarModal('modalAntroSoloLectura')" style="border:none;background:none;font-size:20px;cursor:pointer;color:#6b7a8d">✕</button>
+    </div>
+    <div style="font-size:12px;color:var(--text-soft);margin-bottom:14px" id="antro_ro_pac_info"></div>
+    <div id="evol_antro_ro_wrap"></div>
+  </div>
+</div>
+
 
 
 <!-- MODAL PREVISUALIZACIÓN PDF -->
@@ -3955,9 +3985,14 @@
 <script>
 // ===== SUPABASE =====
 const { createClient } = supabase;
+// persistSession:false / autoRefreshToken:false porque esta app NO usa el login
+// de Supabase Auth (usa su propio sistema de usuario/contraseña). Si el cliente
+// intenta guardar/refrescar sesión y ese token queda inválido, todas las consultas
+// posteriores empiezan a fallar con 403, aunque las policies de RLS estén bien.
 var sb = createClient(
   'https://qdjzetylyojfjdottjrk.supabase.co',
-  'sb_publishable_qe6L1Uc7mRwsen7lzZlllw_DzOXonwL'
+  'sb_publishable_qe6L1Uc7mRwsen7lzZlllw_DzOXonwL',
+  { auth: { persistSession: false, autoRefreshToken: false } }
 );
 window.sb = sb;
 
@@ -5099,9 +5134,13 @@ async function guardarDatosPac(wrapId) {
   if(error) {
     const msg = document.createElement('div');
     msg.style.cssText = 'position:fixed;bottom:20px;right:20px;background:#e25247;color:white;padding:10px 16px;border-radius:10px;z-index:9999;font-size:13px;font-family:var(--font-main)';
-    msg.textContent = '⚠️ Error al guardar: ' + (error.message || JSON.stringify(error));
+    msg.textContent = '⚠️ Error al guardar: ' + (error.message || '') +
+      (error.code ? ' [code:' + error.code + ']' : '') +
+      (error.details ? ' — detalle: ' + error.details : '') +
+      (error.hint ? ' — hint: ' + error.hint : '');
+    msg.style.maxWidth = '480px';
     document.body.appendChild(msg);
-    setTimeout(()=>msg.remove(), 5000);
+    setTimeout(()=>msg.remove(), 20000);
   }
 }
 
@@ -9742,6 +9781,74 @@ async function abrirHistoriaPaciente(dni) {
   renderTablaReadonly(tmpEst, EST_FILAS, 'roest_wrap');
   renderTablaReadonly(tmpAnt, ANT_FILAS, 'roant_wrap');
   pacienteActual = prevPac;
+}
+
+// Render de antropometría "estilo informe" (mismo criterio que el PDF de hábitos y que
+// la app del paciente): título con degradado, solo filas/columnas con datos, valores
+// calculados marcados con ●. No usa renderTablaReadonly para no tocar ese componente
+// compartido con Historia Clínica / Laboratorio / Estudios.
+function renderAntropometriaInforme(datos, wrapId){
+  const wrap = document.getElementById(wrapId);
+  if(!wrap) return;
+  if(!datos || !datos.columnas || !datos.columnas.length || !datos.filas){
+    wrap.innerHTML = '<div style="text-align:center;padding:32px 20px;color:var(--text-soft)"><div style="font-size:32px;margin-bottom:10px">📋</div><p style="font-size:13px">Sin datos registrados aún.</p></div>';
+    return;
+  }
+  calcAntValues(datos, ANT_FILAS);
+  const get = (key, ci) => {
+    const fi = ANT_FILAS.findIndex(f => f.key === key);
+    if(fi < 0) return null;
+    const v = (datos.filas[fi] || [])[ci];
+    return (v != null && v !== '') ? v : null;
+  };
+  const colsConDato = datos.columnas.map((_, ci) => ci).filter(ci => ANT_FILAS.some(f => get(f.key, ci) != null));
+  const colsMostrar = colsConDato.slice(-6);
+  if(!colsMostrar.length){
+    wrap.innerHTML = '<div style="text-align:center;padding:32px 20px;color:var(--text-soft)"><div style="font-size:32px;margin-bottom:10px">📋</div><p style="font-size:13px">Sin valores cargados aún.</p></div>';
+    return;
+  }
+  const filasConDato = ANT_FILAS.filter(f => colsMostrar.some(ci => get(f.key, ci) != null));
+  const fmtF = iso => { try { return new Date(iso + 'T12:00:00').toLocaleDateString('es-AR', {day:'2-digit', month:'2-digit', year:'2-digit'}); } catch(e){ return iso; } };
+
+  const theadCols = colsMostrar.map(ci => '<th>' + fmtF(datos.columnas[ci]) + '</th>').join('');
+  const filasHTML = filasConDato.map(f => {
+    const label = f.label.replace(/\s*\(.*?\)\s*$/, '');
+    const unidad = (f.unidades && f.unidades[0]) || '';
+    const tds = colsMostrar.map(ci => {
+      const v = get(f.key, ci);
+      return '<td>' + (v != null ? v + (unidad ? ' ' + unidad : '') : '—') + '</td>';
+    }).join('');
+    return '<tr><td>' + label + (f.calc ? ' <span class="antinf-calc-dot">●</span>' : '') + '</td>' + tds + '</tr>';
+  }).join('');
+
+  wrap.innerHTML = '<div class="antinf-hdr">📏 Evolución antropométrica</div>'
+    + '<div class="antinf-tabla-wrap"><table class="antinf-tabla"><thead><tr><th>Parámetro</th>' + theadCols + '</tr></thead><tbody>' + filasHTML + '</tbody></table></div>'
+    + '<div class="antinf-nota">● Valor calculado automáticamente a partir de otras medidas.</div>';
+}
+
+// Antropometría de solo lectura, en modal, invocable desde Evolución (sin salir de la pantalla)
+async function abrirAntropometriaSoloLectura(dni) {
+  const p = pacientesData.find(x=>String(x.dni)===String(dni));
+  if(!p) return;
+  const infoEl = document.getElementById('antro_ro_pac_info');
+  if(infoEl) infoEl.textContent = p.apellido + ', ' + p.nombre + ' · DNI: ' + p.dni;
+  const wrap = document.getElementById('evol_antro_ro_wrap');
+  if(wrap) wrap.innerHTML = '<div class="loading">Cargando...</div>';
+  document.getElementById('modalAntroSoloLectura').classList.add('open');
+
+  const tmpAnt = {columnas:[],filas:[],unidades:{},extraFilas:[]};
+  const { data, error } = await sb.from('paciente_tablas').select('*').eq('dni_paciente', dni).eq('tipo','ant');
+  if(error) { console.error('[abrirAntropometriaSoloLectura ERROR]', error); if(wrap) wrap.innerHTML = '<div style="text-align:center;padding:24px;color:var(--red)">No se pudo cargar la antropometría.</div>'; return; }
+  if(data) data.forEach(row => {
+    try {
+      const d = JSON.parse(row.datos);
+      if(!d.extraFilas) d.extraFilas = [];
+      if(!d.unidades) d.unidades = {};
+      Object.assign(tmpAnt, d);
+    } catch(e){}
+  });
+
+  renderAntropometriaInforme(tmpAnt, 'evol_antro_ro_wrap');
 }
 
 
