@@ -1,0 +1,759 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Appdipo</title>
+<link rel="manifest" href="data:application/manifest+json,{&quot;name&quot;:&quot;Appdipo&quot;,&quot;short_name&quot;:&quot;Appdipo&quot;,&quot;display&quot;:&quot;standalone&quot;,&quot;start_url&quot;:&quot;.&quot;,&quot;background_color&quot;:&quot;%23FFFFFF&quot;,&quot;theme_color&quot;:&quot;%233089CA&quot;}">
+<link href="https://fonts.googleapis.com/css2?family=Amiko:wght@400;600;700&family=Encode+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root{
+    --azul:#3089CA;
+    --teal:#4DBCBE;
+    --coral:#E25247;
+    --gris:#E1E1E1;
+    --texto:#2B2B2B;
+    --texto-suave:#6B7280;
+    --blanco:#FFFFFF;
+    --radio:14px;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    font-family:'Encode Sans', sans-serif;
+    background:linear-gradient(180deg, #EAF5F9 0%, #FFFFFF 220px);
+    color:var(--texto);
+    min-height:100vh;
+    -webkit-tap-highlight-color:transparent;
+  }
+  h1,h2,h3{font-family:'Amiko', serif; margin:0;}
+  .app{
+    max-width:480px;
+    margin:0 auto;
+    min-height:100vh;
+    background:var(--blanco);
+    box-shadow:0 0 40px rgba(0,0,0,0.06);
+    display:flex;
+    flex-direction:column;
+  }
+
+  /* ---------- LOGIN ---------- */
+  #vista-login{
+    flex:1;
+    display:flex;
+    flex-direction:column;
+    justify-content:center;
+    padding:32px 28px;
+    background:linear-gradient(160deg, var(--azul), var(--teal));
+    color:var(--blanco);
+  }
+  .logo-wrap{text-align:center; margin-bottom:36px;}
+  .logo-wrap h1{font-size:2.2rem; letter-spacing:0.5px;}
+  .logo-wrap p{margin-top:6px; font-size:0.9rem; opacity:0.9;}
+  .login-card{
+    background:var(--blanco);
+    border-radius:var(--radio);
+    padding:26px 22px;
+    color:var(--texto);
+  }
+  .campo{margin-bottom:16px;}
+  .campo label{
+    display:block;
+    font-size:0.8rem;
+    font-weight:600;
+    margin-bottom:6px;
+    color:var(--texto-suave);
+  }
+  .campo input{
+    width:100%;
+    padding:13px 14px;
+    border:1.5px solid var(--gris);
+    border-radius:10px;
+    font-size:1rem;
+    font-family:inherit;
+  }
+  .campo input:focus{outline:none; border-color:var(--azul);}
+  .btn{
+    width:100%;
+    padding:14px;
+    border:none;
+    border-radius:10px;
+    font-family:'Encode Sans', sans-serif;
+    font-weight:600;
+    font-size:1rem;
+    cursor:pointer;
+    transition:opacity .15s ease, transform .05s ease;
+  }
+  .btn:active{transform:scale(0.98);}
+  .btn-primary{background:var(--coral); color:var(--blanco);}
+  .btn-primary:disabled{opacity:0.6; cursor:default;}
+  .error-msg{
+    color:var(--coral);
+    font-size:0.85rem;
+    margin-top:10px;
+    text-align:center;
+    display:none;
+  }
+
+  /* ---------- APP (post-login) ---------- */
+  #vista-app{display:none; flex:1; flex-direction:column;}
+  header.top{
+    background:var(--azul);
+    color:var(--blanco);
+    padding:20px 20px 24px;
+    border-radius:0 0 20px 20px;
+  }
+  header.top .saludo{font-size:0.85rem; opacity:0.85;}
+  header.top h2{font-size:1.4rem; margin-top:2px;}
+  header.top .salir{
+    float:right;
+    background:rgba(255,255,255,0.18);
+    border:none;
+    color:var(--blanco);
+    padding:8px 14px;
+    border-radius:8px;
+    font-size:0.8rem;
+    cursor:pointer;
+  }
+
+  main{padding:18px 18px 100px; flex:1;}
+
+  .tabs{
+    display:flex;
+    gap:8px;
+    margin:-30px 0 18px;
+    padding:0 2px;
+  }
+  .tab{
+    flex:1;
+    background:var(--blanco);
+    border:1.5px solid var(--gris);
+    border-radius:12px;
+    padding:12px 8px;
+    text-align:center;
+    font-size:0.8rem;
+    font-weight:600;
+    color:var(--texto-suave);
+    cursor:pointer;
+    box-shadow:0 2px 8px rgba(0,0,0,0.06);
+  }
+  .tab.active{
+    background:var(--azul);
+    border-color:var(--azul);
+    color:var(--blanco);
+  }
+
+  .panel{display:none;}
+  .panel.active{display:block;}
+
+  .card{
+    background:var(--blanco);
+    border:1.5px solid var(--gris);
+    border-radius:var(--radio);
+    padding:18px;
+    margin-bottom:14px;
+  }
+  .card h3{font-size:1rem; margin-bottom:14px; color:var(--azul);}
+
+  .grid2{display:grid; grid-template-columns:1fr 1fr; gap:12px;}
+
+  .unidad{
+    display:flex;
+    align-items:center;
+    border:1.5px solid var(--gris);
+    border-radius:10px;
+    overflow:hidden;
+  }
+  .unidad input{
+    border:none;
+    padding:12px;
+    width:100%;
+    font-size:1rem;
+    font-family:inherit;
+  }
+  .unidad input:focus{outline:none;}
+  .unidad span{
+    padding:0 12px;
+    background:#F4F4F4;
+    color:var(--texto-suave);
+    font-size:0.8rem;
+    font-weight:600;
+    align-self:stretch;
+    display:flex;
+    align-items:center;
+  }
+
+  .campo-opcional-label{
+    font-size:0.75rem;
+    color:var(--texto-suave);
+    margin-top:2px;
+  }
+
+  textarea{
+    width:100%;
+    border:1.5px solid var(--gris);
+    border-radius:10px;
+    padding:12px;
+    font-family:inherit;
+    font-size:0.95rem;
+    resize:vertical;
+    min-height:70px;
+  }
+  textarea:focus{outline:none; border-color:var(--azul);}
+
+  .foto-zone{
+    border:1.5px dashed var(--gris);
+    border-radius:10px;
+    padding:18px;
+    text-align:center;
+    color:var(--texto-suave);
+    font-size:0.85rem;
+    cursor:pointer;
+  }
+  .foto-zone.tiene-foto{border-style:solid; border-color:var(--teal); color:var(--teal);}
+  #inputFoto{display:none;}
+  #previewFoto{
+    max-width:100%;
+    border-radius:10px;
+    margin-top:10px;
+    display:none;
+  }
+
+  .habito-item{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    padding:12px 4px;
+    border-bottom:1px solid var(--gris);
+  }
+  .habito-item:last-child{border-bottom:none;}
+  .habito-item .nombre{font-size:0.92rem;}
+  .switch{
+    position:relative;
+    width:46px;
+    height:26px;
+    flex-shrink:0;
+  }
+  .switch input{opacity:0; width:0; height:0;}
+  .slider{
+    position:absolute; inset:0;
+    background:var(--gris);
+    border-radius:20px;
+    cursor:pointer;
+    transition:.2s;
+  }
+  .slider::before{
+    content:"";
+    position:absolute;
+    height:20px; width:20px;
+    left:3px; top:3px;
+    background:var(--blanco);
+    border-radius:50%;
+    transition:.2s;
+  }
+  input:checked + .slider{background:var(--teal);}
+  input:checked + .slider::before{transform:translateX(20px);}
+
+  .historial-item{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    padding:14px 4px;
+    border-bottom:1px solid var(--gris);
+  }
+  .historial-item:last-child{border-bottom:none;}
+  .historial-item .fecha{font-size:0.75rem; color:var(--texto-suave);}
+  .historial-item .peso{font-size:1.1rem; font-weight:700; color:var(--azul);}
+  .vacio{
+    text-align:center;
+    color:var(--texto-suave);
+    padding:24px 10px;
+    font-size:0.9rem;
+  }
+
+  .toast{
+    position:fixed;
+    bottom:24px;
+    left:50%;
+    transform:translateX(-50%) translateY(20px);
+    background:var(--texto);
+    color:var(--blanco);
+    padding:12px 20px;
+    border-radius:10px;
+    font-size:0.9rem;
+    opacity:0;
+    transition:.25s;
+    pointer-events:none;
+    max-width:90%;
+    text-align:center;
+  }
+  .toast.show{opacity:1; transform:translateX(-50%) translateY(0);}
+</style>
+</head>
+<body>
+
+<div class="app">
+
+  <!-- ============ LOGIN ============ -->
+  <div id="vista-login">
+    <div class="logo-wrap">
+      <h1>Appdipo</h1>
+      <p>Seguimiento de adiposidad</p>
+    </div>
+    <div class="login-card">
+      <div class="campo">
+        <label for="loginDni">DNI</label>
+        <input type="text" inputmode="numeric" pattern="[0-9]*" id="loginDni" autocomplete="username" placeholder="Sin puntos, ej: 30123456">
+      </div>
+      <div class="campo">
+        <label for="loginPass">Contraseña</label>
+        <input type="password" id="loginPass" autocomplete="current-password" placeholder="••••••••">
+      </div>
+      <button class="btn btn-primary" id="btnLogin">Ingresar</button>
+      <div class="error-msg" id="loginError"></div>
+    </div>
+  </div>
+
+  <!-- ============ APP ============ -->
+  <div id="vista-app">
+    <header class="top">
+      <button class="salir" id="btnSalir">Salir</button>
+      <div class="saludo">Hola,</div>
+      <h2 id="nombrePaciente">Paciente</h2>
+    </header>
+
+    <main>
+      <div class="tabs">
+        <div class="tab active" data-tab="registro">Nuevo registro</div>
+        <div class="tab" data-tab="habitos">Hábitos de hoy</div>
+        <div class="tab" data-tab="historial">Mi evolución</div>
+      </div>
+
+      <!-- ---- REGISTRO ---- -->
+      <div class="panel active" id="panel-registro">
+        <div class="card">
+          <h3>Peso y medidas</h3>
+          <div class="campo">
+            <label>Peso</label>
+            <div class="unidad">
+              <input type="number" step="0.1" inputmode="decimal" id="inPeso" placeholder="0.0">
+              <span>kg</span>
+            </div>
+          </div>
+          <div class="grid2">
+            <div class="campo">
+              <label>Cintura</label>
+              <div class="unidad">
+                <input type="number" step="0.1" inputmode="decimal" id="inCintura" placeholder="0.0">
+                <span>cm</span>
+              </div>
+            </div>
+            <div class="campo">
+              <label>Cadera</label>
+              <div class="unidad">
+                <input type="number" step="0.1" inputmode="decimal" id="inCadera" placeholder="0.0">
+                <span>cm</span>
+              </div>
+            </div>
+            <div class="campo">
+              <label>Cuello</label>
+              <div class="unidad">
+                <input type="number" step="0.1" inputmode="decimal" id="inCuello" placeholder="0.0">
+                <span>cm</span>
+              </div>
+            </div>
+            <div class="campo">
+              <label>Brazo (opcional)</label>
+              <div class="unidad">
+                <input type="number" step="0.1" inputmode="decimal" id="inBrazo" placeholder="0.0">
+                <span>cm</span>
+              </div>
+            </div>
+          </div>
+          <div class="campo">
+            <label>Muslo (opcional)</label>
+            <div class="unidad">
+              <input type="number" step="0.1" inputmode="decimal" id="inMuslo" placeholder="0.0">
+              <span>cm</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>Foto de progreso (opcional)</h3>
+          <div class="foto-zone" id="fotoZone">
+            📷 Tocá para agregar una foto<br>
+            <span class="campo-opcional-label">Solo si querés, de la manera que prefieras</span>
+          </div>
+          <input type="file" id="inputFoto" accept="image/*" capture="environment">
+          <img id="previewFoto" alt="Vista previa">
+        </div>
+
+        <div class="card">
+          <h3>Nota (opcional)</h3>
+          <textarea id="inNota" placeholder="¿Algo que quieras comentarle a tu médico/a?"></textarea>
+        </div>
+
+        <button class="btn btn-primary" id="btnGuardarRegistro">Guardar registro</button>
+      </div>
+
+      <!-- ---- HABITOS ---- -->
+      <div class="panel" id="panel-habitos">
+        <div class="card">
+          <h3>Actividad física</h3>
+          <div class="habito-item">
+            <span class="nombre">Actividad aeróbica (30 min)</span>
+            <label class="switch"><input type="checkbox" id="habAerobica"><span class="slider"></span></label>
+          </div>
+          <div class="habito-item">
+            <span class="nombre">Ejercicio de fuerza</span>
+            <label class="switch"><input type="checkbox" id="habFuerza"><span class="slider"></span></label>
+          </div>
+          <div class="habito-item">
+            <span class="nombre">Pausas activas / caminatas</span>
+            <label class="switch"><input type="checkbox" id="habCaminata"><span class="slider"></span></label>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>Alimentación</h3>
+          <div class="habito-item">
+            <span class="nombre">5 porciones de frutas/verduras</span>
+            <label class="switch"><input type="checkbox" id="habFrutas"><span class="slider"></span></label>
+          </div>
+          <div class="habito-item">
+            <span class="nombre">Hidratación adecuada</span>
+            <label class="switch"><input type="checkbox" id="habAgua"><span class="slider"></span></label>
+          </div>
+          <div class="habito-item">
+            <span class="nombre">Evité ultraprocesados</span>
+            <label class="switch"><input type="checkbox" id="habUltraprocesados"><span class="slider"></span></label>
+          </div>
+        </div>
+
+        <button class="btn btn-primary" id="btnGuardarHabitos">Guardar hábitos de hoy</button>
+      </div>
+
+      <!-- ---- HISTORIAL ---- -->
+      <div class="panel" id="panel-historial">
+        <div class="card">
+          <h3>Últimos registros</h3>
+          <div id="listaHistorial">
+            <div class="vacio">Cargando...</div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ═══ CONFIGURACIÓN SUPABASE (mismo proyecto que URCyM) ═══
+const SUPABASE_URL = 'https://qdjzetylyojfjdottjrk.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_qe6L1Uc7mRwsen7lzZlllw_DzOXonwL';
+const { createClient } = supabase;
+const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+// ═══ ESTADO ═══
+let usuarioActual = null;   // objeto de auth
+let pacienteActual = null;  // fila de appdipo_pacientes (incluye dni)
+let fotoBase64 = null;
+
+// ═══ ELEMENTOS ═══
+const vistaLogin = document.getElementById('vista-login');
+const vistaApp = document.getElementById('vista-app');
+const toast = document.getElementById('toast');
+
+function mostrarToast(msg, ok=true){
+  toast.textContent = msg;
+  toast.style.background = ok ? '#2B2B2B' : '#E25247';
+  toast.classList.add('show');
+  setTimeout(()=> toast.classList.remove('show'), 2600);
+}
+
+// ═══ LOGIN ═══
+document.getElementById('btnLogin').addEventListener('click', hacerLogin);
+document.getElementById('loginPass').addEventListener('keydown', e=>{
+  if(e.key === 'Enter') hacerLogin();
+});
+
+async function hacerLogin(){
+  const dni = document.getElementById('loginDni').value.trim().replace(/\D/g, '');
+  const pass = document.getElementById('loginPass').value;
+  const errBox = document.getElementById('loginError');
+  errBox.style.display = 'none';
+
+  if(!dni || !pass){
+    errBox.textContent = 'Completá DNI y contraseña.';
+    errBox.style.display = 'block';
+    return;
+  }
+
+  const btn = document.getElementById('btnLogin');
+  btn.disabled = true;
+  btn.textContent = 'Ingresando...';
+
+  // El DNI se traduce a un email interno; el paciente nunca lo ve
+  const email = `${dni}@appdipo.local`;
+  const { data, error } = await sb.auth.signInWithPassword({ email, password: pass });
+
+  btn.disabled = false;
+  btn.textContent = 'Ingresar';
+
+  if(error){
+    errBox.textContent = 'Email o contraseña incorrectos.';
+    errBox.style.display = 'block';
+    return;
+  }
+
+  usuarioActual = data.user;
+  await cargarPaciente();
+}
+
+async function cargarPaciente(){
+  const { data, error } = await sb
+    .from('appdipo_pacientes')
+    .select('*, pacientes(nombre, apellido)')
+    .eq('user_id', usuarioActual.id)
+    .maybeSingle();
+
+  if(error || !data){
+    document.getElementById('loginError').textContent = 'Tu cuenta todavía no está vinculada a un paciente. Contactá a tu médico/a.';
+    document.getElementById('loginError').style.display = 'block';
+    await sb.auth.signOut();
+    return;
+  }
+
+  pacienteActual = data;
+  const nombre = data.pacientes ? `${data.pacientes.nombre || ''}`.trim() : '';
+  document.getElementById('nombrePaciente').textContent = nombre || 'Paciente';
+
+  vistaLogin.style.display = 'none';
+  vistaApp.style.display = 'flex';
+
+  cargarHistorial();
+}
+
+document.getElementById('btnSalir').addEventListener('click', async ()=>{
+  await sb.auth.signOut();
+  usuarioActual = null;
+  pacienteActual = null;
+  vistaApp.style.display = 'none';
+  vistaLogin.style.display = 'flex';
+  document.getElementById('loginDni').value = '';
+  document.getElementById('loginPass').value = '';
+});
+
+// ═══ TABS ═══
+document.querySelectorAll('.tab').forEach(tab=>{
+  tab.addEventListener('click', ()=>{
+    document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById('panel-' + tab.dataset.tab).classList.add('active');
+    if(tab.dataset.tab === 'historial') cargarHistorial();
+  });
+});
+
+// ═══ FOTO ═══
+const fotoZone = document.getElementById('fotoZone');
+const inputFoto = document.getElementById('inputFoto');
+const previewFoto = document.getElementById('previewFoto');
+
+fotoZone.addEventListener('click', ()=> inputFoto.click());
+
+inputFoto.addEventListener('change', ()=>{
+  const file = inputFoto.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = e=>{
+    fotoBase64 = e.target.result;
+    previewFoto.src = fotoBase64;
+    previewFoto.style.display = 'block';
+    fotoZone.classList.add('tiene-foto');
+    fotoZone.innerHTML = '✅ Foto lista — tocá para cambiarla';
+  };
+  reader.readAsDataURL(file);
+});
+
+// ═══ GUARDAR REGISTRO ═══
+document.getElementById('btnGuardarRegistro').addEventListener('click', guardarRegistro);
+
+async function guardarRegistro(){
+  if(!pacienteActual) return;
+
+  const peso = document.getElementById('inPeso').value;
+  const cintura = document.getElementById('inCintura').value;
+  const cadera = document.getElementById('inCadera').value;
+  const cuello = document.getElementById('inCuello').value;
+  const brazo = document.getElementById('inBrazo').value;
+  const muslo = document.getElementById('inMuslo').value;
+  const nota = document.getElementById('inNota').value.trim();
+
+  if(!peso && !cintura && !cadera && !cuello && !brazo && !muslo){
+    mostrarToast('Cargá al menos un dato para guardar.', false);
+    return;
+  }
+
+  const btn = document.getElementById('btnGuardarRegistro');
+  btn.disabled = true;
+  btn.textContent = 'Guardando...';
+
+  let foto_url = null;
+
+  // Si hay foto, subirla a Storage (bucket 'appdipo-fotos')
+  if(fotoBase64){
+    try{
+      const blob = await (await fetch(fotoBase64)).blob();
+      const nombreArchivo = `${pacienteActual.dni}/${Date.now()}.jpg`;
+      const { error: errUpload } = await sb.storage
+        .from('appdipo-fotos')
+        .upload(nombreArchivo, blob, { contentType: 'image/jpeg' });
+      if(!errUpload){
+        const { data: urlData } = sb.storage.from('appdipo-fotos').getPublicUrl(nombreArchivo);
+        foto_url = urlData.publicUrl;
+      }
+    }catch(e){
+      console.warn('No se pudo subir la foto, se guarda el registro igual.', e);
+    }
+  }
+
+  const payload = {
+    dni: pacienteActual.dni,
+    peso_kg: peso ? parseFloat(peso) : null,
+    cintura_cm: cintura ? parseFloat(cintura) : null,
+    cadera_cm: cadera ? parseFloat(cadera) : null,
+    cuello_cm: cuello ? parseFloat(cuello) : null,
+    brazo_cm: brazo ? parseFloat(brazo) : null,
+    muslo_cm: muslo ? parseFloat(muslo) : null,
+    nota: nota || null,
+    foto_url: foto_url,
+    cargado_por: 'paciente'
+  };
+
+  const { error } = await sb.from('appdipo_registros').insert([payload]);
+
+  btn.disabled = false;
+  btn.textContent = 'Guardar registro';
+
+  if(error){
+    console.error(error);
+    mostrarToast('Hubo un error al guardar. Probá de nuevo.', false);
+    return;
+  }
+
+  mostrarToast('Registro guardado ✓');
+  // limpiar formulario
+  ['inPeso','inCintura','inCadera','inCuello','inBrazo','inMuslo','inNota'].forEach(id=>{
+    document.getElementById(id).value = '';
+  });
+  fotoBase64 = null;
+  previewFoto.style.display = 'none';
+  fotoZone.classList.remove('tiene-foto');
+  fotoZone.innerHTML = '📷 Tocá para agregar una foto<br><span class="campo-opcional-label">Solo si querés, de la manera que prefieras</span>';
+}
+
+// ═══ GUARDAR HABITOS ═══
+document.getElementById('btnGuardarHabitos').addEventListener('click', guardarHabitos);
+
+async function guardarHabitos(){
+  if(!pacienteActual) return;
+
+  const actividad_json = {
+    aerobica: document.getElementById('habAerobica').checked,
+    fuerza: document.getElementById('habFuerza').checked,
+    caminata: document.getElementById('habCaminata').checked
+  };
+  const alimentacion_json = {
+    frutas_verduras: document.getElementById('habFrutas').checked,
+    hidratacion: document.getElementById('habAgua').checked,
+    evito_ultraprocesados: document.getElementById('habUltraprocesados').checked
+  };
+
+  const hoy = new Date().toISOString().slice(0,10);
+
+  const btn = document.getElementById('btnGuardarHabitos');
+  btn.disabled = true;
+  btn.textContent = 'Guardando...';
+
+  // upsert manual: buscamos si ya existe un registro de hábitos para hoy
+  const { data: existente } = await sb
+    .from('appdipo_habitos')
+    .select('id')
+    .eq('dni', pacienteActual.dni)
+    .eq('fecha', hoy)
+    .maybeSingle();
+
+  let error;
+  if(existente){
+    ({ error } = await sb.from('appdipo_habitos')
+      .update({ actividad_json, alimentacion_json })
+      .eq('id', existente.id));
+  } else {
+    ({ error } = await sb.from('appdipo_habitos')
+      .insert([{ dni: pacienteActual.dni, fecha: hoy, actividad_json, alimentacion_json }]));
+  }
+
+  btn.disabled = false;
+  btn.textContent = 'Guardar hábitos de hoy';
+
+  if(error){
+    console.error(error);
+    mostrarToast('Hubo un error al guardar. Probá de nuevo.', false);
+    return;
+  }
+
+  mostrarToast('¡Hábitos guardados! Seguí así 💪');
+}
+
+// ═══ HISTORIAL ═══
+async function cargarHistorial(){
+  if(!pacienteActual) return;
+  const cont = document.getElementById('listaHistorial');
+  cont.innerHTML = '<div class="vacio">Cargando...</div>';
+
+  const { data, error } = await sb
+    .from('appdipo_registros')
+    .select('*')
+    .eq('dni', pacienteActual.dni)
+    .order('fecha', { ascending: false })
+    .limit(20);
+
+  if(error){
+    cont.innerHTML = '<div class="vacio">No se pudo cargar el historial.</div>';
+    return;
+  }
+
+  if(!data || data.length === 0){
+    cont.innerHTML = '<div class="vacio">Todavía no cargaste registros. ¡Empezá con el primero!</div>';
+    return;
+  }
+
+  cont.innerHTML = data.map(r=>{
+    const fecha = new Date(r.fecha).toLocaleDateString('es-AR', { day:'2-digit', month:'short', year:'numeric' });
+    const peso = r.peso_kg ? `${r.peso_kg} kg` : '—';
+    return `<div class="historial-item">
+      <div>
+        <div class="fecha">${fecha}</div>
+        ${r.cintura_cm ? `<div class="fecha">Cintura: ${r.cintura_cm} cm</div>` : ''}
+      </div>
+      <div class="peso">${peso}</div>
+    </div>`;
+  }).join('');
+}
+
+// ═══ SESIÓN PERSISTENTE ═══
+(async ()=>{
+  const { data } = await sb.auth.getSession();
+  if(data.session){
+    usuarioActual = data.session.user;
+    await cargarPaciente();
+  }
+})();
+</script>
+</body>
+</html>
