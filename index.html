@@ -7832,13 +7832,7 @@ function renderEstResumen() {
 // para que lo que se escriba a mano libre a continuación NO copie el formato de lo volcado.
 function _asegurarLineaLibreEvol(editor) {
   if(!editor) return;
-  let ultima = editor.lastElementChild;
-  if(!ultima || !ultima.classList || !ultima.classList.contains('linea-libre-evol')) {
-    ultima = document.createElement('div');
-    ultima.className = 'linea-libre-evol';
-    ultima.innerHTML = '<br>';
-    editor.appendChild(ultima);
-  }
+  const ultima = _asegurarLineaLibreEvolSinFoco(editor);
   try {
     editor.focus();
     const range = document.createRange();
@@ -7848,6 +7842,22 @@ function _asegurarLineaLibreEvol(editor) {
     sel.removeAllRanges();
     sel.addRange(range);
   } catch(e) { /* si falla el posicionamiento del cursor, el bloque igual queda insertado */ }
+}
+
+// Igual que _asegurarLineaLibreEvol pero SIN robar el foco.
+// Usar cuando la actualización del bloque en el editor es un efecto secundario
+// automático (ej: recalcular promedios de TA/FC mientras el usuario tipea en otro
+// campo) y no una acción explícita de "volcar al editor".
+function _asegurarLineaLibreEvolSinFoco(editor) {
+  if(!editor) return null;
+  let ultima = editor.lastElementChild;
+  if(!ultima || !ultima.classList || !ultima.classList.contains('linea-libre-evol')) {
+    ultima = document.createElement('div');
+    ultima.className = 'linea-libre-evol';
+    ultima.innerHTML = '<br>';
+    editor.appendChild(ultima);
+  }
+  return ultima;
 }
 
 function volcarTodosAlEditor() {
@@ -9790,7 +9800,7 @@ function volcarPromedioAlEditor() {
     const tmp = document.createElement('div'); tmp.innerHTML = html;
     editor.insertBefore(tmp.firstChild, editor.firstChild);
   }
-  _asegurarLineaLibreEvol(editor);
+  _asegurarLineaLibreEvolSinFoco(editor);
 }
 
 function actualizarIMC() {
