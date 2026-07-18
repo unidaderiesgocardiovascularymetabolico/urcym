@@ -12603,6 +12603,9 @@ async function adipGuardar() {
     }
     if(result.error) throw result.error;
     limpiarDirty('adip');
+    // Volcar a la evolución: queda visible en el editor y, al guardar la evolución,
+    // pasa a formar parte del historial de esa consulta (contenido_html).
+    _volcarAdipAlEditor(adipTratamientos[adipIdx]);
     const badge = document.getElementById('adip_guardado_badge');
     if(badge) { badge.style.display = 'inline-block'; setTimeout(()=>badge.style.display='none', 3000); }
     adipIdx = -1;
@@ -12610,6 +12613,44 @@ async function adipGuardar() {
     adipMostrarFormulario(false);
     adipMostrarBanner(true);
   } catch(e) { console.error('Adiposidad guardar error:', e); alert('Error al guardar: ' + (e.message || e)); }
+}
+
+// Inserta/actualiza en el editor de evolución un bloque con el resumen del tratamiento
+// de Adiposidad recién guardado. Usa data-adip-id para no duplicar si se vuelve a
+// guardar el mismo tratamiento (edición) dentro de la misma consulta.
+function _volcarAdipAlEditor(trat) {
+  const editor = document.getElementById('evol_editor');
+  if(!editor || !trat) return;
+  const fmtF = f => f ? new Date(f+'T12:00:00').toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'}) : '';
+  const partes = [];
+  if(trat.droga) partes.push('Droga: ' + trat.droga + (trat.dosis ? ' ' + trat.dosis : ''));
+  if(trat.fecha_inicio) partes.push('Inicio: ' + fmtF(trat.fecha_inicio));
+  if(trat.fecha_control) partes.push('Próximo control: ' + fmtF(trat.fecha_control));
+  const check = [];
+  if(trat.chk_estudios) check.push('estudios solicitados');
+  if(trat.chk_guia) check.push('guía alimentaria entregada');
+  if(trat.chk_efectos) check.push('efectos adversos explicados');
+  if(trat.chk_anticoncepcion) check.push('doble método anticonceptivo indicado' + (trat.anticoncepcion_texto ? ' (' + trat.anticoncepcion_texto + ')' : ''));
+  if(check.length) partes.push(check.join(' · '));
+  if(!partes.length) return;
+
+  const idAttr = trat.id || '';
+  const bloque = '<div class="bloque-adip" data-adip-id="' + idAttr + '" style="font-family:Arial,sans-serif;font-size:10pt;color:#333;border-left:3px solid #7c3aed;padding:6px 10px;margin-bottom:10px;line-height:1.8">'
+    + '<strong style="font-size:10pt">Tratamiento adiposidad:</strong><br>' + partes.join('<br>') + '</div>';
+  const tmp = document.createElement('div'); tmp.innerHTML = bloque;
+
+  const prev = (idAttr && editor.querySelector('.bloque-adip[data-adip-id="' + idAttr + '"]')) || editor.querySelector('.bloque-adip');
+  if(prev) {
+    prev.replaceWith(tmp.firstChild);
+  } else {
+    // Insertar después del bloque clínico (si existe), igual que el resto de los volcados
+    const bloqueClinico = editor.querySelector('.bloque-clinico');
+    if(bloqueClinico && bloqueClinico.nextSibling) editor.insertBefore(tmp.firstChild, bloqueClinico.nextSibling);
+    else if(bloqueClinico) editor.appendChild(tmp.firstChild);
+    else editor.insertBefore(tmp.firstChild, editor.firstChild);
+  }
+  if(typeof _asegurarLineaLibreEvol === 'function') _asegurarLineaLibreEvol(editor);
+  marcarDirty('evol');
 }
 
 function adipConfirmarEliminar(i) {
