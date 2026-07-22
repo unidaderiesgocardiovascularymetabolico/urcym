@@ -7490,9 +7490,16 @@ async function cargarMedicacion(dni) {
   const cont = document.getElementById('med_filas');
   if(!cont) return;
   cont.innerHTML = '';
+  if (typeof asegurarUIClinica === 'function') asegurarUIClinica();
+  const otrosCont = document.getElementById('otros_med_filas');
+  if (otrosCont) otrosCont.innerHTML = '';
+  const OTROS_GRUPOS_LOCAL = ['otros', 'otro', 'otros_farmacos', 'otros fármacos', 'otros farmacos'];
   const { data } = await sb.from('medicacion').select('*').eq('dni_paciente', dni).eq('activo', true).order('grupo');
   if(!data || !data.length) { agregarFilaMed(); return; }
-  data.forEach(m => agregarFilaMed(m));
+  const normales = data.filter(m => !OTROS_GRUPOS_LOCAL.includes(String(m.grupo||'').toLowerCase()));
+  const otros    = data.filter(m =>  OTROS_GRUPOS_LOCAL.includes(String(m.grupo||'').toLowerCase()));
+  if (normales.length) normales.forEach(m => agregarFilaMed(m)); else agregarFilaMed();
+  otros.forEach(m => agregarFilaOtroMed(m));
 }
 
 async function cargarDatosClinica(dni) {
@@ -7535,6 +7542,7 @@ async function cargarDatosClinica(dni) {
   {const alcNotes=document.getElementById('alc_notas_generales');if(alcNotes)alcNotes.value='';}
   {const tabNotes=document.getElementById('tab_notas_generales');if(tabNotes)tabNotes.value='';}
   {const medCont=document.getElementById('med_filas');if(medCont)medCont.innerHTML='';}
+  {const otrosCont=document.getElementById('otros_med_filas');if(otrosCont)otrosCont.innerHTML='';}
   // ─────────────────────────────────────────────────────────────────────────────
 
   const { data } = await sb.from('paciente_clinica').select('*').eq('dni_paciente',dni).maybeSingle();
