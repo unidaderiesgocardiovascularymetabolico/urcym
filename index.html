@@ -190,6 +190,7 @@
       transition:border-color .2s,box-shadow .2s;
     }
     #modalDocLibre .doc-libre-editor:focus { border-color:var(--blue); background:white; box-shadow:0 0 0 3px var(--blue-glow); }
+    #doclibre_contenido:empty:before{content:attr(data-placeholder);color:#a0aab4;pointer-events:none;white-space:pre-wrap;}
 
     /* ===== PANEL PLANTILLAS HC ===== */
     #phc-bg {
@@ -1167,7 +1168,7 @@
     <div id="login_pwd_section" style="display:none;margin-top:6px">
       <div class="form-group">
         <label>Contraseña</label>
-        <input type="password" id="password" placeholder="••••••••"/>
+        <input type="password" id="password" placeholder="••••••••" style="width:100%;padding:11px 14px;border-radius:12px;border:1.5px solid var(--border);background:var(--gray);font-family:'DM Sans',sans-serif;font-size:14px;color:var(--text);outline:none"/>
         <div class="error-msg" id="errorMsg">Contraseña incorrecta.</div>
       </div>
       <button class="btn" id="btnLogin" onclick="doLogin()" disabled>Ingresar al sistema</button>
@@ -3319,6 +3320,7 @@
             <label style="font-size:11px;font-weight:600;color:#64748b;display:block;margin-bottom:5px;text-transform:uppercase;letter-spacing:.05em">Tipo</label>
             <select id="hab_nueva_tipo" onchange="onTipoActividadChange()" style="width:100%;padding:8px 10px;border:1.5px solid #dde3ec;border-radius:8px;font-size:13px;font-family:var(--font-main);background:white;color:#1e293b">
               <option value="">Seleccioná...</option>
+              <option value="No realiza actividad física">🚫 No realiza actividad física</option>
               <option>Caminata</option><option>Running / Trote</option><option>Ciclismo</option>
               <option>Natación</option><option>Gym – Cardio</option><option>Gym – Fuerza</option>
               <option>Gym – Mixto</option><option>Yoga / Pilates</option>
@@ -6604,6 +6606,14 @@ function _indSetColor(color) {
   document.execCommand('foreColor', false, color);
 }
 
+// Apply a color to the current selection in the doclibre_contenido editor
+function _docLibreSetColor(color) {
+  var el = document.getElementById('doclibre_contenido');
+  if(!el) return;
+  el.focus();
+  document.execCommand('foreColor', false, color);
+}
+
 // Walk DOM nodes and extract text segments with bold/italic/color info
 function _parseRichTextSegments(container) {
   var segments = [];
@@ -9678,15 +9688,43 @@ function _crearPDFIndicacionesEvol(txt, usarOtro) {
     return newHY + 8;
   }
 
-  txt.split('\n').map(l => l.trim()).filter(Boolean).forEach(item => {
-    const itemLines = doc.splitTextToSize('• ' + item, CW - 4);
+  const indElRich = document.getElementById('evol_indicaciones_editor');
+  const segmentsInd = indElRich ? _parseRichTextSegments(indElRich) : [];
+  let firstOfLineInd = true;
+  segmentsInd.forEach((seg) => {
+    if (seg.isNewLine) {
+      curY += lineH * 0.6;
+      const _maxYEvolNL = (_firmaKeyEvol !== 'ninguna') ? firmaZoneTop : maxYMidEvol;
+      if (curY > _maxYEvolNL) { curY = _addIndPage(); }
+      firstOfLineInd = true;
+      return;
+    }
+    const fontStyle = seg.bold && seg.italic ? 'bolditalic' : seg.bold ? 'bold' : seg.italic ? 'italic' : 'normal';
+    doc.setFont('helvetica', fontStyle);
+    doc.setFontSize(8);
+    if (seg.color) {
+      const rgb = _hexToRgb(seg.color);
+      doc.setTextColor(rgb[0], rgb[1], rgb[2]);
+    } else {
+      doc.setTextColor(35, 35, 35);
+    }
+    const prefix = firstOfLineInd ? '• ' : '';
+    firstOfLineInd = false;
+    const itemLines = doc.splitTextToSize(prefix + seg.text, CW - 4);
     itemLines.forEach((ln, idx) => {
       const _maxYEvol = (_firmaKeyEvol !== 'ninguna') ? firmaZoneTop : maxYMidEvol;
       if(curY > _maxYEvol) { curY = _addIndPage(); }
-      doc.text(ln, ML + (idx > 0 ? 4 : 0), curY);
+      const lnX = ML + (idx > 0 ? 4 : 0);
+      doc.text(ln, lnX, curY);
+      if (seg.underline) {
+        const textW = doc.getTextWidth(ln);
+        const ulY = curY + 0.7;
+        doc.setLineWidth(0.25);
+        doc.setDrawColor(...(seg.color ? _hexToRgb(seg.color) : [35, 35, 35]));
+        doc.line(lnX, ulY, lnX + textW, ulY);
+      }
       curY += lineH;
     });
-    curY += 1;
   });
 
   _pdfFirma(doc, u, PW, PH, ML, _firmaKeyEvol, footerHPie);
@@ -13263,6 +13301,7 @@ ${profNombre ? `<div class="prof-strip"><span class="prof-name">${profNombre}</s
               <label style="font-size:11px;font-weight:600;color:#666;display:block;margin-bottom:5px">Tipo</label>
               <select id="fh_nueva_tipo" onchange="onFHTipoActividadChange()" style="width:100%;padding:7px 10px;border:1.5px solid #dde3ec;border-radius:8px;font-size:13px;font-family:var(--font-main);background:white">
                 <option value="">Seleccioná...</option>
+                <option value="No realiza actividad física">🚫 No realiza actividad física</option>
                 <option value="Caminata">Caminata</option>
                 <option value="Running / Trote">Running / Trote</option>
                 <option value="Ciclismo">Ciclismo</option>
@@ -19771,7 +19810,35 @@ ${profNombre?`<div class="prof"><span class="prof-name">${profNombre}</span>${pr
     </div>
     <div class="form-group" style="margin-top:10px">
       <label>Contenido</label>
-      <textarea id="doclibre_contenido" class="doc-libre-editor" placeholder="Escribí el contenido del documento aquí...&#10;&#10;Podés incluir diagnósticos, medicación actual, motivo de derivación, etc."></textarea>
+      <div id="doclibre_toolbar" style="display:flex;gap:4px;flex-wrap:wrap;align-items:center;background:#f4f7fb;border:1.5px solid rgba(48,137,202,.15);border-bottom:none;border-radius:10px 10px 0 0;padding:6px 8px;">
+        <button type="button" title="Negrita" onclick="document.getElementById('doclibre_contenido').focus();document.execCommand('bold')"
+          style="width:28px;height:28px;border:1.5px solid #d0d8e4;border-radius:6px;background:white;font-weight:700;font-size:13px;cursor:pointer;color:#1a2535;display:flex;align-items:center;justify-content:center;font-family:serif;">B</button>
+        <button type="button" title="Cursiva" onclick="document.getElementById('doclibre_contenido').focus();document.execCommand('italic')"
+          style="width:28px;height:28px;border:1.5px solid #d0d8e4;border-radius:6px;background:white;font-style:italic;font-size:13px;cursor:pointer;color:#1a2535;display:flex;align-items:center;justify-content:center;font-family:serif;">I</button>
+        <button type="button" title="Subrayado" onclick="document.getElementById('doclibre_contenido').focus();document.execCommand('underline')"
+          style="width:28px;height:28px;border:1.5px solid #d0d8e4;border-radius:6px;background:white;font-size:13px;cursor:pointer;color:#1a2535;text-decoration:underline;display:flex;align-items:center;justify-content:center;font-family:serif;">U</button>
+        <div style="width:1px;height:20px;background:#d0d8e4;margin:0 2px;"></div>
+        <button type="button" title="Color azul" onclick="_docLibreSetColor('#1a2535')"
+          style="width:22px;height:22px;border-radius:50%;background:#1a2535;border:2px solid #d0d8e4;cursor:pointer;"></button>
+        <button type="button" title="Color azul médico" onclick="_docLibreSetColor('#3089ca')"
+          style="width:22px;height:22px;border-radius:50%;background:#3089ca;border:2px solid #d0d8e4;cursor:pointer;"></button>
+        <button type="button" title="Color rojo" onclick="_docLibreSetColor('#e25247')"
+          style="width:22px;height:22px;border-radius:50%;background:#e25247;border:2px solid #d0d8e4;cursor:pointer;"></button>
+        <button type="button" title="Color verde" onclick="_docLibreSetColor('#27ae60')"
+          style="width:22px;height:22px;border-radius:50%;background:#27ae60;border:2px solid #d0d8e4;cursor:pointer;"></button>
+        <button type="button" title="Color naranja" onclick="_docLibreSetColor('#e08c3a')"
+          style="width:22px;height:22px;border-radius:50%;background:#e08c3a;border:2px solid #d0d8e4;cursor:pointer;"></button>
+        <div style="width:1px;height:20px;background:#d0d8e4;margin:0 2px;"></div>
+        <label title="Color personalizado" style="width:22px;height:22px;border-radius:50%;overflow:hidden;border:2px solid #d0d8e4;cursor:pointer;display:flex;align-items:center;justify-content:center;background:conic-gradient(red,yellow,lime,cyan,blue,magenta,red);">
+          <input type="color" id="doclibre_color_picker" onchange="_docLibreSetColor(this.value)" style="opacity:0;width:1px;height:1px;position:absolute;">
+        </label>
+        <div style="width:1px;height:20px;background:#d0d8e4;margin:0 2px;"></div>
+        <button type="button" title="Quitar formato" onclick="document.getElementById('doclibre_contenido').focus();document.execCommand('removeFormat')"
+          style="padding:0 8px;height:28px;border:1.5px solid #d0d8e4;border-radius:6px;background:white;font-size:11px;cursor:pointer;color:#6b7a8d;">✕ fmt</button>
+      </div>
+      <div id="doclibre_contenido" class="doc-libre-editor" contenteditable="true" spellcheck="true"
+        data-placeholder="Escribí el contenido del documento aquí...&#10;&#10;Podés incluir diagnósticos, medicación actual, motivo de derivación, etc."
+        style="border-radius:0 0 12px 12px;white-space:pre-wrap;word-break:break-word;"></div>
     </div>
     <div style="display:flex;gap:20px;margin-top:12px;align-items:center;flex-wrap:wrap">
       <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text);cursor:pointer;font-weight:500">
@@ -19867,7 +19934,7 @@ function abrirDocumentoLibre(dni) {
   const p = pacientesData.find(x=>x.dni===dni);
   if(!p) return;
   _docLibrePaciente = p;
-  document.getElementById('doclibre_contenido').value = '';
+  document.getElementById('doclibre_contenido').innerHTML = '';
   // reset checkboxes
   const fc = document.getElementById('doclibre_fecha_check');
   const sc = document.getElementById('doclibre_firma_check');
@@ -19886,15 +19953,15 @@ function abrirDocumentoLibre(dni) {
 function volcarDocLibreAEvolucion() {
   const p = _docLibrePaciente;
   if(!p){ alert('No hay paciente seleccionado.'); return; }
-  const contenido = document.getElementById('doclibre_contenido').value.trim();
-  if(!contenido){ alert('Escribí el contenido del documento antes de volcarlo.'); return; }
+  const contEl = document.getElementById('doclibre_contenido');
+  const contenidoHtml = contEl ? contEl.innerHTML.trim() : '';
+  if(!contenidoHtml || contenidoHtml === '<br>'){ alert('Escribí el contenido del documento antes de volcarlo.'); return; }
   const editor = document.getElementById('evol_editor');
   if(!editor){ alert('No se encontró el editor de evolución.'); return; }
   const tipo = document.getElementById('doclibre_tipo').value;
   const hoy = fechaHoy ? fechaHoy() : new Date().toLocaleDateString('es-AR');
-  const lineasHtml = escHtml(contenido).replace(/\n/g, '<br>');
   const bloque = '<div class="bloque-doclibre" style="font-family:Arial,sans-serif;font-size:10pt;color:#333;border-left:3px solid var(--blue);padding:6px 10px;margin-bottom:10px;line-height:1.8">'
-    + '<strong style="font-size:10pt">' + escHtml(tipo) + ' — ' + hoy + ':</strong><br>' + lineasHtml + '</div>';
+    + '<strong style="font-size:10pt">' + escHtml(tipo) + ' — ' + hoy + ':</strong><br>' + contenidoHtml + '</div>';
   const tmp = document.createElement('div'); tmp.innerHTML = bloque;
   editor.appendChild(tmp.firstChild);
   _asegurarLineaLibreEvol(editor);
@@ -19905,8 +19972,9 @@ function generarPDFDocLibre() {
   const p = _docLibrePaciente;
   if(!p){ alert('No hay paciente seleccionado.'); return; }
   const tipo    = document.getElementById('doclibre_tipo').value;
-  const contenido = document.getElementById('doclibre_contenido').value.trim();
-  if(!contenido){ alert('Escribí el contenido del documento antes de descargarlo.'); return; }
+  const contenidoEl = document.getElementById('doclibre_contenido');
+  const contenidoHtml = contenidoEl ? contenidoEl.innerHTML.trim() : '';
+  if(!contenidoHtml || contenidoHtml === '<br>'){ alert('Escribí el contenido del documento antes de descargarlo.'); return; }
 
   const inclFecha = document.getElementById('doclibre_fecha_check')?.checked !== false;
   const inclFirma = document.getElementById('doclibre_firma_check')?.checked === true;
@@ -19974,17 +20042,37 @@ function generarPDFDocLibre() {
       return nHY + 8;
     }
 
-    const lineas = contenido.split('\n');
-    lineas.forEach(linea => {
-      const wrapped = doc.splitTextToSize(linea === '' ? '' : linea, CW);
-      wrapped.forEach((ln, idx) => {
+    const segmentsDoc = contenidoEl ? _parseRichTextSegments(contenidoEl) : [];
+    segmentsDoc.forEach((seg) => {
+      if (seg.isNewLine) {
+        curY += lineH * 0.4;
+        const maxYNL = inclFirma ? firmaZoneTop : maxYMid;
+        if(curY > maxYNL) { curY = _addDocLibrePage(); }
+        return;
+      }
+      const fontStyle = seg.bold && seg.italic ? 'bolditalic' : seg.bold ? 'bold' : seg.italic ? 'italic' : 'normal';
+      doc.setFont('helvetica', fontStyle);
+      doc.setFontSize(9);
+      if (seg.color) {
+        const rgb = _hexToRgb(seg.color);
+        doc.setTextColor(rgb[0], rgb[1], rgb[2]);
+      } else {
+        doc.setTextColor(35, 35, 35);
+      }
+      const wrapped = doc.splitTextToSize(seg.text, CW);
+      wrapped.forEach((ln) => {
         const maxY = inclFirma ? firmaZoneTop : maxYMid;
         if(curY > maxY) { curY = _addDocLibrePage(); }
-        if(ln !== '') doc.text(ln, ML, curY);
+        doc.text(ln, ML, curY);
+        if (seg.underline) {
+          const textW = doc.getTextWidth(ln);
+          const ulY = curY + 0.7;
+          doc.setLineWidth(0.25);
+          doc.setDrawColor(...(seg.color ? _hexToRgb(seg.color) : [35, 35, 35]));
+          doc.line(ML, ulY, ML + textW, ulY);
+        }
         curY += lineH;
       });
-      // línea en blanco entre párrafos (si la línea original estaba vacía)
-      if(linea === '') curY += lineH * 0.4;
     });
 
     // Firma
