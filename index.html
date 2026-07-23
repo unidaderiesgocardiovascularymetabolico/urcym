@@ -6602,8 +6602,13 @@ function _parseRichTextSegments(container) {
     }
     if(node.nodeType !== 1) return;
     var tag = node.tagName ? node.tagName.toUpperCase() : '';
+    // Un DIV/P/LI solo representa una línea real (Enter) cuando está pegado
+    // directamente al editor. El navegador también envuelve texto en DIVs
+    // anidados al aplicar formato (ej: subrayado), y esos NO deben generar
+    // un salto de línea — si no, subrayar un fragmento "daba enter".
+    var esLineaReal = ['P','DIV','LI','H1','H2','H3','H4','H5','H6'].indexOf(tag)>=0 && node.parentNode === container;
     // Block-level elements get a newline before them (except the first)
-    if(['P','DIV','LI','H1','H2','H3','H4','H5','H6'].indexOf(tag)>=0 && segments.length>0) {
+    if(esLineaReal && segments.length>0) {
       segments.push({text:'', bold:false, italic:false, color:null, underline:false, isNewLine:true});
     }
     if(tag === 'BR') {
@@ -6634,11 +6639,18 @@ function _parseRichTextSegments(container) {
     }
     node.childNodes.forEach(function(child){ walk(child, isBold, isItalic, nodeColor, isUnderline); });
     // Add newline after block elements
-    if(['P','DIV','LI','H1','H2','H3','H4','H5','H6'].indexOf(tag)>=0) {
+    if(esLineaReal) {
       segments.push({text:'', bold:false, italic:false, color:null, underline:false, isNewLine:true});
     }
   }
   walk(container, false, false, null, false);
+  // Colapsar saltos de línea consecutivos (por si quedó alguno duplicado)
+  var sinDuplicados = [];
+  segments.forEach(function(s){
+    if(s.isNewLine && sinDuplicados.length && sinDuplicados[sinDuplicados.length-1].isNewLine) return;
+    sinDuplicados.push(s);
+  });
+  segments = sinDuplicados;
   // Merge consecutive same-style text segments on same line into one
   var merged = [];
   segments.forEach(function(s){
@@ -6722,22 +6734,14 @@ function generarPDF(tipo) {
       if (segments.length) {
         let curY = cY + 13;
         const lineH = 4.6;
-        // Casi toda la hoja disponible para el texto en cualquier página;
-        // el espacio de la firma se reserva solo al final, si hace falta (ver más abajo).
-        const maxYMid = PH - 22;
+        // Casi toda la hoja disponible para el texto en cualquier página: el
+        // membrete solo va en la página 1 (ya dibujado) y el pie/firma se
+        // agregan al final, sobre la que termine siendo la última página.
+        const maxYFlujo = PH - 12;
 
-        function _addPageWithHeader() {
-          // Indicador "continúa..." al pie de la página actual
-          const continY = usarOtro ? (PH - footerHPie - 7) : (PH - 56 - 2);
-          doc.setFont('helvetica', 'italic');
-          doc.setFontSize(7);
-          doc.setTextColor(140, 140, 155);
-          doc.text('↓  continúa en la página siguiente', PW / 2, continY, { align: 'center' });
-          // Footer en página actual antes de agregar nueva
-          if (usarOtro) { _pdfFooterOtro(doc, u, PW, PH, direccionPie); } else { _pdfFooter(doc, PW, PH); }
+        function _addPageSinMembrete() {
           doc.addPage();
-          const newHeaderEndY = usarOtro ? _pdfHeaderOtro(doc, u, PW, ML) : _pdfHeader(doc, u, PW, ML);
-          return newHeaderEndY + 8;
+          return 10;
         }
 
         segments.forEach(function(seg) {
@@ -6752,18 +6756,18 @@ function generarPDF(tipo) {
           }
           if (seg.isNewLine) {
             curY += lineH * 0.6;
-            if (curY > maxYMid) { curY = _addPageWithHeader(); }
+            if (curY > maxYFlujo) { curY = _addPageSinMembrete(); }
             return;
           }
           const lines = doc.splitTextToSize(seg.text, W - 8);
           lines.forEach(function(ln) {
-            if (curY > maxYMid) { curY = _addPageWithHeader(); }
+            if (curY > maxYFlujo) { curY = _addPageSinMembrete(); }
             doc.text(ln, ML + 4, curY);
             // Simular subrayado: línea fina debajo del texto
             if (seg.underline) {
               const textW = doc.getTextWidth(ln);
               const ulY = curY + 0.7;
-              doc.setLineWidth(0.25);
+              doc.setLineWidth(0.15);
               doc.setDrawColor(
                 ...(seg.color ? _hexToRgb(seg.color) : _C.oscuro)
               );
@@ -6773,12 +6777,22 @@ function generarPDF(tipo) {
           });
         });
 
-        // Solo pasa a una página nueva por la firma si el texto realmente
-        // termina invadiendo esa zona (en vez de reservarla siempre).
-        if (firmaKey !== 'ninguna') {
-          const alturaFirma = _alturaFirmaMM(firmaKey);
-          const zonaFirmaTop = PH - footerHPie - alturaFirma - 4 - 3;
-          if (curY > zonaFirmaTop) { curY = _addPageWithHeader(); }
+        // Página en blanco extra si ni el pie (+ firma) entran donde terminó el texto
+        const alturaFirmaInd = _alturaFirmaMM(firmaKey);
+        const reservaFinalInd = footerHPie + (firmaKey !== 'ninguna' ? alturaFirmaInd + 7 : 0);
+        if (curY > PH - reservaFinalInd) { curY = _addPageSinMembrete(); }
+
+        // Si terminó habiendo más de una hoja, avisar en la primera página
+        // que el texto continúa, y volver a dejar el "cursor" en la última
+        // hoja para que el pie y la firma (más abajo) se dibujen ahí.
+        const totalPaginasInd = doc.internal.getNumberOfPages();
+        if (totalPaginasInd > 1) {
+          const paginaFinalInd = totalPaginasInd;
+          doc.setPage(1);
+          doc.setFont('helvetica', 'italic'); doc.setFontSize(7);
+          doc.setTextColor(140, 140, 155);
+          doc.text('( continúa en la página siguiente )', PW / 2, PH - 8, { align: 'center' });
+          doc.setPage(paginaFinalInd);
         }
       }
     }
@@ -9626,8 +9640,8 @@ function _crearPDFIndicacionesEvol(txt, usarOtro) {
   const hoy = new Date().toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'});
   const filename = 'Indicaciones_' + p.apellido + '_' + hoy.replace(/\//g,'-') + '.pdf';
 
-  const doc = new jsPDF({ unit:'mm', format:'a5', orientation:'portrait' });
   const PW = 148, PH = 210, ML = 10, MR = 10, CW = PW - ML - MR;
+  const lineH = 4.6;
 
   // Siempre usar hoja del profesional; firma solo si el checkbox está marcado
   const _unameEvol = (u && (u.id || u.name || '')).toLowerCase();
@@ -9637,85 +9651,102 @@ function _crearPDFIndicacionesEvol(txt, usarOtro) {
   const direccionPie = _pieDireccionSeleccionada('evol_ind_direccion');
   const footerHPie = direccionPie ? 24 : 18;
 
-  const _hdrY = _pdfHeaderOtro(doc, u, PW, ML);
-  _pdfPatientBar(doc, p, hoy, PW, ML, MR, _hdrY);
-
-  let curY = _hdrY + 18;
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(8);
-  doc.setTextColor(..._C.oscuro);
-  doc.text('Indicaciones para el paciente:', ML, curY);
-  doc.setLineWidth(0.2); doc.setDrawColor(..._C.gris);
-  doc.line(ML, curY + 2, ML + 62, curY + 2);
-  curY += 8;
-
-  const maxYMidEvol = PH - 22;
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8);
-  doc.setTextColor(35, 35, 35);
-  const lineH = 4.6;
-
-  function _addIndPage() {
-    // Indicador continúa
-    doc.setFont('helvetica', 'italic');
-    doc.setFontSize(7);
-    doc.setTextColor(140, 140, 155);
-    doc.text('↓  continúa en la página siguiente', PW / 2, PH - footerHPie - 7, { align: 'center' });
-    _pdfFooterOtro(doc, u, PW, PH, direccionPie);
-    doc.addPage();
-    const newHY = _pdfHeaderOtro(doc, u, PW, ML);
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(8);
-    doc.setTextColor(35, 35, 35);
-    return newHY + 8;
-  }
-
   const indElRich = document.getElementById('evol_indicaciones_editor');
   const segmentsInd = indElRich ? _parseRichTextSegments(indElRich) : [];
-  let firstOfLineInd = true;
+
+  // ── PASADA 1: medir con un documento descartable cuántas hojas hacen falta ──
+  // Membrete/barra de paciente/título solo existen en la página 1; a partir de
+  // ahí las hojas usan casi todo el alto (sin membrete ni pie), y recién la
+  // última reserva espacio para el pie (+ firma si corresponde).
+  const tmp = new jsPDF({ unit:'mm', format:'a5', orientation:'portrait' });
+  const _hdrYtmp = _pdfHeaderOtro(tmp, u, PW, ML);
+  _pdfPatientBar(tmp, p, hoy, PW, ML, MR, _hdrYtmp);
+  let medY = _hdrYtmp + 18 + 8; // igual offset que el título "Indicaciones para el paciente:" + línea
+
+  const maxYFlujo = PH - 12; // margen inferior mínimo mientras se reparte el texto (sin pie)
+  let medPagina = 1;
+  let firstOfLineMed = true;
+  const items = []; // {page, x, y, text, fontStyle, color, underline}
+
   segmentsInd.forEach((seg) => {
     if (seg.isNewLine) {
-      curY += lineH * 0.6;
-      if (curY > maxYMidEvol) { curY = _addIndPage(); }
-      firstOfLineInd = true;
+      medY += lineH * 0.6;
+      if (medY > maxYFlujo) { medPagina++; medY = 10; }
+      firstOfLineMed = true;
       return;
     }
     const fontStyle = seg.bold && seg.italic ? 'bolditalic' : seg.bold ? 'bold' : seg.italic ? 'italic' : 'normal';
-    doc.setFont('helvetica', fontStyle);
+    tmp.setFont('helvetica', fontStyle);
+    tmp.setFontSize(8);
+    const prefix = firstOfLineMed ? '• ' : '';
+    firstOfLineMed = false;
+    const itemLines = tmp.splitTextToSize(prefix + seg.text, CW - 4);
+    itemLines.forEach((ln, idx) => {
+      if (medY > maxYFlujo) { medPagina++; medY = 10; }
+      const lnX = ML + (idx > 0 ? 4 : 0);
+      items.push({ page: medPagina, x: lnX, y: medY, text: ln, fontStyle, color: seg.color, underline: seg.underline });
+      medY += lineH;
+    });
+  });
+
+  // ¿Entra el pie (+ firma, si corresponde) en la última hoja tal como quedó?
+  let totalPaginas = medPagina;
+  const alturaFirmaEvol = _alturaFirmaMM(_firmaKeyEvol);
+  const reservaFinal = footerHPie + (_firmaKeyEvol !== 'ninguna' ? alturaFirmaEvol + 7 : 0);
+  if (medY > PH - reservaFinal) { totalPaginas++; }
+
+  // ── PASADA 2: dibujar en el documento real, con el membrete solo en la
+  //    página 1 y el pie/firma solo en la última ──
+  const doc = new jsPDF({ unit:'mm', format:'a5', orientation:'portrait' });
+  const _hdrY = _pdfHeaderOtro(doc, u, PW, ML);
+  _pdfPatientBar(doc, p, hoy, PW, ML, MR, _hdrY);
+  const tituloY = _hdrY + 18;
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8);
+  doc.setTextColor(..._C.oscuro);
+  doc.text('Indicaciones para el paciente:', ML, tituloY);
+  doc.setLineWidth(0.2); doc.setDrawColor(..._C.gris);
+  doc.line(ML, tituloY + 2, ML + 62, tituloY + 2);
+
+  function _avisoContinua() {
+    doc.setFont('helvetica', 'italic');
+    doc.setFontSize(7);
+    doc.setTextColor(140, 140, 155);
+    doc.text('( continúa en la página siguiente )', PW / 2, PH - 8, { align: 'center' });
+  }
+
+  let paginaActual = 1;
+  items.forEach((it) => {
+    while (paginaActual < it.page) {
+      if (paginaActual === 1 && totalPaginas > 1) { _avisoContinua(); }
+      doc.addPage();
+      paginaActual++;
+    }
+    doc.setFont('helvetica', it.fontStyle);
     doc.setFontSize(8);
-    if (seg.color) {
-      const rgb = _hexToRgb(seg.color);
+    if (it.color) {
+      const rgb = _hexToRgb(it.color);
       doc.setTextColor(rgb[0], rgb[1], rgb[2]);
     } else {
       doc.setTextColor(35, 35, 35);
     }
-    const prefix = firstOfLineInd ? '• ' : '';
-    firstOfLineInd = false;
-    const itemLines = doc.splitTextToSize(prefix + seg.text, CW - 4);
-    itemLines.forEach((ln, idx) => {
-      if(curY > maxYMidEvol) { curY = _addIndPage(); }
-      const lnX = ML + (idx > 0 ? 4 : 0);
-      doc.text(ln, lnX, curY);
-      if (seg.underline) {
-        const textW = doc.getTextWidth(ln);
-        const ulY = curY + 0.7;
-        doc.setLineWidth(0.25);
-        doc.setDrawColor(...(seg.color ? _hexToRgb(seg.color) : [35, 35, 35]));
-        doc.line(lnX, ulY, lnX + textW, ulY);
-      }
-      curY += lineH;
-    });
+    doc.text(it.text, it.x, it.y);
+    if (it.underline) {
+      const textW = doc.getTextWidth(it.text);
+      const ulY = it.y + 0.7;
+      doc.setLineWidth(0.15);
+      doc.setDrawColor(...(it.color ? _hexToRgb(it.color) : [35, 35, 35]));
+      doc.line(it.x, ulY, it.x + textW, ulY);
+    }
   });
-
-  // La firma solo necesita su propia página en blanco si el texto realmente
-  // termina invadiendo la zona donde se dibuja (ya no se reserva ese espacio
-  // de antemano en todas las páginas, evitando el hueco en blanco previo).
-  if (_firmaKeyEvol !== 'ninguna') {
-    const alturaFirma = _alturaFirmaMM(_firmaKeyEvol);
-    const zonaFirmaTop = PH - footerHPie - alturaFirma - 4 - 3;
-    if (curY > zonaFirmaTop) { curY = _addIndPage(); }
+  // Página(s) en blanco extra si hacía falta solo para el pie/firma
+  while (paginaActual < totalPaginas) {
+    if (paginaActual === 1 && totalPaginas > 1) { _avisoContinua(); }
+    doc.addPage();
+    paginaActual++;
   }
 
+  // Pie y firma: únicamente en la última página
   _pdfFirma(doc, u, PW, PH, ML, _firmaKeyEvol, footerHPie);
   _pdfFooterOtro(doc, u, PW, PH, direccionPie);
 
@@ -19754,28 +19785,21 @@ function generarPDFDocLibre() {
     curY += 7;
 
     // Contenido libre
-    const maxYMid = PH - 22;
+    const maxYFlujo = PH - 12;
     doc.setFont('helvetica', 'normal'); doc.setFontSize(9);
     doc.setTextColor(35, 35, 35);
     const lineH = 5.0;
 
     function _addDocLibrePage() {
-      doc.setFont('helvetica', 'italic'); doc.setFontSize(7);
-      doc.setTextColor(140, 140, 155);
-      doc.text('↓  continúa en la página siguiente', PW / 2, PH - footerHPie - 7, { align: 'center' });
-      _pdfFooterOtro(doc, u, PW, PH, direccionPie);
       doc.addPage();
-      const nHY = _pdfHeaderOtro(doc, u, PW, ML);
-      doc.setFont('helvetica', 'normal'); doc.setFontSize(9);
-      doc.setTextColor(35, 35, 35);
-      return nHY + 8;
+      return 12;
     }
 
     const segmentsDoc = contenidoEl ? _parseRichTextSegments(contenidoEl) : [];
     segmentsDoc.forEach((seg) => {
       if (seg.isNewLine) {
         curY += lineH * 0.4;
-        if(curY > maxYMid) { curY = _addDocLibrePage(); }
+        if(curY > maxYFlujo) { curY = _addDocLibrePage(); }
         return;
       }
       const fontStyle = seg.bold && seg.italic ? 'bolditalic' : seg.bold ? 'bold' : seg.italic ? 'italic' : 'normal';
@@ -19789,12 +19813,12 @@ function generarPDFDocLibre() {
       }
       const wrapped = doc.splitTextToSize(seg.text, CW);
       wrapped.forEach((ln) => {
-        if(curY > maxYMid) { curY = _addDocLibrePage(); }
+        if(curY > maxYFlujo) { curY = _addDocLibrePage(); }
         doc.text(ln, ML, curY);
         if (seg.underline) {
           const textW = doc.getTextWidth(ln);
           const ulY = curY + 0.7;
-          doc.setLineWidth(0.25);
+          doc.setLineWidth(0.15);
           doc.setDrawColor(...(seg.color ? _hexToRgb(seg.color) : [35, 35, 35]));
           doc.line(ML, ulY, ML + textW, ulY);
         }
@@ -19807,11 +19831,20 @@ function generarPDFDocLibre() {
     const _firmaKeyBase = (_unameDoc.includes('omar') || _unameDoc === 'ob') ? 'omar' : 'barbara';
     const firmaKey = inclFirma ? _firmaKeyBase : 'ninguna';
 
-    // Solo pasa a página nueva por la firma si el texto realmente invade esa zona.
-    if (firmaKey !== 'ninguna') {
-      const alturaFirma = _alturaFirmaMM(firmaKey);
-      const zonaFirmaTop = PH - footerHPie - alturaFirma - 4 - 3;
-      if (curY > zonaFirmaTop) { curY = _addDocLibrePage(); }
+    // Página en blanco extra si ni el pie (+ firma) entran donde terminó el texto
+    const alturaFirmaDoc = _alturaFirmaMM(firmaKey);
+    const reservaFinalDoc = footerHPie + (firmaKey !== 'ninguna' ? alturaFirmaDoc + 7 : 0);
+    if (curY > PH - reservaFinalDoc) { curY = _addDocLibrePage(); }
+
+    // Si terminó habiendo más de una hoja, avisar en la primera que el texto
+    // continúa, y dejar el pie/firma (más abajo) para la última hoja.
+    const totalPaginasDoc = doc.internal.getNumberOfPages();
+    if (totalPaginasDoc > 1) {
+      doc.setPage(1);
+      doc.setFont('helvetica', 'italic'); doc.setFontSize(7);
+      doc.setTextColor(140, 140, 155);
+      doc.text('( continúa en la página siguiente )', PW / 2, PH - 8, { align: 'center' });
+      doc.setPage(totalPaginasDoc);
     }
 
     _pdfFirma(doc, u, PW, PH, ML, firmaKey, footerHPie);
