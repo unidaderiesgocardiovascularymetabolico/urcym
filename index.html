@@ -6364,6 +6364,17 @@ function _pdfFirma(doc, u, PW, PH, ML, firmaKey, pieAltura) {
   // Sin línea de firma — nunca
 }
 
+// Alto real (mm) que ocupa la imagen de firma, según el ancho fijo usado en _pdfFirma.
+// Sirve para reservar espacio SOLO en la página donde realmente va a dibujarse la firma,
+// en vez de restar ese espacio en todas las páginas del documento.
+function _alturaFirmaMM(firmaKey) {
+  if (!firmaKey || firmaKey === 'ninguna') return 0;
+  const ratios = { barbara: 558 / 547, omar: 1280 / 876 };
+  const ratio = ratios[firmaKey] || 1;
+  const FW = (firmaKey === 'barbara') ? 34 : 40;
+  return FW * ratio;
+}
+
 /* ─────────────────────────────────────────────────── */
 /*  DIRECCIONES SELECCIONABLES PARA EL PIE DE PÁGINA   */
 /* ─────────────────────────────────────────────────── */
@@ -6711,9 +6722,8 @@ function generarPDF(tipo) {
       if (segments.length) {
         let curY = cY + 13;
         const lineH = 4.6;
-        // Usar máximo de altura: hasta zona de firma en última página
-        const firmaTopLast = PH - 90;
-        // En páginas intermedias usar casi toda la hoja
+        // Casi toda la hoja disponible para el texto en cualquier página;
+        // el espacio de la firma se reserva solo al final, si hace falta (ver más abajo).
         const maxYMid = PH - 22;
 
         function _addPageWithHeader() {
@@ -6742,13 +6752,12 @@ function generarPDF(tipo) {
           }
           if (seg.isNewLine) {
             curY += lineH * 0.6;
-            const maxY = doc.internal.getNumberOfPages() === doc.internal.getNumberOfPages() ? firmaTopLast : maxYMid;
             if (curY > maxYMid) { curY = _addPageWithHeader(); }
             return;
           }
           const lines = doc.splitTextToSize(seg.text, W - 8);
           lines.forEach(function(ln) {
-            if (curY > firmaTopLast) { curY = _addPageWithHeader(); }
+            if (curY > maxYMid) { curY = _addPageWithHeader(); }
             doc.text(ln, ML + 4, curY);
             // Simular subrayado: línea fina debajo del texto
             if (seg.underline) {
@@ -6763,6 +6772,14 @@ function generarPDF(tipo) {
             curY += lineH;
           });
         });
+
+        // Solo pasa a una página nueva por la firma si el texto realmente
+        // termina invadiendo esa zona (en vez de reservarla siempre).
+        if (firmaKey !== 'ninguna') {
+          const alturaFirma = _alturaFirmaMM(firmaKey);
+          const zonaFirmaTop = PH - footerHPie - alturaFirma - 4 - 3;
+          if (curY > zonaFirmaTop) { curY = _addPageWithHeader(); }
+        }
       }
     }
   }
@@ -9632,7 +9649,6 @@ function _crearPDFIndicacionesEvol(txt, usarOtro) {
   doc.line(ML, curY + 2, ML + 62, curY + 2);
   curY += 8;
 
-  const firmaZoneTop = PH - 90;
   const maxYMidEvol = PH - 22;
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8);
@@ -9660,8 +9676,7 @@ function _crearPDFIndicacionesEvol(txt, usarOtro) {
   segmentsInd.forEach((seg) => {
     if (seg.isNewLine) {
       curY += lineH * 0.6;
-      const _maxYEvolNL = (_firmaKeyEvol !== 'ninguna') ? firmaZoneTop : maxYMidEvol;
-      if (curY > _maxYEvolNL) { curY = _addIndPage(); }
+      if (curY > maxYMidEvol) { curY = _addIndPage(); }
       firstOfLineInd = true;
       return;
     }
@@ -9678,8 +9693,7 @@ function _crearPDFIndicacionesEvol(txt, usarOtro) {
     firstOfLineInd = false;
     const itemLines = doc.splitTextToSize(prefix + seg.text, CW - 4);
     itemLines.forEach((ln, idx) => {
-      const _maxYEvol = (_firmaKeyEvol !== 'ninguna') ? firmaZoneTop : maxYMidEvol;
-      if(curY > _maxYEvol) { curY = _addIndPage(); }
+      if(curY > maxYMidEvol) { curY = _addIndPage(); }
       const lnX = ML + (idx > 0 ? 4 : 0);
       doc.text(ln, lnX, curY);
       if (seg.underline) {
@@ -9692,6 +9706,15 @@ function _crearPDFIndicacionesEvol(txt, usarOtro) {
       curY += lineH;
     });
   });
+
+  // La firma solo necesita su propia página en blanco si el texto realmente
+  // termina invadiendo la zona donde se dibuja (ya no se reserva ese espacio
+  // de antemano en todas las páginas, evitando el hueco en blanco previo).
+  if (_firmaKeyEvol !== 'ninguna') {
+    const alturaFirma = _alturaFirmaMM(_firmaKeyEvol);
+    const zonaFirmaTop = PH - footerHPie - alturaFirma - 4 - 3;
+    if (curY > zonaFirmaTop) { curY = _addIndPage(); }
+  }
 
   _pdfFirma(doc, u, PW, PH, ML, _firmaKeyEvol, footerHPie);
   _pdfFooterOtro(doc, u, PW, PH, direccionPie);
@@ -19731,7 +19754,6 @@ function generarPDFDocLibre() {
     curY += 7;
 
     // Contenido libre
-    const firmaZoneTop = PH - 90;
     const maxYMid = PH - 22;
     doc.setFont('helvetica', 'normal'); doc.setFontSize(9);
     doc.setTextColor(35, 35, 35);
@@ -19753,8 +19775,7 @@ function generarPDFDocLibre() {
     segmentsDoc.forEach((seg) => {
       if (seg.isNewLine) {
         curY += lineH * 0.4;
-        const maxYNL = inclFirma ? firmaZoneTop : maxYMid;
-        if(curY > maxYNL) { curY = _addDocLibrePage(); }
+        if(curY > maxYMid) { curY = _addDocLibrePage(); }
         return;
       }
       const fontStyle = seg.bold && seg.italic ? 'bolditalic' : seg.bold ? 'bold' : seg.italic ? 'italic' : 'normal';
@@ -19768,8 +19789,7 @@ function generarPDFDocLibre() {
       }
       const wrapped = doc.splitTextToSize(seg.text, CW);
       wrapped.forEach((ln) => {
-        const maxY = inclFirma ? firmaZoneTop : maxYMid;
-        if(curY > maxY) { curY = _addDocLibrePage(); }
+        if(curY > maxYMid) { curY = _addDocLibrePage(); }
         doc.text(ln, ML, curY);
         if (seg.underline) {
           const textW = doc.getTextWidth(ln);
@@ -19786,6 +19806,14 @@ function generarPDFDocLibre() {
     const _unameDoc = (u && (u.id || u.name || '')).toLowerCase();
     const _firmaKeyBase = (_unameDoc.includes('omar') || _unameDoc === 'ob') ? 'omar' : 'barbara';
     const firmaKey = inclFirma ? _firmaKeyBase : 'ninguna';
+
+    // Solo pasa a página nueva por la firma si el texto realmente invade esa zona.
+    if (firmaKey !== 'ninguna') {
+      const alturaFirma = _alturaFirmaMM(firmaKey);
+      const zonaFirmaTop = PH - footerHPie - alturaFirma - 4 - 3;
+      if (curY > zonaFirmaTop) { curY = _addDocLibrePage(); }
+    }
+
     _pdfFirma(doc, u, PW, PH, ML, firmaKey, footerHPie);
     _pdfFooterOtro(doc, u, PW, PH, direccionPie);
 
