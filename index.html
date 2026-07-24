@@ -4168,6 +4168,34 @@ function mostrarModalPestanasDirty(tabs, opts) {
     document.getElementById('modalGP_cancelar').onclick = () => cleanup(null);
   });
 }
+
+// Modal simple para cuando solo hay cambios sin guardar en el texto de la
+// evolución (sin pestañas de tablas dirty). A diferencia de un confirm()
+// nativo, acá "Guardar y cerrar" es la opción destacada y más fácil de
+// elegir; "Cerrar sin guardar" queda como opción secundaria, más discreta.
+// Devuelve una Promise que resuelve a 'guardar' | 'singuardar' | null (canceló).
+function confirmarGuardarAntesDeCerrar(subtitulo) {
+  return new Promise(resolve => {
+    const modal = document.getElementById('modalConfirmGuardarCerrar');
+    const subEl = document.getElementById('modalCGC_subtitulo');
+    if(subEl) subEl.textContent = subtitulo || 'Tenés cambios sin guardar.';
+    modal.style.display = 'flex';
+
+    const cleanup = (valor) => { modal.style.display = 'none'; resolve(valor); };
+
+    // Clonar botones para limpiar listeners acumulados de llamadas anteriores
+    ['modalCGC_guardar','modalCGC_sinGuardar','modalCGC_cancelar'].forEach(id => {
+      const old = document.getElementById(id);
+      if(!old) return;
+      const fresh = old.cloneNode(true);
+      old.parentNode.replaceChild(fresh, old);
+    });
+
+    document.getElementById('modalCGC_guardar').onclick = () => cleanup('guardar');
+    document.getElementById('modalCGC_sinGuardar').onclick = () => cleanup('singuardar');
+    document.getElementById('modalCGC_cancelar').onclick = () => cleanup(null);
+  });
+}
 let labDatos = { columnas:[], filas:[] };
 let estDatos = { columnas:[], filas:[] };
 let antDatos = { columnas:[], filas:[] };
@@ -5822,10 +5850,18 @@ async function cerrarTabPaciente(ev, dni) {
         if(elegidas.has(tab.key)) await tab.fn();
       }
     } else {
-      // Solo hay borrador de evolución → confirm simple
+      // Solo hay borrador de evolución → modal con "Guardar y cerrar" como
+      // opción fácil/destacada (antes era un confirm() nativo donde el botón
+      // más prominente terminaba descartando los cambios, algo confuso).
       const nombre = (pacienteTabsAbiertas.find(t => String(t.dni) === String(dni)) || {}).nombre || 'este paciente';
-      const ok = confirm('La evolución de ' + nombre + ' tiene cambios sin guardar.\n\n¿Cerrar igual sin guardar?');
-      if(!ok) return;
+      const resultado = await confirmarGuardarAntesDeCerrar(
+        'La evolución de ' + nombre + ' tiene cambios sin guardar.'
+      );
+      if(resultado === null) return; // canceló, se queda en la pestaña
+      if(resultado === 'guardar') {
+        if(!esPacienteActual) { await activarTabPaciente(dni); }
+        await guardarEvolucion();
+      }
     }
   }
 
@@ -6375,6 +6411,69 @@ function _alturaFirmaMM(firmaKey) {
   return FW * ratio;
 }
 
+// Dibuja una lista de segmentos con formato mixto (de _parseRichTextSegments) en
+// flujo continuo, palabra por palabra — para que negrita/cursiva/color/subrayado
+// dentro de una misma frase sigan corridos en el mismo renglón, en vez de que
+// cada cambio de estilo empiece un renglón nuevo (que se veía como un "enter").
+// opts: { ML, maxWidth, lineH, fontSize, startY, maxY, addPageFn, defaultColor, newLineGapFactor }
+// addPageFn() agrega una hoja nueva y devuelve el Y donde debe arrancar el contenido.
+// Devuelve el Y final tras dibujar todo.
+function _dibujarSegmentosPDF(doc, segments, opts) {
+  const ML = opts.ML;
+  const maxWidth = opts.maxWidth;
+  const lineH = opts.lineH;
+  const fontSize = opts.fontSize;
+  const maxY = opts.maxY;
+  const addPageFn = opts.addPageFn;
+  const defaultColor = opts.defaultColor || [35, 35, 35];
+
+  let curX = ML;
+  let curY = opts.startY;
+
+  function nuevaLinea() {
+    curX = ML;
+    curY += lineH;
+    if (curY > maxY) { curY = addPageFn(); curX = ML; }
+  }
+
+  segments.forEach((seg) => {
+    if (seg.isNewLine) {
+      curX = ML;
+      curY += lineH * (opts.newLineGapFactor != null ? opts.newLineGapFactor : 0.6);
+      if (curY > maxY) { curY = addPageFn(); }
+      curX = ML;
+      return;
+    }
+    const fontStyle = seg.bold && seg.italic ? 'bolditalic' : seg.bold ? 'bold' : seg.italic ? 'italic' : 'normal';
+    doc.setFont('helvetica', fontStyle);
+    doc.setFontSize(fontSize);
+    const rgb = seg.color ? _hexToRgb(seg.color) : defaultColor;
+    doc.setTextColor(rgb[0], rgb[1], rgb[2]);
+
+    // Tokenizar preservando los espacios, para cortar solo entre palabras
+    const tokens = seg.text.match(/\S+\s*|\s+/g) || [];
+    tokens.forEach((tok) => {
+      if (/^\s+$/.test(tok) && curX === ML) return; // no arrancar un renglón con un espacio suelto
+      const tokW = doc.getTextWidth(tok);
+      if (curX + tokW > ML + maxWidth && curX > ML) { nuevaLinea(); }
+      doc.text(tok, curX, curY);
+      if (seg.underline) {
+        const trimmed = tok.replace(/\s+$/, '');
+        if (trimmed) {
+          const trimW = doc.getTextWidth(trimmed);
+          const ulY = curY + 0.7;
+          doc.setLineWidth(0.15);
+          doc.setDrawColor(rgb[0], rgb[1], rgb[2]);
+          doc.line(curX, ulY, curX + trimW, ulY);
+        }
+      }
+      curX += tokW;
+    });
+  });
+
+  return curY;
+}
+
 /* ─────────────────────────────────────────────────── */
 /*  DIRECCIONES SELECCIONABLES PARA EL PIE DE PÁGINA   */
 /* ─────────────────────────────────────────────────── */
@@ -6752,45 +6851,17 @@ function generarPDF(tipo) {
           return newHeaderEndY + 8;
         }
 
-        segments.forEach(function(seg) {
-          const fontStyle = seg.bold && seg.italic ? 'bolditalic' : seg.bold ? 'bold' : seg.italic ? 'italic' : 'normal';
-          doc.setFont('helvetica', fontStyle);
-          doc.setFontSize(8);
-          if (seg.color) {
-            const rgb = _hexToRgb(seg.color);
-            doc.setTextColor(rgb[0], rgb[1], rgb[2]);
-          } else {
-            doc.setTextColor(..._C.oscuro);
-          }
-          if (seg.isNewLine) {
-            curY += lineH * 0.6;
-            if (curY > maxYMid) { curY = _addPageWithHeader(); }
-            return;
-          }
-          const lines = doc.splitTextToSize(seg.text, W - 8);
-          lines.forEach(function(ln) {
-            if (curY > maxYMid) { curY = _addPageWithHeader(); }
-            doc.text(ln, ML + 4, curY);
-            // Simular subrayado: línea fina debajo del texto
-            if (seg.underline) {
-              const textW = doc.getTextWidth(ln);
-              const ulY = curY + 0.7;
-              doc.setLineWidth(0.15);
-              doc.setDrawColor(
-                ...(seg.color ? _hexToRgb(seg.color) : _C.oscuro)
-              );
-              doc.line(ML + 4, ulY, ML + 4 + textW, ulY);
-            }
-            curY += lineH;
-          });
+        curY = _dibujarSegmentosPDF(doc, segments, {
+          ML: ML + 4, maxWidth: W - 8, lineH, fontSize: 8, startY: curY, maxY: maxYMid,
+          addPageFn: _addPageWithHeader, defaultColor: _C.oscuro
         });
 
         // Solo pasa a una página nueva por la firma si el texto realmente
         // termina invadiendo la zona donde se dibuja (mismo margen de 4mm
-        // que usa _pdfFirma, más 2mm de aire).
+        // que usa _pdfFirma). curY ya representa el renglón real final.
         if (firmaKey !== 'ninguna') {
           const alturaFirma = _alturaFirmaMM(firmaKey);
-          const zonaFirmaTop = PH - footerHPie - alturaFirma - 4 - 2;
+          const zonaFirmaTop = PH - footerHPie - alturaFirma - 4;
           if (curY > zonaFirmaTop) { curY = _addPageWithHeader(); }
         }
       }
@@ -9685,44 +9756,17 @@ function _crearPDFIndicacionesEvol(txt, usarOtro) {
 
   const indElRich = document.getElementById('evol_indicaciones_editor');
   const segmentsInd = indElRich ? _parseRichTextSegments(indElRich) : [];
-  segmentsInd.forEach((seg) => {
-    if (seg.isNewLine) {
-      curY += lineH * 0.6;
-      if (curY > maxYMidEvol) { curY = _addIndPage(); }
-      return;
-    }
-    const fontStyle = seg.bold && seg.italic ? 'bolditalic' : seg.bold ? 'bold' : seg.italic ? 'italic' : 'normal';
-    doc.setFont('helvetica', fontStyle);
-    doc.setFontSize(8);
-    if (seg.color) {
-      const rgb = _hexToRgb(seg.color);
-      doc.setTextColor(rgb[0], rgb[1], rgb[2]);
-    } else {
-      doc.setTextColor(35, 35, 35);
-    }
-    // Sin bullet automático: se respeta el texto tal como lo escribió el profesional
-    const itemLines = doc.splitTextToSize(seg.text, CW - 4);
-    itemLines.forEach((ln, idx) => {
-      if(curY > maxYMidEvol) { curY = _addIndPage(); }
-      const lnX = ML + (idx > 0 ? 4 : 0);
-      doc.text(ln, lnX, curY);
-      if (seg.underline) {
-        const textW = doc.getTextWidth(ln);
-        const ulY = curY + 0.7;
-        doc.setLineWidth(0.15);
-        doc.setDrawColor(...(seg.color ? _hexToRgb(seg.color) : [35, 35, 35]));
-        doc.line(lnX, ulY, lnX + textW, ulY);
-      }
-      curY += lineH;
-    });
+  curY = _dibujarSegmentosPDF(doc, segmentsInd, {
+    ML, maxWidth: CW - 4, lineH, fontSize: 8, startY: curY, maxY: maxYMidEvol,
+    addPageFn: _addIndPage, defaultColor: [35, 35, 35]
   });
 
   // La firma solo pasa a una hoja nueva si el texto realmente termina
-  // invadiendo el espacio donde se dibuja (mismo margen de 4mm que usa _pdfFirma,
-  // más 2mm de aire — no los 90mm fijos que se reservaban antes en cada página).
+  // invadiendo el espacio donde se dibuja (mismo margen de 4mm que usa _pdfFirma).
+  // curY ya representa el renglón real donde terminó el texto.
   if (_firmaKeyEvol !== 'ninguna') {
     const alturaFirma = _alturaFirmaMM(_firmaKeyEvol);
-    const zonaFirmaTop = PH - footerHPie - alturaFirma - 4 - 2;
+    const zonaFirmaTop = PH - footerHPie - alturaFirma - 4;
     if (curY > zonaFirmaTop) { curY = _addIndPage(); }
   }
 
@@ -13351,6 +13395,19 @@ ${profNombre ? `<div class="prof-strip"><span class="prof-name">${profNombre}</s
       <button id="modalGP_guardarTodo" style="flex:1;padding:10px 14px;border:none;border-radius:9px;background:var(--teal);color:white;font-size:13px;font-weight:700;cursor:pointer;font-family:var(--font-main)">💾 Guardar todo</button>
       <button id="modalGP_soloEvol" style="flex:1;padding:10px 14px;border:1.5px solid var(--border);border-radius:9px;background:white;color:var(--text);font-size:13px;cursor:pointer;font-family:var(--font-main)">Cerrar sin guardar</button>
       <button id="modalGP_cancelar" style="width:100%;padding:9px;border:none;border-radius:9px;background:var(--gray);color:var(--text-soft);font-size:12px;cursor:pointer;font-family:var(--font-main);margin-top:2px">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: confirmar guardado antes de cerrar (solo evolución, sin pestañas de tablas dirty) -->
+<div id="modalConfirmGuardarCerrar" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;align-items:center;justify-content:center">
+  <div style="background:white;border-radius:16px;padding:28px 32px;max-width:420px;width:92%;box-shadow:0 20px 60px rgba(0,0,0,.2)">
+    <div style="font-family:var(--font-display);font-size:16px;font-weight:700;color:var(--text);margin-bottom:6px">⚠️ Cambios sin guardar</div>
+    <div id="modalCGC_subtitulo" style="font-size:13px;color:var(--text-soft);margin-bottom:20px;line-height:1.5">Tenés cambios sin guardar.</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button id="modalCGC_guardar" style="flex:1;padding:10px 14px;border:none;border-radius:9px;background:var(--teal);color:white;font-size:13px;font-weight:700;cursor:pointer;font-family:var(--font-main)">💾 Guardar y cerrar</button>
+      <button id="modalCGC_sinGuardar" style="flex:1;padding:10px 14px;border:1.5px solid var(--border);border-radius:9px;background:white;color:var(--text);font-size:13px;cursor:pointer;font-family:var(--font-main)">Cerrar sin guardar</button>
+      <button id="modalCGC_cancelar" style="width:100%;padding:9px;border:none;border-radius:9px;background:var(--gray);color:var(--text-soft);font-size:12px;cursor:pointer;font-family:var(--font-main);margin-top:2px">Cancelar</button>
     </div>
   </div>
 </div>
@@ -19601,11 +19658,18 @@ ${profNombre?`<div class="prof"><span class="prof-name">${profNombre}</span>${pr
       </select>
     </div>
     <div class="form-actions" style="margin-top:16px">
-      <button class="btn btn-secondary" style="flex:1;min-width:120px" onclick="document.getElementById('modalDocLibre').classList.remove('open')">Cancelar</button>
+      <button class="btn btn-secondary" style="flex:1;min-width:120px" onclick="cancelarDocLibre()">Cancelar</button>
+      <button class="btn btn-secondary" style="flex:0 0 auto;min-width:44px" title="Minimizar (seguís después sin perder lo escrito)" onclick="minimizarDocLibre()">🗕</button>
       <button class="btn btn-secondary" style="flex:1;min-width:140px" onclick="volcarDocLibreAEvolucion()">↑ Volcar a evolución</button>
       <button class="btn btn-teal" style="flex:1;min-width:140px" onclick="generarPDFDocLibre()">📄 Descargar PDF</button>
     </div>
   </div>
+</div>
+
+<!-- Chip flotante para retomar un Documento libre minimizado -->
+<div id="docLibreMiniChip" style="display:none;position:fixed;right:20px;bottom:20px;z-index:250;background:#1a2535;color:white;padding:10px 16px;border-radius:30px;box-shadow:0 6px 20px rgba(0,0,0,.25);cursor:pointer;font-family:var(--font-main);font-size:13px;font-weight:600;align-items:center;gap:8px;"
+  onclick="restaurarDocLibre()">
+  <span>📄</span><span id="docLibreMiniChipTexto">Documento libre en pausa</span>
 </div>
 
 <!-- ===== PANEL PLANTILLAS HC ===== -->
@@ -19654,6 +19718,21 @@ ${profNombre?`<div class="prof"><span class="prof-name">${profNombre}</span>${pr
 // ===== DOCUMENTO LIBRE =====
 // guarda el paciente activo cuando se abre el modal
 let _docLibrePaciente = null;
+// true mientras hay un borrador "en pausa" (minimizado) sin guardar ni descartar
+let _docLibreBorradorActivo = false;
+
+function _mostrarChipDocLibre() {
+  const chip = document.getElementById('docLibreMiniChip');
+  if(!chip) return;
+  const p = _docLibrePaciente;
+  const txt = document.getElementById('docLibreMiniChipTexto');
+  if(txt) txt.textContent = 'Documento libre en pausa' + (p ? ' — ' + p.apellido + ', ' + p.nombre : '');
+  chip.style.display = 'flex';
+}
+function _ocultarChipDocLibre() {
+  const chip = document.getElementById('docLibreMiniChip');
+  if(chip) chip.style.display = 'none';
+}
 
 function _renderDocLibreHeader() {
   const p = _docLibrePaciente;
@@ -19673,7 +19752,20 @@ function _renderDocLibreHeader() {
 function abrirDocumentoLibre(dni) {
   const p = pacientesData.find(x=>x.dni===dni);
   if(!p) return;
+  // Si hay un borrador en pausa del mismo paciente, lo retomamos tal cual quedó
+  if(_docLibreBorradorActivo && _docLibrePaciente && _docLibrePaciente.dni === dni) {
+    _ocultarChipDocLibre();
+    document.getElementById('modalDocLibre').classList.add('open');
+    return;
+  }
+  // Si había un borrador en pausa de OTRO paciente, se lo avisamos antes de reemplazarlo
+  if(_docLibreBorradorActivo && _docLibrePaciente && _docLibrePaciente.dni !== dni) {
+    const seguir = confirm('Tenés un documento libre en pausa de ' + _docLibrePaciente.apellido + ', ' + _docLibrePaciente.nombre + ' sin guardar.\n\n¿Descartarlo y empezar uno nuevo para este paciente?');
+    if(!seguir) return;
+  }
   _docLibrePaciente = p;
+  _docLibreBorradorActivo = false;
+  _ocultarChipDocLibre();
   document.getElementById('doclibre_contenido').innerHTML = '';
   // reset checkboxes
   const fc = document.getElementById('doclibre_fecha_check');
@@ -19688,6 +19780,32 @@ function abrirDocumentoLibre(dni) {
     fc._docLibreListener = true;
   }
   document.getElementById('modalDocLibre').classList.add('open');
+}
+
+// Minimizar: cierra el modal pero deja el contenido intacto, con un chip para retomarlo
+function minimizarDocLibre() {
+  document.getElementById('modalDocLibre').classList.remove('open');
+  _docLibreBorradorActivo = true;
+  _mostrarChipDocLibre();
+}
+
+// Restaurar desde el chip flotante
+function restaurarDocLibre() {
+  _ocultarChipDocLibre();
+  document.getElementById('modalDocLibre').classList.add('open');
+}
+
+// Cancelar: si hay algo escrito, confirma antes de descartarlo de verdad
+function cancelarDocLibre() {
+  const contEl = document.getElementById('doclibre_contenido');
+  const hayContenido = contEl && contEl.innerHTML.trim() && contEl.innerHTML.trim() !== '<br>';
+  if(hayContenido) {
+    const descartar = confirm('¿Descartar este documento? Se va a perder lo que escribiste.\n\nTip: usá el botón 🗕 para dejarlo en pausa sin perderlo.');
+    if(!descartar) return;
+  }
+  document.getElementById('modalDocLibre').classList.remove('open');
+  _docLibreBorradorActivo = false;
+  _ocultarChipDocLibre();
 }
 
 function volcarDocLibreAEvolucion() {
@@ -19706,6 +19824,8 @@ function volcarDocLibreAEvolucion() {
   editor.appendChild(tmp.firstChild);
   _asegurarLineaLibreEvol(editor);
   document.getElementById('modalDocLibre').classList.remove('open');
+  _docLibreBorradorActivo = false;
+  _ocultarChipDocLibre();
 }
 
 function generarPDFDocLibre() {
@@ -19782,34 +19902,9 @@ function generarPDFDocLibre() {
     }
 
     const segmentsDoc = contenidoEl ? _parseRichTextSegments(contenidoEl) : [];
-    segmentsDoc.forEach((seg) => {
-      if (seg.isNewLine) {
-        curY += lineH * 0.4;
-        if(curY > maxYMid) { curY = _addDocLibrePage(); }
-        return;
-      }
-      const fontStyle = seg.bold && seg.italic ? 'bolditalic' : seg.bold ? 'bold' : seg.italic ? 'italic' : 'normal';
-      doc.setFont('helvetica', fontStyle);
-      doc.setFontSize(9);
-      if (seg.color) {
-        const rgb = _hexToRgb(seg.color);
-        doc.setTextColor(rgb[0], rgb[1], rgb[2]);
-      } else {
-        doc.setTextColor(35, 35, 35);
-      }
-      const wrapped = doc.splitTextToSize(seg.text, CW);
-      wrapped.forEach((ln) => {
-        if(curY > maxYMid) { curY = _addDocLibrePage(); }
-        doc.text(ln, ML, curY);
-        if (seg.underline) {
-          const textW = doc.getTextWidth(ln);
-          const ulY = curY + 0.7;
-          doc.setLineWidth(0.15);
-          doc.setDrawColor(...(seg.color ? _hexToRgb(seg.color) : [35, 35, 35]));
-          doc.line(ML, ulY, ML + textW, ulY);
-        }
-        curY += lineH;
-      });
+    curY = _dibujarSegmentosPDF(doc, segmentsDoc, {
+      ML, maxWidth: CW, lineH, fontSize: 9, startY: curY, maxY: maxYMid,
+      addPageFn: _addDocLibrePage, defaultColor: [35, 35, 35], newLineGapFactor: 0.4
     });
 
     // Firma
@@ -19818,10 +19913,11 @@ function generarPDFDocLibre() {
     const firmaKey = inclFirma ? _firmaKeyBase : 'ninguna';
 
     // Solo pasa a página nueva por la firma si el texto realmente invade esa
-    // zona (mismo margen de 4mm que usa _pdfFirma, más 2mm de aire).
+    // zona (mismo margen de 4mm que usa _pdfFirma). curY ya representa el
+    // renglón real final.
     if (firmaKey !== 'ninguna') {
       const alturaFirma = _alturaFirmaMM(firmaKey);
-      const zonaFirmaTop = PH - footerHPie - alturaFirma - 4 - 2;
+      const zonaFirmaTop = PH - footerHPie - alturaFirma - 4;
       if (curY > zonaFirmaTop) { curY = _addDocLibrePage(); }
     }
 
