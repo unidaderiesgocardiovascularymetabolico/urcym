@@ -19635,6 +19635,7 @@ ${profNombre?`<div class="prof"><span class="prof-name">${profNombre}</span>${pr
       </div>
       <div id="doclibre_contenido" class="doc-libre-editor" contenteditable="true" spellcheck="true"
         data-placeholder="Escribí el contenido del documento aquí...&#10;&#10;Podés incluir diagnósticos, medicación actual, motivo de derivación, etc."
+        onkeydown="if(event.key==='Enter'){event.stopPropagation();}"
         style="border-radius:0 0 12px 12px;white-space:pre-wrap;word-break:break-word;"></div>
     </div>
     <div style="display:flex;gap:20px;margin-top:12px;align-items:center;flex-wrap:wrap">
@@ -19657,19 +19658,12 @@ ${profNombre?`<div class="prof"><span class="prof-name">${profNombre}</span>${pr
         <option value="urcym">URCyM – Unidad de riesgo cardiovascular y metabólico (Santa Teresita)</option>
       </select>
     </div>
-    <div class="form-actions" style="margin-top:16px">
+    <div class="form-actions" style="margin-top:16px;flex-wrap:wrap">
       <button class="btn btn-secondary" style="flex:1;min-width:120px" onclick="cancelarDocLibre()">Cancelar</button>
-      <button class="btn btn-secondary" style="flex:0 0 auto;min-width:44px" title="Minimizar (seguís después sin perder lo escrito)" onclick="minimizarDocLibre()">🗕</button>
       <button class="btn btn-secondary" style="flex:1;min-width:140px" onclick="volcarDocLibreAEvolucion()">↑ Volcar a evolución</button>
       <button class="btn btn-teal" style="flex:1;min-width:140px" onclick="generarPDFDocLibre()">📄 Descargar PDF</button>
     </div>
   </div>
-</div>
-
-<!-- Chip flotante para retomar un Documento libre minimizado -->
-<div id="docLibreMiniChip" style="display:none;position:fixed;right:20px;bottom:20px;z-index:250;background:#1a2535;color:white;padding:10px 16px;border-radius:30px;box-shadow:0 6px 20px rgba(0,0,0,.25);cursor:pointer;font-family:var(--font-main);font-size:13px;font-weight:600;align-items:center;gap:8px;"
-  onclick="restaurarDocLibre()">
-  <span>📄</span><span id="docLibreMiniChipTexto">Documento libre en pausa</span>
 </div>
 
 <!-- ===== PANEL PLANTILLAS HC ===== -->
@@ -19718,21 +19712,6 @@ ${profNombre?`<div class="prof"><span class="prof-name">${profNombre}</span>${pr
 // ===== DOCUMENTO LIBRE =====
 // guarda el paciente activo cuando se abre el modal
 let _docLibrePaciente = null;
-// true mientras hay un borrador "en pausa" (minimizado) sin guardar ni descartar
-let _docLibreBorradorActivo = false;
-
-function _mostrarChipDocLibre() {
-  const chip = document.getElementById('docLibreMiniChip');
-  if(!chip) return;
-  const p = _docLibrePaciente;
-  const txt = document.getElementById('docLibreMiniChipTexto');
-  if(txt) txt.textContent = 'Documento libre en pausa' + (p ? ' — ' + p.apellido + ', ' + p.nombre : '');
-  chip.style.display = 'flex';
-}
-function _ocultarChipDocLibre() {
-  const chip = document.getElementById('docLibreMiniChip');
-  if(chip) chip.style.display = 'none';
-}
 
 function _renderDocLibreHeader() {
   const p = _docLibrePaciente;
@@ -19752,20 +19731,7 @@ function _renderDocLibreHeader() {
 function abrirDocumentoLibre(dni) {
   const p = pacientesData.find(x=>x.dni===dni);
   if(!p) return;
-  // Si hay un borrador en pausa del mismo paciente, lo retomamos tal cual quedó
-  if(_docLibreBorradorActivo && _docLibrePaciente && _docLibrePaciente.dni === dni) {
-    _ocultarChipDocLibre();
-    document.getElementById('modalDocLibre').classList.add('open');
-    return;
-  }
-  // Si había un borrador en pausa de OTRO paciente, se lo avisamos antes de reemplazarlo
-  if(_docLibreBorradorActivo && _docLibrePaciente && _docLibrePaciente.dni !== dni) {
-    const seguir = confirm('Tenés un documento libre en pausa de ' + _docLibrePaciente.apellido + ', ' + _docLibrePaciente.nombre + ' sin guardar.\n\n¿Descartarlo y empezar uno nuevo para este paciente?');
-    if(!seguir) return;
-  }
   _docLibrePaciente = p;
-  _docLibreBorradorActivo = false;
-  _ocultarChipDocLibre();
   document.getElementById('doclibre_contenido').innerHTML = '';
   // reset checkboxes
   const fc = document.getElementById('doclibre_fecha_check');
@@ -19782,30 +19748,15 @@ function abrirDocumentoLibre(dni) {
   document.getElementById('modalDocLibre').classList.add('open');
 }
 
-// Minimizar: cierra el modal pero deja el contenido intacto, con un chip para retomarlo
-function minimizarDocLibre() {
-  document.getElementById('modalDocLibre').classList.remove('open');
-  _docLibreBorradorActivo = true;
-  _mostrarChipDocLibre();
-}
-
-// Restaurar desde el chip flotante
-function restaurarDocLibre() {
-  _ocultarChipDocLibre();
-  document.getElementById('modalDocLibre').classList.add('open');
-}
-
 // Cancelar: si hay algo escrito, confirma antes de descartarlo de verdad
 function cancelarDocLibre() {
   const contEl = document.getElementById('doclibre_contenido');
   const hayContenido = contEl && contEl.innerHTML.trim() && contEl.innerHTML.trim() !== '<br>';
   if(hayContenido) {
-    const descartar = confirm('¿Descartar este documento? Se va a perder lo que escribiste.\n\nTip: usá el botón 🗕 para dejarlo en pausa sin perderlo.');
+    const descartar = confirm('¿Descartar este documento? Se va a perder lo que escribiste.');
     if(!descartar) return;
   }
   document.getElementById('modalDocLibre').classList.remove('open');
-  _docLibreBorradorActivo = false;
-  _ocultarChipDocLibre();
 }
 
 function volcarDocLibreAEvolucion() {
@@ -19824,8 +19775,6 @@ function volcarDocLibreAEvolucion() {
   editor.appendChild(tmp.firstChild);
   _asegurarLineaLibreEvol(editor);
   document.getElementById('modalDocLibre').classList.remove('open');
-  _docLibreBorradorActivo = false;
-  _ocultarChipDocLibre();
 }
 
 function generarPDFDocLibre() {
@@ -19904,7 +19853,7 @@ function generarPDFDocLibre() {
     const segmentsDoc = contenidoEl ? _parseRichTextSegments(contenidoEl) : [];
     curY = _dibujarSegmentosPDF(doc, segmentsDoc, {
       ML, maxWidth: CW, lineH, fontSize: 9, startY: curY, maxY: maxYMid,
-      addPageFn: _addDocLibrePage, defaultColor: [35, 35, 35], newLineGapFactor: 0.4
+      addPageFn: _addDocLibrePage, defaultColor: [35, 35, 35]
     });
 
     // Firma
