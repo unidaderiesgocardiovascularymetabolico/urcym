@@ -2645,7 +2645,7 @@
           </div>
 
           <!-- Editor principal -->
-          <div id="evol_editor" class="evol-editor" contenteditable="true" spellcheck="true" placeholder="Escribí la evolución aquí..." oninput="marcarDirty('evol')" onkeydown="if(event.key==='Enter'){event.stopPropagation();}"></div>
+          <div id="evol_editor" class="evol-editor" contenteditable="true" spellcheck="true" placeholder="Escribí la evolución aquí..." oninput="marcarDirty('evol')" onkeydown="if(event.key==='Enter'){event.stopPropagation();}" onpaste="limpiarPegado(event)"></div>
 
           <!-- Panel de actualización clínica inferior -->
           <div class="evol-update-panel">
@@ -2733,6 +2733,7 @@
             <div id="evol_indicaciones_editor" class="evol-editor" contenteditable="true" spellcheck="true"
               placeholder="Escribí las indicaciones para el paciente..."
               onkeydown="if(event.key==='Enter'){event.stopPropagation();}"
+              onpaste="limpiarPegado(event)"
               style="border-radius:0 0 10px 10px;min-height:120px"></div>
             <div class="evol-ind-actions">
               <button class="btn btn-secondary" onclick="volcarIndicacionesAlEditor()" style="width:auto;margin:0;padding:7px 16px;font-size:12px">↑ Volcar a evolución</button>
@@ -3823,6 +3824,7 @@
         style="min-height:140px;padding:11px 14px;border-radius:0 0 10px 10px;border:1.5px solid rgba(48,137,202,.15);background:#f4f7fb;font-family:'Encode Sans',sans-serif;font-size:12px;color:#1a2535;outline:none;line-height:1.7;white-space:pre-wrap;word-break:break-word;transition:border-color .2s,box-shadow .2s;"
         onfocus="this.style.borderColor='#3089ca';this.style.background='white';this.style.boxShadow='0 0 0 3px rgba(48,137,202,0.18)'"
         onblur="this.style.borderColor='rgba(48,137,202,.15)';this.style.background='#f4f7fb';this.style.boxShadow='none'"
+        onpaste="limpiarPegado(event)"
       ></div>
       <style>
         #ind_contenido:empty:before{content:attr(data-placeholder);color:#a0aab4;pointer-events:none;white-space:pre;}
@@ -5304,7 +5306,91 @@ const DOSIS_MED = {
   'Sotalol':         ['40mg','80mg','160mg'],
 };
 
-// ===== LOGIN =====
+// ===== LIMPIEZA DE PEGADO (Word / otros) =====
+// Cuando se pega texto copiado de Word (u otro procesador), viene acompañado de
+// estilos inline (mso-*, line-height, márgenes, fuentes, clases) que rompen el
+// interlineado y la tipografía del editor. Esta función intercepta el pegado,
+// descarta toda esa basura y reconstruye el contenido conservando solo negrita,
+// cursiva, subrayado, color y saltos de línea/listas — para que el texto pegado
+// se vea siempre igual de prolijo que el escrito a mano en el editor.
+function _escapeHtmlPegado(s) {
+  return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function _sanitizarHTMLPegado(html) {
+  const div = document.createElement('div');
+  div.innerHTML = html;
+  // Eliminar basura típica de Word/Office (estilos, comentarios condicionales, metadatos)
+  div.querySelectorAll('style, script, meta, link, xml').forEach(n => n.remove());
+
+  function esBold(tag, style) { return tag==='B'||tag==='STRONG'||/font-weight:\s*(bold|[6-9]00)/i.test(style); }
+  function esItalic(tag, style) { return tag==='I'||tag==='EM'||/font-style:\s*italic/i.test(style); }
+  function esUnderline(tag, style) { return tag==='U'||/text-decoration[^;]*underline/i.test(style); }
+  function getColor(style) {
+    const m = (style||'').match(/(?:^|;)\s*color:\s*([^;]+)/i);
+    if(!m) return null;
+    const c = m[1].trim();
+    // Solo aceptar colores hex o rgb() simples; descartar 'inherit', 'windowtext', etc.
+    if(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(c) || /^rgb\(/i.test(c)) return c;
+    return null;
+  }
+
+  function walk(node) {
+    let out = '';
+    node.childNodes.forEach(child => {
+      if(child.nodeType === 3) { // texto plano
+        out += _escapeHtmlPegado(child.textContent);
+        return;
+      }
+      if(child.nodeType !== 1) return; // ignorar comentarios, etc.
+      const tag = child.tagName;
+      if(tag === 'BR') { out += '<br>'; return; }
+      if(tag === 'LI') { out += '• ' + walk(child) + '<br>'; return; }
+      if(tag === 'UL' || tag === 'OL') { out += walk(child); return; }
+      if(tag === 'P' || tag === 'DIV' || tag === 'TR') {
+        const inner = walk(child);
+        if(!inner.trim()) return; // descartar párrafos vacíos (típico relleno de Word)
+        if(out && !/<br>\s*$/.test(out)) out += '<br>';
+        out += inner + '<br>';
+        return;
+      }
+      const style = child.getAttribute ? (child.getAttribute('style')||'') : '';
+      let inner = walk(child);
+      if(!inner.trim()) return;
+      if(esBold(tag, style)) inner = '<b>'+inner+'</b>';
+      if(esItalic(tag, style)) inner = '<i>'+inner+'</i>';
+      if(esUnderline(tag, style)) inner = '<u>'+inner+'</u>';
+      const color = getColor(style);
+      if(color) inner = '<span style="color:'+color+'">'+inner+'</span>';
+      out += inner;
+    });
+    return out;
+  }
+
+  let resultado = walk(div);
+  // Colapsar 3+ saltos de línea seguidos (párrafos vacíos de Word) a máximo 2
+  resultado = resultado.replace(/(<br>\s*){3,}/gi, '<br><br>');
+  // Recortar saltos de línea sobrantes al principio/final
+  resultado = resultado.replace(/^(<br>\s*)+/, '').replace(/(<br>\s*)+$/, '');
+  return resultado || _escapeHtmlPegado(div.textContent || '');
+}
+
+function limpiarPegado(e) {
+  e.preventDefault();
+  const cd = e.clipboardData || window.clipboardData;
+  if(!cd) return;
+  const html = cd.getData('text/html');
+  const texto = cd.getData('text/plain');
+  let limpio;
+  if(html && html.trim()) {
+    limpio = _sanitizarHTMLPegado(html);
+  } else if(texto) {
+    limpio = _escapeHtmlPegado(texto).replace(/\r\n|\r|\n/g, '<br>');
+  } else {
+    limpio = '';
+  }
+  document.execCommand('insertHTML', false, limpio);
+}\n\n// ===== LOGIN =====
 function selectUser(u) {
   selectedUser = u;
   document.querySelectorAll('.user-btn').forEach(b=>b.classList.remove('active'));
@@ -7253,7 +7339,7 @@ async function renderPreviasList() {
         <div style="padding:10px 14px">
           <div id="previa_editor_${e.id}" contenteditable="true" spellcheck="true"
             style="border:1.5px solid var(--blue);border-radius:10px;padding:14px;min-height:100px;font-family:var(--font-main);font-size:13px;line-height:1.7;outline:none;background:#fafeff"
-            onkeydown="if(event.key==='Enter'){event.stopPropagation();}">${e.contenido_html||''}</div>
+            onkeydown="if(event.key==='Enter'){event.stopPropagation();}" onpaste="limpiarPegado(event)">${e.contenido_html||''}</div>
           <div style="display:flex;gap:8px;margin-top:8px;justify-content:flex-end">
             <button onclick="cancelarEditarPrevia()" style="padding:5px 14px;border:1.5px solid var(--border);border-radius:8px;background:white;font-size:12px;cursor:pointer;font-family:var(--font-main)">Cancelar</button>
             <button onclick="guardarEditarPrevia(${e.id})" style="padding:5px 14px;border:none;border-radius:8px;background:var(--blue);color:white;font-size:12px;font-weight:600;cursor:pointer;font-family:var(--font-main)">💾 Guardar cambios</button>
@@ -8372,7 +8458,7 @@ function renderHistoria(data, mostrarContador, soloLectura) {
         <div style="padding:10px 14px">
           <div id="hc_editor_${e.id}" contenteditable="true" spellcheck="true"
             style="border:1.5px solid var(--blue);border-radius:10px;padding:14px;min-height:100px;font-family:var(--font-main);font-size:13px;line-height:1.7;outline:none;background:#fafeff"
-            onkeydown="if(event.key==='Enter'){event.stopPropagation();}">${e.contenido_html||''}</div>
+            onkeydown="if(event.key==='Enter'){event.stopPropagation();}" onpaste="limpiarPegado(event)">${e.contenido_html||''}</div>
           <div style="display:flex;gap:8px;margin-top:8px;justify-content:flex-end">
             <button onclick="_hcCancelarEditar()" style="padding:5px 14px;border:1.5px solid var(--border);border-radius:8px;background:white;font-size:12px;cursor:pointer;font-family:var(--font-main)">Cancelar</button>
             <button onclick="_hcGuardarEditar(${e.id})" style="padding:5px 14px;border:none;border-radius:8px;background:var(--blue);color:white;font-size:12px;font-weight:600;cursor:pointer;font-family:var(--font-main)">💾 Guardar cambios</button>
@@ -12797,6 +12883,7 @@ ${profNombre ? `<div class="prof-strip"><span class="prof-name">${profNombre}</s
         <label style="font-size:12px;font-weight:700;color:var(--text);display:block;margin-bottom:6px">Evolución:</label>
         <div id="evh_editor" contenteditable="true" spellcheck="true"
           onkeydown="if(event.key==='Enter'){event.stopPropagation();}"
+          onpaste="limpiarPegado(event)"
           placeholder="Escribí la evolución histórica aquí..."
           style="min-height:200px;border:1.5px solid var(--border);border-radius:10px;padding:14px;font-size:13px;font-family:var(--font-main);line-height:1.6;outline:none;color:var(--text)"></div>
       </div>
@@ -12805,6 +12892,7 @@ ${profNombre ? `<div class="prof-strip"><span class="prof-name">${profNombre}</s
         <label style="font-size:12px;font-weight:700;color:var(--text);display:block;margin-bottom:6px">Indicaciones (opcional):</label>
         <div id="evh_indicaciones" contenteditable="true" spellcheck="true"
           onkeydown="if(event.key==='Enter'){event.stopPropagation();}"
+          onpaste="limpiarPegado(event)"
           placeholder="Indicaciones de esa consulta..."
           style="min-height:80px;border:1.5px solid var(--border);border-radius:10px;padding:14px;font-size:13px;font-family:var(--font-main);line-height:1.6;outline:none;color:var(--text)"></div>
       </div>
@@ -19636,6 +19724,7 @@ ${profNombre?`<div class="prof"><span class="prof-name">${profNombre}</span>${pr
       <div id="doclibre_contenido" class="doc-libre-editor" contenteditable="true" spellcheck="true"
         data-placeholder="Escribí el contenido del documento aquí...&#10;&#10;Podés incluir diagnósticos, medicación actual, motivo de derivación, etc."
         onkeydown="if(event.key==='Enter'){event.stopPropagation();}"
+        onpaste="limpiarPegado(event)"
         style="border-radius:0 0 12px 12px;white-space:pre-wrap;word-break:break-word;"></div>
     </div>
     <div style="display:flex;gap:20px;margin-top:12px;align-items:center;flex-wrap:wrap">
