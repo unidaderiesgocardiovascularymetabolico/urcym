@@ -6920,7 +6920,7 @@ function generarPDF(tipo) {
       const segments = _parseRichTextSegments(elI);
       if (segments.length) {
         let curY = cY + 13;
-        const lineH = 4.6;
+        const lineH = 5.6;
         // Casi toda la hoja disponible para el texto en cualquier página;
         // el espacio de la firma se reserva según su tamaño real (ver más abajo).
         const maxYMid = PH - 22;
@@ -9121,15 +9121,21 @@ async function abrirModalHabitos() {
   if (evolClinicaSnapshot?.clinica?.hab_alimentacion_json)
     try { fuenteAli = JSON.parse(evolClinicaSnapshot.clinica.hab_alimentacion_json); } catch(e) {}
   if ((!fuenteAct || !fuenteAli) && pacienteActual?.dni) {
+    const _dniHabModal = pacienteActual.dni; // capturado antes del await
     try {
       const {data:_hr} = await sb.from('paciente_clinica')
         .select('hab_actividad_json,hab_alimentacion_json')
-        .eq('dni_paciente', pacienteActual.dni).maybeSingle();
-      if (_hr) {
+        .eq('dni_paciente', _dniHabModal).maybeSingle();
+      // Solo escribir en el snapshot compartido si seguimos en la MISMA pestaña de paciente
+      if (_hr && pacienteActual && String(pacienteActual.dni) === String(_dniHabModal)) {
         if (!evolClinicaSnapshot) evolClinicaSnapshot = {clinica:{},medicacion:[]};
         if (!evolClinicaSnapshot.clinica) evolClinicaSnapshot.clinica = {};
         if (_hr.hab_actividad_json)    { evolClinicaSnapshot.clinica.hab_actividad_json    = _hr.hab_actividad_json;    if(!fuenteAct) try{fuenteAct=JSON.parse(_hr.hab_actividad_json);}catch(e){} }
         if (_hr.hab_alimentacion_json) { evolClinicaSnapshot.clinica.hab_alimentacion_json = _hr.hab_alimentacion_json; if(!fuenteAli) try{fuenteAli=JSON.parse(_hr.hab_alimentacion_json);}catch(e){} }
+      } else if (_hr) {
+        // Cambiaron de pestaña: igual usamos los datos recién leídos solo para precargar ESTE modal
+        if (_hr.hab_actividad_json && !fuenteAct)    try{fuenteAct=JSON.parse(_hr.hab_actividad_json);}catch(e){}
+        if (_hr.hab_alimentacion_json && !fuenteAli) try{fuenteAli=JSON.parse(_hr.hab_alimentacion_json);}catch(e){}
       }
     } catch(e) { console.warn('[abrirModalHabitos] BD:', e); }
   }
@@ -9487,11 +9493,14 @@ function confirmarModalHabitos() {
   // Guardar en paciente_clinica AL INSTANTE
   (async function(){
     if(!_habDatos || !pacienteActual?.dni) return;
-    const _upd = {dni_paciente: pacienteActual.dni};
+    const _dniHab = pacienteActual.dni; // capturado ANTES del await: evita contaminar otra pestaña si se cambia de paciente mientras se guarda
+    const _upd = {dni_paciente: _dniHab};
     if(_habDatos.act) _upd.hab_actividad_json    = JSON.stringify(_habDatos.act);
     if(_habDatos.ali) _upd.hab_alimentacion_json = JSON.stringify(_habDatos.ali);
     if(Object.keys(_upd).length <= 1) return;
     try { await sb.from('paciente_clinica').upsert(_upd,{onConflict:'dni_paciente'}); } catch(e){}
+    // Solo tocar el snapshot en memoria si seguimos en la MISMA pestaña de paciente
+    if(!pacienteActual || String(pacienteActual.dni) !== String(_dniHab)) return;
     if(!evolClinicaSnapshot) evolClinicaSnapshot={clinica:{},medicacion:[]};
     if(!evolClinicaSnapshot.clinica) evolClinicaSnapshot.clinica={};
     if(_habDatos.act) evolClinicaSnapshot.clinica.hab_actividad_json    = JSON.stringify(_habDatos.act);
@@ -9674,10 +9683,13 @@ async function volcarActualizacion() {
       if(_habDatos?.ali) _hu.hab_alimentacion_json = JSON.stringify(_habDatos.ali);
       try {
         await sb.from('paciente_clinica').upsert(_hu,{onConflict:'dni_paciente'});
-        if(!evolClinicaSnapshot) evolClinicaSnapshot={clinica:{},medicacion:[]};
-        if(!evolClinicaSnapshot.clinica) evolClinicaSnapshot.clinica={};
-        if(_habDatos?.act) evolClinicaSnapshot.clinica.hab_actividad_json    = _hu.hab_actividad_json;
-        if(_habDatos?.ali) evolClinicaSnapshot.clinica.hab_alimentacion_json = _hu.hab_alimentacion_json;
+        // Solo tocar el snapshot compartido si seguimos en la MISMA pestaña de paciente
+        if(pacienteActual && String(pacienteActual.dni) === String(dni)) {
+          if(!evolClinicaSnapshot) evolClinicaSnapshot={clinica:{},medicacion:[]};
+          if(!evolClinicaSnapshot.clinica) evolClinicaSnapshot.clinica={};
+          if(_habDatos?.act) evolClinicaSnapshot.clinica.hab_actividad_json    = _hu.hab_actividad_json;
+          if(_habDatos?.ali) evolClinicaSnapshot.clinica.hab_alimentacion_json = _hu.hab_alimentacion_json;
+        }
       } catch(e){ console.warn('[hab upsert]',e); }
     }
 
@@ -9685,9 +9697,12 @@ async function volcarActualizacion() {
       sb.from('paciente_clinica').select('*').eq('dni_paciente', dni).maybeSingle(),
       sb.from('medicacion').select('*').eq('dni_paciente', dni).eq('activo', true).order('grupo')
     ]);
-    const snapFresco = { clinica: cr.data || (evolClinicaSnapshot?.clinica) || null, medicacion: mr.data || [] };
-    evolClinicaSnapshot = snapFresco;
-    window.actualizarEncabezadoVariable(snapFresco);
+    // Solo pisar el snapshot compartido y el encabezado si seguimos en la MISMA pestaña de paciente
+    if(pacienteActual && String(pacienteActual.dni) === String(dni)) {
+      const snapFresco = { clinica: cr.data || (evolClinicaSnapshot?.clinica) || null, medicacion: mr.data || [] };
+      evolClinicaSnapshot = snapFresco;
+      window.actualizarEncabezadoVariable(snapFresco);
+    }
   }
 
   // 3. Limpiar panel
@@ -9825,7 +9840,7 @@ function _crearPDFIndicacionesEvol(txt, usarOtro) {
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8);
   doc.setTextColor(35, 35, 35);
-  const lineH = 4.6;
+  const lineH = 5.6;
 
   function _addIndPage() {
     // Indicador continúa
@@ -19298,34 +19313,43 @@ window.abrirModalClinica=abrirModalClinica=async function(){
 var _origGuardarCli=guardarClinica;
 guardarClinica=async function(){
   var hab=leerTabActAli();
+  // Capturar el paciente ANTES del await: si el usuario cambia de pestaña mientras
+  // se guarda, esto evita que los datos de actividad física de este paciente
+  // terminen escritos en Supabase (o en el snapshot en memoria) del paciente nuevo.
+  var _dniGuardado = (typeof pacienteActual!=='undefined'&&pacienteActual) ? pacienteActual.dni : null;
   await _origGuardarCli();
-  if(hab&&typeof pacienteActual!=='undefined'&&pacienteActual){
-    var dni=pacienteActual.dni;
+  if(hab&&_dniGuardado){
+    var dni=_dniGuardado;
     if(hab.act||hab.ali){
       var _hu={dni_paciente:dni};
       if(hab.act) _hu.hab_actividad_json=JSON.stringify(hab.act);
       if(hab.ali) _hu.hab_alimentacion_json=JSON.stringify(hab.ali);
       sb.from('paciente_clinica').upsert(_hu,{onConflict:'dni_paciente'}).then(function(r){if(r.error)console.warn('[patch hab]',r.error.message);});
     }
-    if(typeof evolClinicaSnapshot==='undefined'||!evolClinicaSnapshot) evolClinicaSnapshot={clinica:{},medicacion:[]};
-    if(!evolClinicaSnapshot.clinica) evolClinicaSnapshot.clinica={};
-    if(hab.act) evolClinicaSnapshot.clinica.hab_actividad_json=JSON.stringify(hab.act);
-    if(hab.ali) evolClinicaSnapshot.clinica.hab_alimentacion_json=JSON.stringify(hab.ali);
-    {
-      // Re-volcar al bloque clinico en la evolucion con los nuevos datos de habitos
-      try{
-        var textoAct=generarTextoClinico(evolClinicaSnapshot.clinica, evolClinicaSnapshot.medicacion||[]);
-        if(textoAct){
-          var editor=document.getElementById('evol_editor');
-          if(editor){
-            var tmp=document.createElement('div'); tmp.innerHTML=textoAct;
-            var prevBloque=editor.querySelector('.bloque-clinico');
-            if(prevBloque) prevBloque.replaceWith(tmp.firstChild);
+    // Todo lo que sigue toca estado compartido (snapshot en memoria, editor visible):
+    // solo hacerlo si seguimos en la MISMA pestaña de paciente que guardó los datos.
+    var _seguimosEnMismoPaciente = typeof pacienteActual!=='undefined' && pacienteActual && String(pacienteActual.dni)===String(_dniGuardado);
+    if(_seguimosEnMismoPaciente){
+      if(typeof evolClinicaSnapshot==='undefined'||!evolClinicaSnapshot) evolClinicaSnapshot={clinica:{},medicacion:[]};
+      if(!evolClinicaSnapshot.clinica) evolClinicaSnapshot.clinica={};
+      if(hab.act) evolClinicaSnapshot.clinica.hab_actividad_json=JSON.stringify(hab.act);
+      if(hab.ali) evolClinicaSnapshot.clinica.hab_alimentacion_json=JSON.stringify(hab.ali);
+      {
+        // Re-volcar al bloque clinico en la evolucion con los nuevos datos de habitos
+        try{
+          var textoAct=generarTextoClinico(evolClinicaSnapshot.clinica, evolClinicaSnapshot.medicacion||[]);
+          if(textoAct){
+            var editor=document.getElementById('evol_editor');
+            if(editor){
+              var tmp=document.createElement('div'); tmp.innerHTML=textoAct;
+              var prevBloque=editor.querySelector('.bloque-clinico');
+              if(prevBloque) prevBloque.replaceWith(tmp.firstChild);
+            }
           }
-        }
-      }catch(e){ console.warn('[guardarClinica patch] re-volcar texto clinico:', e); }
+        }catch(e){ console.warn('[guardarClinica patch] re-volcar texto clinico:', e); }
+      }
+      precargarModalHabitosUpd(hab);
     }
-    precargarModalHabitosUpd(hab);
   }
 };
 // ══════════════════════════════════════════════════════════════════════════════
@@ -19927,7 +19951,7 @@ function generarPDFDocLibre() {
     const maxYMid = PH - 22;
     doc.setFont('helvetica', 'normal'); doc.setFontSize(9);
     doc.setTextColor(35, 35, 35);
-    const lineH = 5.0;
+    const lineH = 6.1;
 
     function _addDocLibrePage() {
       doc.setFont('helvetica', 'italic'); doc.setFontSize(7);
