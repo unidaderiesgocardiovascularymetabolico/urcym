@@ -7632,14 +7632,12 @@ async function guardarClinica() {
         await sb.from('evoluciones').update({
           clinica_snapshot: JSON.stringify(evolClinicaSnapshot)
         }).eq('id', evolHoy[0].id);
-      } else {
-        await sb.from('evoluciones').insert({
-          dni_paciente: dni,
-          fecha_hora: new Date().toISOString(),
-          contenido_html: '',
-          clinica_snapshot: JSON.stringify(evolClinicaSnapshot)
-        });
       }
+      // Si NO hay evolución de hoy, no creamos una fila nueva solo para el snapshot:
+      // eso generaba una "historia" vacía (contenido_html:'') en Historias previas
+      // cada vez que se guardaban datos clínicos sin evolucionar. Los datos ya
+      // quedaron guardados en paciente_clinica (arriba); el snapshot se adjuntará
+      // a la evolución real cuando el profesional efectivamente evolucione.
     } catch(snapErr) { console.warn('[guardarClinica] snapshot insert:', snapErr); }
     cerrarModal('modalClinica');
     window.actualizarEncabezadoVariable(evolClinicaSnapshot);
