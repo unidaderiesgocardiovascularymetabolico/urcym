@@ -19901,16 +19901,25 @@ function _renderDocLibreHeader() {
 function abrirDocumentoLibre(dni) {
   const p = pacientesData.find(x=>x.dni===dni);
   if(!p) return;
+  const contEl = document.getElementById('doclibre_contenido');
+  const hayContenidoPrevio = contEl && contEl.innerHTML.trim() && contEl.innerHTML.trim() !== '<br>';
+  const mismoPaciente = _docLibrePaciente && _docLibrePaciente.dni === dni;
+  // Solo se vacía el editor si es un paciente distinto o si todavía no había
+  // nada escrito. Si ya hay un documento sin descargar del mismo paciente
+  // (por ej. volviste a la historia y tocaste el ícono de nuevo), se respeta
+  // lo escrito: solo se pierde si el usuario lo cierra (Cancelar) o lo descarga.
+  if(!mismoPaciente || !hayContenidoPrevio) {
+    if(contEl) contEl.innerHTML = '';
+    const fc0 = document.getElementById('doclibre_fecha_check');
+    const sc0 = document.getElementById('doclibre_firma_check');
+    if(fc0) fc0.checked = true;
+    if(sc0) sc0.checked = false;
+    const dc0 = document.getElementById('doclibre_direccion');
+    if(dc0) dc0.value = 'ninguna';
+  }
   _docLibrePaciente = p;
-  document.getElementById('doclibre_contenido').innerHTML = '';
-  // reset checkboxes
-  const fc = document.getElementById('doclibre_fecha_check');
-  const sc = document.getElementById('doclibre_firma_check');
-  if(fc) fc.checked = true;
-  if(sc) sc.checked = false;
-  const dc = document.getElementById('doclibre_direccion');
-  if(dc) dc.value = 'ninguna';
   _renderDocLibreHeader();
+  const fc = document.getElementById('doclibre_fecha_check');
   if(fc && !fc._docLibreListener) {
     fc.addEventListener('change', _renderDocLibreHeader);
     fc._docLibreListener = true;
@@ -19944,7 +19953,24 @@ function volcarDocLibreAEvolucion() {
   const tmp = document.createElement('div'); tmp.innerHTML = bloque;
   editor.appendChild(tmp.firstChild);
   _asegurarLineaLibreEvol(editor);
-  document.getElementById('modalDocLibre').classList.remove('open');
+  // No se cierra el modal ni se borra el contenido: el documento sigue
+  // disponible en el cuadro para seguir editándolo o descargarlo como PDF.
+  // Solo se limpia al Cancelar (cerrar) o al descargar el PDF.
+  _toastDocLibre('✅ Volcado a la evolución');
+}
+
+function _toastDocLibre(msg) {
+  let t = document.getElementById('_doclibre_toast');
+  if(!t) {
+    t = document.createElement('div');
+    t.id = '_doclibre_toast';
+    t.style.cssText = 'position:fixed;bottom:28px;left:50%;transform:translateX(-50%);background:var(--blue-dark);color:#fff;border-radius:20px;padding:9px 22px;font-size:13px;font-weight:600;z-index:99999;pointer-events:none;opacity:0;transition:opacity .3s;font-family:inherit';
+    document.body.appendChild(t);
+  }
+  t.textContent = msg;
+  t.style.opacity = '1';
+  clearTimeout(t._t);
+  t._t = setTimeout(function(){ t.style.opacity = '0'; }, 2000);
 }
 
 function generarPDFDocLibre() {
@@ -20044,6 +20070,10 @@ function generarPDFDocLibre() {
     _pdfFooterOtro(doc, u, PW, PH, direccionPie);
 
     doc.save(filename);
+
+    // Ya se descargó: ahora sí se limpia el borrador y se cierra el modal.
+    if(contenidoEl) contenidoEl.innerHTML = '';
+    document.getElementById('modalDocLibre').classList.remove('open');
   });
 }
 
