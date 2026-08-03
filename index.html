@@ -2732,6 +2732,7 @@
             </div>
             <div id="evol_indicaciones_editor" class="evol-editor" contenteditable="true" spellcheck="true"
               placeholder="Escribí las indicaciones para el paciente..."
+              oninput="_marcarIndicacionesSinDescargar()"
               onkeydown="if(event.key==='Enter'){event.stopPropagation();}"
               onpaste="limpiarPegado(event)"
               style="border-radius:0 0 10px 10px;min-height:120px"></div>
@@ -3771,7 +3772,10 @@
 <!-- MODAL INDICACIONES -->
 <div class="modal-overlay" id="modalIndicaciones">
   <div class="modal modal-doc">
-    <div class="modal-title">Indicaciones</div>
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <div class="modal-title" style="margin:0">Indicaciones</div>
+      <button onclick="minimizarModal('modalIndicaciones','Indicaciones')" title="Minimizar (podés seguir trabajando en otra cosa y volver después sin perder lo escrito)" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--text-soft);line-height:1;padding:4px 6px;border-radius:8px" onmouseover="this.style.background='var(--gray)'" onmouseout="this.style.background='none'">🗕</button>
+    </div>
     <div class="doc-header" id="indHeader"></div>
     <div class="form-group">
       <label>Paciente</label>
@@ -8274,8 +8278,12 @@ async function abrirEvolucion(dni) {
   await _flushPendingSaves();
   // Guardar el DNI anterior ANTES de pisar pacienteActual (evita bug de duplicación entre pestañas)
   const _dniAnterior = pacienteActual ? String(pacienteActual.dni) : null;
-  // Si quedó una píldora de "Datos clínicos minimizado" de otro paciente, se descarta
-  if(typeof _quitarChipMinimizado === 'function') _quitarChipMinimizado('modalClinica');
+  // Si quedó una píldora de ventana minimizada de otro paciente, se descarta
+  if(typeof _quitarChipMinimizado === 'function') {
+    _quitarChipMinimizado('modalClinica');
+    _quitarChipMinimizado('modalIndicaciones');
+    _quitarChipMinimizado('modalDocLibre');
+  }
   pacienteActual = p;
   abrirTabPaciente(p);
   document.getElementById('evol_nombre').textContent = p.apellido + ', ' + p.nombre;
@@ -8294,6 +8302,7 @@ async function abrirEvolucion(dni) {
     });
     ['upd_tto'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
     const indEl=document.getElementById('evol_indicaciones_editor');if(indEl)indEl.innerHTML='';
+    _indicacionesPdfDescargado = false;
     const proxDiasEl=document.getElementById('evol_prox_dias');if(proxDiasEl)proxDiasEl.value='';
     const proxFechaEl=document.getElementById('evol_prox_fecha_display');if(proxFechaEl)proxFechaEl.textContent='';
     updTtoItems = []; renderTtoUpd();
@@ -9778,6 +9787,16 @@ async function abrirHistorialMed() {
 }
 
 // ===== INDICACIONES EN EVOLUCIÓN =====
+// _indicacionesPdfDescargado indica si el PDF de las indicaciones actualmente
+// escritas ya se descargó. Se pone en true al generar el PDF (o al enviarlo
+// por mail, que también lo genera) y se resetea a false apenas el texto
+// vuelve a cambiar, para no dar falsos positivos.
+let _indicacionesPdfDescargado = false;
+
+function _marcarIndicacionesSinDescargar() {
+  _indicacionesPdfDescargado = false;
+}
+
 function volcarIndicacionesAlEditor() {
   const indEl = document.getElementById('evol_indicaciones_editor');
   const txt = indEl ? indEl.innerHTML.trim() : '';
@@ -9789,8 +9808,13 @@ function volcarIndicacionesAlEditor() {
   const tmp = document.createElement('div'); tmp.innerHTML = bloque;
   editor.appendChild(tmp.firstChild);
   _asegurarLineaLibreEvol(editor);
-  // Limpiar el box de indicaciones tras volcar a evolución
-  if(indEl) indEl.innerHTML = '';
+  // Las indicaciones ya quedaron volcadas en la historia clínica (evolución).
+  // Solo se borra el cuadro de texto si el PDF correspondiente ya se descargó;
+  // si todavía no se descargó, se deja el texto para que no se pierda y el
+  // profesional pueda generarlo/enviarlo cuando quiera.
+  if(indEl && _indicacionesPdfDescargado) {
+    indEl.innerHTML = '';
+  }
 }
 
 function generarPDFIndicacionesEvol() {
@@ -9801,6 +9825,7 @@ function generarPDFIndicacionesEvol() {
   _getLogoPNG(function() {
     const { doc, filename } = _crearPDFIndicacionesEvol(txt, true);
     doc.save(filename);
+    _indicacionesPdfDescargado = true;
   });
 }
 
@@ -9885,6 +9910,7 @@ function enviarMailIndicacionesEvol() {
   _getLogoPNG(function() {
     const { doc, filename, hoy } = _crearPDFIndicacionesEvol(txt, true);
     doc.save(filename);
+    _indicacionesPdfDescargado = true;
     const u = users[selectedUser];
     setTimeout(() => {
       const asunto = encodeURIComponent('Indicaciones médicas - Evaluaciones cardiometabólicas - '+hoy);
@@ -11441,13 +11467,26 @@ window.restaurarModalMinimizado = restaurarModalMinimizado;
 function _quitarChipMinimizado(id) {
   const chip = document.getElementById('chip-min-' + id);
   if(chip) chip.remove();
+  _reacomodarChipsMinimizados();
 }
 window._quitarChipMinimizado = _quitarChipMinimizado;
+
+function _reacomodarChipsMinimizados() {
+  // Apila las píldoras minimizadas una encima de la otra para que,
+  // si hay más de una ventana minimizada a la vez (ej: Datos clínicos +
+  // Indicaciones + Documento libre), no se tapen entre sí y no se pierda
+  // el acceso a ninguna.
+  const chips = Array.from(document.querySelectorAll('.chip-min-flotante'));
+  chips.forEach(function(chip, i) {
+    chip.style.bottom = (24 + i * 58) + 'px';
+  });
+}
 
 function _mostrarChipMinimizado(id, label) {
   _quitarChipMinimizado(id);
   const chip = document.createElement('div');
   chip.id = 'chip-min-' + id;
+  chip.className = 'chip-min-flotante';
   chip.setAttribute('role','button');
   chip.onclick = function(){ restaurarModalMinimizado(id); };
   chip.style.cssText = 'position:fixed;bottom:24px;right:24px;z-index:500;background:var(--blue);color:white;'+
@@ -11457,6 +11496,7 @@ function _mostrarChipMinimizado(id, label) {
   chip.innerHTML = '📋 <span>' + label + '</span>' +
     '<span style="opacity:.85;font-size:11px;font-weight:500;border-left:1px solid rgba(255,255,255,.4);padding-left:8px">tocá para continuar</span>';
   document.body.appendChild(chip);
+  _reacomodarChipsMinimizados();
 }
 
 // Si el modal se cierra del todo (✕) o vuelve a abrirse con datos nuevos,
@@ -19718,7 +19758,10 @@ ${profNombre?`<div class="prof"><span class="prof-name">${profNombre}</span>${pr
 <!-- ===== MODAL DOCUMENTO LIBRE ===== -->
 <div class="modal-overlay" id="modalDocLibre">
   <div class="modal modal-doc" style="max-width:720px">
-    <div class="modal-title">📄 Documento libre</div>
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <div class="modal-title" style="margin:0">📄 Documento libre</div>
+      <button onclick="minimizarModal('modalDocLibre','Documento libre')" title="Minimizar (podés seguir trabajando en otra cosa y volver después sin perder lo escrito)" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--text-soft);line-height:1;padding:4px 6px;border-radius:8px" onmouseover="this.style.background='var(--gray)'" onmouseout="this.style.background='none'">🗕</button>
+    </div>
     <div class="doc-header" id="doclibre_header" style="margin-bottom:14px"></div>
     <div class="form-group">
       <label>Tipo de documento</label>
