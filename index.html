@@ -5284,7 +5284,7 @@ async function restaurarBorradorEvol(dni) {
   const { data } = await sb.from('paciente_tablas').select('datos').eq('dni_paciente', dni).eq('tipo','evol_borrador').maybeSingle();
   if(!data) return;
   try {
-    const { html } = JSON.parse(data.datos);
+    const { html } = (typeof data.datos === 'string' ? JSON.parse(data.datos) : data.datos);
     const editor = document.getElementById('evol_editor');
     if(editor && html) editor.innerHTML = html;
   } catch(e) {}
@@ -6227,7 +6227,7 @@ async function verLabReadonly(dni) {
   cont.innerHTML = '<div class="loading">Cargando...</div>';
   const tmpLab = {columnas:[],filas:[],unidades:{},extraFilas:[]};
   const { data } = await sb.from('paciente_tablas').select('*').eq('dni_paciente', dni).eq('tipo','lab').maybeSingle();
-  if(data) { try { Object.assign(tmpLab, JSON.parse(data.datos)); } catch(e){} }
+  if(data) { try { Object.assign(tmpLab, (typeof data.datos === 'string' ? JSON.parse(data.datos) : data.datos)); } catch(e){} }
   if(!tmpLab.columnas.length) {
     cont.innerHTML = '<p style="color:var(--text-soft);padding:20px">No hay laboratorio cargado para este paciente.</p>';
     return;
@@ -7643,9 +7643,9 @@ async function guardarClinica() {
     gpac_p:document.getElementById('gpac_p')?.value||null,
     gpac_a:document.getElementById('gpac_a')?.value||null,
     gpac_c:document.getElementById('gpac_c')?.value||null,
-    dx_acv_eventos: JSON.stringify(getEventosACV()),
+    dx_acv_eventos: getEventosACV(),
     dx_acv_nota:document.getElementById('dx_acv_nota')?.value||null,
-    dx_iam_eventos: JSON.stringify(getEventosIAM()),
+    dx_iam_eventos: getEventosIAM(),
     dx_iam_nota:document.getElementById('dx_iam_nota')?.value||null,
     dx_hta_fecha:document.getElementById('dx_hta_fecha')?.value||null,
     dx_hta_nota:document.getElementById('dx_hta_nota')?.value||null,
@@ -7671,7 +7671,7 @@ async function guardarClinica() {
     ali_notas:document.getElementById('ali_notas_generales')?.value||null,
     alc_notas:document.getElementById('alc_notas_generales')?.value||null,
     tab_notas:document.getElementById('tab_notas_generales')?.value||null,
-    quirurg_cirugias: JSON.stringify(getCirugias()),
+    quirurg_cirugias: getCirugias(),
     quirurg_notas: document.getElementById('quirurg_notas')?.value||null,
     actualizado_en:new Date().toISOString()
   };
@@ -9848,16 +9848,16 @@ function confirmarModalHabitos() {
     if(!_habDatos || !pacienteActual?.dni) return;
     const _dniHab = pacienteActual.dni; // capturado ANTES del await: evita contaminar otra pestaña si se cambia de paciente mientras se guarda
     const _upd = {dni_paciente: _dniHab};
-    if(_habDatos.act) _upd.hab_actividad_json    = JSON.stringify(_habDatos.act);
-    if(_habDatos.ali) _upd.hab_alimentacion_json = JSON.stringify(_habDatos.ali);
+    if(_habDatos.act) _upd.hab_actividad_json    = _habDatos.act;
+    if(_habDatos.ali) _upd.hab_alimentacion_json = _habDatos.ali;
     if(Object.keys(_upd).length <= 1) return;
     try { await sb.from('paciente_clinica').upsert(_upd,{onConflict:'dni_paciente'}); } catch(e){}
     // Solo tocar el snapshot en memoria si seguimos en la MISMA pestaña de paciente
     if(!pacienteActual || String(pacienteActual.dni) !== String(_dniHab)) return;
     if(!evolClinicaSnapshot) evolClinicaSnapshot={clinica:{},medicacion:[]};
     if(!evolClinicaSnapshot.clinica) evolClinicaSnapshot.clinica={};
-    if(_habDatos.act) evolClinicaSnapshot.clinica.hab_actividad_json    = JSON.stringify(_habDatos.act);
-    if(_habDatos.ali) evolClinicaSnapshot.clinica.hab_alimentacion_json = JSON.stringify(_habDatos.ali);
+    if(_habDatos.act) evolClinicaSnapshot.clinica.hab_actividad_json    = _habDatos.act;
+    if(_habDatos.ali) evolClinicaSnapshot.clinica.hab_alimentacion_json = _habDatos.ali;
   })();
 
   cerrarModalHabitos();
@@ -10032,8 +10032,8 @@ async function volcarActualizacion() {
     }
     if(_habDatos?.act || _habDatos?.ali) {
       const _hu = {dni_paciente: dni};
-      if(_habDatos?.act) _hu.hab_actividad_json    = JSON.stringify(_habDatos.act);
-      if(_habDatos?.ali) _hu.hab_alimentacion_json = JSON.stringify(_habDatos.ali);
+      if(_habDatos?.act) _hu.hab_actividad_json    = _habDatos.act;
+      if(_habDatos?.ali) _hu.hab_alimentacion_json = _habDatos.ali;
       try {
         await sb.from('paciente_clinica').upsert(_hu,{onConflict:'dni_paciente'});
         // Solo tocar el snapshot compartido si seguimos en la MISMA pestaña de paciente
@@ -10283,7 +10283,7 @@ async function cargarDatosTablasEvol(dni) {
   if(error) { console.error('[cargarDatosTablas ERROR]', error); return; }
   if(data) data.forEach(row => {
     try {
-      const d = JSON.parse(row.datos);
+      const d = (typeof row.datos === 'string' ? JSON.parse(row.datos) : row.datos);
       if(!d.extraFilas) d.extraFilas = [];
       if(!d.unidades) d.unidades = {};
       if(!d.columnas) d.columnas = [];
@@ -10329,7 +10329,7 @@ async function abrirHistoriaPaciente(dni) {
   const { data } = await sb.from('paciente_tablas').select('*').eq('dni_paciente', dni);
   if(data) data.forEach(row => {
     try {
-      const d = JSON.parse(row.datos);
+      const d = (typeof row.datos === 'string' ? JSON.parse(row.datos) : row.datos);
       if(!d.extraFilas) d.extraFilas = [];
       if(!d.unidades) d.unidades = {};
       if(row.tipo==='lab') Object.assign(tmpLab, d);
@@ -10403,7 +10403,7 @@ async function abrirAntropometriaSoloLectura(dni) {
   if(error) { console.error('[abrirAntropometriaSoloLectura ERROR]', error); if(wrap) wrap.innerHTML = '<div style="text-align:center;padding:24px;color:var(--red)">No se pudo cargar la antropometría.</div>'; return; }
   if(data) data.forEach(row => {
     try {
-      const d = JSON.parse(row.datos);
+      const d = (typeof row.datos === 'string' ? JSON.parse(row.datos) : row.datos);
       if(!d.extraFilas) d.extraFilas = [];
       if(!d.unidades) d.unidades = {};
       Object.assign(tmpAnt, d);
@@ -11555,7 +11555,7 @@ async function cargarVacunacion(dni) {
   try {
     const { data } = await sb.from('paciente_tablas')
       .select('datos').eq('dni_paciente', dni).eq('tipo', 'vac').maybeSingle();
-    if(data?.datos) vacDatos = JSON.parse(data.datos);
+    if(data?.datos) vacDatos = (typeof data.datos === 'string' ? JSON.parse(data.datos) : data.datos);
   } catch(e) {}
 }
 
@@ -12261,7 +12261,7 @@ async function mdpaGuardar() {
   if(nd) est.n_dias = parseInt(nd.value) || 7;
   const payload = {
     paciente_dni: mdpaPacDni, fecha_inicio: est.fecha_inicio,
-    n_dias: est.n_dias, tomas: JSON.stringify(est.tomas),
+    n_dias: est.n_dias, tomas: est.tomas,
     farmacos: est.farmacos || '',
     motivo: est.motivo || '',
     nota: est.nota || '',
@@ -19856,8 +19856,8 @@ guardarClinica=async function(){
     var dni=_dniGuardado;
     if(hab.act||hab.ali){
       var _hu={dni_paciente:dni};
-      if(hab.act) _hu.hab_actividad_json=JSON.stringify(hab.act);
-      if(hab.ali) _hu.hab_alimentacion_json=JSON.stringify(hab.ali);
+      if(hab.act) _hu.hab_actividad_json=hab.act;
+      if(hab.ali) _hu.hab_alimentacion_json=hab.ali;
       sb.from('paciente_clinica').upsert(_hu,{onConflict:'dni_paciente'}).then(function(r){if(r.error)console.warn('[patch hab]',r.error.message);});
     }
     // Todo lo que sigue toca estado compartido (snapshot en memoria, editor visible):
@@ -19866,8 +19866,8 @@ guardarClinica=async function(){
     if(_seguimosEnMismoPaciente){
       if(typeof evolClinicaSnapshot==='undefined'||!evolClinicaSnapshot) evolClinicaSnapshot={clinica:{},medicacion:[]};
       if(!evolClinicaSnapshot.clinica) evolClinicaSnapshot.clinica={};
-      if(hab.act) evolClinicaSnapshot.clinica.hab_actividad_json=JSON.stringify(hab.act);
-      if(hab.ali) evolClinicaSnapshot.clinica.hab_alimentacion_json=JSON.stringify(hab.ali);
+      if(hab.act) evolClinicaSnapshot.clinica.hab_actividad_json=hab.act;
+      if(hab.ali) evolClinicaSnapshot.clinica.hab_alimentacion_json=hab.ali;
       {
         // Re-volcar al bloque clinico en la evolucion con los nuevos datos de habitos
         try{
