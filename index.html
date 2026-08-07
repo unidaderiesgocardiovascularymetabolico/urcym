@@ -6941,18 +6941,22 @@ function _parseRichTextSegments(container) {
   function walk(node, bold, italic, color, underline) {
     if(node.nodeType === 3) { // text node
       var txt = node.textContent;
-      if(txt) segments.push({text:txt, bold:bold, italic:italic, color:color, underline:underline, isNewLine:false});
+      if(txt) {
+        // Manejar saltos de línea dentro del nodo de texto (ej: \n dentro de <b>)
+        var partes = txt.split('\n');
+        partes.forEach(function(parte, idx) {
+          if(idx > 0) segments.push({text:'', bold:bold, italic:italic, color:color, underline:underline, isNewLine:true});
+          if(parte) segments.push({text:parte, bold:bold, italic:italic, color:color, underline:underline, isNewLine:false});
+        });
+      }
       return;
     }
     if(node.nodeType !== 1) return;
     var tag = node.tagName ? node.tagName.toUpperCase() : '';
-    // Detectar si es un elemento de bloque que representa un salto de línea real.
-    // Incluimos también DIVs anidados que contengan texto (no solo los hijos directos del editor)
-    // para capturar correctamente los saltos generados por Enter en contenteditable.
-    var esBloque = ['P','DIV','LI','H1','H2','H3','H4','H5','H6'].indexOf(tag) >= 0;
-    // Solo agregar newline si el bloque tiene contenido de texto (no contenedores vacíos)
-    var tieneTexto = node.textContent && node.textContent.trim().length > 0;
-    if(esBloque && segments.length > 0 && tieneTexto) {
+    // DIV/P hijo directo del editor = salto de línea real (Enter)
+    // DIV anidado dentro de otro elemento = contenedor de formato, NO genera salto
+    var esLineaReal = ['P','DIV','LI','H1','H2','H3','H4','H5','H6'].indexOf(tag)>=0 && node.parentNode === container;
+    if(esLineaReal && segments.length>0) {
       segments.push({text:'', bold:false, italic:false, color:null, underline:false, isNewLine:true});
     }
     if(tag === 'BR') {
@@ -6962,7 +6966,6 @@ function _parseRichTextSegments(container) {
     var isBold = bold || tag==='B' || tag==='STRONG';
     var isItalic = italic || tag==='I' || tag==='EM';
     var isUnderline = underline || tag==='U';
-    // Extract color from style
     var nodeColor = color;
     if(node.style) {
       var fc = node.style.color;
@@ -6981,7 +6984,12 @@ function _parseRichTextSegments(container) {
       if(node.style.textDecoration&&node.style.textDecoration.indexOf('underline')>=0) isUnderline=true;
     }
     node.childNodes.forEach(function(child){ walk(child, isBold, isItalic, nodeColor, isUnderline); });
+    // Newline al final del bloque también (para capturar el Enter después del texto)
+    if(esLineaReal) {
+      segments.push({text:'', bold:false, italic:false, color:null, underline:false, isNewLine:true});
+    }
   }
+  walk(container, false, false, null, false);
   // Colapsar saltos de línea consecutivos (por si quedó alguno duplicado)
   var sinDuplicados = [];
   segments.forEach(function(s){
