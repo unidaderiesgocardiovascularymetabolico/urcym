@@ -5245,6 +5245,40 @@ async function _archivarPacienteTabla(dni, tipo) {
   } catch(e) { console.warn('_archivarPacienteTabla:', e); }
 }
 
+// ===== TOAST DISCRETO =====
+function showToast(msg, tipo='ok', duracion=2000) {
+  const t = document.createElement('div');
+  const color = tipo==='ok' ? '#22a06b' : tipo==='warn' ? '#e08c3a' : '#e25247';
+  const icon  = tipo==='ok' ? '✓' : tipo==='warn' ? '⚠' : '✕';
+  t.style.cssText = `position:fixed;bottom:20px;right:20px;background:${color};color:white;
+    padding:7px 14px;border-radius:20px;z-index:9999;font-size:12px;font-weight:600;
+    font-family:var(--font-main);box-shadow:0 2px 8px rgba(0,0,0,.2);
+    opacity:0;transition:opacity .25s;pointer-events:none;max-width:360px`;
+  t.textContent = icon + ' ' + msg;
+  document.body.appendChild(t);
+  requestAnimationFrame(()=>{ t.style.opacity='1'; });
+  setTimeout(()=>{ t.style.opacity='0'; setTimeout(()=>t.remove(), 300); }, duracion);
+}
+
+// ===== VERIFICACIÓN DE ESQUEMA AL INICIAR =====
+async function verificarEsquema() {
+  try {
+    const { error } = await sb.from('paciente_tablas')
+      .upsert({dni_paciente:'__test__', tipo:'__test__', datos:{_ok:true}},
+              {onConflict:'dni_paciente,tipo'});
+    if(error) {
+      console.error('[URCyM esquema] Error en paciente_tablas:', error.message);
+      showToast('⚠ Error de conexión con la base de datos', 'error', 8000);
+      return false;
+    }
+    await sb.from('paciente_tablas').delete().eq('dni_paciente','__test__').eq('tipo','__test__');
+    return true;
+  } catch(e) {
+    console.error('[URCyM esquema]', e);
+    return false;
+  }
+}
+
 async function guardarDatosPac(wrapId) {
   const dni = pacHistoriaDni || pacienteActual?.dni;
   if(!dni) return;
@@ -5257,15 +5291,10 @@ async function guardarDatosPac(wrapId) {
     {onConflict:'dni_paciente,tipo'}
   );
   if(error) {
-    const msg = document.createElement('div');
-    msg.style.cssText = 'position:fixed;bottom:20px;right:20px;background:#e25247;color:white;padding:10px 16px;border-radius:10px;z-index:9999;font-size:13px;font-family:var(--font-main)';
-    msg.textContent = '⚠️ Error al guardar: ' + (error.message || '') +
-      (error.code ? ' [code:' + error.code + ']' : '') +
-      (error.details ? ' — detalle: ' + error.details : '') +
-      (error.hint ? ' — hint: ' + error.hint : '');
-    msg.style.maxWidth = '480px';
-    document.body.appendChild(msg);
-    setTimeout(()=>msg.remove(), 20000);
+    showToast('Error al guardar — ' + (error.hint||error.message||''), 'error', 15000);
+    console.error('[guardarDatosPac]', error);
+  } else {
+    showToast('Guardado', 'ok', 1500);
   }
 }
 
@@ -5548,6 +5577,8 @@ function doLogin() {
     document.getElementById('app').style.display = 'block';
     document.getElementById('topbarUser').textContent = currentUser.mp ? currentUser.titulo + ' · ' + currentUser.mp : currentUser.titulo;
     document.getElementById('dashWelcome').textContent = 'Hola, ' + currentUser.name;
+    // Verificar esquema de base de datos al iniciar
+    verificarEsquema();
     // Mostrar/ocultar tabs según rol
     var navFinanzas = document.getElementById('nav-tab-finanzas');
     var navMisPacientes = document.getElementById('nav-tab-mis-pacientes');
@@ -6915,13 +6946,13 @@ function _parseRichTextSegments(container) {
     }
     if(node.nodeType !== 1) return;
     var tag = node.tagName ? node.tagName.toUpperCase() : '';
-    // Un DIV/P/LI solo representa una línea real (Enter) cuando está pegado
-    // directamente al editor. El navegador también envuelve texto en DIVs
-    // anidados al aplicar formato (ej: subrayado), y esos NO deben generar
-    // un salto de línea — si no, subrayar un fragmento "daba enter".
-    var esLineaReal = ['P','DIV','LI','H1','H2','H3','H4','H5','H6'].indexOf(tag)>=0 && node.parentNode === container;
-    // Block-level elements get a newline before them (except the first)
-    if(esLineaReal && segments.length>0) {
+    // Detectar si es un elemento de bloque que representa un salto de línea real.
+    // Incluimos también DIVs anidados que contengan texto (no solo los hijos directos del editor)
+    // para capturar correctamente los saltos generados por Enter en contenteditable.
+    var esBloque = ['P','DIV','LI','H1','H2','H3','H4','H5','H6'].indexOf(tag) >= 0;
+    // Solo agregar newline si el bloque tiene contenido de texto (no contenedores vacíos)
+    var tieneTexto = node.textContent && node.textContent.trim().length > 0;
+    if(esBloque && segments.length > 0 && tieneTexto) {
       segments.push({text:'', bold:false, italic:false, color:null, underline:false, isNewLine:true});
     }
     if(tag === 'BR') {
@@ -6936,14 +6967,13 @@ function _parseRichTextSegments(container) {
     if(node.style) {
       var fc = node.style.color;
       if(fc) {
-        // convert rgb(...) to hex if needed
         var m = fc.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/);
         if(m) {
           nodeColor = '#'+[m[1],m[2],m[3]].map(function(v){return('0'+parseInt(v).toString(16)).slice(-2)}).join('');
         } else if(fc.indexOf('#')===0) {
           nodeColor = fc;
         } else {
-          nodeColor = fc; // named color fallback
+          nodeColor = fc;
         }
       }
       if(node.style.fontWeight==='bold'||node.style.fontWeight==='700') isBold=true;
@@ -6951,12 +6981,7 @@ function _parseRichTextSegments(container) {
       if(node.style.textDecoration&&node.style.textDecoration.indexOf('underline')>=0) isUnderline=true;
     }
     node.childNodes.forEach(function(child){ walk(child, isBold, isItalic, nodeColor, isUnderline); });
-    // Add newline after block elements
-    if(esLineaReal) {
-      segments.push({text:'', bold:false, italic:false, color:null, underline:false, isNewLine:true});
-    }
   }
-  walk(container, false, false, null, false);
   // Colapsar saltos de línea consecutivos (por si quedó alguno duplicado)
   var sinDuplicados = [];
   segments.forEach(function(s){
@@ -9036,7 +9061,7 @@ async function guardarEvolucion() {
     error = r2.error;
   }
   if(error) {
-    alert('Error al guardar: ' + error.message);
+    showToast('Error al guardar evolución — ' + (error.message||''), 'error', 10000);
     btnGuardar.disabled = false;
     btnGuardar.textContent = '💾 Guardar evolución';
     return;
