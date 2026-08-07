@@ -6938,70 +6938,63 @@ function _docLibreSetColor(color) {
 // Walk DOM nodes and extract text segments with bold/italic/color info
 function _parseRichTextSegments(container) {
   var segments = [];
-  function walk(node, bold, italic, color, underline) {
-    if(node.nodeType === 3) { // text node
-      var txt = node.textContent;
-      if(txt) {
-        // Manejar saltos de línea dentro del nodo de texto (ej: \n dentro de <b>)
-        var partes = txt.split('\n');
-        partes.forEach(function(parte, idx) {
-          if(idx > 0) segments.push({text:'', bold:bold, italic:italic, color:color, underline:underline, isNewLine:true});
-          if(parte) segments.push({text:parte, bold:bold, italic:italic, color:color, underline:underline, isNewLine:false});
-        });
-      }
-      return;
-    }
-    if(node.nodeType !== 1) return;
-    var tag = node.tagName ? node.tagName.toUpperCase() : '';
-    // DIV/P hijo directo del editor = salto de línea real (Enter)
-    // DIV anidado dentro de otro elemento = contenedor de formato, NO genera salto
-    var esLineaReal = ['P','DIV','LI','H1','H2','H3','H4','H5','H6'].indexOf(tag)>=0 && node.parentNode === container;
-    if(esLineaReal && segments.length>0) {
-      segments.push({text:'', bold:false, italic:false, color:null, underline:false, isNewLine:true});
-    }
-    if(tag === 'BR') {
-      segments.push({text:'', bold:false, italic:false, color:null, underline:false, isNewLine:true});
-      return;
-    }
-    // <div><br></div> hijo directo = línea en blanco (doble Enter)
-    // Solo el BR ya genera un newline, el div agrega otro → línea vacía visible
-    var esDivVacio = esLineaReal && node.childNodes.length === 1 && 
-                     node.childNodes[0].nodeName === 'BR';
-    if(esDivVacio) {
-      segments.push({text:'', bold:false, italic:false, color:null, underline:false, isNewLine:true});
-      return; // el BR interno ya fue contado arriba, no procesar hijos
-    }
-    var isBold = bold || tag==='B' || tag==='STRONG';
-    var isItalic = italic || tag==='I' || tag==='EM';
-    var isUnderline = underline || tag==='U';
-    var nodeColor = color;
-    // Manejar tag <font color="..."> generado por execCommand('foreColor')
-    if(tag === 'FONT' && node.getAttribute('color')) {
-      nodeColor = node.getAttribute('color');
-    }
-    if(node.style) {
-      var fc = node.style.color;
-      if(fc) {
-        var m = fc.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/);
-        if(m) {
-          nodeColor = '#'+[m[1],m[2],m[3]].map(function(v){return('0'+parseInt(v).toString(16)).slice(-2)}).join('');
-        } else if(fc.indexOf('#')===0) {
-          nodeColor = fc;
-        } else {
-          nodeColor = fc;
+
+  // Procesa los hijos directos del container primero para detectar
+  // correctamente los saltos de línea (DIV/P = Enter en contenteditable)
+  function walkChildren(nodes, bold, italic, color, underline, isDirectChild) {
+    nodes.forEach(function(node) {
+      if(node.nodeType === 3) {
+        var txt = node.textContent;
+        if(txt) {
+          var partes = txt.split('\n');
+          partes.forEach(function(parte, idx) {
+            if(idx > 0) segments.push({text:'', bold:bold, italic:italic, color:color, underline:underline, isNewLine:true});
+            if(parte) segments.push({text:parte, bold:bold, italic:italic, color:color, underline:underline, isNewLine:false});
+          });
         }
+        return;
       }
-      if(node.style.fontWeight==='bold'||node.style.fontWeight==='700') isBold=true;
-      if(node.style.fontStyle==='italic') isItalic=true;
-      if(node.style.textDecoration&&node.style.textDecoration.indexOf('underline')>=0) isUnderline=true;
-    }
-    node.childNodes.forEach(function(child){ walk(child, isBold, isItalic, nodeColor, isUnderline); });
-    // Newline al final del bloque también (para capturar el Enter después del texto)
-    if(esLineaReal) {
-      segments.push({text:'', bold:false, italic:false, color:null, underline:false, isNewLine:true});
-    }
+      if(node.nodeType !== 1) return;
+      var tag = node.tagName ? node.tagName.toUpperCase() : '';
+
+      if(tag === 'BR') {
+        segments.push({text:'', bold:false, italic:false, color:null, underline:false, isNewLine:true});
+        return;
+      }
+
+      var esBloque = isDirectChild && ['P','DIV','LI','H1','H2','H3','H4','H5','H6'].indexOf(tag) >= 0;
+
+      if(esBloque && segments.length > 0) {
+        segments.push({text:'', bold:false, italic:false, color:null, underline:false, isNewLine:true});
+      }
+
+      var isBold = bold || tag==='B' || tag==='STRONG';
+      var isItalic = italic || tag==='I' || tag==='EM';
+      var isUnderline = underline || tag==='U';
+      var nodeColor = color;
+
+      if(tag === 'FONT' && node.getAttribute('color')) {
+        nodeColor = node.getAttribute('color');
+      }
+      if(node.style) {
+        var fc = node.style.color;
+        if(fc) {
+          var m = fc.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/);
+          if(m) {
+            nodeColor = '#'+[m[1],m[2],m[3]].map(function(v){return('0'+parseInt(v).toString(16)).slice(-2)}).join('');
+          } else if(fc.indexOf('#')===0) { nodeColor = fc; } else { nodeColor = fc; }
+        }
+        if(node.style.fontWeight==='bold'||node.style.fontWeight==='700') isBold=true;
+        if(node.style.fontStyle==='italic') isItalic=true;
+        if(node.style.textDecoration&&node.style.textDecoration.indexOf('underline')>=0) isUnderline=true;
+      }
+
+      // Procesar hijos — los hijos de un bloque NO son hijos directos del container
+      walkChildren(Array.from(node.childNodes), isBold, isItalic, nodeColor, isUnderline, false);
+    });
   }
-  walk(container, false, false, null, false);
+
+  walkChildren(Array.from(container.childNodes), false, false, null, false, true);
   // Colapsar saltos de línea consecutivos (por si quedó alguno duplicado)
   var sinDuplicados = [];
   segments.forEach(function(s){
