@@ -429,6 +429,16 @@
     /* Sidebar sections */
     .evol-sidebar-section { background:white; border-radius:14px; border:1px solid var(--border); padding:14px 16px; }
     .evol-sidebar-title { font-family:var(--font-display); font-size:11px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--text-soft); margin-bottom:10px; }
+    .calc-semaforo-item{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:9px;cursor:pointer;transition:background .15s}
+    .calc-semaforo-item:hover{background:var(--gray)}
+    .calc-semaforo-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0;box-shadow:0 0 0 3px rgba(0,0,0,.04)}
+    .calc-semaforo-nombre{font-size:11.5px;font-weight:600;color:var(--text);flex:1;line-height:1.25}
+    .calc-semaforo-val{font-size:11px;font-weight:700;white-space:nowrap}
+    .calc-semaforo-empty{font-size:11px;color:var(--text-soft);padding:6px 8px;border-radius:9px;cursor:pointer;line-height:1.4;transition:background .15s}
+    .calc-semaforo-empty:hover{background:var(--gray);color:var(--text)}
+    .alerta-item{display:flex;align-items:flex-start;gap:7px;padding:5px 6px;border-radius:8px;font-size:11px;color:#7a5c00;line-height:1.4}
+    .alerta-item:hover{background:rgba(245,158,11,.08)}
+    .alerta-item .ai-dot{flex-shrink:0;margin-top:3px;width:5px;height:5px;border-radius:50%;background:#f59e0b}
     /* Tabla TA */
     .ta-table { width:100%; border-collapse:collapse; font-size:12px; }
     .ta-table th { background:var(--gray); padding:5px 3px; text-align:center; font-size:10px; font-weight:600; letter-spacing:.05em; text-transform:uppercase; color:var(--text-soft); }
@@ -454,6 +464,20 @@
     .evol-campo-row input { width:88px; padding:5px 7px; border:1.5px solid var(--border); border-radius:7px; text-align:center; font-size:12px; background:var(--gray); outline:none; }
     .evol-campo-row input:focus { border-color:var(--blue); background:white; }
     .evol-calc-result { width:88px; text-align:center; font-size:13px; font-weight:600; color:var(--text); }
+    /* Antropometría — placa rediseñada */
+    .evol-antro-card { background:linear-gradient(160deg,#ffffff,#f7fbfd); }
+    .evol-antro-nota { display:none; font-size:10px; color:var(--teal); font-weight:600; margin:-4px 0 9px; }
+    .evol-antro-nota.show { display:block; }
+    .evol-antro-row { display:flex; align-items:center; gap:8px; margin-bottom:8px; }
+    .evol-antro-ico { font-size:14px; width:18px; text-align:center; flex-shrink:0; }
+    .evol-antro-row label { color:var(--text-soft); font-size:12px; flex:1; }
+    .evol-antro-row input { width:72px; padding:6px 8px; border:1.5px solid var(--border); border-radius:8px; text-align:center; font-size:13px; font-weight:600; background:var(--gray); outline:none; transition:border-color .15s,background .15s; }
+    .evol-antro-row input:focus { border-color:var(--blue); background:white; }
+    .evol-antro-unidad { font-size:10px; color:var(--text-soft); width:20px; flex-shrink:0; }
+    .evol-antro-imc-box { display:flex; align-items:baseline; gap:8px; margin-top:10px; padding-top:10px; border-top:1px dashed var(--border); }
+    .evol-antro-imc-lbl { font-size:11px; font-weight:700; color:var(--text-soft); text-transform:uppercase; letter-spacing:.04em; }
+    .evol-antro-imc-val { font-size:19px; font-weight:800; font-family:var(--font-display); color:var(--text); }
+    .evol-antro-imc-cat { font-size:11px; font-weight:700; margin-left:auto; }
     /* HC lectura */
     .hc-entrada { background:white; border-radius:14px; border:1px solid var(--border); border-left:5px solid var(--border); margin-bottom:16px; overflow:hidden; }
     /* Coloreado alternado por bloque de evolución, para diferenciar claramente cada entrada de la siguiente */
@@ -2682,6 +2706,12 @@
           <div class="evh-title">Hábitos</div>
           <div id="evh_habitos" class="evh-habitos"></div>
         </div>
+        <!-- TA promedio (última consulta) -->
+        <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-width:80px;gap:2px">
+          <div style="font-size:10px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--text-soft)">TA prom.</div>
+          <div id="evh_ta_badge" style="font-size:20px;font-weight:800;color:var(--text-soft)">—</div>
+          <div id="evh_ta_label" style="font-size:9px;color:var(--text-soft);text-align:center"></div>
+        </div>
         <!-- PREVENT semáforo -->
         <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-width:90px;gap:2px">
           <div style="font-size:10px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--text-soft)">PREVENT</div>
@@ -2893,25 +2923,48 @@
             </div>
           </div>
 
+          <!-- Sugerencias / alertas suaves del paciente -->
+          <div class="evol-sidebar-section" id="evol_alertas_wrap" style="display:none;background:#fffdf5;border-color:#f3e2b3">
+            <div class="evol-sidebar-title" style="display:flex;align-items:center;justify-content:space-between;cursor:pointer" onclick="toggleAlertasPaciente()">
+              <span>💡 Sugerencias</span>
+              <span id="evol_alertas_toggle" style="font-size:10px;color:var(--text-soft)">ocultar ▾</span>
+            </div>
+            <div id="evol_alertas_lista" style="display:flex;flex-direction:column;gap:5px"></div>
+          </div>
+
           <!-- Antropometría de la consulta (peso/talla/IMC/cintura quedan acá; el score PREVENT se movió a la pestaña Calculadoras) -->
-          <div class="evol-sidebar-section">
-            <div class="evol-sidebar-title">Antropometría</div>
-            <div class="evol-campo-row">
-              <label>Peso (kg)</label>
+          <div class="evol-sidebar-section evol-antro-card">
+            <div class="evol-sidebar-title">📐 Antropometría</div>
+            <div class="evol-antro-nota" id="evol_antro_nota">↳ autocompletado con el último registro</div>
+            <div class="evol-antro-row">
+              <span class="evol-antro-ico">⚖️</span>
+              <label>Peso</label>
               <input type="number" id="evol_peso" step="0.1" placeholder="—" oninput="actualizarIMC();calcularPREVENT()"/>
+              <span class="evol-antro-unidad">kg</span>
             </div>
-            <div class="evol-campo-row">
-              <label>Talla (cm)</label>
+            <div class="evol-antro-row">
+              <span class="evol-antro-ico">📏</span>
+              <label>Talla</label>
               <input type="number" id="evol_talla" placeholder="—" oninput="actualizarIMC();calcularPREVENT()"/>
+              <span class="evol-antro-unidad">cm</span>
             </div>
-            <div class="evol-campo-row">
-              <label>IMC</label>
-              <div id="evol_imc" class="evol-calc-result">—</div>
+            <div class="evol-antro-row">
+              <span class="evol-antro-ico">📊</span>
+              <label>Cintura</label>
+              <input type="number" id="evol_cintura" placeholder="—" oninput="calcularPREVENT()"/>
+              <span class="evol-antro-unidad">cm</span>
             </div>
-            <div class="evol-campo-row">
-              <label>Cintura (cm)</label>
-              <input type="number" id="evol_cintura" placeholder="—"/>
+            <div class="evol-antro-imc-box" id="evol_imc_box">
+              <span class="evol-antro-imc-lbl">IMC</span>
+              <span id="evol_imc" class="evol-antro-imc-val">—</span>
+              <span id="evol_imc_cat" class="evol-antro-imc-cat"></span>
             </div>
+          </div>
+
+          <!-- Semáforo de calculadoras: resumen de las que ya tienen resultado para este paciente -->
+          <div class="evol-sidebar-section" id="evol_calc_resumen_wrap" style="display:none">
+            <div class="evol-sidebar-title">🧮 Calculadoras</div>
+            <div id="evol_calc_resumen_lista" style="display:flex;flex-direction:column;gap:5px"></div>
           </div>
 
           </div></div>
@@ -3117,7 +3170,7 @@
       <div id="pmain-adip" style="display:none;padding:16px 28px 28px;width:100%;box-sizing:border-box">
         <div class="mdpa-topbar">
           <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-            <span style="font-size:12px;color:var(--text-soft);font-style:italic">Tratamientos farmacológicos de adiposidad</span>
+            <span style="font-size:12px;color:var(--text-soft);font-style:italic">Tratamientos de adiposidad — farmacológico o bariátrica</span>
             <div class="mdpa-estudios-list" id="adip_pills_list"></div>
             <button class="mdpa-nuevo-btn" onclick="adipNuevoTratamiento()">+ Nuevo tratamiento</button>
           </div>
@@ -3136,7 +3189,18 @@
             <input type="date" lang="es-AR" id="adip_fecha_control" oninput="adipActualizarCampo()" style="padding:5px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;font-family:var(--font-main);background:white;outline:none"/>
             <div id="adip_guardado_badge" style="display:none;background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:3px 10px;font-size:11px;font-weight:600;color:#16a34a">✓ Guardado</div>
           </div>
-          <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap;background:var(--gray);border:1px solid var(--border);border-radius:10px;padding:8px 12px">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap">
+            <span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-soft)">Tipo de tratamiento:</span>
+            <div style="display:flex;gap:6px">
+              <label style="display:flex;align-items:center;gap:5px;padding:5px 12px;border:1.5px solid var(--border);border-radius:20px;cursor:pointer;font-size:12px;font-weight:600;color:var(--text);background:white">
+                <input type="radio" name="adip_tipo_tratamiento" id="adip_tipo_farm" value="farmacologico" onchange="adipCambiarTipoTratamiento()" style="accent-color:var(--blue);margin:0"/> 💊 Farmacológico
+              </label>
+              <label style="display:flex;align-items:center;gap:5px;padding:5px 12px;border:1.5px solid var(--border);border-radius:20px;cursor:pointer;font-size:12px;font-weight:600;color:var(--text);background:white">
+                <input type="radio" name="adip_tipo_tratamiento" id="adip_tipo_bar" value="bariatrica" onchange="adipCambiarTipoTratamiento()" style="accent-color:var(--blue);margin:0"/> 🔪 Bariátrica
+              </label>
+            </div>
+          </div>
+          <div id="adip_farm_wrap" style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap;background:var(--gray);border:1px solid var(--border);border-radius:10px;padding:8px 12px">
             <div style="display:flex;align-items:center;gap:7px;flex:1;min-width:180px">
               <span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-soft)">💊 Droga:</span>
               <input type="text" id="adip_droga_input" placeholder="Ej: Liraglutide" oninput="adipActualizarCampo()" style="flex:1;padding:3px 8px;border:1.5px solid var(--border);border-radius:7px;font-size:12px;font-family:var(--font-main);background:white;outline:none;min-width:140px"/>
@@ -3145,6 +3209,20 @@
             <div style="display:flex;align-items:center;gap:7px;flex:1;min-width:140px">
               <span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-soft)">Dosis:</span>
               <input type="text" id="adip_dosis_input" placeholder="Ej: 0.6mg/día" oninput="adipActualizarCampo()" style="flex:1;padding:3px 8px;border:1.5px solid var(--border);border-radius:7px;font-size:12px;font-family:var(--font-main);background:white;outline:none;min-width:120px"/>
+            </div>
+          </div>
+          <div id="adip_bar_wrap" style="display:none;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap;background:var(--gray);border:1px solid var(--border);border-radius:10px;padding:8px 12px">
+            <div style="display:flex;align-items:center;gap:7px;flex:1;min-width:200px">
+              <span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-soft)">🔪 Tipo de cirugía:</span>
+              <select id="adip_cirugia_select" onchange="adipActualizarCampo()" style="flex:1;padding:4px 8px;border:1.5px solid var(--border);border-radius:7px;font-size:12px;font-family:var(--font-main);background:white;outline:none;min-width:180px">
+                <option value="">—</option>
+                <option value="Manga gástrica (sleeve)">Manga gástrica (sleeve)</option>
+                <option value="Bypass gástrico en Y de Roux">Bypass gástrico en Y de Roux</option>
+                <option value="Banda gástrica ajustable">Banda gástrica ajustable</option>
+                <option value="Derivación biliopancreática">Derivación biliopancreática</option>
+                <option value="Balón intragástrico">Balón intragástrico</option>
+                <option value="Otra">Otra</option>
+              </select>
             </div>
           </div>
 
@@ -3186,7 +3264,7 @@
               </div>
               <div class="mdpa-acciones">
                 <button onclick="adipVolcarAEditor()" style="padding:8px 16px;border:1.5px solid var(--teal);border-radius:9px;background:var(--teal-light);color:var(--teal);font-size:12px;font-weight:600;cursor:pointer;font-family:var(--font-main)">📋 Volcar a la evolución</button>
-                <button onclick="adipImprimirInforme()" style="padding:8px 16px;border:1.5px solid var(--blue);border-radius:9px;background:var(--blue-light);color:var(--blue);font-size:12px;font-weight:600;cursor:pointer;font-family:var(--font-main)">🖨️ Imprimir informe</button>
+                <button onclick="adipAbrirOpcionesInforme()" style="padding:8px 16px;border:1.5px solid var(--blue);border-radius:9px;background:var(--blue-light);color:var(--blue);font-size:12px;font-weight:600;cursor:pointer;font-family:var(--font-main)">🖨️ Generar informe</button>
                 <button onclick="adipEliminarTratamiento()" style="padding:8px 16px;border:1.5px solid var(--red);border-radius:9px;background:var(--red-light);color:var(--red);font-size:12px;font-weight:600;cursor:pointer;font-family:var(--font-main);margin-left:auto">🗑️ Eliminar tratamiento</button>
               </div>
             </div>
@@ -3200,6 +3278,31 @@
                 <div class="mdpa-res-row"><span class="mdpa-res-label">1er control (estipulado)</span><span class="mdpa-res-val" id="adip_r_control" style="font-size:12px">—</span></div>
               </div>
               <span class="mdpa-res-subtext" id="adip_r_checklist">0 de 4 indicaciones marcadas</span>
+            </div>
+          </div>
+
+          <div class="mdpa-tabla-wrap" style="margin-top:14px;grid-column:1/-1">
+            <div class="mdpa-tabla-header">
+              <div class="mdpa-tabla-title">🧮 Requerimientos nutricionales estimados</div>
+            </div>
+            <div style="padding:14px 16px">
+              <div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:10px;font-size:11.5px;color:var(--text-soft)">
+                <span>⚖️ Peso: <b id="adip_nutri_peso_val" style="color:var(--text)">—</b></span>
+                <span>📏 Talla: <b id="adip_nutri_talla_val" style="color:var(--text)">—</b></span>
+                <span>🎂 Edad: <b id="adip_nutri_edad_val" style="color:var(--text)">—</b></span>
+                <span>Sexo: <b id="adip_nutri_sexo_val" style="color:var(--text)">—</b></span>
+              </div>
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+                <span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-soft)">🏃 Nivel de actividad física:</span>
+                <select id="adip_nutri_actividad" onchange="adipCalcularRequerimientos()" style="padding:5px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:12.5px;font-family:var(--font-main);background:white;outline:none">
+                  <option value="sedentario">Sedentario (poco o nada de ejercicio)</option>
+                  <option value="ligero">Ligera (1-3 días/sem)</option>
+                  <option value="moderado">Moderada (3-5 días/sem)</option>
+                  <option value="intenso">Intensa (6-7 días/sem)</option>
+                  <option value="muy_intenso">Muy intensa (2x/día)</option>
+                </select>
+              </div>
+              <div id="adip_nutri_resultado"></div>
             </div>
           </div>
         </div>
@@ -3228,6 +3331,9 @@
           .calc-card-completo{border-color:#86efac;background:linear-gradient(160deg,#f4fdf7,#ffffff)}
           .calc-card-completo:hover{border-color:#4ade80}
           .calc-card-badge{position:absolute;top:12px;right:12px;width:22px;height:22px;border-radius:50%;background:#16a34a;color:white;font-size:12px;font-weight:800;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(22,163,74,.35)}
+          .calc-card-resumen{margin-top:10px;padding-top:10px;border-top:1px dashed var(--border);font-size:12.5px;display:flex;align-items:baseline;gap:6px;flex-wrap:wrap}
+          .calc-card-resumen .cr-val{font-size:16px;font-weight:800;font-family:var(--font-display)}
+          .calc-card-resumen .cr-cat{font-weight:600;font-size:11.5px}
           .calc-card-grupo{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--blue);margin-bottom:6px}
           .calc-card-nombre{font-family:var(--font-display);font-size:16px;font-weight:700;color:var(--text);margin-bottom:5px;letter-spacing:.01em}
           .calc-card-desc{font-size:12px;color:var(--text-soft);line-height:1.5}
@@ -3305,6 +3411,7 @@
             <label class="calc-check"><input type="checkbox" id="prev_estatina" onchange="calcularPREVENT()"/> Estatina</label>
             <label class="calc-check"><input type="checkbox" id="prev_asa" onchange="calcularPREVENT()"/> AAS</label>
             <label class="calc-check"><input type="checkbox" id="prev_tabaco" onchange="calcularPREVENT()"/> Tabaquismo</label>
+            <label class="calc-check"><input type="checkbox" id="prev_dm" onchange="calcularPREVENT()"/> Diabetes</label>
             <div id="prev_resultado" class="calc-resultado" style="min-height:44px"></div>
           </div>
         </div>
@@ -3394,6 +3501,17 @@
     <div class="mdpa-modal-title">🎯 Nuevo tratamiento de adiposidad</div>
     <div style="display:flex;flex-direction:column;gap:14px">
       <div>
+        <label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-soft);display:block;margin-bottom:6px">Tipo de tratamiento</label>
+        <div style="display:flex;gap:6px">
+          <label style="flex:1;display:flex;align-items:center;gap:6px;padding:8px 10px;border:1.5px solid var(--border);border-radius:9px;cursor:pointer;font-size:12.5px;font-weight:600;color:var(--text)">
+            <input type="radio" name="adip_nuevo_tipo_tratamiento" id="adip_nuevo_tipo_farm" value="farmacologico" checked onchange="adipNuevoToggleTipo()" style="accent-color:var(--blue);margin:0"/> 💊 Farmacológico
+          </label>
+          <label style="flex:1;display:flex;align-items:center;gap:6px;padding:8px 10px;border:1.5px solid var(--border);border-radius:9px;cursor:pointer;font-size:12.5px;font-weight:600;color:var(--text)">
+            <input type="radio" name="adip_nuevo_tipo_tratamiento" id="adip_nuevo_tipo_bar" value="bariatrica" onchange="adipNuevoToggleTipo()" style="accent-color:var(--blue);margin:0"/> 🔪 Bariátrica
+          </label>
+        </div>
+      </div>
+      <div>
         <label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-soft);display:block;margin-bottom:6px">Fecha de inicio del tratamiento *</label>
         <input type="date" lang="es-AR" id="adip_nuevo_fecha" style="width:100%;padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:14px;font-family:var(--font-main);background:white;outline:none;box-sizing:border-box"/>
       </div>
@@ -3402,13 +3520,23 @@
         <input type="date" lang="es-AR" id="adip_nuevo_fecha_control" style="width:100%;padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:14px;font-family:var(--font-main);background:white;outline:none;box-sizing:border-box"/>
         <span class="mdpa-modal-help">⏰ Es una fecha orientativa, no un turno reservado. Recordar solicitar el turno con anticipación.</span>
       </div>
-      <div>
+      <div id="adip_nuevo_farm_wrap">
         <label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-soft);display:block;margin-bottom:6px">Droga</label>
         <input type="text" id="adip_nuevo_droga" placeholder="Ej: Liraglutide" style="width:100%;padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;font-family:var(--font-main);background:white;outline:none;box-sizing:border-box"/>
-      </div>
-      <div>
-        <label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-soft);display:block;margin-bottom:6px">Dosis</label>
+        <label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-soft);display:block;margin:10px 0 6px">Dosis</label>
         <input type="text" id="adip_nuevo_dosis" placeholder="Ej: 0.6mg/día" style="width:100%;padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;font-family:var(--font-main);background:white;outline:none;box-sizing:border-box"/>
+      </div>
+      <div id="adip_nuevo_bar_wrap" style="display:none">
+        <label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-soft);display:block;margin-bottom:6px">Tipo de cirugía</label>
+        <select id="adip_nuevo_cirugia" style="width:100%;padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;font-family:var(--font-main);background:white;outline:none;box-sizing:border-box">
+          <option value="">—</option>
+          <option value="Manga gástrica (sleeve)">Manga gástrica (sleeve)</option>
+          <option value="Bypass gástrico en Y de Roux">Bypass gástrico en Y de Roux</option>
+          <option value="Banda gástrica ajustable">Banda gástrica ajustable</option>
+          <option value="Derivación biliopancreática">Derivación biliopancreática</option>
+          <option value="Balón intragástrico">Balón intragástrico</option>
+          <option value="Otra">Otra</option>
+        </select>
       </div>
     </div>
     <div style="display:flex;gap:10px;margin-top:22px">
@@ -3418,6 +3546,32 @@
   </div>
 </div>
 
+<!-- MODAL OPCIONES INFORME ADIPOSIDAD -->
+<div id="adip_modal_opciones_informe" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:10000;align-items:center;justify-content:center">
+  <div style="background:white;border-radius:16px;width:100%;max-width:380px;padding:26px;box-shadow:0 20px 60px rgba(0,0,0,.25)">
+    <div style="font-family:var(--font-display);font-size:16px;font-weight:700;color:var(--text);margin-bottom:4px">🖨️ Opciones del informe</div>
+    <div style="font-size:12px;color:var(--text-soft);margin-bottom:18px">Elegí qué secciones incluir</div>
+    <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:20px">
+      <label style="display:flex;align-items:center;gap:10px;font-size:13px;font-weight:500;color:#1e293b;cursor:pointer;padding:10px 12px;border:1.5px solid var(--border);border-radius:10px;background:var(--gray)">
+        <input type="checkbox" id="adip_chk_inf_indic" checked style="width:16px;height:16px;accent-color:var(--blue)">
+        ✅ Pauta de inicio e indicaciones
+      </label>
+      <label style="display:flex;align-items:center;gap:10px;font-size:13px;font-weight:500;color:#1e293b;cursor:pointer;padding:10px 12px;border:1.5px solid var(--border);border-radius:10px;background:var(--gray)">
+        <input type="checkbox" id="adip_chk_inf_nutri" checked style="width:16px;height:16px;accent-color:var(--blue)">
+        🧮 Requerimientos nutricionales
+      </label>
+      <label style="display:flex;align-items:center;gap:10px;font-size:13px;font-weight:500;color:#1e293b;cursor:pointer;padding:10px 12px;border:1.5px solid var(--border);border-radius:10px;background:var(--gray)">
+        <input type="checkbox" id="adip_chk_inf_antro" style="width:16px;height:16px;accent-color:var(--blue)">
+        📏 Antropometría (evolución peso/IMC/cintura)
+      </label>
+    </div>
+    <div style="display:flex;justify-content:space-between;gap:8px">
+      <button onclick="adipCerrarOpcionesInforme()" style="padding:9px 18px;border:1.5px solid var(--border);border-radius:10px;background:white;font-size:13px;font-weight:500;color:var(--text-soft);cursor:pointer;font-family:var(--font-main)">Cancelar</button>
+      <button onclick="adipGenerarInformeConOpciones()" style="padding:9px 22px;border:none;border-radius:10px;background:var(--blue);color:white;font-size:13px;font-weight:700;cursor:pointer;font-family:var(--font-main)">🖨️ Generar</button>
+    </div>
+  </div>
+</div>
+<!-- FIN MODAL OPCIONES INFORME ADIPOSIDAD -->
 
 <!-- MODAL HÁBITOS: ACTIVIDAD FÍSICA + ALIMENTACIÓN -->
 <div id="modal_habitos_upd" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.48);z-index:1200;align-items:flex-start;justify-content:center;padding:16px;overflow-y:auto">
@@ -5863,7 +6017,7 @@ function _restaurarEstadoPestana(dni) {
       const el=document.getElementById(id);
       if(el && estado[id] !== undefined) el.value = estado[id];
     });
-    ['prev_hta_tto','prev_estatina','prev_asa','prev_tabaco'].forEach(id=>{
+    ['prev_hta_tto','prev_estatina','prev_asa','prev_tabaco','prev_dm'].forEach(id=>{
       const el=document.getElementById(id);
       if(el && estado[id] !== undefined) el.checked = estado[id];
     });
@@ -5906,7 +6060,7 @@ function _guardarDraftLocal(dni) {
       const el = document.getElementById(id);
       if(el) draft.campos[id] = el.value || '';
     });
-    ['prev_hta_tto','prev_estatina','prev_asa','prev_tabaco'].forEach(id=>{
+    ['prev_hta_tto','prev_estatina','prev_asa','prev_tabaco','prev_dm'].forEach(id=>{
       const el = document.getElementById(id);
       if(el) draft.campos[id] = el.checked || false;
     });
@@ -8142,6 +8296,7 @@ async function switchPacMainTab(tab) {
   setActiveSidebarLeft(sideIcon);
   const hoy = fechaHoy();
   if(tab==='vac') { renderVacunacion(); }
+  if(tab==='evol') { setTimeout(function(){ if(window.renderAlertasPaciente) { try { renderAlertasPaciente(); } catch(e) { console.error('renderAlertasPaciente:', e); } } }, 30); }
   if(tab==='calc') { setTimeout(function(){ if(window.renderCalcGrid) renderCalcGrid(); }, 30); }
   // NO se vuelca automáticamente al volver a la pestaña evolución.
   // El volcado ocurre solo al guardar un lab/ant/est nuevo (preserva lo que el usuario escribió).
@@ -8766,6 +8921,8 @@ async function abrirEvolucion(dni) {
   }
   pacienteActual = p;
   if(typeof CALC_COMPLETO !== 'undefined') Object.keys(CALC_COMPLETO).forEach(k => delete CALC_COMPLETO[k]);
+  if(typeof cargarUltimaTAHistorica === 'function') _ultimaTAHistPromise = cargarUltimaTAHistorica(p.dni);
+  if(typeof renderCalcResumenSidebar === 'function') renderCalcResumenSidebar();
   abrirTabPaciente(p);
   document.getElementById('evol_nombre').textContent = p.apellido + ', ' + p.nombre;
   const evhNombre = document.getElementById('evh_nombre_paciente');
@@ -8799,7 +8956,7 @@ async function abrirEvolucion(dni) {
     ['prev_edad','prev_sexo','prev_tas','prev_ct','prev_hdl','prev_glu','prev_egfr'].forEach(id=>{
       const el=document.getElementById(id); if(el){el.value='';el.style.background='';el.style.borderColor='';}
     });
-    ['prev_hta_tto','prev_estatina','prev_asa','prev_tabaco'].forEach(id=>{
+    ['prev_hta_tto','prev_estatina','prev_asa','prev_tabaco','prev_dm'].forEach(id=>{
       const el=document.getElementById(id); if(el) el.checked=false;
     });
     const prevRes=document.getElementById('prev_resultado');
@@ -8819,6 +8976,9 @@ async function abrirEvolucion(dni) {
   // debe sobrevivir de un paciente al otro (eran globales y se filtraban entre pestañas).
   _dirty.lab = false; _dirty.ant = false; _dirty.est = false; _dirty.vac = false; _dirty.mdpa = false; _dirty.adip = false;
   _tabDirty = false;
+  // Antropometría del panel lateral: si no hay borrador de esta sesión, autocompletar con el
+  // último peso/talla/cintura registrados en la tabla de Antropometría (recién cargada arriba).
+  if(!hayBorradorSesion && typeof precargarAntropometriaSidebar === 'function') precargarAntropometriaSidebar();
   if(hayBorradorSesion) {
     // Restaurar desde sessionStorage (más reciente que el borrador en Supabase)
     _restaurarEstadoPestana(p.dni);
@@ -8847,6 +9007,8 @@ async function abrirEvolucion(dni) {
   switchPacMainTab('evol');
   await window.actualizarEncabezadoVariable(p.dni);
   await cargarSnapshotInicial(p.dni);
+  if(_ultimaTAHistPromise) { try { await _ultimaTAHistPromise; } catch(e) {} }
+  if(typeof renderAlertasPaciente === 'function') renderAlertasPaciente();
   // Conectar auto-guardado en sessionStorage al editor
   setTimeout(function() {
     const ed = document.getElementById('evol_editor');
@@ -8855,7 +9017,7 @@ async function abrirEvolucion(dni) {
                       'evol_fc1','evol_fc2','evol_fc3','evol_peso','evol_talla','evol_cintura',
                       'evol_tap_s','evol_tap_d','evol_tap_fc','evol_prox_dias',
                       'prev_edad','prev_sexo','prev_tas','prev_ct','prev_hdl','prev_glu','prev_egfr'];
-    const checkIds = ['prev_hta_tto','prev_estatina','prev_asa','prev_tabaco'];
+    const checkIds = ['prev_hta_tto','prev_estatina','prev_asa','prev_tabaco','prev_dm'];
     [ed, ind].forEach(function(el) {
       if(el && !el._urcymAutoGuardar) {
         el._urcymAutoGuardar = true;
@@ -9133,7 +9295,8 @@ async function guardarEvolucion() {
       hta_tto: (document.getElementById('prev_hta_tto')||{}).checked||false,
       estatina: (document.getElementById('prev_estatina')||{}).checked||false,
       asa: (document.getElementById('prev_asa')||{}).checked||false,
-      tabaco: (document.getElementById('prev_tabaco')||{}).checked||false
+      tabaco: (document.getElementById('prev_tabaco')||{}).checked||false,
+      dm: (document.getElementById('prev_dm')||{}).checked||false
     });
   })();
   const _baseInsert = {
@@ -9461,9 +9624,31 @@ function _crearDiasBtns(contenedor) {
 //       en 1º/2º/3º trimestre de embarazo). Calcio — RNI FAO/OMS.
 // ═══════════════════════════════════════════════════════════════════════
 function getPesoActualKg() {
+  // 1) Peso cargado en la consulta actual (aún no guardado)
+  const actual = parseFloat(document.getElementById('evol_peso')?.value);
+  if(!isNaN(actual) && actual > 0) return actual;
+  // 2) Último peso registrado en la tabla de Antropometría (consultas anteriores)
   try {
     if (typeof antDatos === 'undefined' || !antDatos || !antDatos.filas) return null;
     const fi = ANT_FILAS.findIndex(f => f.key === 'Peso');
+    if (fi < 0) return null;
+    const fila = antDatos.filas[fi] || [];
+    for (let i = fila.length - 1; i >= 0; i--) {
+      const v = parseFloat(fila[i]);
+      if (!isNaN(v) && v > 0) return v;
+    }
+  } catch (e) {}
+  return null;
+}
+
+function getTallaActualCm() {
+  // 1) Talla cargada en la consulta actual (aún no guardada)
+  const actual = parseFloat(document.getElementById('evol_talla')?.value);
+  if(!isNaN(actual) && actual > 0) return actual;
+  // 2) Última talla registrada en la tabla de Antropometría (consultas anteriores)
+  try {
+    if (typeof antDatos === 'undefined' || !antDatos || !antDatos.filas) return null;
+    const fi = ANT_FILAS.findIndex(f => f.key === 'Altura');
     if (fi < 0) return null;
     const fila = antDatos.filas[fi] || [];
     for (let i = fila.length - 1; i >= 0; i--) {
@@ -9579,8 +9764,14 @@ function _limpiarNutriPanel(prefix) {
 }
 
 function _cargarNutriPanel(prefix, n) {
-  if (!n) { _limpiarNutriPanel(prefix); calcularNutriPanel(prefix); return; }
   const pesoAuto = getPesoActualKg();
+  if (!n) {
+    _limpiarNutriPanel(prefix);
+    const pesoEl0 = document.getElementById(prefix + '_nutri_peso');
+    if (pesoEl0 && pesoAuto != null) pesoEl0.value = pesoAuto;
+    calcularNutriPanel(prefix);
+    return;
+  }
   const pesoEl = document.getElementById(prefix + '_nutri_peso');
   if (pesoEl) pesoEl.value = (n.peso != null && n.peso !== '') ? n.peso : (pesoAuto != null ? pesoAuto : '');
   const embEl = document.getElementById(prefix + '_nutri_embarazo'); if (embEl) embEl.value = n.embarazo || '';
@@ -10577,6 +10768,7 @@ function actualizarPromedios() {
     if(pFC) txt += (txt?' &nbsp;|&nbsp; ':'') + 'FC ' + pFC + ' lpm';
     el.innerHTML = txt ? '<strong>Promedio 3 tomas protocolarizadas:</strong><br>' + txt : '<span style="color:#b0bcc9;font-size:11px">Completar tomas 2 y 3</span>';
   }
+  if(typeof actualizarBadgeTA === 'function') actualizarBadgeTA();
   volcarPromedioAlEditor();
 }
 
@@ -10587,10 +10779,16 @@ function volcarPromedioAlEditor() {
   const tapD = document.getElementById('evol_tap_d').value;
   const editor = document.getElementById('evol_editor');
   if(!editor) return;
-  // Construir texto del bloque TA
+  // Construir texto del bloque TA: cada toma individual + el promedio
   let lineas = [];
+  const s1 = document.getElementById('evol_ta1s').value, d1 = document.getElementById('evol_ta1d').value, f1 = document.getElementById('evol_fc1').value;
+  const s2 = document.getElementById('evol_ta2s').value, d2 = document.getElementById('evol_ta2d').value, f2 = document.getElementById('evol_fc2').value;
+  const s3 = document.getElementById('evol_ta3s').value, d3 = document.getElementById('evol_ta3d').value, f3 = document.getElementById('evol_fc3').value;
+  if(s1 && d1) lineas.push('Toma 1: ' + s1 + '/' + d1 + ' mmHg' + (f1 ? ' · FC ' + f1 + ' lpm' : ''));
+  if(s2 && d2) lineas.push('Toma 2: ' + s2 + '/' + d2 + ' mmHg' + (f2 ? ' · FC ' + f2 + ' lpm' : ''));
+  if(s3 && d3) lineas.push('Toma 3: ' + s3 + '/' + d3 + ' mmHg' + (f3 ? ' · FC ' + f3 + ' lpm' : ''));
   if(pTA || pFC) {
-    let ln = '<strong>Promedio de tres tomas protocolarizadas:</strong>';
+    let ln = '<strong>Promedio (tomas 2 y 3):</strong>';
     if(pTA) ln += ' TA ' + pTA + ' mmHg';
     if(pFC) ln += ' · FC ' + pFC + ' lpm';
     lineas.push(ln);
@@ -10618,6 +10816,7 @@ function actualizarIMC() {
   const peso = parseFloat(document.getElementById('evol_peso').value);
   const talla = parseFloat(document.getElementById('evol_talla').value);
   const el = document.getElementById('evol_imc');
+  const catEl = document.getElementById('evol_imc_cat');
   if(!el) return;
   if(peso && talla) {
     const imc = (peso / ((talla/100)**2)).toFixed(1);
@@ -10626,8 +10825,14 @@ function actualizarIMC() {
     else if(imc<25){cat='Normal';color='#27ae60';}
     else if(imc<30){cat='Sobrepeso';color='#e08c3a';}
     else{cat='Obesidad';color='var(--red)';}
-    el.innerHTML='<span style="color:'+color+';font-size:15px">'+imc+'</span><span style="font-size:10px;color:'+color+';margin-left:4px">'+cat+'</span>';
-  } else { el.innerHTML='—'; }
+    el.textContent = imc;
+    el.style.color = color;
+    if(catEl) { catEl.textContent = cat; catEl.style.color = color; }
+  } else {
+    el.textContent = '—';
+    el.style.color = '';
+    if(catEl) catEl.textContent = '';
+  }
 }
 
 function formatCmd(cmd, val) {
@@ -10954,6 +11159,28 @@ function getUltimoValorAnt(key) {
   }
   return null;
 }
+function precargarAntropometriaSidebar() {
+  let huboAutocompletado = false;
+  const pesoEl = document.getElementById('evol_peso');
+  const tallaEl = document.getElementById('evol_talla');
+  const cinturaEl = document.getElementById('evol_cintura');
+  if(pesoEl && !pesoEl.value) {
+    const v = getUltimoValorAnt('Peso');
+    if(v != null) { pesoEl.value = v; huboAutocompletado = true; }
+  }
+  if(tallaEl && !tallaEl.value) {
+    const v = getUltimoValorAnt('Altura');
+    if(v != null) { tallaEl.value = v; huboAutocompletado = true; }
+  }
+  if(cinturaEl && !cinturaEl.value) {
+    const v = getUltimoValorAnt('Cintura');
+    if(v != null) { cinturaEl.value = v; huboAutocompletado = true; }
+  }
+  const nota = document.getElementById('evol_antro_nota');
+  if(nota) nota.classList.toggle('show', huboAutocompletado);
+  if(typeof actualizarIMC === 'function') actualizarIMC();
+  if(typeof calcularPREVENT === 'function') calcularPREVENT();
+}
 
 function precargarPREVENT() {
   // Auto-cargar desde datos ya cargados del paciente
@@ -10966,12 +11193,13 @@ function precargarPREVENT() {
     if(edad >= 30 && edad <= 79) document.getElementById('prev_edad').value = edad;
   }
   // Sexo
-  if(p.sexo && !document.getElementById('prev_sexo').value) {
-    document.getElementById('prev_sexo').value = p.sexo==='Femenino'?'F':'M';
+  const sexoP = calcSexoPaciente();
+  if(sexoP && !document.getElementById('prev_sexo').value) {
+    document.getElementById('prev_sexo').value = sexoP;
   }
-  // TAS: promedio de la consulta actual
-  const tas = parseFloat(document.getElementById('evol_ta2s').value) || parseFloat(document.getElementById('evol_ta1s').value);
-  if(tas) document.getElementById('prev_tas').value = tas;
+  // TAS: de la consulta actual, o si no hay, la última guardada en evoluciones previas
+  const tas = calcTASActual();
+  if(tas && !document.getElementById('prev_tas').value) document.getElementById('prev_tas').value = tas;
 
   // Lab: CT, HDL, glucemia, eGFR — último valor
   const ct = getUltimoValorLab('CT');
@@ -10983,16 +11211,17 @@ function precargarPREVENT() {
   if(glu) document.getElementById('prev_glu').value = glu;
   if(egfr) document.getElementById('prev_egfr').value = egfr;
 
-  // IMC: ya calculado, o desde peso/talla actuales
-  const imc = getUltimoValorAnt('IMC') || parseFloat(document.getElementById('evol_imc').textContent);
-  if(imc && !document.getElementById('evol_peso').value) {
-    // solo si no hay peso cargado en la consulta actual
-  }
+  // Tabaquismo actual
+  const c = evolClinicaSnapshot?.clinica;
+  if(c?.tabaquismo === 'actual') document.getElementById('prev_tabaco').checked = true;
+  // Diabetes: solo si el médico la marcó como diagnóstico (nunca inferida de un valor de glucemia)
+  if(c?.dx_dbt1 || c?.dx_dbt2) document.getElementById('prev_dm').checked = true;
 
-  // Medicación: detectar antihipertensivos, estatinas, AAS
-  if(currentUser) {
-    // No resetear checks si el usuario ya los marcó
-  }
+  // Medicación activa: antihipertensivo, hipolipemiante (estatina), antiagregante (AAS).
+  // Si no hay medicación de ese grupo cargada, se da por hecho que no está en tratamiento (queda destildado).
+  if(medicacionTieneGrupo('Antihipertensivo')) document.getElementById('prev_hta_tto').checked = true;
+  if(medicacionTieneGrupo('Hipolipemiante')) document.getElementById('prev_estatina').checked = true;
+  if(medicacionTieneGrupo('Antiagregante')) document.getElementById('prev_asa').checked = true;
 
   calcularPREVENT();
 }
@@ -11011,11 +11240,11 @@ function calcularPREVENT() {
   const estatina = document.getElementById('prev_estatina').checked;
   const asa = document.getElementById('prev_asa').checked;
   const tabaco = document.getElementById('prev_tabaco').checked;
-  const dm = glu ? glu >= 126 : false; // diabetes si glucemia ≥126 mg/dL
+  const dm = document.getElementById('prev_dm').checked; // diagnóstico marcado por el médico, no inferido de la glucemia
 
-  // Amarillo en campos faltantes
+  // Amarillo en campos faltantes (glucemia queda fuera: es informativa, no interviene en el cálculo)
   const req = {prev_edad: edad, prev_sexo: sexo||null, prev_tas: tas,
-               prev_ct: ct, prev_hdl: hdl, prev_glu: glu, prev_egfr: egfr};
+               prev_ct: ct, prev_hdl: hdl, prev_egfr: egfr};
   Object.entries(req).forEach(([id,val]) => {
     const el = document.getElementById(id);
     if(!el) return;
@@ -11027,7 +11256,7 @@ function calcularPREVENT() {
   const res = document.getElementById('prev_resultado');
   let imc = (peso && talla) ? peso/Math.pow(talla/100,2) : null;
 
-  if(!edad || !sexo || !tas || !ct || !hdl || !glu || !egfr) {
+  if(!edad || !sexo || !tas || !ct || !hdl || !egfr) {
     res.innerHTML = '<span style="color:var(--text-soft);font-size:11px">⚠️ Completá los campos en amarillo para calcular</span>';
     actualizarPREVENTHeader(null,null,null,null);
     if(typeof calcMarcarEstado === 'function') calcMarcarEstado('prevent', false);
@@ -11053,7 +11282,7 @@ function calcularPREVENT() {
   const mg2mmol = 1/38.67;
   const tc_mmol  = ct  * mg2mmol;
   const hdl_mmol = hdl * mg2mmol;
-  const dm_bin    = (glu >= 126) ? 1 : 0; // DM si glucemia ≥126 mg/dL
+  const dm_bin    = dm ? 1 : 0;
   const smoke_bin = tabaco ? 1 : 0;
   const hta_bin   = htaTto ? 1 : 0;
   const stat_bin  = estatina ? 1 : 0;
@@ -11117,7 +11346,7 @@ function calcularPREVENT() {
 
   actualizarPREVENTHeader(pct, cat, color, emoji);
   if(typeof calcMarcarEstado === 'function') {
-    calcMarcarEstado('prevent', true);
+    calcMarcarEstado('prevent', true, pct+'%', cat, color);
     calcAutoVolcar('prevent', () => volcar_prevent(pct, cat));
   }
 }
@@ -11190,14 +11419,19 @@ function renderCalcGrid() {
   }
   const grupoLabel = {};
   CALC_GRUPOS.forEach(g=>grupoLabel[g.id]=g.label);
-  grid.innerHTML = lista.map(c => `
-    <div class="calc-card${CALC_COMPLETO[c.id] ? ' calc-card-completo' : ''}" data-id="${c.id}" onclick="abrirCalculadora('${c.id}')">
-      ${CALC_COMPLETO[c.id] ? '<div class="calc-card-badge" title="Cargada para este paciente">✓</div>' : ''}
+  grid.innerHTML = lista.map(c => {
+    const est = CALC_COMPLETO[c.id];
+    const completo = est && est.completo;
+    return `
+    <div class="calc-card${completo ? ' calc-card-completo' : ''}" data-id="${c.id}" onclick="abrirCalculadora('${c.id}')">
+      ${completo ? '<div class="calc-card-badge" title="Cargada para este paciente">✓</div>' : ''}
       <div class="calc-card-grupo">${grupoLabel[c.grupo]}</div>
       <div class="calc-card-nombre">${c.nombre}</div>
       <div class="calc-card-desc">${c.desc}</div>
+      ${completo && est.resumen ? `<div class="calc-card-resumen">${est.resumen}</div>` : ''}
     </div>
-  `).join('');
+  `;
+  }).join('');
 }
 function seleccionarGrupoCalc(g) {
   calcGrupoActivo = g;
@@ -11212,13 +11446,19 @@ function cerrarCalculadora() {
   const fp = document.getElementById('calc_form_prevent');
   if(fp) fp.style.display = 'none';
 }
-function abrirCalculadora(id) {
+const _CALC_USA_TA = ['score2','ascvd','frs','prevent'];
+async function abrirCalculadora(id) {
   const def = CALC_DEFS.find(c=>c.id===id);
   if(!def) return;
   document.getElementById('calc_vista_lista').style.display = 'none';
   document.getElementById('calc_vista_detalle').style.display = 'block';
   const body = document.getElementById('calc_detalle_body');
   const formPrevent = document.getElementById('calc_form_prevent');
+  // Si la calculadora usa presión arterial, esperar a que termine de cargar la última TA histórica
+  // (se dispara en segundo plano al abrir el paciente) antes de autocompletar.
+  if(pacienteActual && _CALC_USA_TA.includes(id) && _ultimaTAHistPromise) {
+    try { await _ultimaTAHistPromise; } catch(e) {}
+  }
   // PREVENT usa su formulario propio (mismos campos/lógica de siempre), no el genérico
   if(id === 'prevent') {
     body.style.display = 'none';
@@ -11240,6 +11480,119 @@ function abrirCalculadora(id) {
 }
 
 // ---- utilidades comunes ----
+let _ultimaTAHist = { dni: null, sis: null, dia: null, fecha: null };
+let _ultimaTAHistPromise = null;
+async function cargarUltimaTAHistorica(dni) {
+  const estado = { dni, sis: null, dia: null, fecha: null };
+  try {
+    const { data, error } = await sb.from('evoluciones')
+      .select('fecha_hora,ta1s,ta1d,ta2s,ta2d,ta3s,ta3d')
+      .eq('dni_paciente', dni)
+      .order('fecha_hora', { ascending: false })
+      .limit(15);
+    if(!error && data) {
+      for(const row of data) {
+        const s2 = parseFloat(row.ta2s), d2 = parseFloat(row.ta2d);
+        const s3 = parseFloat(row.ta3s), d3 = parseFloat(row.ta3d);
+        const s1 = parseFloat(row.ta1s), d1 = parseFloat(row.ta1d);
+        let s = null, d = null;
+        if(s2 && d2 && s3 && d3) { s = Math.round((s2+s3)/2); d = Math.round((d2+d3)/2); } // promedio tomas 2 y 3, igual que en la consulta
+        else if(s2 && d2) { s = s2; d = d2; }
+        else if(s1 && d1) { s = s1; d = d1; }
+        else if(s3 && d3) { s = s3; d = d3; }
+        if(s && d) { estado.sis = s; estado.dia = d; estado.fecha = row.fecha_hora; break; }
+      }
+    }
+  } catch(e) { console.error('cargarUltimaTAHistorica:', e); }
+  _ultimaTAHist = estado;
+  if(typeof actualizarBadgeTA === 'function') actualizarBadgeTA();
+  return estado;
+}
+function actualizarBadgeTA() {
+  const badge = document.getElementById('evh_ta_badge');
+  const label = document.getElementById('evh_ta_label');
+  if(!badge || !label) return;
+  const pTA = (typeof calcPromedioTA === 'function') ? calcPromedioTA() : null;
+  const pFC = (typeof calcPromedioFC === 'function') ? calcPromedioFC() : null;
+  let taMostrar = pTA, fcMostrar = pFC, esHistorico = false;
+  if(!taMostrar && _ultimaTAHist.dni === pacienteActual?.dni && _ultimaTAHist.sis) {
+    taMostrar = _ultimaTAHist.sis + '/' + _ultimaTAHist.dia;
+    fcMostrar = null;
+    esHistorico = true;
+  }
+  if(taMostrar) {
+    const [sisT] = taMostrar.split('/').map(Number);
+    let color = '#16a34a';
+    if(sisT >= 140) color = '#dc2626';
+    else if(sisT >= 130) color = '#ea580c';
+    badge.textContent = taMostrar;
+    badge.style.color = color;
+    label.textContent = fcMostrar ? 'FC ' + fcMostrar + ' lpm' : (esHistorico ? 'última registrada' : '');
+    label.style.color = color;
+  } else {
+    badge.textContent = '—';
+    badge.style.color = 'var(--text-soft)';
+    label.textContent = '';
+  }
+}
+function medicacionTieneGrupo(grupo) {
+  const meds = evolClinicaSnapshot?.medicacion;
+  if(!Array.isArray(meds)) return false;
+  return meds.some(m => m?.grupo === grupo);
+}
+
+// ---- Sugerencias / alertas suaves sobre el paciente activo ----
+function renderAlertasPaciente() {
+  const wrap = document.getElementById('evol_alertas_wrap');
+  const lista = document.getElementById('evol_alertas_lista');
+  if(!wrap || !lista || !pacienteActual) return;
+  const p = pacienteActual;
+  const alertas = [];
+  try {
+    const c = evolClinicaSnapshot?.clinica || {};
+
+    // Presión arterial nunca registrada
+    const taActualCargada = parseFloat(document.getElementById('evol_ta1s')?.value) || parseFloat(document.getElementById('evol_ta2s')?.value);
+    if(!taActualCargada && !(_ultimaTAHist.dni === p.dni && _ultimaTAHist.sis)) {
+      alertas.push('No hay ningún valor de presión arterial registrado — considerá tomarla hoy.');
+    }
+    // Datos de contacto
+    if(!p.telefono && !p.email) {
+      alertas.push('Faltan datos de contacto (teléfono / email) — completalos en la ficha del paciente.');
+    }
+    // Diagnósticos
+    const tieneDx = Object.keys(c).some(k => k.startsWith('dx_') && c[k]);
+    if(!tieneDx) {
+      alertas.push('Sin diagnósticos cardiometabólicos cargados.');
+    }
+    // Tabaquismo nunca preguntado (distinto de "nunca fumó", que sí es un dato cargado)
+    if(!c.tabaquismo) {
+      alertas.push('Sin datos de tabaquismo registrados — completalos en Hábitos.');
+    }
+    // Antropometría
+    const pesoActual = document.getElementById('evol_peso')?.value;
+    const tallaActual = document.getElementById('evol_talla')?.value;
+    let imcPrevio = null;
+    try { imcPrevio = getUltimoValorAnt('IMC'); } catch(e2) { imcPrevio = null; }
+    if(!pesoActual && !tallaActual && !imcPrevio) {
+      alertas.push('Sin peso/talla registrados en ninguna consulta.');
+    }
+  } catch(e) {
+    console.error('renderAlertasPaciente:', e);
+  }
+
+  if(!alertas.length) { wrap.style.display = 'none'; lista.innerHTML = ''; return; }
+  wrap.style.display = 'block';
+  lista.innerHTML = alertas.map(a => `<div class="alerta-item"><span class="ai-dot"></span><span>${a}</span></div>`).join('');
+}
+function toggleAlertasPaciente() {
+  const lista = document.getElementById('evol_alertas_lista');
+  const toggle = document.getElementById('evol_alertas_toggle');
+  if(!lista || !toggle) return;
+  const oculto = lista.style.display === 'none';
+  lista.style.display = oculto ? 'flex' : 'none';
+  toggle.textContent = oculto ? 'ocultar ▾' : 'mostrar ▸';
+}
 function calcEdadPaciente() {
   const p = pacienteActual;
   if(!p || !p.fecha_nacimiento) return null;
@@ -11248,13 +11601,28 @@ function calcEdadPaciente() {
 }
 function calcSexoPaciente() {
   const p = pacienteActual;
-  if(!p || !p.sexo) return null;
-  return p.sexo === 'Femenino' ? 'F' : 'M';
+  const s = p?.sexo?.trim();
+  if(!s) return null;
+  if(s === 'Masculino') return 'M';
+  if(s === 'Femenino') return 'F';
+  return null; // "Otro" u otro valor no mapea a los modelos binarios de riesgo CV
 }
 function calcTASActual() {
   const el2 = document.getElementById('evol_ta2s');
   const el1 = document.getElementById('evol_ta1s');
-  return parseFloat(el2?.value) || parseFloat(el1?.value) || null;
+  const actual = parseFloat(el2?.value) || parseFloat(el1?.value);
+  if(actual) return actual;
+  // Si no hay TA cargada en la consulta actual, usar la última TA guardada en evoluciones previas
+  if(_ultimaTAHist.dni === pacienteActual?.dni && _ultimaTAHist.sis) return _ultimaTAHist.sis;
+  return null;
+}
+function calcTADActual() {
+  const el2 = document.getElementById('evol_ta2d');
+  const el1 = document.getElementById('evol_ta1d');
+  const actual = parseFloat(el2?.value) || parseFloat(el1?.value);
+  if(actual) return actual;
+  if(_ultimaTAHist.dni === pacienteActual?.dni && _ultimaTAHist.dia) return _ultimaTAHist.dia;
+  return null;
 }
 function volcarCalculadoraAEditor(clase, tituloHtml, contenidoHtml) {
   const editor = document.getElementById('evol_editor');
@@ -11275,15 +11643,61 @@ function volcarCalculadoraAEditor(clase, tituloHtml, contenidoHtml) {
 // ---- estado "completo" + auto-volcado a la HC ----
 const CALC_COMPLETO = {};
 const _calcAutoTimers = {};
-function calcMarcarEstado(id, completo) {
-  CALC_COMPLETO[id] = !!completo;
+function calcMarcarEstado(id, completo, val, cat, color) {
+  CALC_COMPLETO[id] = completo ? {completo:true, val: val||'', cat: cat||'', color: color || '#16a34a'} : {completo:false};
   const card = document.querySelector('.calc-card[data-id="' + id + '"]');
-  if(card) card.classList.toggle('calc-card-completo', !!completo);
+  if(card) {
+    card.classList.toggle('calc-card-completo', !!completo);
+    let sumEl = card.querySelector('.calc-card-resumen');
+    if(completo && val) {
+      if(!sumEl) {
+        sumEl = document.createElement('div');
+        sumEl.className = 'calc-card-resumen';
+        card.appendChild(sumEl);
+      }
+      sumEl.innerHTML = `<span class="cr-val" style="color:${color}">${val}</span> <span class="cr-cat" style="color:${color}">${cat}</span>`;
+    } else if(sumEl) {
+      sumEl.remove();
+    }
+  }
+  if(typeof renderCalcResumenSidebar === 'function') renderCalcResumenSidebar();
 }
 function calcAutoVolcar(id, fn) {
   clearTimeout(_calcAutoTimers[id]);
   if(!pacienteActual) return; // sin paciente activo no hay HC donde volcar
   _calcAutoTimers[id] = setTimeout(fn, 800);
+}
+// Semáforo: colapsa los colores de severidad usados en las calculadoras a 3 niveles
+function calcColorASemaforo(color) {
+  if(color === '#16a34a') return '#16a34a';       // verde
+  if(color === '#dc2626') return '#dc2626';       // rojo
+  return '#f59e0b';                                 // amarillo/naranja (límite, moderado, intermedio, alto no-rojo)
+}
+function renderCalcResumenSidebar() {
+  const wrap = document.getElementById('evol_calc_resumen_wrap');
+  const lista = document.getElementById('evol_calc_resumen_lista');
+  if(!wrap || !lista) return;
+  wrap.style.display = 'block';
+  const completas = CALC_DEFS.filter(c => CALC_COMPLETO[c.id]?.completo);
+  if(!completas.length) {
+    lista.innerHTML = `<div class="calc-semaforo-empty" onclick="calcIrACalculadora('')" title="Ir a Calculadoras">
+      Ninguna calculadora completa todavía para este paciente.
+    </div>`;
+    return;
+  }
+  lista.innerHTML = completas.map(c => {
+    const est = CALC_COMPLETO[c.id];
+    const dot = calcColorASemaforo(est.color);
+    return `<div class="calc-semaforo-item" onclick="calcIrACalculadora('${c.id}')" title="${c.nombre} — ${est.cat}">
+      <span class="calc-semaforo-dot" style="background:${dot}"></span>
+      <span class="calc-semaforo-nombre">${c.nombre}</span>
+      <span class="calc-semaforo-val" style="color:${dot}">${est.val}</span>
+    </div>`;
+  }).join('');
+}
+function calcIrACalculadora(id) {
+  if(typeof switchPacMainTab === 'function') switchPacMainTab('calc');
+  if(id) setTimeout(() => { if(typeof abrirCalculadora === 'function') abrirCalculadora(id); }, 60);
 }
 
 // ============================================================
@@ -11300,15 +11714,6 @@ function render_score2() {
       <div class="calc-field"><label>TAS (mmHg)</label><input type="number" id="c_score2_tas" oninput="calc_score2()"/></div>
       <div class="calc-field"><label>CT (mg/dL)</label><input type="number" id="c_score2_ct" oninput="calc_score2()"/></div>
       <div class="calc-field"><label>HDL (mg/dL)</label><input type="number" id="c_score2_hdl" oninput="calc_score2()"/></div>
-      <div class="calc-field"><label>Región riesgo ESC</label>
-        <select id="c_score2_region" onchange="calc_score2()">
-          <option value="">— elegir —</option>
-          <option value="bajo">Bajo</option>
-          <option value="moderado">Moderado</option>
-          <option value="alto">Alto</option>
-          <option value="muyalto">Muy alto</option>
-        </select>
-      </div>
     </div>
     <label class="calc-check"><input type="checkbox" id="c_score2_tabaco" onchange="calc_score2()"/> Tabaquismo actual</label>
     <div id="calc_res_score2"></div>
@@ -11330,7 +11735,6 @@ function calc_score2() {
   const tas = parseFloat(document.getElementById('c_score2_tas').value);
   const ct = parseFloat(document.getElementById('c_score2_ct').value);
   const hdl = parseFloat(document.getElementById('c_score2_hdl').value);
-  const region = document.getElementById('c_score2_region').value;
   const res = document.getElementById('calc_res_score2');
   if(!edad || !sexo || !tas || !ct || !hdl) {
     res.innerHTML = '<div class="calc-resultado"><span style="font-size:12px;color:var(--text-soft)">⚠️ Completá edad, sexo, TAS, CT y HDL</span></div>';
@@ -11339,18 +11743,18 @@ function calc_score2() {
   }
   const nonHdlMgdl = ct - hdl;
   const nonHdlMmol = (nonHdlMgdl / 38.67).toFixed(2);
-  // Bandas de riesgo ESC 2021 por edad (SCORE2/SCORE2-OP), en % a 10 años
+  // Bandas de riesgo ESC 2021 por edad (SCORE2/SCORE2-OP), en % a 10 años — referencia genérica,
+  // no calibrada para Argentina (SCORE2 solo tiene regiones de riesgo europeas)
   let bandas;
   if(edad < 50) bandas = {mod:2.5, alto:7.5};
   else if(edad < 70) bandas = {mod:5, alto:10};
   else bandas = {mod:7.5, alto:15};
-  const regionTxt = {bajo:'Bajo',moderado:'Moderado',alto:'Alto',muyalto:'Muy alto'}[region] || 'sin especificar';
   res.innerHTML = `
     <div class="calc-resultado info">
       <div style="font-size:13px;font-weight:700;margin-bottom:6px">Colesterol no-HDL: ${nonHdlMgdl.toFixed(0)} mg/dL (${nonHdlMmol} mmol/L)</div>
       <div class="calc-resultado-interp">
-        El cálculo exacto de SCORE2/SCORE2-OP requiere el modelo calibrado por región ESC (coeficientes no reproducidos aquí para evitar un número no verificado). Usá estos datos ya cargados (edad ${edad}, sexo ${sexo==='M'?'M':'F'}, TAS ${tas} mmHg, no-HDL ${nonHdlMgdl.toFixed(0)} mg/dL, tabaquismo: ${document.getElementById('c_score2_tabaco').checked?'sí':'no'}, región ${regionTxt}) en la calculadora oficial ESC (U-Prevent / HeartScore) y cargá el resultado abajo.<br><br>
-        <b>Referencia de bandas de riesgo ESC 2021 para esta edad:</b> Bajo-moderado &lt;${bandas.mod}% · Alto ${bandas.mod}–&lt;${bandas.alto}% · Muy alto ≥${bandas.alto}%
+        SCORE2/SCORE2-OP solo está calibrado para regiones de riesgo europeas (no incluye Argentina ni el resto de Latinoamérica). Usá estos datos ya cargados (edad ${edad}, sexo ${sexo==='M'?'M':'F'}, TAS ${tas} mmHg, no-HDL ${nonHdlMgdl.toFixed(0)} mg/dL, tabaquismo: ${document.getElementById('c_score2_tabaco').checked?'sí':'no'}) en la calculadora oficial ESC (U-Prevent / HeartScore) — elegí la banda de riesgo europea que prefieras usar como referencia — y cargá el resultado abajo.<br><br>
+        <b>Bandas de riesgo ESC 2021 para esta edad (referencia genérica, no específica de Argentina):</b> Bajo-moderado &lt;${bandas.mod}% · Alto ${bandas.mod}–&lt;${bandas.alto}% · Muy alto ≥${bandas.alto}%
       </div>
       <div class="calc-row" style="margin-top:12px">
         <div class="calc-field"><label>Riesgo SCORE2 obtenido (%)</label><input type="number" step="0.1" id="c_score2_manual" oninput="calc_score2_manual()"/></div>
@@ -11379,7 +11783,7 @@ function calc_score2_manual() {
     <div class="calc-actions">
       <button class="calc-btn-volcar" onclick="volcar_score2(${v},'${cat}')">📋 Volcar a la evolución</button>
     </div>`;
-  calcMarcarEstado('score2', true);
+  calcMarcarEstado('score2', true, v+'%', cat, color);
   calcAutoVolcar('score2', () => volcar_score2(v, cat));
 }
 function volcar_score2(v, cat) {
@@ -11431,7 +11835,7 @@ function precargar_ascvd() {
   if(hdl) document.getElementById('c_ascvd_hdl').value = hdl;
   const c = evolClinicaSnapshot?.clinica;
   if(c?.tabaquismo === 'actual') document.getElementById('c_ascvd_tabaco').checked = true;
-  if(c?.dx_hta) document.getElementById('c_ascvd_tto').checked = true;
+  if(medicacionTieneGrupo('Antihipertensivo')) document.getElementById('c_ascvd_tto').checked = true;
   if(c?.dx_dbt1 || c?.dx_dbt2) document.getElementById('c_ascvd_dm').checked = true;
 }
 function calc_ascvd() {
@@ -11475,7 +11879,7 @@ function calc_ascvd() {
       </div>
     </div>
   `;
-  calcMarcarEstado('ascvd', true);
+  calcMarcarEstado('ascvd', true, pct+'%', cat, color);
   calcAutoVolcar('ascvd', () => volcar_ascvd(pct, cat));
 }
 function volcar_ascvd(pct, cat) {
@@ -11517,7 +11921,7 @@ function precargar_frs() {
   if(hdl) document.getElementById('c_frs_hdl').value = hdl;
   const c = evolClinicaSnapshot?.clinica;
   if(c?.tabaquismo === 'actual') document.getElementById('c_frs_tabaco').checked = true;
-  if(c?.dx_hta) document.getElementById('c_frs_tto').checked = true;
+  if(medicacionTieneGrupo('Antihipertensivo')) document.getElementById('c_frs_tto').checked = true;
   if(c?.dx_dbt1 || c?.dx_dbt2) document.getElementById('c_frs_dm').checked = true;
 }
 function calc_frs() {
@@ -11562,7 +11966,7 @@ function calc_frs() {
       </div>
     </div>
   `;
-  calcMarcarEstado('frs', true);
+  calcMarcarEstado('frs', true, pct+'%', cat, color);
   calcAutoVolcar('frs', () => volcar_frs(pct, cat));
 }
 function volcar_frs(pct, cat) {
@@ -11613,7 +12017,7 @@ function calc_tyg() {
       </div>
     </div>
   `;
-  calcMarcarEstado('tyg', true);
+  calcMarcarEstado('tyg', true, v, cat, color);
   calcAutoVolcar('tyg', () => volcar_tyg(v, cat.replace(/'/g,"")));
 }
 function volcar_tyg(v, cat) {
@@ -11672,7 +12076,7 @@ function calc_fib4() {
       </div>
     </div>
   `;
-  calcMarcarEstado('fib4', true);
+  calcMarcarEstado('fib4', true, v, cat, color);
   calcAutoVolcar('fib4', () => volcar_fib4(v, cat));
 }
 function volcar_fib4(v, cat) {
@@ -11736,7 +12140,7 @@ function calc_cha2ds2vasc(interacted) {
     </div>
   `;
   if(interacted) {
-    calcMarcarEstado('cha2ds2vasc', true);
+    calcMarcarEstado('cha2ds2vasc', true, total+' pts', cat.startsWith('Riesgo bajo')?'Riesgo bajo':'Riesgo aumentado', color);
     calcAutoVolcar('cha2ds2vasc', () => volcar_cha2ds2vasc(total, cat));
   }
 }
@@ -11797,7 +12201,7 @@ function calc_hasbled(interacted) {
     </div>
   `;
   if(interacted) {
-    calcMarcarEstado('hasbled', true);
+    calcMarcarEstado('hasbled', true, total+' pts', total<=2?'Riesgo bajo':'Riesgo alto', color);
     calcAutoVolcar('hasbled', () => volcar_hasbled(total, cat));
   }
 }
@@ -11848,7 +12252,7 @@ function calc_tam() {
       </div>
     </div>
   `;
-  calcMarcarEstado('tam', true);
+  calcMarcarEstado('tam', true, v+' mmHg', v<90?'Rango esperado':'Elevada', color);
   calcAutoVolcar('tam', () => volcar_tam(v, cat));
 }
 function volcar_tam(v, cat) {
@@ -11927,7 +12331,8 @@ function calc_pe_riesgo(interacted) {
     </div>
   `;
   if(interacted) {
-    calcMarcarEstado('pe_riesgo', true);
+    const catCorta = (altoMarc.length>=1||modMarc.length>=2) ? 'AAS indicada' : (modMarc.length===1 ? 'Evaluar individualmente' : 'Sin indicación');
+    calcMarcarEstado('pe_riesgo', true, (altoMarc.length+modMarc.length)+' factor(es)', catCorta, color);
     calcAutoVolcar('pe_riesgo', () => volcar_pe_riesgo());
   }
 }
@@ -13829,6 +14234,119 @@ let adipTratamientos = [];
 let adipIdx          = -1;
 let adipPacDni       = null;
 
+const ADIP_FACTORES_ACTIVIDAD = [
+  { id:'sedentario',  label:'Sedentario (poco o nada de ejercicio)', factor:1.2   },
+  { id:'ligero',      label:'Actividad ligera (1-3 días/sem)',       factor:1.375 },
+  { id:'moderado',    label:'Actividad moderada (3-5 días/sem)',     factor:1.55  },
+  { id:'intenso',     label:'Actividad intensa (6-7 días/sem)',      factor:1.725 },
+  { id:'muy_intenso', label:'Muy intensa (2x/día, entren. físico)',  factor:1.9   },
+];
+
+// Estima TMB (Mifflin-St Jeor), GET y objetivos según tipo de tratamiento.
+// Devuelve null si faltan datos antropométricos básicos.
+function adipCalcularEstimacionNutricional(trat) {
+  const peso  = getPesoActualKg();
+  const talla = getTallaActualCm();
+  const p     = (typeof pacienteActual !== 'undefined') ? (pacienteActual || {}) : {};
+  const edad  = p.fecha_nacimiento ? edadDesde(p.fecha_nacimiento) : null;
+  const sexo  = p.sexo === 'Femenino' ? 'F' : 'M';
+  if(!peso || !talla || edad == null) return { peso, talla, edad, sexo, ok:false };
+
+  const actId  = (trat && trat.actividad_factor) || 'sedentario';
+  const actObj = ADIP_FACTORES_ACTIVIDAD.find(a => a.id === actId) || ADIP_FACTORES_ACTIVIDAD[0];
+
+  const tmb = sexo === 'F'
+    ? (10*peso + 6.25*talla - 5*edad - 161)
+    : (10*peso + 6.25*talla - 5*edad + 5);
+  const get = tmb * actObj.factor;
+
+  const protMin = peso * 1.2, protMax = peso * 1.5;
+  const tipo = (trat && trat.tipo_tratamiento) || 'farmacologico';
+
+  let objetivoCal = null, piso = null, deficit = 500;
+  if(tipo !== 'bariatrica') {
+    piso = sexo === 'F' ? 1200 : 1500;
+    objetivoCal = Math.max(get - deficit, piso);
+  }
+
+  return { ok:true, peso, talla, edad, sexo, actObj, tmb, get, protMin, protMax, tipo, objetivoCal, piso, deficit };
+}
+
+function adipCalcularRequerimientos() {
+  if(adipIdx < 0) return;
+  const trat = adipTratamientos[adipIdx];
+  const resDiv = document.getElementById('adip_nutri_resultado');
+  if(!resDiv) return;
+
+  const actSel = document.getElementById('adip_nutri_actividad');
+  if(actSel) trat.actividad_factor = actSel.value;
+
+  const r = adipCalcularEstimacionNutricional(trat);
+  const setTxt = (id,v) => { const el = document.getElementById(id); if(el) el.textContent = v; };
+  setTxt('adip_nutri_peso_val',  r.peso  ? r.peso.toFixed(1)+' kg' : '— (cargar en Evolución)');
+  setTxt('adip_nutri_talla_val', r.talla ? r.talla+' cm' : '— (cargar en Evolución)');
+  setTxt('adip_nutri_edad_val',  r.edad != null ? r.edad+' años' : '—');
+  setTxt('adip_nutri_sexo_val',  r.sexo === 'F' ? 'Femenino' : 'Masculino');
+
+  if(!r.ok) {
+    resDiv.innerHTML = '<div style="font-size:11.5px;color:#94a3b8;padding:6px 2px">Faltan datos (peso, talla y/o fecha de nacimiento) para calcular los requerimientos. Cargalos en Evolución o en la ficha del paciente.</div>';
+    marcarDirty('adip');
+    return;
+  }
+
+  let objetivoHtml;
+  if(r.tipo === 'bariatrica') {
+    objetivoHtml = `
+      <div style="background:white;border:1.5px solid #ddd6fe;border-radius:9px;padding:10px 12px;margin-top:8px">
+        <div style="font-size:10.5px;font-weight:700;color:#6d28d9;text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px">🎯 Metas según evidencia — cirugía bariátrica</div>
+        <div style="font-size:12px;color:#334155;line-height:1.7">
+          • %EWL (exceso de peso perdido) esperado: <b>50–70%</b> a los 12–18 meses<br>
+          • %TWL (peso total perdido) esperado: <b>25–35%</b> a los 12–18 meses<br>
+          • El requerimiento calórico varía según la etapa post-quirúrgica (líquida → puré → blanda → general); no se estima un valor único.<br>
+          • Proteína objetivo: <b>${r.protMin.toFixed(0)}–${r.protMax.toFixed(0)} g/día</b> (1.2–1.5 g/kg peso actual) para preservar masa magra.
+        </div>
+      </div>`;
+  } else {
+    objetivoHtml = `
+      <div style="background:white;border:1.5px solid #ddd6fe;border-radius:9px;padding:10px 12px;margin-top:8px">
+        <div style="font-size:10.5px;font-weight:700;color:#6d28d9;text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px">🎯 Objetivo calórico — tratamiento farmacológico</div>
+        <div style="font-size:12px;color:#334155;line-height:1.7">
+          • Consumo estimado de mantenimiento (GET): <b>${Math.round(r.get)} kcal/día</b><br>
+          • Objetivo con déficit moderado (~${r.deficit} kcal/día): <b>${Math.round(r.objetivoCal)} kcal/día</b>${r.objetivoCal===r.piso?' (piso de seguridad)':''}<br>
+          • Proteína objetivo: <b>${r.protMin.toFixed(0)}–${r.protMax.toFixed(0)} g/día</b> (1.2–1.5 g/kg peso actual)<br>
+          • Meta de descenso esperable con agonistas GLP-1/asociaciones: <b>~15–20%</b> del peso total a 12–18 meses.
+        </div>
+      </div>`;
+  }
+
+  resDiv.innerHTML = `
+    <div style="font-size:11px;color:#64748b;line-height:1.6">
+      TMB (Mifflin-St Jeor): <b>${Math.round(r.tmb)} kcal/día</b> · Factor actividad: <b>×${r.actObj.factor}</b> (${r.actObj.label}) · GET (mantenimiento): <b>${Math.round(r.get)} kcal/día</b>
+    </div>
+    ${objetivoHtml}
+    <div style="font-size:10px;color:#94a3b8;font-style:italic;margin-top:6px">Estimación orientativa según ecuación de Mifflin-St Jeor y nivel de actividad reportado; ajustar según criterio clínico.</div>
+  `;
+  marcarDirty('adip');
+}
+
+function adipCambiarTipoTratamiento() {
+  if(adipIdx < 0) return;
+  const trat = adipTratamientos[adipIdx];
+  const esBar = !!(document.getElementById('adip_tipo_bar')||{}).checked;
+  trat.tipo_tratamiento = esBar ? 'bariatrica' : 'farmacologico';
+  const fw = document.getElementById('adip_farm_wrap'); if(fw) fw.style.display = esBar ? 'none' : 'flex';
+  const bw = document.getElementById('adip_bar_wrap');  if(bw) bw.style.display = esBar ? 'flex' : 'none';
+  adipActualizarCampo();
+  adipCalcularRequerimientos();
+  adipRenderPills();
+}
+
+function adipNuevoToggleTipo() {
+  const esBar = !!(document.getElementById('adip_nuevo_tipo_bar')||{}).checked;
+  const fw = document.getElementById('adip_nuevo_farm_wrap'); if(fw) fw.style.display = esBar ? 'none' : 'block';
+  const bw = document.getElementById('adip_nuevo_bar_wrap');  if(bw) bw.style.display = esBar ? 'block' : 'none';
+}
+
 async function adipIniciar(dni) {
   adipPacDni       = dni;
   adipTratamientos = [];
@@ -13842,6 +14360,9 @@ async function adipIniciar(dni) {
         id:               r.id,
         fecha_inicio:     r.fecha_inicio,
         fecha_control:    r.fecha_control || '',
+        tipo_tratamiento: r.tipo_tratamiento || 'farmacologico',
+        tipo_cirugia:     r.tipo_cirugia || '',
+        actividad_factor: r.actividad_factor || 'sedentario',
         droga:            r.droga || '',
         dosis:            r.dosis || '',
         chk_estudios:     !!r.chk_estudios,
@@ -13866,17 +14387,21 @@ function adipRenderPills() {
     const fecha = trat.fecha_inicio
       ? new Date(trat.fecha_inicio + 'T12:00:00').toLocaleDateString('es-AR', {day:'2-digit',month:'2-digit',year:'2-digit'})
       : 'Sin fecha';
+    const etiqueta = trat.tipo_tratamiento === 'bariatrica'
+      ? (trat.tipo_cirugia || 'Bariátrica')
+      : (trat.droga || '');
+    const icono = trat.tipo_tratamiento === 'bariatrica' ? '🔪' : '💊';
     const pill = document.createElement('div');
     const esEditable = (i === adipIdx && adipIdx >= 0);
     pill.className = 'mdpa-estudio-pill' + (esEditable ? ' active' : '');
     pill.style.cursor = 'pointer';
     if(esEditable) {
       pill.title = 'Tratamiento en edición';
-      pill.innerHTML = `<span style="display:flex;align-items:center;gap:5px">✏️ ${fecha}${trat.droga ? ' · '+trat.droga : ''}</span>`
+      pill.innerHTML = `<span style="display:flex;align-items:center;gap:5px">✏️ ${fecha}${etiqueta ? ' · '+icono+' '+etiqueta : ''}</span>`
         + `<button class="mdpa-pill-del" onclick="event.stopPropagation();adipConfirmarEliminar(${i})" title="Eliminar">×</button>`;
     } else {
       pill.title = 'Ver informe';
-      pill.innerHTML = `<span onclick="adipAbrirInformePrevio(${i})" style="display:flex;align-items:center;gap:5px">📄 ${fecha}${trat.droga ? ' · '+trat.droga : ''}</span>`;
+      pill.innerHTML = `<span onclick="adipAbrirInformePrevio(${i})" style="display:flex;align-items:center;gap:5px">📄 ${fecha}${etiqueta ? ' · '+icono+' '+etiqueta : ''}</span>`;
     }
     cont.appendChild(pill);
   });
@@ -13916,8 +14441,14 @@ function adipSeleccionarTratamiento(i) {
   if(badge) badge.style.display = 'none';
   const fi = document.getElementById('adip_fecha_inicio'); if(fi) fi.value = trat.fecha_inicio || '';
   const fc = document.getElementById('adip_fecha_control'); if(fc) fc.value = trat.fecha_control || '';
+  const esBar = trat.tipo_tratamiento === 'bariatrica';
+  const rf = document.getElementById('adip_tipo_farm'); if(rf) rf.checked = !esBar;
+  const rb = document.getElementById('adip_tipo_bar');  if(rb) rb.checked = esBar;
+  const fw = document.getElementById('adip_farm_wrap'); if(fw) fw.style.display = esBar ? 'none' : 'flex';
+  const bw = document.getElementById('adip_bar_wrap');  if(bw) bw.style.display = esBar ? 'flex' : 'none';
   const dr = document.getElementById('adip_droga_input'); if(dr) dr.value = trat.droga || '';
   const do_ = document.getElementById('adip_dosis_input'); if(do_) do_.value = trat.dosis || '';
+  const cir = document.getElementById('adip_cirugia_select'); if(cir) cir.value = trat.tipo_cirugia || '';
   const c1 = document.getElementById('adip_chk_estudios'); if(c1) c1.checked = !!trat.chk_estudios;
   const c2 = document.getElementById('adip_chk_guia'); if(c2) c2.checked = !!trat.chk_guia;
   const c5 = document.getElementById('adip_chk_colocacion'); if(c5) c5.checked = !!trat.chk_colocacion;
@@ -13925,8 +14456,10 @@ function adipSeleccionarTratamiento(i) {
   const c4 = document.getElementById('adip_chk_anticoncepcion'); if(c4) c4.checked = !!trat.chk_anticoncepcion;
   const txt = document.getElementById('adip_anticoncepcion_texto'); if(txt) txt.value = trat.anticoncepcion_texto || '';
   const wrap = document.getElementById('adip_anticoncepcion_wrap'); if(wrap) wrap.style.display = trat.chk_anticoncepcion ? 'block' : 'none';
+  const actSel = document.getElementById('adip_nutri_actividad'); if(actSel) actSel.value = trat.actividad_factor || 'sedentario';
   adipRenderResumen();
   adipRenderPills();
+  adipCalcularRequerimientos();
 }
 
 function adipToggleAnticoncepcion() {
@@ -13951,6 +14484,7 @@ function adipActualizarCampo() {
   const fc = document.getElementById('adip_fecha_control'); if(fc) trat.fecha_control = fc.value;
   const dr = document.getElementById('adip_droga_input'); if(dr) trat.droga = dr.value;
   const do_ = document.getElementById('adip_dosis_input'); if(do_) trat.dosis = do_.value;
+  const cir = document.getElementById('adip_cirugia_select'); if(cir) trat.tipo_cirugia = cir.value;
   const c1 = document.getElementById('adip_chk_estudios'); if(c1) trat.chk_estudios = c1.checked;
   const c2 = document.getElementById('adip_chk_guia'); if(c2) trat.chk_guia = c2.checked;
   const c5 = document.getElementById('adip_chk_colocacion'); if(c5) trat.chk_colocacion = c5.checked;
@@ -13959,6 +14493,7 @@ function adipActualizarCampo() {
   const txt = document.getElementById('adip_anticoncepcion_texto'); if(txt) trat.anticoncepcion_texto = txt.value;
   marcarDirty('adip');
   adipRenderResumen();
+  adipRenderPills();
 }
 
 function adipRenderResumen() {
@@ -13966,8 +14501,9 @@ function adipRenderResumen() {
   const trat = adipTratamientos[adipIdx];
   const fmtF = f => f ? new Date(f+'T12:00:00').toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'}) : '—';
   const set = (id,val) => { const el=document.getElementById(id); if(el) el.textContent = val; };
-  set('adip_r_droga', trat.droga || '—');
-  set('adip_r_dosis', trat.dosis || '—');
+  const esBar = trat.tipo_tratamiento === 'bariatrica';
+  set('adip_r_droga', esBar ? 'Cirugía' : (trat.droga || '—'));
+  set('adip_r_dosis', esBar ? (trat.tipo_cirugia || '—') : (trat.dosis || '—'));
   set('adip_r_inicio', fmtF(trat.fecha_inicio));
   set('adip_r_control', fmtF(trat.fecha_control));
   const nMarcadas = [trat.chk_estudios, trat.chk_guia, trat.chk_colocacion, trat.chk_efectos].filter(Boolean).length;
@@ -13980,10 +14516,15 @@ function adipNuevoTratamiento() {
   const fc = document.getElementById('adip_nuevo_fecha_control');
   const dr = document.getElementById('adip_nuevo_droga');
   const do_ = document.getElementById('adip_nuevo_dosis');
+  const cir = document.getElementById('adip_nuevo_cirugia');
+  const rf = document.getElementById('adip_nuevo_tipo_farm');
   if(fn) fn.value = hoy;
   if(fc) fc.value = '';
   if(dr) dr.value = '';
   if(do_) do_.value = '';
+  if(cir) cir.value = '';
+  if(rf) rf.checked = true;
+  adipNuevoToggleTipo();
   document.getElementById('adip_modal_nuevo').classList.add('open');
 }
 
@@ -13992,14 +14533,20 @@ function adipCrearTratamiento() {
   const fc = document.getElementById('adip_nuevo_fecha_control');
   const dr = document.getElementById('adip_nuevo_droga');
   const do_ = document.getElementById('adip_nuevo_dosis');
+  const cir = document.getElementById('adip_nuevo_cirugia');
+  const esBar = !!(document.getElementById('adip_nuevo_tipo_bar')||{}).checked;
   const fecha = fn ? fn.value : '';
   const fechaControl = fc ? fc.value : '';
   const droga = dr ? dr.value.trim() : '';
   const dosis = do_ ? do_.value.trim() : '';
+  const tipoCirugia = cir ? cir.value : '';
   if(!fecha) { alert('Ingresá la fecha de inicio del tratamiento'); return; }
   adipTratamientos.unshift({
     id: 'new_' + Date.now(), fecha_inicio: fecha, fecha_control: fechaControl,
-    droga: droga, dosis: dosis,
+    tipo_tratamiento: esBar ? 'bariatrica' : 'farmacologico',
+    tipo_cirugia: esBar ? tipoCirugia : '',
+    actividad_factor: 'sedentario',
+    droga: esBar ? '' : droga, dosis: esBar ? '' : dosis,
     chk_estudios: false, chk_guia: false, chk_colocacion: false, chk_efectos: false,
     chk_anticoncepcion: false, anticoncepcion_texto: ''
   });
@@ -14019,6 +14566,9 @@ async function adipGuardar() {
     paciente_dni: adipPacDni,
     fecha_inicio: trat.fecha_inicio,
     fecha_control: trat.fecha_control || null,
+    tipo_tratamiento: trat.tipo_tratamiento || 'farmacologico',
+    tipo_cirugia: trat.tipo_cirugia || '',
+    actividad_factor: trat.actividad_factor || 'sedentario',
     droga: trat.droga || '',
     dosis: trat.dosis || '',
     chk_estudios: !!trat.chk_estudios,
@@ -14082,22 +14632,50 @@ function adipVolcarAEditor() {
   ].filter(x => x[0]).map(x => x[1]);
   const itemsTxt = items.length ? items.join(' · ') : 'sin indicaciones marcadas aún';
   const anticoncepcionTxt = trat.chk_anticoncepcion ? ' · Se brindó información de doble anticoncepción.' : '';
+  const tratTxt = trat.tipo_tratamiento === 'bariatrica'
+    ? `Cirugía: <b>${trat.tipo_cirugia || '—'}</b>`
+    : `Droga: <b>${trat.droga || '—'}</b> · Dosis: <b>${trat.dosis || '—'}</b>`;
   if(typeof volcarCalculadoraAEditor !== 'function') { alert('No se pudo volcar: abrí primero la pestaña Evolución.'); return; }
   volcarCalculadoraAEditor('bloque-adip-pauta', 'Adiposidad — Pauta de tratamiento',
-    `Droga: <b>${trat.droga || '—'}</b> · Dosis: <b>${trat.dosis || '—'}</b> · Inicio: ${fmtF(trat.fecha_inicio)} · 1er control (estipulado): ${fmtF(trat.fecha_control)}.<br>` +
+    `${tratTxt} · Inicio: ${fmtF(trat.fecha_inicio)} · 1er control (estipulado): ${fmtF(trat.fecha_control)}.<br>` +
     `Indicaciones: ${itemsTxt}.${anticoncepcionTxt}<br>` +
     `<span style="font-style:italic;color:#5b6b7d">Todo lo indicado fue conversado con el/la paciente durante esta consulta; no reemplaza la consulta médica.</span>`);
 }
 
-function adipImprimirInforme() {
+const ADIP_OPTS_DEFAULT = { indic:true, nutri:true, antro:true };
+
+function adipImprimirInforme(opts) {
   if(adipIdx < 0) return;
-  const html = _adipGenerarHTMLInforme(adipTratamientos[adipIdx], false);
+  const html = _adipGenerarHTMLInforme(adipTratamientos[adipIdx], false, opts || ADIP_OPTS_DEFAULT);
   const win = window.open('', '_blank', 'width=960,height=720');
   if(!win) { alert('Bloqueador de popups activo. Permitir para este sitio.'); return; }
   win.document.write(html);
   win.document.close();
   win.focus();
   setTimeout(() => win.print(), 450);
+}
+
+function adipAbrirOpcionesInforme() {
+  if(adipIdx < 0) return;
+  const trat = adipTratamientos[adipIdx];
+  const chkAntro = document.getElementById('adip_chk_inf_antro');
+  if(chkAntro) chkAntro.checked = !!(typeof antDatos !== 'undefined' && antDatos?.columnas?.length);
+  const m = document.getElementById('adip_modal_opciones_informe');
+  if(m) { m.style.display = 'flex'; document.body.style.overflow = 'hidden'; }
+}
+function adipCerrarOpcionesInforme() {
+  const m = document.getElementById('adip_modal_opciones_informe');
+  if(m) m.style.display = 'none';
+  document.body.style.overflow = '';
+}
+function adipGenerarInformeConOpciones() {
+  const opts = {
+    indic: !!(document.getElementById('adip_chk_inf_indic')||{}).checked,
+    nutri: !!(document.getElementById('adip_chk_inf_nutri')||{}).checked,
+    antro: !!(document.getElementById('adip_chk_inf_antro')||{}).checked,
+  };
+  adipCerrarOpcionesInforme();
+  adipImprimirInforme(opts);
 }
 
 let _adipInformeTratamiento = null;
@@ -14134,7 +14712,8 @@ function adipInformeModalImprimir() {
   setTimeout(() => win.print(), 450);
 }
 
-function _adipGenerarHTMLInforme(trat, modoModal) {
+function _adipGenerarHTMLInforme(trat, modoModal, opts) {
+  opts = opts || ADIP_OPTS_DEFAULT;
   const p       = pacienteActual || {};
   const nombre  = ((p.apellido||'') + ', ' + (p.nombre||'')).trim().replace(/^,\s*/,'');
   const fnac    = p.fecha_nacimiento || p.fnac || '';
@@ -14157,6 +14736,77 @@ function _adipGenerarHTMLInforme(trat, modoModal) {
         <div class="anti-txt">${(trat.anticoncepcion_texto || 'Se brindó información sobre doble anticoncepción durante el tratamiento.').replace(/\n/g,'<br>')}</div>
       </div>`
     : '';
+
+  const esBar = trat.tipo_tratamiento === 'bariatrica';
+
+  // ── Bloque: pauta de inicio e indicaciones (opcional) ──
+  const indicHTML = opts.indic ? `
+  <div class="chk-panel">
+    <div class="chk-hdr">✅ Pauta de inicio e indicaciones</div>
+    ${item(trat.chk_estudios, 'Se indicó solicitar los estudios de control con anticipación, para coincidir con la fecha estipulada del primer control.')}
+    ${item(trat.chk_guia, esBar ? 'Se envió guía con información sobre la cirugía, preguntas frecuentes, efectos adversos y pautas de alarma.' : 'Se envió guía con información sobre el fármaco (para qué sirve), preguntas frecuentes, efectos adversos y pautas de alarma.')}
+    ${item(trat.chk_colocacion, esBar ? 'Se brindaron instrucciones perioperatorias/postoperatorias.' : 'Se enviaron instrucciones de colocación del fármaco (técnica de aplicación, sitios de inyección, manejo del dispositivo).')}
+    ${item(trat.chk_efectos, 'Se entregó guía alimentaria general.')}
+    <div class="chk-nota">ℹ️ Estos materiales son un complemento educativo: no reemplazan la consulta médica. Todo lo indicado fue conversado con el/la paciente durante esta consulta.</div>
+  </div>` : '';
+
+  // ── Bloque: requerimientos nutricionales (opcional) ──
+  let nutriHTML = '';
+  if(opts.nutri) {
+    const r = adipCalcularEstimacionNutricional(trat);
+    if(!r.ok) {
+      nutriHTML = `
+  <div class="nutri-panel">
+    <div class="nutri-hdr2">🧮 Requerimientos nutricionales</div>
+    <div class="nutri-empty">Faltan datos antropométricos (peso, talla o fecha de nacimiento) para estimar los requerimientos.</div>
+  </div>`;
+    } else {
+      const objBlock = r.tipo === 'bariatrica'
+        ? `<div class="nutri-row"><span>%EWL esperado (12–18 meses)</span><b>50–70%</b></div>
+           <div class="nutri-row"><span>%TWL esperado (12–18 meses)</span><b>25–35%</b></div>
+           <div class="nutri-row"><span>Proteína objetivo</span><b>${r.protMin.toFixed(0)}–${r.protMax.toFixed(0)} g/día</b> (1.2–1.5 g/kg)</div>
+           <div class="nutri-nota2">El requerimiento calórico varía según etapa post-quirúrgica; no se estima un valor único.</div>`
+        : `<div class="nutri-row"><span>GET (mantenimiento)</span><b>${Math.round(r.get)} kcal/día</b></div>
+           <div class="nutri-row"><span>Objetivo con déficit moderado</span><b>${Math.round(r.objetivoCal)} kcal/día</b></div>
+           <div class="nutri-row"><span>Proteína objetivo</span><b>${r.protMin.toFixed(0)}–${r.protMax.toFixed(0)} g/día</b> (1.2–1.5 g/kg)</div>
+           <div class="nutri-row"><span>Meta de descenso esperable (12–18 meses)</span><b>~15–20% del peso total</b></div>`;
+      nutriHTML = `
+  <div class="nutri-panel">
+    <div class="nutri-hdr2">🧮 Requerimientos nutricionales estimados</div>
+    <div class="nutri-datos">Peso: <b>${r.peso.toFixed(1)} kg</b> · Talla: <b>${r.talla} cm</b> · Edad: <b>${r.edad} años</b> · Sexo: <b>${r.sexo==='F'?'Femenino':'Masculino'}</b> · Actividad: <b>${r.actObj.label}</b></div>
+    <div class="nutri-row"><span>TMB (Mifflin-St Jeor)</span><b>${Math.round(r.tmb)} kcal/día</b></div>
+    ${objBlock}
+    <div class="nutri-nota2">Estimación orientativa; ajustar según criterio clínico.</div>
+  </div>`;
+    }
+  }
+
+  // ── Bloque: antropometría (opcional) ──
+  let antroHTML = '';
+  if(opts.antro && typeof antDatos !== 'undefined' && antDatos?.columnas?.length) {
+    const keysAntro = ['Peso','IMC','Cintura'];
+    const idxAntro = keysAntro.map(k => ANT_FILAS.findIndex(f=>f.key===k));
+    const colsConDato = antDatos.columnas.map((f,ci)=>ci).filter(ci =>
+      idxAntro.some(fi => fi>=0 && (antDatos.filas[fi]||[])[ci]));
+    const colsMostrar = colsConDato.slice(-6);
+    if(colsMostrar.length) {
+      const theadCols = colsMostrar.map(ci => '<th>'+(fmtF(antDatos.columnas[ci])||antDatos.columnas[ci])+'</th>').join('');
+      const rows = keysAntro.map((k,ki)=>{
+        const fi = idxAntro[ki]; if(fi<0) return '';
+        const cfg = ANT_FILAS[fi];
+        const tds = colsMostrar.map(ci=>{
+          const v = (antDatos.filas[fi]||[])[ci];
+          return '<td>'+(v ? v+(cfg.unidades?.[0]&&k!=='IMC'?' '+cfg.unidades[0]:'') : '—')+'</td>';
+        }).join('');
+        return '<tr><td>'+cfg.label+'</td>'+tds+'</tr>';
+      }).join('');
+      antroHTML = `
+  <div class="nutri-panel">
+    <div class="nutri-hdr2">📏 Evolución antropométrica</div>
+    <table class="antro-table"><thead><tr><th>Variable</th>${theadCols}</tr></thead><tbody>${rows}</tbody></table>
+  </div>`;
+    }
+  }
 
   const estilos = `
     *{box-sizing:border-box;margin:0;padding:0}
@@ -14201,15 +14851,31 @@ function _adipGenerarHTMLInforme(trat, modoModal) {
     .anti-txt{font-size:11.5px;color:#334155;line-height:1.5}
     .footer{margin-top:16px;padding-top:10px;border-top:1px solid #e2e8f0;display:flex;align-items:center;justify-content:space-between;font-size:8.5px;color:#94a3b8}
     .footer-brand{font-weight:700;color:#64748b;letter-spacing:.04em;text-transform:uppercase}
+    .nutri-panel{background:#f5f3ff;border:1.5px solid #ddd6fe;border-radius:10px;padding:14px 16px;margin-bottom:16px}
+    .nutri-hdr2{font-size:11px;font-weight:700;color:#6d28d9;text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px}
+    .nutri-datos{font-size:10.5px;color:#64748b;margin-bottom:8px}
+    .nutri-row{display:flex;justify-content:space-between;gap:10px;font-size:11.5px;color:#334155;padding:5px 0;border-bottom:1px dashed #e2d9fb}
+    .nutri-row:last-of-type{border-bottom:none}
+    .nutri-row b{color:#0c4a6e}
+    .nutri-nota2{font-size:9.5px;color:#8b5cf6;font-style:italic;margin-top:8px}
+    .nutri-empty{font-size:11px;color:#94a3b8}
+    .antro-table{width:100%;border-collapse:collapse;font-size:10.5px;margin-top:4px}
+    .antro-table th,.antro-table td{border:1px solid #e2e8f0;padding:5px 8px;text-align:center}
+    .antro-table th{background:#ede9fe;color:#6d28d9;font-weight:700}
+    .antro-table td:first-child{text-align:left;font-weight:600;color:#334155;background:#faf9ff}
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
-    @media print{body{background:white}@page{margin:8mm 10mm;size:A4}.rh,.chk-hdr{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+    @media print{body{background:white}@page{margin:8mm 10mm;size:A4}.rh,.chk-hdr,.nutri-hdr2,.antro-table th{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
   `;
+
+  const tituloTrat = esBar ? 'Adiposidad — Tratamiento Bariátrico' : 'Adiposidad — Tratamiento Farmacológico';
+  const chip1 = esBar ? { lbl:'Tipo de cirugía', val: trat.tipo_cirugia || '—' } : { lbl:'Droga', val: trat.droga || '—' };
+  const chip2 = esBar ? { lbl:'—', val:'' } : { lbl:'Dosis', val: trat.dosis || '—' };
 
   const cuerpo = `
 <div class="rh">
-  <div class="rh-ico">🎯</div>
+  <div class="rh-ico">${esBar ? '🔪' : '🎯'}</div>
   <div class="rh-txt">
-    <div class="rh-title">Adiposidad — Tratamiento Farmacológico</div>
+    <div class="rh-title">${tituloTrat}</div>
     <div class="rh-sub">Seguimiento de inicio de tratamiento</div>
   </div>
   <div class="rh-fecha"><strong>${fechaHoyStr}</strong>1er control (estipulado): ${fechaControl}</div>
@@ -14227,22 +14893,19 @@ ${profNombre ? `<div class="prof-strip"><span class="prof-name">${profNombre}</s
     <div class="turno-txt"><strong>La fecha de "1er control" es estipulada, no un turno ya reservado.</strong> Solicitá el turno para esa fecha con anticipación, para asegurar disponibilidad.</div>
   </div>
   <div class="info-grid">
-    <div class="chip"><div class="chip-lbl">Droga</div><div class="chip-val">${trat.droga || '—'}</div></div>
-    <div class="chip"><div class="chip-lbl">Dosis</div><div class="chip-val">${trat.dosis || '—'}</div></div>
+    <div class="chip"><div class="chip-lbl">${chip1.lbl}</div><div class="chip-val">${chip1.val}</div></div>
+    ${chip2.lbl!=='—' ? `<div class="chip"><div class="chip-lbl">${chip2.lbl}</div><div class="chip-val">${chip2.val}</div></div>` : ''}
     <div class="chip"><div class="chip-lbl">Fecha de inicio</div><div class="chip-val">${fechaIni}</div></div>
     <div class="chip"><div class="chip-lbl">1er control (estipulado)</div><div class="chip-val">${fechaControl}</div></div>
   </div>
 
-  <div class="chk-panel">
-    <div class="chk-hdr">✅ Pauta de inicio e indicaciones</div>
-    ${item(trat.chk_estudios, 'Se indicó solicitar los estudios de control con anticipación, para coincidir con la fecha estipulada del primer control.')}
-    ${item(trat.chk_guia, 'Se envió guía con información sobre el fármaco (para qué sirve), preguntas frecuentes, efectos adversos y pautas de alarma.')}
-    ${item(trat.chk_colocacion, 'Se enviaron instrucciones de colocación del fármaco (técnica de aplicación, sitios de inyección, manejo del dispositivo).')}
-    ${item(trat.chk_efectos, 'Se entregó guía alimentaria general.')}
-    <div class="chk-nota">ℹ️ Estos materiales son un complemento educativo: no reemplazan la consulta médica. Todo lo indicado fue conversado con el/la paciente durante esta consulta.</div>
-  </div>
+  ${indicHTML}
 
   ${anticoncepcionBlock}
+
+  ${nutriHTML}
+
+  ${antroHTML}
 
   <div class="footer">
     <span class="footer-brand">Evaluaciones Cardiometabólicas</span>
