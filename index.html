@@ -19,6 +19,7 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     :root {
@@ -1991,27 +1992,140 @@
         .inv-empty-block{padding:16px;text-align:center;color:var(--text-soft);font-size:12.5px;font-style:italic}
         .inv-calc-list{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
         .inv-calc-pill{font-size:11px;padding:4px 10px;border-radius:20px;background:var(--blue-light);color:var(--blue);font-weight:600}
+
+        /* ── Toolbar / filtros avanzados ── */
+        .inv-toolbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:-6px 0 18px}
+        .inv-btn-filtros{display:flex;align-items:center;gap:7px;padding:9px 16px;border-radius:11px;border:1.5px solid var(--border);background:white;color:var(--text);font-size:12.5px;font-weight:600;cursor:pointer;font-family:var(--font-main);transition:all .15s}
+        .inv-btn-filtros:hover{border-color:var(--blue);color:var(--blue)}
+        .inv-btn-filtros.active{background:var(--blue);border-color:var(--blue);color:white}
+        .inv-filtros-badge{background:rgba(255,255,255,.25);border-radius:20px;padding:1px 8px;font-size:10.5px}
+        .inv-btn-filtros:not(.active) .inv-filtros-badge{background:var(--blue);color:white}
+        .inv-filtros-panel{background:white;border:1px solid var(--border);border-radius:18px;padding:22px 24px;margin-bottom:20px;display:none}
+        .inv-filtros-panel.open{display:block}
+        .inv-filtros-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:22px 26px}
+        .inv-filtro-section{grid-column:span 1}
+        .inv-filtro-section.wide{grid-column:1/-1}
+        .inv-filtro-titulo{font-family:var(--font-display);font-size:12px;font-weight:700;color:var(--text);margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;gap:8px}
+        .inv-filtro-modo{display:flex;gap:2px;background:var(--gray);border-radius:8px;padding:2px}
+        .inv-filtro-modo button{border:none;background:transparent;padding:3px 9px;font-size:10px;font-weight:700;border-radius:6px;cursor:pointer;color:var(--text-soft);font-family:var(--font-main)}
+        .inv-filtro-modo button.active{background:white;color:var(--blue);box-shadow:0 1px 3px rgba(0,0,0,.12)}
+        .inv-check-list{display:flex;flex-wrap:wrap;gap:6px;max-height:168px;overflow-y:auto;padding:2px 2px 4px}
+        .inv-check-pill{display:inline-flex;align-items:center;gap:5px;font-size:11px;padding:5px 10px;border-radius:20px;background:var(--gray);cursor:pointer;user-select:none;border:1.5px solid transparent;line-height:1.2}
+        .inv-check-pill input{margin:0;accent-color:var(--blue)}
+        .inv-check-pill.checked{background:var(--blue-light);border-color:var(--blue);color:var(--blue);font-weight:600}
+        .inv-check-pill.excl input{accent-color:var(--red)}
+        .inv-check-pill.excl.checked{background:var(--red-light);border-color:var(--red);color:var(--red);font-weight:600}
+        .inv-check-sub{font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-soft);width:100%;margin:6px 0 -2px}
+        .inv-range-row{display:grid;grid-template-columns:1fr 60px 60px;align-items:center;gap:6px;margin-bottom:7px}
+        .inv-range-row label{font-size:11px;color:var(--text-soft)}
+        .inv-range-row input{width:100%;padding:6px 7px;border:1.5px solid var(--border);border-radius:8px;font-size:11.5px;font-family:var(--font-main);background:var(--gray)}
+        .inv-range-row input:focus{border-color:var(--blue);background:white;outline:none}
+        .inv-range-head{display:grid;grid-template-columns:1fr 60px 60px;gap:6px;margin-bottom:4px}
+        .inv-range-head span{font-size:9px;font-weight:700;text-transform:uppercase;color:var(--text-soft);text-align:center}
+        .inv-filtro-inline{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+        .inv-filtro-inline input[type=number]{width:70px;padding:7px 9px;border:1.5px solid var(--border);border-radius:9px;font-size:12.5px;font-family:var(--font-main);background:var(--gray)}
+        .inv-filtro-inline select{padding:7px 9px;border:1.5px solid var(--border);border-radius:9px;font-size:12.5px;font-family:var(--font-main);background:var(--gray);color:var(--text)}
+        .inv-filtros-actions{display:flex;gap:10px;justify-content:flex-end;align-items:center;margin-top:18px;padding-top:16px;border-top:1px solid var(--border)}
+        .inv-filtros-resumen{font-size:11.5px;color:var(--text-soft);margin-right:auto}
+        .inv-btn-primary{padding:9px 20px;border-radius:11px;border:none;background:var(--blue);color:white;font-size:12.5px;font-weight:600;cursor:pointer;font-family:var(--font-main)}
+        .inv-btn-primary:hover{background:var(--blue-dark)}
+        .inv-btn-ghost{padding:9px 16px;border-radius:11px;border:1.5px solid var(--border);background:white;color:var(--text-soft);font-size:12.5px;font-weight:500;cursor:pointer;font-family:var(--font-main)}
+        .inv-btn-ghost:hover{border-color:var(--text-soft);color:var(--text)}
+        .inv-filtro-nota{font-size:10.5px;color:var(--text-soft);opacity:.8;margin-top:8px;font-style:italic}
+
+        /* ── Vista B: Cohorte ── */
+        .inv-cohort-bar{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:14px}
+        .inv-cohort-count{font-size:13px;color:var(--text-soft)}
+        .inv-cohort-count b{color:var(--text);font-family:var(--font-display)}
+        .inv-cohort-actions{display:flex;gap:8px;flex-wrap:wrap}
+        .inv-cohort-table-wrap{background:white;border:1px solid var(--border);border-radius:18px;overflow-x:auto}
+        .inv-cohort-table{width:100%;border-collapse:collapse;font-size:12.5px;min-width:820px}
+        .inv-cohort-table th{background:var(--gray);padding:10px 12px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-soft);white-space:nowrap;cursor:pointer;user-select:none}
+        .inv-cohort-table th:hover{color:var(--blue)}
+        .inv-cohort-table th.sorted::after{content:' ▾';font-size:9px}
+        .inv-cohort-table th.sorted.asc::after{content:' ▴'}
+        .inv-cohort-table td{padding:9px 12px;border-top:1px solid var(--border);vertical-align:top}
+        .inv-cohort-table tbody tr.rowclick{cursor:pointer}
+        .inv-cohort-table tbody tr.rowclick:hover td{background:#fafcff}
+        .inv-cohort-dx{display:flex;flex-wrap:wrap;gap:3px;max-width:220px}
+        .inv-cohort-dx span{font-size:9.5px;padding:2px 7px;border-radius:20px;background:var(--red-light);color:var(--red);white-space:nowrap}
+        .inv-cohort-farm{font-size:11px;color:var(--text-soft);max-width:180px}
+        .inv-cohort-riesgo{font-size:10px;font-weight:700;padding:3px 9px;border-radius:20px;display:inline-block;white-space:nowrap}
+        .inv-cohort-riesgo.bajo{background:#e8f9f0;color:#1D9E75}
+        .inv-cohort-riesgo.moderado{background:#fff8e1;color:#b45309}
+        .inv-cohort-riesgo.alto{background:var(--red-light);color:var(--red)}
+        .inv-cohort-riesgo.muyalto{background:#fde2e1;color:#a32a20}
+        .inv-cohort-riesgo.sd{background:var(--gray);color:var(--text-soft)}
+        .inv-cohort-pag{display:flex;align-items:center;justify-content:center;gap:14px;padding:14px;font-size:12px;color:var(--text-soft)}
+        .inv-cohort-pag button{padding:5px 12px;border-radius:8px;border:1.5px solid var(--border);background:white;cursor:pointer;font-size:12px;font-family:var(--font-main)}
+        .inv-cohort-pag button:disabled{opacity:.4;cursor:default}
+        .inv-cohort-back{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--blue);cursor:pointer;font-weight:600;margin-bottom:14px}
+
+        /* ── Modal de exportación ── */
+        .inv-export-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:3000;align-items:center;justify-content:center;padding:20px}
+        .inv-export-overlay.open{display:flex}
+        .inv-export-modal{background:white;border-radius:20px;padding:26px 26px 22px;width:100%;max-width:500px;max-height:85vh;overflow-y:auto;animation:fadeUp .2s ease}
+        .inv-export-title{font-family:var(--font-display);font-size:16.5px;font-weight:700;color:var(--text);margin-bottom:4px}
+        .inv-export-sub{font-size:12px;color:var(--text-soft);margin-bottom:18px}
+        .inv-privacy-opt{display:flex;gap:10px;margin-bottom:18px}
+        .inv-privacy-card{flex:1;border:1.5px solid var(--border);border-radius:13px;padding:12px 14px;cursor:pointer;transition:all .15s}
+        .inv-privacy-card.active{border-color:var(--blue);background:var(--blue-light)}
+        .inv-privacy-card b{font-size:12.5px;display:block;color:var(--text);margin-bottom:2px}
+        .inv-privacy-card span{font-size:10.5px;color:var(--text-soft);line-height:1.4}
+        .inv-export-section-title{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-soft);margin:14px 0 8px}
+        .inv-export-vars{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-bottom:6px;max-height:220px;overflow-y:auto;padding:2px}
+        .inv-export-var{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--text)}
+        .inv-export-var input{accent-color:var(--blue)}
+        .inv-export-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:20px}
+
+        /* ── Pestañas: Búsqueda individual vs Cohorte (separadas, no se mezclan) ── */
+        .inv-mode-tabs{display:flex;gap:4px;background:var(--gray);border-radius:12px;padding:4px;margin-bottom:20px;width:fit-content}
+        .inv-mode-tab{padding:9px 20px;border-radius:9px;border:none;background:transparent;font-family:var(--font-main);font-size:12.5px;font-weight:600;color:var(--text-soft);cursor:pointer;transition:all .2s;white-space:nowrap}
+        .inv-mode-tab.active{background:white;color:var(--blue);box-shadow:0 1px 4px rgba(48,137,202,.18)}
       </style>
 
       <div class="inv-header">
         <div>
           <div class="page-title">🔬 Investigación y Cohortes</div>
-          <div class="page-subtitle">Ficha clínica 360° · buscá por DNI o nombre</div>
+          <div class="page-subtitle">Ficha clínica 360° individual, o búsqueda multicriterio por cohorte</div>
         </div>
       </div>
 
-      <div class="inv-search-wrap">
-        <input class="inv-search" id="inv-search" placeholder="Buscar por DNI o nombre y apellido..." oninput="invBuscar(this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault(); invBuscarEnter();}"/>
-        <div class="inv-suggest" id="inv-suggest"></div>
-        <div class="inv-search-hint">Escribí al menos 2 caracteres. Elegí un paciente de la lista para abrir su ficha 360°.</div>
+      <div class="inv-mode-tabs">
+        <button class="inv-mode-tab active" id="inv-mode-tab-individual" onclick="invSetModoPagina('individual')">🔍 Búsqueda individual</button>
+        <button class="inv-mode-tab" id="inv-mode-tab-cohorte" onclick="invSetModoPagina('cohorte')">🎛️ Cohorte / Investigación</button>
+      </div>
+
+      <div id="inv-panel-individual">
+        <div class="inv-search-wrap">
+          <input class="inv-search" id="inv-search" placeholder="Buscar por DNI o nombre y apellido..." oninput="invBuscar(this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault(); invBuscarEnter();}"/>
+          <div class="inv-suggest" id="inv-suggest"></div>
+          <div class="inv-search-hint">Escribí al menos 2 caracteres y elegí un paciente de la lista para abrir su ficha 360°.</div>
+        </div>
+      </div>
+
+      <div id="inv-panel-cohorte" style="display:none">
+        <div class="inv-filtros-panel open" id="inv-filtros-panel">
+          <div id="inv-filtros-grid"><!-- se completa por JS: invRenderFiltrosPanel(), agrupado en bloques plegables --></div>
+          <div class="inv-filtros-actions">
+            <span class="inv-filtros-resumen" id="inv-filtros-resumen"></span>
+            <button class="inv-btn-ghost" onclick="invLimpiarFiltros()">Limpiar</button>
+            <button class="inv-btn-primary" onclick="invAplicarFiltros()">Buscar cohorte</button>
+          </div>
+        </div>
       </div>
 
       <div id="inv-resultado">
         <div class="inv-empty">
           <div>🩺</div>
-          <p>Buscá un paciente para ver su ficha clínica consolidada.</p>
+          <p>Buscá un paciente por DNI o nombre para ver su ficha clínica 360°.</p>
         </div>
       </div>
+    </div>
+
+    <!-- Modal de exportación de cohorte -->
+    <div class="inv-export-overlay" id="inv-export-overlay" onclick="if(event.target===this) invCerrarExport()">
+      <div class="inv-export-modal" id="inv-export-modal"><!-- se completa por JS: invAbrirExport() --></div>
     </div>
 
     <!-- ── Página CALCULADORAS ── -->
@@ -23636,16 +23750,42 @@ function invBuscarEnter() {
   const q = (document.getElementById('inv-search').value||'').trim();
   if(!q) return;
   const base = (pacientesData||[]);
-  const p = base.find(function(x){ return String(x.dni) === q; }) ||
-            base.find(function(x){ return ((x.apellido||'')+' '+(x.nombre||'')).toLowerCase().includes(q.toLowerCase()); });
-  if(p) invSeleccionar(p.dni);
+  const exact = base.find(function(x){ return String(x.dni) === q; });
+  document.getElementById('inv-suggest').classList.remove('show');
+  if(exact) { document.getElementById('inv-search').value=''; invSeleccionar(exact.dni); return; }
+  const qq = q.toLowerCase();
+  const matches = base.filter(function(x){
+    return ((x.apellido||'')+' '+(x.nombre||'')).toLowerCase().includes(qq) || String(x.dni||'').includes(qq);
+  });
+  // La búsqueda individual sólo abre ficha: si hay una sola coincidencia, la abre.
+  // Si hay 0 o varias, no hace nada más acá — la lista desplegable (invBuscar) ya las muestra para elegir.
+  // Para buscar por cohorte se usa la pestaña "Cohorte / Investigación" con filtros, nunca esta búsqueda.
+  if(matches.length === 1) { document.getElementById('inv-search').value=''; invSeleccionar(matches[0].dni); }
 }
 
 function invSeleccionar(dni) {
   document.getElementById('inv-suggest').classList.remove('show');
   document.getElementById('inv-search').value = '';
+  invSetModoPagina('individual');
   invCargarFicha(dni);
 }
+
+// ── Pestañas: separan por completo la búsqueda individual (Vista A) de la cohorte (Vista B) ──
+function invSetModoPagina(modo) {
+  invModoPagina = modo;
+  document.getElementById('inv-mode-tab-individual').classList.toggle('active', modo==='individual');
+  document.getElementById('inv-mode-tab-cohorte').classList.toggle('active', modo==='cohorte');
+  document.getElementById('inv-panel-individual').style.display = modo==='individual' ? '' : 'none';
+  document.getElementById('inv-panel-cohorte').style.display = modo==='cohorte' ? '' : 'none';
+  if(modo==='cohorte' && !document.getElementById('inv-filtros-grid').innerHTML.trim()) invRenderFiltrosPanel();
+  if(modo==='individual' && !invPacienteData) {
+    document.getElementById('inv-resultado').innerHTML = '<div class="inv-empty"><div>🩺</div><p>Buscá un paciente por DNI o nombre para ver su ficha clínica 360°.</p></div>';
+  }
+  if(modo==='cohorte' && !invCohortResults.length) {
+    document.getElementById('inv-resultado').innerHTML = '<div class="inv-empty"><div>🎛️</div><p>Configurá los filtros y tocá "Buscar cohorte" para ver los resultados acá.</p></div>';
+  }
+}
+let invModoPagina = 'individual';
 
 async function invCargarFicha(dni) {
   const cont = document.getElementById('inv-resultado');
@@ -23727,7 +23867,11 @@ function invRenderFicha() {
   const cont = document.getElementById('inv-resultado');
 
   // ── Header ──
-  let h = '<div class="inv-pac-header">';
+  let h = '';
+  if(invCohortResults && invCohortResults.length) {
+    h += '<div class="inv-cohort-back" onclick="invSetModoPagina(\'cohorte\');invRenderCohorte()">← Volver a la cohorte ('+invCohortResults.length+')</div>';
+  }
+  h += '<div class="inv-pac-header">';
   h += '<div><div class="inv-pac-nombre">'+escHtml((p.apellido||'')+', '+(p.nombre||''))+'</div>';
   h += '<div class="inv-pac-meta">';
   h += '<span><b>DNI:</b> '+escHtml(String(p.dni))+'</span>';
@@ -23918,6 +24062,769 @@ function invRenderCalculadoras(labVals, antVals, sexoPac, p) {
 
 function invKvRaw(label, val, unidad, alerta) {
   return '<div class="inv-kv-item'+(alerta?' alert':'')+'"><div class="l">'+escHtml(label)+'</div><div class="v">'+escHtml(String(val))+'<span class="u"> '+escHtml(unidad||'')+'</span></div></div>';
+}
+
+/* ══════════════════════════════════════════════════════════════
+   VISTA B — Búsqueda multicriterio y Cohorte (Investigación §2/§3)
+   ══════════════════════════════════════════════════════════════ */
+
+const INV_COHORT_LAB_KEYS = [
+  ['HbA1c','HbA1c','%'], ['Glucemia','Glucemia','mg/dL'], ['CT','Col. total','mg/dL'],
+  ['HDL','HDL','mg/dL'], ['TG','Triglicéridos','mg/dL'], ['LDL_MH','LDL (M-H)','mg/dL'],
+  ['noHDL','No-HDL','mg/dL'], ['ApoB','ApoB','mg/dL'], ['Creatinina','Creatinina','mg/dL'],
+  ['MDRD','eGFR (MDRD)','mL/min/1.73m²'], ['RAC','RAC','mg/g'],
+];
+const INV_COHORT_ANT_KEYS = [
+  ['IMC','IMC','kg/m²'], ['Cintura','Cintura','cm'], ['PctGrasa','% grasa','%'], ['GrasaVisceral','Grasa visceral',''],
+];
+const INV_COHORT_MAPA_KEYS = [
+  ['mapa_TAS24','TAS 24h','mmHg'], ['mapa_TAD24','TAD 24h','mmHg'], ['mapa_TASd','TAS diurna','mmHg'],
+  ['mapa_TADd','TAD diurna','mmHg'], ['mapa_TASn','TAS nocturna','mmHg'], ['mapa_TADn','TAD nocturna','mmHg'],
+  ['mapa_PP24','PP 24h','mmHg'], ['mapa_DETASd','DE TAS diurna','mmHg'],
+];
+const INV_COHORT_ECO_KEYS = [
+  ['eco_FE','FEVI (ecocardio)','%'], ['eco_IMVI','IMVI','g/m²'],
+];
+const INV_RIESGO_LABEL = {bajo:'Bajo', moderado:'Moderado', alto:'Alto', muyalto:'Muy alto'};
+const INV_EXPORT_VARS = [
+  ['dni','DNI', true], ['nombre','Nombre y apellido', true], ['edad','Edad', true], ['sexo','Sexo', true],
+  ['cobertura','Cobertura médica', false], ['diagnosticos','Diagnósticos activos', true],
+  ['farmacos','Fármacos activos', true], ['tabaquismo','Tabaquismo', false],
+  ['hba1c','HbA1c (%)', true], ['glucemia','Glucemia (mg/dL)', false], ['ct','Col. total (mg/dL)', false],
+  ['hdl','HDL (mg/dL)', false], ['tg','Triglicéridos (mg/dL)', false], ['ldl','LDL M-H (mg/dL)', false],
+  ['nohdl','No-HDL (mg/dL)', false], ['creatinina','Creatinina (mg/dL)', false], ['egfr','eGFR (MDRD)', false],
+  ['rac','RAC (mg/g)', false], ['imc','IMC', true], ['cintura','Cintura (cm)', false],
+  ['grasavisc','Grasa visceral', true], ['ascvd','ASCVD 10 años (%)', true], ['riesgo','Riesgo CV (heurístico)', false],
+];
+
+function invFiltrosVacio() {
+  return { edadMin:'', edadMax:'', sexo:'', cobertura:'', dxInc:[], dxMode:'OR', dxExc:[],
+           farmInc:[], farmMode:'OR', farmExc:[], farmEspecifico:'', tabaquismo:'', lab:{}, ant:{},
+           est:{}, mapaPatron:'', ecoDD:'', ecoabdEst:'', placas:'', idx:{}, alimentacion:'', ascvd:{min:'',max:''} };
+}
+let invFiltros = invFiltrosVacio();
+let invCohortResults = [];
+let invCohortSeleccion = new Set();
+let invCohortPage = 1;
+let invCohortSort = {col:'apellido', dir:'asc'};
+const INV_COHORT_PAGESIZE = 20;
+let invCohortCache = {clinica:{}, meds:{}, lab:{}, ant:{}};
+let invExportPrivacidad = 'gestion';
+let invExportVarsSel = null;
+let invExportSoloSeleccionados = false;
+
+function invParseTablaJSON(raw) {
+  if(!raw) return {columnas:[],filas:[],unidades:{}};
+  try { return typeof raw === 'string' ? JSON.parse(raw) : raw; } catch(e){ return {columnas:[],filas:[],unidades:{}}; }
+}
+
+function invCoberturasDisponibles() {
+  const set = new Set();
+  (pacientesData||[]).forEach(function(p){ if(p.obra_social) set.add(p.obra_social); });
+  return Array.from(set).sort();
+}
+
+// ── Panel de filtros: agrupado en bloques plegables (mismo patrón que la ficha 360°) ──
+function invRenderFiltrosPanel() {
+  const f = invFiltros;
+  const grid = document.getElementById('inv-filtros-grid');
+
+  const nDemog = (f.edadMin!=='' || f.edadMax!=='' ? 1:0) + (f.sexo?1:0) + (f.cobertura?1:0);
+  const nVida = f.tabaquismo ? 1 : 0;
+  const nDx = f.dxInc.length + f.dxExc.length;
+  const nFarm = f.farmInc.length + f.farmExc.length;
+  const nLab = Object.keys(f.lab).filter(function(k){ return f.lab[k] && (f.lab[k].min!=='' || f.lab[k].max!==''); }).length;
+  const nAnt = Object.keys(f.ant).filter(function(k){ return f.ant[k] && (f.ant[k].min!=='' || f.ant[k].max!==''); }).length;
+
+  let h = '<div class="inv-blocks">';
+
+  // Demográficos
+  h += invBlockOpen('flt-demog', '👤 Demográficos', nDemog||null, true);
+  h += '<div class="inv-range-row" style="grid-template-columns:1fr 1fr">';
+  h += '<input type="number" placeholder="Edad mín." value="'+f.edadMin+'" oninput="invFiltros.edadMin=this.value;invActualizarBadge()"/>';
+  h += '<input type="number" placeholder="Edad máx." value="'+f.edadMax+'" oninput="invFiltros.edadMax=this.value;invActualizarBadge()"/></div>';
+  h += '<div class="inv-filtro-inline" style="margin-top:8px">';
+  h += '<select onchange="invFiltros.sexo=this.value;invActualizarBadge()"><option value="">Sexo: todos</option>';
+  h += '<option value="Masculino"'+(f.sexo==='Masculino'?' selected':'')+'>Masculino</option>';
+  h += '<option value="Femenino"'+(f.sexo==='Femenino'?' selected':'')+'>Femenino</option></select>';
+  h += '<select onchange="invFiltros.cobertura=this.value;invActualizarBadge()"><option value="">Cobertura: todas</option>';
+  h += invCoberturasDisponibles().map(function(o){ return '<option value="'+escHtml(o)+'"'+(f.cobertura===o?' selected':'')+'>'+escHtml(o)+'</option>'; }).join('');
+  h += '</select></div>';
+  h += invBlockClose();
+
+  // Estilo de vida
+  h += invBlockOpen('flt-vida', '🚬 Estilo de vida', nVida||null, false);
+  h += '<select onchange="invFiltros.tabaquismo=this.value;invActualizarBadge()" style="width:100%;padding:7px 9px;border:1.5px solid var(--border);border-radius:9px;font-size:12.5px;font-family:var(--font-main);background:var(--gray)">';
+  h += '<option value="">Tabaquismo: todos</option>';
+  ['Fumador activo','Exfumador','No fumador'].forEach(function(op){ h += '<option value="'+op+'"'+(f.tabaquismo===op?' selected':'')+'>'+op+'</option>'; });
+  h += '</select>';
+  h += invBlockClose();
+
+  // Diagnósticos
+  h += invBlockOpen('flt-dx', '🩺 Diagnósticos y comorbilidades', nDx||null, nDx>0);
+  h += '<div class="inv-filtro-modo" style="margin-bottom:10px">';
+  h += '<button class="'+(f.dxMode==='OR'?'active':'')+'" onclick="invSetModo(\'dxMode\',\'OR\')">Al menos uno</button>';
+  h += '<button class="'+(f.dxMode==='AND'?'active':'')+'" onclick="invSetModo(\'dxMode\',\'AND\')">Todos (AND)</button></div>';
+  h += '<div class="inv-check-list">' + Object.keys(INV_DX_LABELS).map(function(k){
+    const checked = f.dxInc.includes(k);
+    return '<label class="inv-check-pill'+(checked?' checked':'')+'"><input type="checkbox" '+(checked?'checked':'')+' onchange="invTogglePill(\'dxInc\',\''+k+'\')"/>'+escHtml(INV_DX_LABELS[k])+'</label>';
+  }).join('') + '</div>';
+  h += '<div class="inv-check-sub">Excluir si tiene (NOT)</div>';
+  h += '<div class="inv-check-list">' + Object.keys(INV_DX_LABELS).map(function(k){
+    const checked = f.dxExc.includes(k);
+    return '<label class="inv-check-pill excl'+(checked?' checked':'')+'"><input type="checkbox" '+(checked?'checked':'')+' onchange="invTogglePill(\'dxExc\',\''+k+'\')"/>'+escHtml(INV_DX_LABELS[k])+'</label>';
+  }).join('') + '</div>';
+  h += invBlockClose();
+
+  // Fármacos
+  h += invBlockOpen('flt-farm', '💊 Tratamiento farmacológico (por clase)', nFarm||null, nFarm>0);
+  h += '<div class="inv-filtro-modo" style="margin-bottom:10px">';
+  h += '<button class="'+(f.farmMode==='OR'?'active':'')+'" onclick="invSetModo(\'farmMode\',\'OR\')">Al menos uno</button>';
+  h += '<button class="'+(f.farmMode==='AND'?'active':'')+'" onclick="invSetModo(\'farmMode\',\'AND\')">Todos (AND)</button></div>';
+  h += '<div class="inv-check-list">' + GRUPOS_MED.map(function(g){
+    const checked = f.farmInc.includes(g);
+    return '<label class="inv-check-pill'+(checked?' checked':'')+'"><input type="checkbox" '+(checked?'checked':'')+' onchange="invTogglePill(\'farmInc\',\''+g+'\')"/>'+escHtml(g)+'</label>';
+  }).join('') + '</div>';
+  h += '<div class="inv-check-sub">Excluir si tiene (NOT)</div>';
+  h += '<div class="inv-check-list">' + GRUPOS_MED.map(function(g){
+    const checked = f.farmExc.includes(g);
+    return '<label class="inv-check-pill excl'+(checked?' checked':'')+'"><input type="checkbox" '+(checked?'checked':'')+' onchange="invTogglePill(\'farmExc\',\''+g+'\')"/>'+escHtml(g)+'</label>';
+  }).join('') + '</div>';
+  h += '<div class="inv-filtro-inline" style="margin-top:10px"><label style="font-size:11px;color:var(--text-soft)">Fármaco específico (contiene)</label>';
+  h += '<input type="text" placeholder="ej: Empagliflozina, Atorvastatina" value="'+escHtml(f.farmEspecifico)+'" oninput="invFiltros.farmEspecifico=this.value;invActualizarBadge()" style="flex:1;padding:7px 9px;border:1.5px solid var(--border);border-radius:9px;font-size:12.5px;font-family:var(--font-main);background:var(--gray)"/></div>';
+  h += '<div class="inv-filtro-nota">Los chips de arriba filtran por clase/grupo. Este campo busca coincidencias de texto en el nombre del fármaco cargado (independiente del filtro por clase).</div>';
+  h += invBlockClose();
+
+  // Laboratorio
+  h += invBlockOpen('flt-lab', '🧪 Laboratorio (último valor cargado)', nLab||null, nLab>0);
+  h += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:4px 20px">';
+  INV_COHORT_LAB_KEYS.forEach(function(kk){
+    const rf = f.lab[kk[0]] || {min:'',max:''};
+    h += '<div><div class="inv-range-head"><span></span><span>Mín.</span><span>Máx.</span></div>';
+    h += '<div class="inv-range-row"><label>'+escHtml(kk[1])+' ('+kk[2]+')</label>';
+    h += '<input type="number" step="any" value="'+rf.min+'" oninput="invSetRango(\'lab\',\''+kk[0]+'\',\'min\',this.value)"/>';
+    h += '<input type="number" step="any" value="'+rf.max+'" oninput="invSetRango(\'lab\',\''+kk[0]+'\',\'max\',this.value)"/></div></div>';
+  });
+  h += '</div>';
+  h += invBlockClose();
+
+  // Antropometría
+  h += invBlockOpen('flt-ant', '⚖️ Antropometría (último valor cargado)', nAnt||null, nAnt>0);
+  h += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:4px 20px">';
+  INV_COHORT_ANT_KEYS.forEach(function(kk){
+    const rf = f.ant[kk[0]] || {min:'',max:''};
+    h += '<div><div class="inv-range-head"><span></span><span>Mín.</span><span>Máx.</span></div>';
+    h += '<div class="inv-range-row"><label>'+escHtml(kk[1])+(kk[2]?' ('+kk[2]+')':'')+'</label>';
+    h += '<input type="number" step="any" value="'+rf.min+'" oninput="invSetRango(\'ant\',\''+kk[0]+'\',\'min\',this.value)"/>';
+    h += '<input type="number" step="any" value="'+rf.max+'" oninput="invSetRango(\'ant\',\''+kk[0]+'\',\'max\',this.value)"/></div></div>';
+  });
+  h += '</div>';
+  h += invBlockClose();
+
+  // Hemodinámico y MAPA
+  const nMapa = Object.keys(f.est).filter(function(k){ return f.est[k] && (f.est[k].min!=='' || f.est[k].max!==''); }).length + (f.mapaPatron?1:0);
+  h += invBlockOpen('flt-mapa', '❤️ Hemodinámico y MAPA', nMapa||null, nMapa>0);
+  h += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:4px 20px">';
+  INV_COHORT_MAPA_KEYS.forEach(function(kk){
+    const rf = f.est[kk[0]] || {min:'',max:''};
+    h += '<div><div class="inv-range-head"><span></span><span>Mín.</span><span>Máx.</span></div>';
+    h += '<div class="inv-range-row"><label>'+escHtml(kk[1])+' ('+kk[2]+')</label>';
+    h += '<input type="number" step="any" value="'+rf.min+'" oninput="invSetRango(\'est\',\''+kk[0]+'\',\'min\',this.value)"/>';
+    h += '<input type="number" step="any" value="'+rf.max+'" oninput="invSetRango(\'est\',\''+kk[0]+'\',\'max\',this.value)"/></div></div>';
+  });
+  h += '</div>';
+  h += '<div class="inv-filtro-inline" style="margin-top:10px"><label style="font-size:11px;color:var(--text-soft)">Patrón (contiene)</label>';
+  h += '<input type="text" placeholder="ej: dipper, non-dipper" value="'+escHtml(f.mapaPatron)+'" oninput="invFiltros.mapaPatron=this.value;invActualizarBadge()" style="flex:1;padding:7px 9px;border:1.5px solid var(--border);border-radius:9px;font-size:12.5px;font-family:var(--font-main);background:var(--gray)"/></div>';
+  h += '<div class="inv-filtro-nota">Requiere estudio de MAPA cargado en el paciente; el patrón dipper/non-dipper es un campo de texto libre.</div>';
+  h += invBlockClose();
+
+  // Estudios por imágenes
+  const nEco = Object.keys(f.est).filter(function(k){ return INV_COHORT_ECO_KEYS.some(function(kk){return kk[0]===k;}) && f.est[k] && (f.est[k].min!=='' || f.est[k].max!==''); }).length + (f.ecoDD?1:0) + (f.ecoabdEst?1:0) + (f.placas?1:0);
+  h += invBlockOpen('flt-eco', '📷 Estudios por imágenes', nEco||null, nEco>0);
+  h += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:4px 20px">';
+  INV_COHORT_ECO_KEYS.forEach(function(kk){
+    const rf = f.est[kk[0]] || {min:'',max:''};
+    h += '<div><div class="inv-range-head"><span></span><span>Mín.</span><span>Máx.</span></div>';
+    h += '<div class="inv-range-row"><label>'+escHtml(kk[1])+' ('+kk[2]+')</label>';
+    h += '<input type="number" step="any" value="'+rf.min+'" oninput="invSetRango(\'est\',\''+kk[0]+'\',\'min\',this.value)"/>';
+    h += '<input type="number" step="any" value="'+rf.max+'" oninput="invSetRango(\'est\',\''+kk[0]+'\',\'max\',this.value)"/></div></div>';
+  });
+  h += '</div>';
+  h += '<div class="inv-filtro-inline" style="margin-top:10px">';
+  h += '<select onchange="invFiltros.ecoDD=this.value;invActualizarBadge()"><option value="">Disf. diastólica: todas</option>';
+  ['No','1','2','3'].forEach(function(op){ h += '<option value="'+op+'"'+(f.ecoDD===op?' selected':'')+'>Grado '+op+'</option>'; });
+  h += '</select>';
+  h += '<select onchange="invFiltros.placas=this.value;invActualizarBadge()"><option value="">Placas carotídeas/femorales: todas</option>';
+  h += '<option value="si"'+(f.placas==='si'?' selected':'')+'>Con placa (algún territorio)</option>';
+  h += '<option value="no"'+(f.placas==='no'?' selected':'')+'>Sin placas</option>';
+  h += '</select></div>';
+  h += '<div class="inv-filtro-inline" style="margin-top:8px"><label style="font-size:11px;color:var(--text-soft)">Esteatosis eco. abdominal (contiene)</label>';
+  h += '<input type="text" placeholder="ej: grado I, II, III" value="'+escHtml(f.ecoabdEst)+'" oninput="invFiltros.ecoabdEst=this.value;invActualizarBadge()" style="flex:1;padding:7px 9px;border:1.5px solid var(--border);border-radius:9px;font-size:12.5px;font-family:var(--font-main);background:var(--gray)"/></div>';
+  h += invBlockClose();
+
+  // Índices metabólicos calculados
+  const nIdx = Object.keys(f.idx).filter(function(k){ return f.idx[k] && (f.idx[k].min!=='' || f.idx[k].max!==''); }).length;
+  h += invBlockOpen('flt-idx', '🧮 Índices metabólicos calculados', nIdx||null, nIdx>0);
+  [['tyg','TyG Index','(ln[TG×glucemia/2])'],['metsir','METS-IR','']].forEach(function(kk){
+    const rf = f.idx[kk[0]] || {min:'',max:''};
+    h += '<div class="inv-range-row"><label>'+escHtml(kk[1])+(kk[2]?' '+kk[2]:'')+'</label>';
+    h += '<input type="number" step="any" value="'+rf.min+'" placeholder="mín" oninput="invSetRango(\'idx\',\''+kk[0]+'\',\'min\',this.value)"/>';
+    h += '<input type="number" step="any" value="'+rf.max+'" placeholder="máx" oninput="invSetRango(\'idx\',\''+kk[0]+'\',\'max\',this.value)"/></div>';
+  });
+  h += '<div class="inv-filtro-nota">Se calculan a partir del último valor de glucemia, TG, HDL e IMC cargados. KDIGO (función renal/albuminuria) ya se filtra con eGFR y RAC en el bloque de Laboratorio.</div>';
+  h += invBlockClose();
+
+  // Riesgo CV validado (ASCVD)
+  const nAscvd = (f.ascvd.min!=='' || f.ascvd.max!=='') ? 1 : 0;
+  h += invBlockOpen('flt-ascvd', '🎯 Riesgo CV validado (ASCVD)', nAscvd||null, nAscvd>0);
+  h += '<div class="inv-range-row"><label>Riesgo ASCVD a 10 años (%)</label>';
+  h += '<input type="number" step="any" min="0" max="100" value="'+f.ascvd.min+'" placeholder="mín" oninput="invFiltros.ascvd.min=this.value;invActualizarBadge()"/>';
+  h += '<input type="number" step="any" min="0" max="100" value="'+f.ascvd.max+'" placeholder="máx" oninput="invFiltros.ascvd.max=this.value;invActualizarBadge()"/></div>';
+  h += '<div class="inv-filtro-nota">Pooled Cohort Equations (ACC/AHA), la misma fórmula validada que la calculadora individual — no el heurístico interno de la tabla. Requiere paciente de 40 a 79 años con TAS, colesterol total y HDL cargados; la raza no está registrada en el sistema y se asume "blanca/otra" (igual que el valor por defecto de la calculadora). SCORE2 no se incluye porque sus coeficientes todavía no están validados en el sistema.</div>';
+  h += invBlockClose();
+
+  // Alimentación y evaluación proteica
+  h += invBlockOpen('flt-ali', '🥗 Alimentación y evaluación proteica', f.alimentacion?1:null, !!f.alimentacion);
+  h += '<div class="inv-filtro-inline"><label style="font-size:11px;color:var(--text-soft)">Patrón alimentario (contiene)</label>';
+  h += '<input type="text" placeholder="ej: vegetariano, bajo en sodio" value="'+escHtml(f.alimentacion)+'" oninput="invFiltros.alimentacion=this.value;invActualizarBadge()" style="flex:1;padding:7px 9px;border:1.5px solid var(--border);border-radius:9px;font-size:12.5px;font-family:var(--font-main);background:var(--gray)"/></div>';
+  h += '<div class="inv-filtro-nota">No existe un campo estructurado de evaluación proteica (g/kg/día) en la historia clínica; este filtro busca coincidencias de texto en el campo de alimentación cargado en cada paciente.</div>';
+  h += invBlockClose();
+
+  h += '</div>'; // /inv-blocks
+  h += '<div class="inv-filtro-nota" style="margin-top:12px">Matriz cubierta: demográficos, diagnósticos, fármacos (por clase y por monodroga), laboratorio, antropometría, tabaquismo, hemodinámico/MAPA, estudios por imágenes, índices metabólicos calculados, riesgo CV validado (ASCVD) y alimentación (texto libre). SCORE2 queda afuera porque sus coeficientes no están validados en el sistema.</div>';
+
+  grid.innerHTML = h;
+}
+
+function invTogglePill(kind, key) {
+  const arr = invFiltros[kind];
+  const idx = arr.indexOf(key);
+  if(idx>=0) arr.splice(idx,1); else arr.push(key);
+  const opp = {dxInc:'dxExc', dxExc:'dxInc', farmInc:'farmExc', farmExc:'farmInc'}[kind];
+  if(opp && idx<0) { const oi = invFiltros[opp].indexOf(key); if(oi>=0) invFiltros[opp].splice(oi,1); }
+  invRenderFiltrosPanel();
+  invActualizarBadge();
+}
+function invSetModo(campo, val) { invFiltros[campo]=val; invRenderFiltrosPanel(); }
+function invSetRango(tipo, key, campo, val) {
+  if(!invFiltros[tipo][key]) invFiltros[tipo][key] = {min:'', max:''};
+  invFiltros[tipo][key][campo] = val;
+  invActualizarBadge();
+}
+function invContarFiltrosActivos() {
+  const f = invFiltros; let n = 0;
+  if(f.edadMin!=='' || f.edadMax!=='') n++;
+  if(f.sexo) n++; if(f.cobertura) n++; if(f.tabaquismo) n++;
+  if(f.dxInc.length) n++; if(f.dxExc.length) n++;
+  if(f.farmInc.length) n++; if(f.farmExc.length) n++; if(f.farmEspecifico) n++;
+  n += Object.keys(f.lab).filter(function(k){ return f.lab[k] && (f.lab[k].min!=='' || f.lab[k].max!==''); }).length;
+  n += Object.keys(f.ant).filter(function(k){ return f.ant[k] && (f.ant[k].min!=='' || f.ant[k].max!==''); }).length;
+  n += Object.keys(f.est).filter(function(k){ return f.est[k] && (f.est[k].min!=='' || f.est[k].max!==''); }).length;
+  n += Object.keys(f.idx).filter(function(k){ return f.idx[k] && (f.idx[k].min!=='' || f.idx[k].max!==''); }).length;
+  if(f.mapaPatron) n++; if(f.ecoDD) n++; if(f.ecoabdEst) n++; if(f.placas) n++; if(f.alimentacion) n++;
+  if(f.ascvd.min!=='' || f.ascvd.max!=='') n++;
+  return n;
+}
+function invActualizarBadge() {
+  const n = invContarFiltrosActivos();
+  const resumen = document.getElementById('inv-filtros-resumen');
+  if(resumen) resumen.textContent = n ? n+' criterio'+(n===1?'':'s')+' activo'+(n===1?'':'s') : 'Sin criterios seleccionados';
+}
+function invLimpiarFiltros() {
+  invFiltros = invFiltrosVacio();
+  invRenderFiltrosPanel();
+  invActualizarBadge();
+}
+
+// ── Aplicar filtros → arma candidatos y dispara la cohorte ──
+async function invAplicarFiltros() {
+  const f = invFiltros;
+  document.getElementById('inv-search').value = '';
+  document.getElementById('inv-suggest').classList.remove('show');
+  const cont = document.getElementById('inv-resultado');
+  cont.innerHTML = '<div class="inv-empty"><div>⏳</div><p>Aplicando filtros...</p></div>';
+  if(!pacientesData || !pacientesData.length) await cargarPacientes();
+
+  const ascvdActivo = f.ascvd.min!=='' || f.ascvd.max!=='';
+  // Mapas compartidos entre pasos (hoisteados para que el paso de ASCVD, al final, pueda reusar
+  // clínica/medicación/laboratorio ya traídos por pasos anteriores en vez de volver a pedirlos).
+  let clinicaMap = {}, medsMap = {}, labMap = {}, antMap = {};
+
+  let candidatos = (pacientesData||[]).filter(function(p){
+    if(f.sexo && p.sexo !== f.sexo) return false;
+    if(f.cobertura && (p.obra_social||'') !== f.cobertura) return false;
+    const edad = edadDesde(p.fecha_nacimiento);
+    if(f.edadMin !== '' && edad < parseInt(f.edadMin)) return false;
+    if(f.edadMax !== '' && edad > parseInt(f.edadMax)) return false;
+    return true;
+  });
+  if(!candidatos.length) return invRenderCohorteVacia();
+
+  if(f.dxInc.length || f.dxExc.length || f.tabaquismo || f.alimentacion || ascvdActivo) {
+    const { data } = await sb.from('paciente_clinica').select('*').in('dni_paciente', candidatos.map(function(p){return p.dni;}));
+    clinicaMap = {}; (data||[]).forEach(function(c){ clinicaMap[c.dni_paciente]=c; });
+    candidatos = candidatos.filter(function(p){
+      const c = clinicaMap[p.dni] || {};
+      if(f.dxInc.length) {
+        const tiene = f.dxInc.map(function(k){ return !!c['dx_'+k]; });
+        if(f.dxMode==='AND' ? !tiene.every(Boolean) : !tiene.some(Boolean)) return false;
+      }
+      if(f.dxExc.length && f.dxExc.some(function(k){ return !!c['dx_'+k]; })) return false;
+      if(f.tabaquismo && c.tabaquismo !== f.tabaquismo) return false;
+      if(f.alimentacion && !(c.alimentacion||'').toLowerCase().includes(f.alimentacion.toLowerCase())) return false;
+      return true;
+    });
+  }
+  if(!candidatos.length) return invRenderCohorteVacia();
+
+  if(f.farmInc.length || f.farmExc.length || f.farmEspecifico || ascvdActivo) {
+    const { data } = await sb.from('medicacion').select('*').eq('activo', true).in('dni_paciente', candidatos.map(function(p){return p.dni;}));
+    medsMap = {}; (data||[]).forEach(function(m){ (medsMap[m.dni_paciente]=medsMap[m.dni_paciente]||[]).push(m); });
+    candidatos = candidatos.filter(function(p){
+      const meds = medsMap[p.dni] || [];
+      const grupos = meds.map(function(m){ return m.grupo; });
+      if(f.farmInc.length) {
+        const tiene = f.farmInc.map(function(g){ return grupos.includes(g); });
+        if(f.farmMode==='AND' ? !tiene.every(Boolean) : !tiene.some(Boolean)) return false;
+      }
+      if(f.farmExc.length && f.farmExc.some(function(g){ return grupos.includes(g); })) return false;
+      if(f.farmEspecifico && !meds.some(function(m){ return (m.farmaco||'').toLowerCase().includes(f.farmEspecifico.toLowerCase()); })) return false;
+      return true;
+    });
+  }
+  if(!candidatos.length) return invRenderCohorteVacia();
+
+  const labKeysActivos = Object.keys(f.lab).filter(function(k){ return f.lab[k] && (f.lab[k].min!=='' || f.lab[k].max!==''); });
+  const antKeysActivos = Object.keys(f.ant).filter(function(k){ return f.ant[k] && (f.ant[k].min!=='' || f.ant[k].max!==''); });
+  const idxKeysActivos = Object.keys(f.idx).filter(function(k){ return f.idx[k] && (f.idx[k].min!=='' || f.idx[k].max!==''); });
+  if(labKeysActivos.length || antKeysActivos.length || idxKeysActivos.length || ascvdActivo) {
+    const { data } = await sb.from('paciente_tablas').select('dni_paciente,tipo,datos')
+      .in('dni_paciente', candidatos.map(function(p){return p.dni;})).in('tipo', ['lab','ant']);
+    labMap={}; antMap={};
+    (data||[]).forEach(function(row){
+      const parsed = invParseTablaJSON(row.datos);
+      if(row.tipo==='lab') labMap[row.dni_paciente]=parsed; else antMap[row.dni_paciente]=parsed;
+    });
+    const prevPac = pacienteActual;
+    candidatos.forEach(function(p){
+      pacienteActual = p;
+      try {
+        if(labMap[p.dni] && labMap[p.dni].columnas && labMap[p.dni].columnas.length) calcLabValues(labMap[p.dni], LAB_FILAS);
+        if(antMap[p.dni] && antMap[p.dni].columnas && antMap[p.dni].columnas.length) calcAntValues(antMap[p.dni], ANT_FILAS);
+      } catch(e) {}
+    });
+    pacienteActual = prevPac;
+    candidatos = candidatos.filter(function(p){
+      for(const k of labKeysActivos) {
+        const r = invUltimoValor(labMap[p.dni], LAB_FILAS, k);
+        if(!r) return false;
+        const v = parseFloat(r.valor); if(isNaN(v)) return false;
+        const rf = f.lab[k];
+        if(rf.min!=='' && v < parseFloat(rf.min)) return false;
+        if(rf.max!=='' && v > parseFloat(rf.max)) return false;
+      }
+      for(const k of antKeysActivos) {
+        const r = invUltimoValor(antMap[p.dni], ANT_FILAS, k);
+        if(!r) return false;
+        const v = parseFloat(r.valor); if(isNaN(v)) return false;
+        const rf = f.ant[k];
+        if(rf.min!=='' && v < parseFloat(rf.min)) return false;
+        if(rf.max!=='' && v > parseFloat(rf.max)) return false;
+      }
+      if(idxKeysActivos.length) {
+        const glu = invUltimoValor(labMap[p.dni], LAB_FILAS, 'Glucemia');
+        const tg = invUltimoValor(labMap[p.dni], LAB_FILAS, 'TG');
+        const hdl = invUltimoValor(labMap[p.dni], LAB_FILAS, 'HDL');
+        const imc = invUltimoValor(antMap[p.dni], ANT_FILAS, 'IMC');
+        if(idxKeysActivos.includes('tyg')) {
+          if(!glu || !tg) return false;
+          const tyg = Math.log(parseFloat(tg.valor) * parseFloat(glu.valor) / 2);
+          const rf = f.idx.tyg;
+          if(rf.min!=='' && tyg < parseFloat(rf.min)) return false;
+          if(rf.max!=='' && tyg > parseFloat(rf.max)) return false;
+        }
+        if(idxKeysActivos.includes('metsir')) {
+          if(!glu || !tg || !hdl || !imc) return false;
+          const metsir = (Math.log((2*parseFloat(glu.valor)) + parseFloat(tg.valor)) * parseFloat(imc.valor)) / Math.log(parseFloat(hdl.valor));
+          const rf = f.idx.metsir;
+          if(rf.min!=='' && metsir < parseFloat(rf.min)) return false;
+          if(rf.max!=='' && metsir > parseFloat(rf.max)) return false;
+        }
+      }
+      return true;
+    });
+  }
+  if(!candidatos.length) return invRenderCohorteVacia();
+
+  const estKeysActivos = Object.keys(f.est).filter(function(k){ return f.est[k] && (f.est[k].min!=='' || f.est[k].max!==''); });
+  if(estKeysActivos.length || f.mapaPatron || f.ecoDD || f.ecoabdEst || f.placas) {
+    const { data } = await sb.from('paciente_tablas').select('dni_paciente,datos')
+      .in('dni_paciente', candidatos.map(function(p){return p.dni;})).eq('tipo', 'est');
+    const estMap = {}; (data||[]).forEach(function(row){ estMap[row.dni_paciente] = invParseTablaJSON(row.datos); });
+    candidatos = candidatos.filter(function(p){
+      const est = estMap[p.dni];
+      for(const k of estKeysActivos) {
+        const r = invUltimoValor(est, EST_FILAS, k);
+        if(!r) return false;
+        const v = parseFloat(r.valor); if(isNaN(v)) return false;
+        const rf = f.est[k];
+        if(rf.min!=='' && v < parseFloat(rf.min)) return false;
+        if(rf.max!=='' && v > parseFloat(rf.max)) return false;
+      }
+      if(f.mapaPatron) {
+        const r = invUltimoValor(est, EST_FILAS, 'mapa_Patron');
+        if(!r || !String(r.valor).toLowerCase().includes(f.mapaPatron.toLowerCase())) return false;
+      }
+      if(f.ecoDD) {
+        const r = invUltimoValor(est, EST_FILAS, 'eco_DD');
+        if(!r || String(r.valor) !== f.ecoDD) return false;
+      }
+      if(f.ecoabdEst) {
+        const r = invUltimoValor(est, EST_FILAS, 'ecoabd_Est');
+        if(!r || !String(r.valor).toLowerCase().includes(f.ecoabdEst.toLowerCase())) return false;
+      }
+      if(f.placas) {
+        const claves = ['dop_PlacaACID','dop_PlacaACII','dop_PlacaFemD','dop_PlacaFemI'];
+        const tienePlaca = claves.some(function(k){ const r = invUltimoValor(est, EST_FILAS, k); return r && String(r.valor)==='Sí'; });
+        if(f.placas==='si' && !tienePlaca) return false;
+        if(f.placas==='no' && tienePlaca) return false;
+      }
+      return true;
+    });
+  }
+  if(!candidatos.length) return invRenderCohorteVacia();
+
+  // ASCVD validado (Pooled Cohort Equations) — misma fórmula que la calculadora individual.
+  // No se incluye SCORE2 acá porque sus coeficientes no están validados en el sistema (ver ficha 360°/calculadoras).
+  if(ascvdActivo) {
+    const taMap = await invUltimasTAsBulk(candidatos.map(function(p){return p.dni;}));
+    candidatos = candidatos.filter(function(p){
+      const ascvd = invCalcularASCVDPaciente(p, clinicaMap[p.dni]||{}, medsMap[p.dni]||[], labMap[p.dni], taMap[p.dni]);
+      if(ascvd==null) return false;
+      if(f.ascvd.min!=='' && ascvd < parseFloat(f.ascvd.min)) return false;
+      if(f.ascvd.max!=='' && ascvd > parseFloat(f.ascvd.max)) return false;
+      return true;
+    });
+  }
+  if(!candidatos.length) return invRenderCohorteVacia();
+
+  if(candidatos.length === 1) { invSeleccionar(candidatos[0].dni); return; }
+  invFetchYArmarCohorte(candidatos);
+}
+
+// ── ASCVD (Pooled Cohort Equations) reutilizable para un paciente ya con sus datos en memoria ──
+function invCalcularASCVDPaciente(p, clinica, meds, lab, tas) {
+  const edad = edadDesde(p.fecha_nacimiento);
+  const sexo = p.sexo==='Masculino' ? 'M' : p.sexo==='Femenino' ? 'F' : null;
+  if(!sexo || !edad || edad<40 || edad>79 || !tas) return null;
+  const ctR = invUltimoValor(lab, LAB_FILAS, 'CT');
+  const hdlR = invUltimoValor(lab, LAB_FILAS, 'HDL');
+  if(!ctR || !hdlR) return null;
+  const ct = parseFloat(ctR.valor), hdl = parseFloat(hdlR.valor);
+  if(isNaN(ct) || isNaN(hdl)) return null;
+  const tto = meds.some(function(m){ return m.grupo==='Antihipertensivo'; });
+  const tabaco = clinica.tabaquismo === 'Fumador activo';
+  const dm = !!(clinica.dx_dbt1 || clinica.dx_dbt2 || clinica.dx_dbt_otro);
+  // Raza no es un dato registrado en el sistema: se asume "blanca/otra", igual que la opción
+  // por defecto de la calculadora ASCVD individual del paciente.
+  const k = ASCVD_COEF[sexo + '_white'];
+  const lnAge = Math.log(edad), lnTC = Math.log(ct), lnHDL = Math.log(hdl), lnSBP = Math.log(tas);
+  const sum = k.age*lnAge + (k.age2 ? k.age2*lnAge*lnAge : 0) + k.tc*lnTC + k.agetc*lnAge*lnTC
+          + k.hdl*lnHDL + k.agehdl*lnAge*lnHDL
+          + (tto ? k.sbpT*lnSBP + k.agesbpT*lnAge*lnSBP : k.sbpU*lnSBP + k.agesbpU*lnAge*lnSBP)
+          + k.smoke*(tabaco?1:0) + k.agesmoke*lnAge*(tabaco?1:0)
+          + k.dm*(dm?1:0);
+  const risk = (1 - Math.pow(k.s0, Math.exp(sum - k.mean))) * 100;
+  return Math.max(0, Math.round(risk*10)/10);
+}
+
+// Última PA sistólica registrada en evoluciones, en lote para varios pacientes a la vez
+// (misma lógica de fallback ta2>ta1>ta3 que cargarUltimaTAHistorica, pero para muchos DNI en una sola consulta).
+async function invUltimasTAsBulk(dnis) {
+  const map = {};
+  if(!dnis || !dnis.length) return map;
+  const lim = Math.min(Math.max(dnis.length*8, 200), 4000);
+  const { data } = await sb.from('evoluciones').select('dni_paciente,fecha_hora,ta1s,ta1d,ta2s,ta2d,ta3s,ta3d')
+    .in('dni_paciente', dnis).order('fecha_hora', {ascending:false}).limit(lim);
+  (data||[]).forEach(function(row){
+    if(map[row.dni_paciente] !== undefined) return;
+    const s2=parseFloat(row.ta2s), d2=parseFloat(row.ta2d), s3=parseFloat(row.ta3s), d3=parseFloat(row.ta3d), s1=parseFloat(row.ta1s), d1=parseFloat(row.ta1d);
+    let s = null;
+    if(s2&&d2&&s3&&d3) s = Math.round((s2+s3)/2);
+    else if(s2&&d2) s = s2;
+    else if(s1&&d1) s = s1;
+    else if(s3&&d3) s = s3;
+    if(s) map[row.dni_paciente] = s;
+  });
+  return map;
+}
+
+function invRenderCohorteVacia() {
+  document.getElementById('inv-resultado').innerHTML = '<div class="inv-cohort-back" onclick="invVolverBusqueda()">← Nueva búsqueda</div><div class="inv-empty"><div>🔎</div><p>Ningún paciente cumple los criterios seleccionados. Probá ampliar los filtros.</p></div>';
+}
+function invVolverBusqueda() {
+  invCohortResults = [];
+  invCohortSeleccion = new Set();
+  document.getElementById('inv-resultado').innerHTML = '<div class="inv-empty"><div>🎛️</div><p>Configurá los filtros y tocá "Buscar cohorte" para ver los resultados acá.</p></div>';
+}
+
+// ── Trae datos en lote para la lista final de pacientes y arma las filas de la tabla ──
+async function invFetchYArmarCohorte(patients) {
+  const cont = document.getElementById('inv-resultado');
+  cont.innerHTML = '<div class="inv-empty"><div>⏳</div><p>Armando cohorte...</p></div>';
+  const dnis = patients.map(function(p){ return p.dni; });
+  const [clinicaR, medsR, tablasR, taMap] = await Promise.all([
+    sb.from('paciente_clinica').select('*').in('dni_paciente', dnis),
+    sb.from('medicacion').select('*').eq('activo', true).in('dni_paciente', dnis),
+    sb.from('paciente_tablas').select('dni_paciente,tipo,datos').in('dni_paciente', dnis).in('tipo', ['lab','ant']),
+    invUltimasTAsBulk(dnis),
+  ]);
+  const clinicaMap = {}; (clinicaR.data||[]).forEach(function(c){ clinicaMap[c.dni_paciente]=c; });
+  const medsMap = {}; (medsR.data||[]).forEach(function(m){ (medsMap[m.dni_paciente]=medsMap[m.dni_paciente]||[]).push(m); });
+  const labMap={}, antMap={};
+  (tablasR.data||[]).forEach(function(row){
+    const parsed = invParseTablaJSON(row.datos);
+    if(row.tipo==='lab') labMap[row.dni_paciente]=parsed; else antMap[row.dni_paciente]=parsed;
+  });
+  const prevPac = pacienteActual;
+  patients.forEach(function(p){
+    pacienteActual = p;
+    try {
+      if(labMap[p.dni] && labMap[p.dni].columnas && labMap[p.dni].columnas.length) calcLabValues(labMap[p.dni], LAB_FILAS);
+      if(antMap[p.dni] && antMap[p.dni].columnas && antMap[p.dni].columnas.length) calcAntValues(antMap[p.dni], ANT_FILAS);
+    } catch(e) {}
+  });
+  pacienteActual = prevPac;
+  Object.keys(clinicaMap).forEach(function(k){ invCohortCache.clinica[k]=clinicaMap[k]; });
+  Object.keys(medsMap).forEach(function(k){ invCohortCache.meds[k]=medsMap[k]; });
+  Object.keys(labMap).forEach(function(k){ invCohortCache.lab[k]=labMap[k]; });
+  Object.keys(antMap).forEach(function(k){ invCohortCache.ant[k]=antMap[k]; });
+  invConstruirFilasCohorte(patients, clinicaMap, medsMap, labMap, antMap, taMap);
+}
+
+function invRiesgoHeuristico(p, c) {
+  const edad = edadDesde(p.fecha_nacimiento);
+  let score = 0;
+  if(c.dx_hta) score += 1; if(c.dx_hta2) score += 1.5;
+  if(c.dx_dbt2 || c.dx_dbt1 || c.dx_dbt_otro) score += 1.5;
+  if(c.dx_dis) score += 1;
+  if(c.dx_iam || c.dx_acv || c.dx_eap || c.dx_atero_subcl) score += 3;
+  if(c.dx_erc) score += 1.5;
+  if(c.dx_icc) score += 2;
+  if(c.dx_fa) score += 1;
+  if(c.tabaquismo === 'Fumador activo') score += 1.5;
+  if(edad >= 75) score += 2; else if(edad >= 65) score += 1;
+  if(score >= 6) return 'muyalto';
+  if(score >= 3.5) return 'alto';
+  if(score >= 1.5) return 'moderado';
+  return 'bajo';
+}
+
+function invConstruirFilasCohorte(candidatos, clinicaMap, medsMap, labMap, antMap, taMap) {
+  const getLab = function(dni, key){ const r = invUltimoValor(labMap[dni], LAB_FILAS, key); return r ? parseFloat(r.valor) : null; };
+  const getAnt = function(dni, key){ const r = invUltimoValor(antMap[dni], ANT_FILAS, key); return r ? parseFloat(r.valor) : null; };
+  invCohortResults = candidatos.map(function(p){
+    const c = clinicaMap[p.dni] || invCohortCache.clinica[p.dni] || {};
+    const meds = medsMap[p.dni] || invCohortCache.meds[p.dni] || [];
+    const dxKeys = Object.keys(INV_DX_LABELS).filter(function(k){ return !!c['dx_'+k]; });
+    return {
+      dni: p.dni, apellido: p.apellido||'', nombre: p.nombre||'',
+      edad: edadDesde(p.fecha_nacimiento), sexo: p.sexo||'', cobertura: p.obra_social||'',
+      dxKeys: dxKeys, farmacosTxt: meds.map(function(m){ return m.farmaco; }).filter(Boolean).join(', '),
+      tabaquismo: c.tabaquismo||'',
+      hba1c: getLab(p.dni,'HbA1c'), glucemia: getLab(p.dni,'Glucemia'), ct: getLab(p.dni,'CT'),
+      hdl: getLab(p.dni,'HDL'), tg: getLab(p.dni,'TG'), ldl: getLab(p.dni,'LDL_MH'), nohdl: getLab(p.dni,'noHDL'),
+      creatinina: getLab(p.dni,'Creatinina'), egfr: getLab(p.dni,'MDRD'), rac: getLab(p.dni,'RAC'),
+      imc: getAnt(p.dni,'IMC'), cintura: getAnt(p.dni,'Cintura'), grasaVisceral: getAnt(p.dni,'GrasaVisceral'),
+      riesgo: invRiesgoHeuristico(p, c),
+      ascvd: invCalcularASCVDPaciente(p, c, meds, labMap[p.dni], taMap ? taMap[p.dni] : null),
+    };
+  });
+  invCohortSeleccion = new Set();
+  invCohortPage = 1;
+  invCohortSort = {col:'apellido', dir:'asc'};
+  invExportSoloSeleccionados = false;
+  invRenderCohorte();
+}
+
+// ── Render de la tabla de cohorte (Vista B) ──
+function invRenderCohorte() {
+  const cont = document.getElementById('inv-resultado');
+  let rows = invCohortResults.slice();
+  const {col, dir} = invCohortSort;
+  rows.sort(function(a,b){
+    let va = col==='dxKeys' ? a.dxKeys.length : a[col];
+    let vb = col==='dxKeys' ? b.dxKeys.length : b[col];
+    if(va===null||va===undefined) va = dir==='asc' ? Infinity : -Infinity;
+    if(vb===null||vb===undefined) vb = dir==='asc' ? Infinity : -Infinity;
+    if(typeof va==='string') va = va.toLowerCase();
+    if(typeof vb==='string') vb = vb.toLowerCase();
+    if(va<vb) return dir==='asc'?-1:1;
+    if(va>vb) return dir==='asc'?1:-1;
+    return 0;
+  });
+  const totalPages = Math.max(1, Math.ceil(rows.length / INV_COHORT_PAGESIZE));
+  if(invCohortPage > totalPages) invCohortPage = totalPages;
+  const start = (invCohortPage-1) * INV_COHORT_PAGESIZE;
+  const pageRows = rows.slice(start, start+INV_COHORT_PAGESIZE);
+
+  let h = '<div class="inv-cohort-back" onclick="invVolverBusqueda()">← Nueva búsqueda</div>';
+  h += '<div class="inv-cohort-bar">';
+  h += '<div class="inv-cohort-count"><b>'+rows.length+'</b> paciente'+(rows.length===1?'':'s')+' en la cohorte'+(invCohortSeleccion.size?' · '+invCohortSeleccion.size+' seleccionado'+(invCohortSeleccion.size===1?'':'s'):'')+'</div>';
+  h += '<div class="inv-cohort-actions">';
+  h += '<button class="inv-btn-ghost" onclick="invSeleccionarTodosCohorte()">'+((invCohortSeleccion.size===rows.length && rows.length) ? 'Deseleccionar todos' : 'Seleccionar todos')+'</button>';
+  h += '<button class="inv-btn-primary" onclick="invAbrirExport()">⬇️ Exportar</button>';
+  h += '</div></div>';
+
+  h += '<div class="inv-cohort-table-wrap"><table class="inv-cohort-table"><thead><tr><th style="width:30px"></th>';
+  const cols = [['apellido','Paciente'],['dni','DNI'],['dxKeys','Diagnósticos clave'],['farmacosTxt','Fármacos'],['hba1c','HbA1c'],['grasaVisceral','Grasa visceral'],['ascvd','ASCVD 10a'],['riesgo','Riesgo CV']];
+  cols.forEach(function(cc){
+    const sorted = invCohortSort.col===cc[0];
+    h += '<th class="'+(sorted?'sorted '+invCohortSort.dir:'')+'" onclick="invOrdenarCohorte(\''+cc[0]+'\')">'+cc[1]+'</th>';
+  });
+  h += '</tr></thead><tbody>';
+  if(!pageRows.length) {
+    h += '<tr><td colspan="9" style="text-align:center;padding:30px;color:var(--text-soft)">Sin pacientes en esta página.</td></tr>';
+  }
+  pageRows.forEach(function(r){
+    const dniEsc = String(r.dni).replace(/'/g,"\\'");
+    const checked = invCohortSeleccion.has(r.dni);
+    h += '<tr>';
+    h += '<td onclick="event.stopPropagation()"><input type="checkbox" '+(checked?'checked':'')+' onchange="invToggleSeleccionFila(\''+dniEsc+'\')"/></td>';
+    h += '<td class="rowclick" onclick="invSeleccionar(\''+dniEsc+'\')"><b>'+escHtml((r.apellido||'')+', '+(r.nombre||''))+'</b><div style="font-size:10.5px;color:var(--text-soft)">'+r.edad+' años · '+escHtml(r.sexo||'')+'</div></td>';
+    h += '<td class="rowclick" onclick="invSeleccionar(\''+dniEsc+'\')">'+escHtml(String(r.dni))+'</td>';
+    h += '<td class="rowclick" onclick="invSeleccionar(\''+dniEsc+'\')"><div class="inv-cohort-dx">'+(r.dxKeys.length ?
+      r.dxKeys.slice(0,4).map(function(k){ return '<span>'+escHtml(INV_DX_LABELS[k]||k)+'</span>'; }).join('') + (r.dxKeys.length>4?'<span>+'+(r.dxKeys.length-4)+'</span>':'')
+      : '<span style="background:var(--gray);color:var(--text-soft)">—</span>')+'</div></td>';
+    h += '<td class="rowclick inv-cohort-farm" onclick="invSeleccionar(\''+dniEsc+'\')">'+(r.farmacosTxt?escHtml(r.farmacosTxt):'—')+'</td>';
+    h += '<td class="rowclick" onclick="invSeleccionar(\''+dniEsc+'\')">'+(r.hba1c!=null?r.hba1c+'%':'—')+'</td>';
+    h += '<td class="rowclick" onclick="invSeleccionar(\''+dniEsc+'\')">'+(r.grasaVisceral!=null?r.grasaVisceral:'—')+'</td>';
+    h += '<td class="rowclick" onclick="invSeleccionar(\''+dniEsc+'\')">'+(r.ascvd!=null?r.ascvd+'%':'—')+'</td>';
+    h += '<td class="rowclick" onclick="invSeleccionar(\''+dniEsc+'\')"><span class="inv-cohort-riesgo '+r.riesgo+'">'+INV_RIESGO_LABEL[r.riesgo]+'</span></td>';
+    h += '</tr>';
+  });
+  h += '</tbody></table></div>';
+
+  h += '<div class="inv-cohort-pag">';
+  h += '<button onclick="invCambiarPagina(-1)" '+(invCohortPage<=1?'disabled':'')+'>← Anterior</button>';
+  h += '<span>Página '+invCohortPage+' de '+totalPages+'</span>';
+  h += '<button onclick="invCambiarPagina(1)" '+(invCohortPage>=totalPages?'disabled':'')+'>Siguiente →</button>';
+  h += '</div>';
+  h += '<div class="inv-filtro-nota" style="margin-top:2px">"ASCVD 10a" es el riesgo real de la Pooled Cohort Equations (igual fórmula que la calculadora individual; requiere 40-79 años, TAS y CT/HDL cargados — sin esos datos muestra "—"). "Riesgo CV" es un indicador heurístico propio (diagnósticos + tabaquismo + edad) para ordenar/explorar cuando no hay ASCVD calculable. No se incluye SCORE2 porque sus coeficientes no están validados en el sistema.</div>';
+
+  cont.innerHTML = h;
+}
+
+function invOrdenarCohorte(col) {
+  if(invCohortSort.col===col) invCohortSort.dir = invCohortSort.dir==='asc' ? 'desc' : 'asc';
+  else invCohortSort = {col:col, dir:'asc'};
+  invRenderCohorte();
+}
+function invCambiarPagina(delta) { invCohortPage += delta; invRenderCohorte(); }
+function invToggleSeleccionFila(dni) {
+  if(invCohortSeleccion.has(dni)) invCohortSeleccion.delete(dni); else invCohortSeleccion.add(dni);
+  invRenderCohorte();
+}
+function invSeleccionarTodosCohorte() {
+  invCohortSeleccion = (invCohortSeleccion.size===invCohortResults.length && invCohortResults.length)
+    ? new Set() : new Set(invCohortResults.map(function(r){ return r.dni; }));
+  invRenderCohorte();
+}
+
+// ── Exportación (Modo Gestión Interna vs. Investigación/Docencia) ──
+function invAbrirExport() {
+  if(!invExportVarsSel) {
+    invExportVarsSel = {};
+    INV_EXPORT_VARS.forEach(function(v){ invExportVarsSel[v[0]] = v[2]; });
+  }
+  invRenderExportModal();
+  document.getElementById('inv-export-overlay').classList.add('open');
+}
+function invCerrarExport() { document.getElementById('inv-export-overlay').classList.remove('open'); }
+function invSetPrivacidad(m) { invExportPrivacidad = m; invRenderExportModal(); }
+
+function invRenderExportModal() {
+  const modal = document.getElementById('inv-export-modal');
+  const totalDisp = invCohortResults.length;
+  const totalSel = invCohortSeleccion.size;
+  let h = '<div class="inv-export-title">⬇️ Exportar cohorte</div>';
+  h += '<div class="inv-export-sub">'+(totalSel ? totalSel+' paciente'+(totalSel===1?'':'s')+' seleccionado'+(totalSel===1?'':'s')+' de '+totalDisp : 'Ningún paciente seleccionado — se exportarán los '+totalDisp+' de la cohorte')+'</div>';
+  if(totalSel>0) {
+    h += '<label style="display:flex;align-items:center;gap:8px;font-size:12px;margin-bottom:16px;cursor:pointer"><input type="checkbox" '+(invExportSoloSeleccionados?'checked':'')+' onchange="invExportSoloSeleccionados=this.checked;invRenderExportModal()"/> Exportar solo los seleccionados ('+totalSel+')</label>';
+  }
+  h += '<div class="inv-export-section-title">Modo de privacidad</div><div class="inv-privacy-opt">';
+  h += '<div class="inv-privacy-card'+(invExportPrivacidad==='gestion'?' active':'')+'" onclick="invSetPrivacidad(\'gestion\')"><b>🔓 Gestión interna</b><span>Incluye DNI, nombre y apellido reales.</span></div>';
+  h += '<div class="inv-privacy-card'+(invExportPrivacidad==='investigacion'?' active':'')+'" onclick="invSetPrivacidad(\'investigacion\')"><b>🔒 Investigación / docencia</b><span>Reemplaza el DNI por un ID anónimo (SUBJ-001...) y oculta nombre y apellido.</span></div>';
+  h += '</div>';
+  h += '<div class="inv-export-section-title">Variables a incluir</div>';
+  h += '<div class="inv-export-vars">' + INV_EXPORT_VARS.map(function(v){
+    const bloqueado = invExportPrivacidad==='investigacion' && (v[0]==='dni' || v[0]==='nombre');
+    const checked = bloqueado ? false : invExportVarsSel[v[0]];
+    return '<label class="inv-export-var" style="'+(bloqueado?'opacity:.45':'')+'"><input type="checkbox" '+(checked?'checked':'')+' '+(bloqueado?'disabled':'')+' onchange="invExportVarsSel[\''+v[0]+'\']=this.checked"/>'+escHtml(v[1])+(bloqueado?' (oculto)':'')+'</label>';
+  }).join('') + '</div>';
+  if(invExportPrivacidad==='investigacion') h += '<div class="inv-filtro-nota">El ID anónimo (SUBJ-001, SUBJ-002...) es correlativo solo dentro de este archivo exportado; no es un identificador persistente entre exportaciones.</div>';
+  h += '<div class="inv-export-actions">';
+  h += '<button class="inv-btn-ghost" onclick="invCerrarExport()">Cancelar</button>';
+  h += '<button class="inv-btn-ghost" onclick="invEjecutarExport(\'csv\')">.CSV</button>';
+  h += '<button class="inv-btn-primary" onclick="invEjecutarExport(\'xlsx\')">.XLSX</button>';
+  h += '</div>';
+  modal.innerHTML = h;
+}
+
+function invEjecutarExport(formato) {
+  const rows = (invExportSoloSeleccionados && invCohortSeleccion.size)
+    ? invCohortResults.filter(function(r){ return invCohortSeleccion.has(r.dni); })
+    : invCohortResults;
+  if(!rows.length) { alert('No hay datos para exportar.'); return; }
+  const anon = invExportPrivacidad === 'investigacion';
+  const data = rows.map(function(r, i){
+    const o = {};
+    if(anon) { o['ID'] = 'SUBJ-'+String(i+1).padStart(3,'0'); }
+    else {
+      if(invExportVarsSel.dni) o['DNI'] = r.dni;
+      if(invExportVarsSel.nombre) o['Paciente'] = (r.apellido||'')+', '+(r.nombre||'');
+    }
+    if(invExportVarsSel.edad) o['Edad'] = r.edad;
+    if(invExportVarsSel.sexo) o['Sexo'] = r.sexo;
+    if(invExportVarsSel.cobertura) o['Cobertura'] = r.cobertura||'';
+    if(invExportVarsSel.diagnosticos) o['Diagnósticos'] = r.dxKeys.map(function(k){ return INV_DX_LABELS[k]||k; }).join('; ');
+    if(invExportVarsSel.farmacos) o['Fármacos'] = r.farmacosTxt||'';
+    if(invExportVarsSel.tabaquismo) o['Tabaquismo'] = r.tabaquismo||'';
+    if(invExportVarsSel.hba1c) o['HbA1c (%)'] = r.hba1c!=null?r.hba1c:'';
+    if(invExportVarsSel.glucemia) o['Glucemia (mg/dL)'] = r.glucemia!=null?r.glucemia:'';
+    if(invExportVarsSel.ct) o['Col. total (mg/dL)'] = r.ct!=null?r.ct:'';
+    if(invExportVarsSel.hdl) o['HDL (mg/dL)'] = r.hdl!=null?r.hdl:'';
+    if(invExportVarsSel.tg) o['Triglicéridos (mg/dL)'] = r.tg!=null?r.tg:'';
+    if(invExportVarsSel.ldl) o['LDL M-H (mg/dL)'] = r.ldl!=null?r.ldl:'';
+    if(invExportVarsSel.nohdl) o['No-HDL (mg/dL)'] = r.nohdl!=null?r.nohdl:'';
+    if(invExportVarsSel.creatinina) o['Creatinina (mg/dL)'] = r.creatinina!=null?r.creatinina:'';
+    if(invExportVarsSel.egfr) o['eGFR (MDRD)'] = r.egfr!=null?r.egfr:'';
+    if(invExportVarsSel.rac) o['RAC (mg/g)'] = r.rac!=null?r.rac:'';
+    if(invExportVarsSel.imc) o['IMC'] = r.imc!=null?r.imc:'';
+    if(invExportVarsSel.cintura) o['Cintura (cm)'] = r.cintura!=null?r.cintura:'';
+    if(invExportVarsSel.grasavisc) o['Grasa visceral'] = r.grasaVisceral!=null?r.grasaVisceral:'';
+    if(invExportVarsSel.ascvd) o['ASCVD 10 años (%)'] = r.ascvd!=null?r.ascvd:'';
+    if(invExportVarsSel.riesgo) o['Riesgo CV'] = INV_RIESGO_LABEL[r.riesgo]||r.riesgo;
+    return o;
+  });
+  const fechaTag = new Date().toISOString().slice(0,10);
+  const nombreArchivo = 'cohorte_urcym_'+fechaTag+(anon?'_anon':'');
+  if(formato==='csv') {
+    const headers = Object.keys(data[0]);
+    const csvRows = [headers.join(',')].concat(data.map(function(row){
+      return headers.map(function(h){ const v = row[h]===undefined||row[h]===null?'':String(row[h]); return '"'+v.replace(/"/g,'""')+'"'; }).join(',');
+    }));
+    const blob = new Blob(['\ufeff'+csvRows.join('\n')], {type:'text/csv;charset=utf-8;'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href=url; a.download=nombreArchivo+'.csv'; document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+  } else {
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Cohorte');
+    XLSX.writeFile(wb, nombreArchivo+'.xlsx');
+  }
+  invCerrarExport();
 }
 
 // Cerrar sugerencias al hacer click afuera
