@@ -807,6 +807,11 @@
 .ag-form-row input:focus,.ag-form-row select:focus,.ag-form-row textarea:focus{outline:none;border-color:#185FA5;box-shadow:0 0 0 3px rgba(24,95,165,.08);}
 .ag-form-row textarea{resize:vertical;min-height:55px;}
 .ag-form-row-2{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;}
+.ag-motivo-chip{display:inline-flex;align-items:center;gap:5px;padding:5px 10px;border:1.5px solid #e2e8f0;border-radius:20px;font-size:12px;color:#4b5563;cursor:pointer;user-select:none;transition:all .15s;}
+.ag-motivo-chip input{width:13px;height:13px;accent-color:#185FA5;cursor:pointer;margin:0;}
+.ag-motivo-chip:has(input:checked){border-color:#185FA5;background:#eaf2fb;color:#185FA5;font-weight:600;}
+.ag-motivo-chip.ag-motivo-disabled{opacity:.4;cursor:not-allowed;}
+.ag-motivo-hint{font-size:10.5px;color:#9ca3af;font-weight:400;text-transform:none;letter-spacing:0;}
 .ag-modal-actions{display:flex;gap:8px;padding:16px 24px;border-top:1px solid #f1f5f9;justify-content:flex-end;position:sticky;bottom:0;background:#fff;border-radius:0 0 16px 16px;}
 .ag-btn-primary{background:#185FA5;color:#fff;border:none;border-radius:8px;padding:9px 20px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;transition:background .15s;}
 .ag-btn-primary:hover{background:#0C447C;}
@@ -1614,19 +1619,18 @@
             </label>
             <input type="number" id="ag-f-monto" placeholder="0" min="0" style="border:1.5px solid #1D9E75;">
           </div>
-          <div class="ag-form-row"><label>Motivo de consulta</label>
-            <select id="ag-f-notas">
-              <option value="">—</option>
-              <option value="Hipertensión">Hipertensión</option>
-              <option value="Diabetes">Diabetes</option>
-              <option value="Adiposopatía">Adiposopatía</option>
-              <option value="Dislipidemia">Dislipidemia</option>
-              <option value="Hipertensión en el embarazo">Hipertensión en el embarazo</option>
-              <option value="ACV/AIT/ateromatosis carotídea">ACV/AIT/ateromatosis carotídea</option>
-              <option value="Esteatosis hepática">Esteatosis hepática</option>
-              <option value="Hepatitis">Hepatitis</option>
-              <option value="Enfermedad hepática">Enfermedad hepática</option>
-            </select>
+          <div class="ag-form-row"><label>Motivo de consulta <span class="ag-motivo-hint" id="ag-f-motivos-count">(hasta 3)</span></label>
+            <div id="ag-f-motivos" style="display:flex;flex-wrap:wrap;gap:6px;">
+              <label class="ag-motivo-chip"><input type="checkbox" value="Hipertensión" onchange="agLimitMotivos(this)"> Hipertensión</label>
+              <label class="ag-motivo-chip"><input type="checkbox" value="Diabetes" onchange="agLimitMotivos(this)"> Diabetes</label>
+              <label class="ag-motivo-chip"><input type="checkbox" value="Adiposopatía" onchange="agLimitMotivos(this)"> Adiposopatía</label>
+              <label class="ag-motivo-chip"><input type="checkbox" value="Dislipidemia" onchange="agLimitMotivos(this)"> Dislipidemia</label>
+              <label class="ag-motivo-chip"><input type="checkbox" value="Hipertensión en el embarazo" onchange="agLimitMotivos(this)"> Hipertensión en el embarazo</label>
+              <label class="ag-motivo-chip"><input type="checkbox" value="ACV/AIT/ateromatosis carotídea" onchange="agLimitMotivos(this)"> ACV/AIT/ateromatosis carotídea</label>
+              <label class="ag-motivo-chip"><input type="checkbox" value="Esteatosis hepática" onchange="agLimitMotivos(this)"> Esteatosis hepática</label>
+              <label class="ag-motivo-chip"><input type="checkbox" value="Hepatitis" onchange="agLimitMotivos(this)"> Hepatitis</label>
+              <label class="ag-motivo-chip"><input type="checkbox" value="Enfermedad hepática" onchange="agLimitMotivos(this)"> Enfermedad hepática</label>
+            </div>
           </div>
           </div><!-- /ag-modal-body -->
           <div class="ag-modal-actions">
@@ -8446,7 +8450,7 @@ async function cargarDatosClinica(dni) {
   {const l=document.getElementById('quirurg_filas');if(l)l.innerHTML='';}
   {const e=document.getElementById('quirurg_empty');if(e)e.style.display='block';}
   {const n=document.getElementById('quirurg_notas');if(n)n.value='';}
-  {const tab=document.getElementById('hab_tabaquismo');if(tab){tab.value='nunca';actualizarTabaquismo();}}
+  {const tab=document.getElementById('hab_tabaquismo');if(tab){tab.value='';actualizarTabaquismo();}}
   {const cig=document.getElementById('hab_cig_dia');if(cig)cig.value='';}
   {const ani=document.getElementById('hab_anios');if(ani)ani.value='';}
   calcPackYear();
@@ -8515,7 +8519,7 @@ async function cargarDatosClinica(dni) {
   try{const cirs=JSON.parse(data.quirurg_cirugias||'[]');setCirugias(cirs);}catch(e){}
   {const qn=document.getElementById('quirurg_notas');if(qn&&data.quirurg_notas)qn.value=data.quirurg_notas;}
   const tab=document.getElementById('hab_tabaquismo');
-  if(tab){tab.value=data.tabaquismo||'nunca';actualizarTabaquismo();}
+  if(tab){tab.value=data.tabaquismo||'';actualizarTabaquismo();}
   const cig=document.getElementById('hab_cig_dia');if(cig&&data.cigarrillos_dia)cig.value=data.cigarrillos_dia;
   const ani=document.getElementById('hab_anios');if(ani&&data.anios_fumando)ani.value=data.anios_fumando;
   calcPackYear();
@@ -11265,15 +11269,20 @@ function calcDxTiempo(dx) {
 }
 function actualizarTabaquismo(){
   const val=document.getElementById('hab_tabaquismo').value;
-  document.getElementById('hab_tab_detalle').style.display=val==='nunca'?'none':'block';
+  document.getElementById('hab_tab_detalle').style.display=(val==='nunca'||val==='')?'none':'block';
   const lbl=document.getElementById('hab_anios_label'); if(lbl) lbl.textContent=val==='ex'?'Años que fumó':'Años fumando';
   calcPackYear();
 }
 function calcPackYear(){
+  const val=document.getElementById('hab_tabaquismo').value;
   const cig=parseFloat(document.getElementById('hab_cig_dia').value)||0;
   const ani=parseFloat(document.getElementById('hab_anios').value)||0;
+  const corresponde=(val==='actual'||val==='ex')&&(cig||ani);
+  const py=((cig*ani)/20).toFixed(1);
   const el=document.getElementById('hab_pack_year_result');
-  if(el) el.textContent=(cig||ani)?'Pack-year: '+((cig*ani)/20).toFixed(1):'';
+  if(el) el.textContent=corresponde?'Pack-year: '+py:'';
+  const hdr=document.getElementById('hab_tab_header_pa');
+  if(hdr) hdr.textContent=corresponde?' — '+py+' paquetes/año':'';
 }
 function actualizarAlcohol(){
   const v = document.getElementById('hab_alcohol').value;
@@ -12448,6 +12457,16 @@ function renderAlertasPaciente() {
     try { imcPrevio = getUltimoValorAnt('IMC'); } catch(e2) { imcPrevio = null; }
     if(!pesoActual && !tallaActual && !imcPrevio) {
       alertas.push('Sin peso/talla registrados en ninguna consulta.');
+    }
+    // Antecedentes ginecoobstétricos (solo pacientes mujeres)
+    if(calcSexoPaciente() === 'F') {
+      const GIN_DX_KEYS = ['pe','rciu','ppt','sop','dbtg','htag','ms_gineco','menopausia'];
+      const tieneDxGineco = GIN_DX_KEYS.some(k => c['dx_'+k]);
+      const tieneGpac = [c.gpac_g,c.gpac_p,c.gpac_a,c.gpac_c].some(v => v != null && v !== '');
+      const tieneNotasGineco = !!c.gineco_notas;
+      if(!tieneDxGineco && !tieneGpac && !tieneNotasGineco) {
+        alertas.push('Sin antecedentes ginecoobstétricos registrados — completalos en la pestaña Ginecológicos.');
+      }
     }
   } catch(e) {
     console.error('renderAlertasPaciente:', e);
@@ -16428,10 +16447,11 @@ function _obeGenerarHTMLInforme(opts) {
       <div class="clinica-grid">
         <!-- Columna izquierda: Tabaquismo -->
         <div class="clinica-section">
-          <h4>🚬 Tabaquismo</h4>
+          <h4>🚬 Tabaquismo<span id="hab_tab_header_pa" style="font-weight:400;font-size:11px;color:var(--text-soft)"></span></h4>
           <div class="habito-row">
             <label>Estado</label>
             <select id="hab_tabaquismo" onchange="actualizarTabaquismo()">
+              <option value="">Sin datos</option>
               <option value="nunca">Nunca fumó</option>
               <option value="social">Fumador social</option>
               <option value="actual">Fumador actual</option>
@@ -16932,6 +16952,49 @@ var DEFAULT_DISP=[
 ];
 
 var turnos={}, nlBlocks=[], dispBlocks=[], instBlocks=[];
+
+// ── Motivo(s) de consulta del turno: hasta 3, guardados como array en t.notas ──
+// (compatible con turnos viejos donde t.notas era un string único)
+function turnoMotivosArr(t) {
+  if(!t) return [];
+  var n = t.notas;
+  if(Array.isArray(n)) return n.filter(Boolean);
+  if(typeof n === 'string' && n.trim()) return [n.trim()];
+  return [];
+}
+function turnoMotivosTxt(t) { return turnoMotivosArr(t).join(', '); }
+function agGetMotivosSel() {
+  var box = document.getElementById('ag-f-motivos');
+  if(!box) return [];
+  return Array.prototype.slice.call(box.querySelectorAll('input:checked')).map(function(i){ return i.value; });
+}
+function agSetMotivosSel(arr) {
+  var box = document.getElementById('ag-f-motivos');
+  if(!box) return;
+  var sel = arr||[];
+  box.querySelectorAll('input').forEach(function(i){ i.checked = sel.indexOf(i.value) >= 0; });
+  agUpdateMotivosUI();
+}
+function agUpdateMotivosUI() {
+  var box = document.getElementById('ag-f-motivos');
+  if(!box) return;
+  var checked = box.querySelectorAll('input:checked');
+  var full = checked.length >= 3;
+  box.querySelectorAll('label.ag-motivo-chip').forEach(function(lbl){
+    var inp = lbl.querySelector('input');
+    var disable = full && !inp.checked;
+    lbl.classList.toggle('ag-motivo-disabled', disable);
+    inp.disabled = disable;
+  });
+  var countEl = document.getElementById('ag-f-motivos-count');
+  if(countEl) countEl.textContent = checked.length ? '('+checked.length+'/3)' : '(hasta 3)';
+}
+function agLimitMotivos(cb) {
+  var box = document.getElementById('ag-f-motivos');
+  var checked = box.querySelectorAll('input:checked');
+  if(checked.length > 3) { cb.checked = false; }
+  agUpdateMotivosUI();
+}
 var nlTmp=[], dispTmp=[], instTmp=[];
 var currentMonday=getMonday(new Date());
 var editKey=null, pendingDate=null, pendingTime=null;
@@ -17759,7 +17822,7 @@ function makeTurnoEl(t,key,hPx){
         +'<div class="ag-tt-row"><span>Pago</span><span>'+(PAGO_L[turno.pago||'sin-seña']||'')+'</span></div>'
         +(turno.monto?'<div class="ag-tt-row"><span>Monto total</span><span style="color:#1D9E75;font-weight:700;">$'+Number(turno.monto).toLocaleString('es-AR')+'</span></div>':'')
         +'<div class="ag-tt-row"><span>Asistencia</span><span>'+asistLabel+'</span></div>'
-        +(turno.notas?'<div class="ag-tt-row" style="margin-top:5px;border-top:1px solid #e5e7eb;padding-top:5px;flex-direction:column;gap:2px;"><span>Notas</span><span style="font-size:11px;font-weight:400;white-space:pre-wrap">'+esc(turno.notas)+'</span></div>':'');
+        +(turnoMotivosArr(turno).length?'<div class="ag-tt-row" style="margin-top:5px;border-top:1px solid #e5e7eb;padding-top:5px;flex-direction:column;gap:2px;"><span>Motivo de consulta</span><span style="font-size:11px;font-weight:400;white-space:pre-wrap">'+esc(turnoMotivosTxt(turno))+'</span></div>':'');
       tt.style.display='block';moveTT(e);
     });
     el.addEventListener('mousemove',moveTT);
@@ -17977,7 +18040,7 @@ function openModal(ds,time,key,forcedProf,freeTime){
     document.getElementById('ag-f-estado').value=t.estado||'';
     document.getElementById('ag-f-sena').value=t.pago==='pagado'?'':(t.sena||'');
     document.getElementById('ag-f-pago').value=t.pago==='osde'?'sin-seña':(t.pago||'sin-seña');
-    document.getElementById('ag-f-notas').value=t.notas||'';
+    agSetMotivosSel(turnoMotivosArr(t));
     document.getElementById('ag-f-osde').checked=t.osde?true:false;
     document.getElementById('ag-pago-row').style.display=t.osde?'none':'';
     // Monto
@@ -18000,7 +18063,7 @@ function openModal(ds,time,key,forcedProf,freeTime){
     document.getElementById('ag-f-estado').value='';
     document.getElementById('ag-f-sena').value='';
     document.getElementById('ag-f-pago').value='sin-seña';
-    document.getElementById('ag-f-notas').value='';
+    agSetMotivosSel([]);
     document.getElementById('ag-f-osde').checked=false;
     document.getElementById('ag-pago-row').style.display='';
     document.getElementById('ag-monto-row').style.display='none';
@@ -18305,7 +18368,7 @@ function openReprog(key){
     sena:osdeVal?'':senaVal,
     pago:osdeVal?'osde':pagoVal,
     monto:pagoVal==='pagado'&&montoVal?montoVal:undefined,
-    notas:document.getElementById('ag-f-notas').value,
+    notas:agGetMotivosSel(),
     asistencia:prevAsist,
     extra:isExtra?true:undefined,
     video:isVideo3?true:undefined,
@@ -20718,7 +20781,7 @@ window.cargarProxConsultas = cargarProxConsultas;
             sena:    senaNum,
             pago:    t.pago||'sin-seña', origen:'urcym',
             ausente: t.asistencia==='ausente',
-            notas:   t.notas||'',
+            notas:   turnoMotivosTxt(t),
             video:   !!t.video
           });
         }
@@ -21975,7 +22038,7 @@ window.gpCargar = async function() {
         osde:    !!(t.osde || t.pago==='osde'),
         ausente: t.asistencia === 'ausente',   // único campo real
         video:   esVideo,
-        notas:   t.notas||''
+        notas:   turnoMotivosTxt(t)
       });
     });
 
@@ -24089,6 +24152,7 @@ const INV_RIESGO_LABEL = {bajo:'Bajo', moderado:'Moderado', alto:'Alto', muyalto
 const INV_EXPORT_VARS = [
   ['dni','DNI', true], ['nombre','Nombre y apellido', true], ['edad','Edad', true], ['sexo','Sexo', true],
   ['cobertura','Cobertura médica', false], ['diagnosticos','Diagnósticos activos', true],
+  ['motivoconsulta','Motivo de consulta (turnos)', true],
   ['farmacos','Fármacos activos', true], ['tabaquismo','Tabaquismo', false],
   ['hba1c','HbA1c (%)', true], ['glucemia','Glucemia (mg/dL)', false], ['ct','Col. total (mg/dL)', false],
   ['hdl','HDL (mg/dL)', false], ['tg','Triglicéridos (mg/dL)', false], ['ldl','LDL M-H (mg/dL)', false],
@@ -24099,6 +24163,7 @@ const INV_EXPORT_VARS = [
 
 function invFiltrosVacio() {
   return { edadMin:'', edadMax:'', sexo:'', cobertura:'', dxInc:[], dxMode:'OR', dxExc:[],
+           famInc:[], famMode:'OR', famExc:[], ginInc:[], ginMode:'OR', ginExc:[],
            farmInc:[], farmMode:'OR', farmExc:[], farmEspecifico:'', tabaquismo:'', lab:{}, ant:{},
            est:{}, mapaPatron:'', ecoDD:'', ecoabdEst:'', placas:'', idx:{}, alimentacion:'', ascvd:{min:'',max:''} };
 }
@@ -24108,7 +24173,7 @@ let invCohortSeleccion = new Set();
 let invCohortPage = 1;
 let invCohortSort = {col:'apellido', dir:'asc'};
 const INV_COHORT_PAGESIZE = 20;
-let invCohortCache = {clinica:{}, meds:{}, lab:{}, ant:{}};
+let invCohortCache = {clinica:{}, meds:{}, lab:{}, ant:{}, motivos:{}};
 let invExportPrivacidad = 'gestion';
 let invExportVarsSel = null;
 let invExportSoloSeleccionados = false;
@@ -24132,6 +24197,8 @@ function invRenderFiltrosPanel() {
   const nDemog = (f.edadMin!=='' || f.edadMax!=='' ? 1:0) + (f.sexo?1:0) + (f.cobertura?1:0);
   const nVida = f.tabaquismo ? 1 : 0;
   const nDx = f.dxInc.length + f.dxExc.length;
+  const nFam = f.famInc.length + f.famExc.length;
+  const nGin = f.ginInc.length + f.ginExc.length;
   const nFarm = f.farmInc.length + f.farmExc.length;
   const nLab = Object.keys(f.lab).filter(function(k){ return f.lab[k] && (f.lab[k].min!=='' || f.lab[k].max!==''); }).length;
   const nAnt = Object.keys(f.ant).filter(function(k){ return f.ant[k] && (f.ant[k].min!=='' || f.ant[k].max!==''); }).length;
@@ -24173,6 +24240,38 @@ function invRenderFiltrosPanel() {
   h += '<div class="inv-check-list">' + Object.keys(INV_DX_LABELS).map(function(k){
     const checked = f.dxExc.includes(k);
     return '<label class="inv-check-pill excl'+(checked?' checked':'')+'"><input type="checkbox" '+(checked?'checked':'')+' onchange="invTogglePill(\'dxExc\',\''+k+'\')"/>'+escHtml(INV_DX_LABELS[k])+'</label>';
+  }).join('') + '</div>';
+  h += invBlockClose();
+
+  // Antecedentes familiares
+  h += invBlockOpen('flt-fam', '🟢 Antecedentes familiares', nFam||null, nFam>0);
+  h += '<div class="inv-filtro-modo" style="margin-bottom:10px">';
+  h += '<button class="'+(f.famMode==='OR'?'active':'')+'" onclick="invSetModo(\'famMode\',\'OR\')">Al menos uno</button>';
+  h += '<button class="'+(f.famMode==='AND'?'active':'')+'" onclick="invSetModo(\'famMode\',\'AND\')">Todos (AND)</button></div>';
+  h += '<div class="inv-check-list">' + Object.keys(INV_FAM_LABELS).map(function(k){
+    const checked = f.famInc.includes(k);
+    return '<label class="inv-check-pill'+(checked?' checked':'')+'"><input type="checkbox" '+(checked?'checked':'')+' onchange="invTogglePill(\'famInc\',\''+k+'\')"/>'+escHtml(INV_FAM_LABELS[k])+'</label>';
+  }).join('') + '</div>';
+  h += '<div class="inv-check-sub">Excluir si tiene (NOT)</div>';
+  h += '<div class="inv-check-list">' + Object.keys(INV_FAM_LABELS).map(function(k){
+    const checked = f.famExc.includes(k);
+    return '<label class="inv-check-pill excl'+(checked?' checked':'')+'"><input type="checkbox" '+(checked?'checked':'')+' onchange="invTogglePill(\'famExc\',\''+k+'\')"/>'+escHtml(INV_FAM_LABELS[k])+'</label>';
+  }).join('') + '</div>';
+  h += invBlockClose();
+
+  // Antecedentes ginecoobstétricos
+  h += invBlockOpen('flt-gin', '🩷 Antecedentes ginecoobstétricos', nGin||null, nGin>0);
+  h += '<div class="inv-filtro-modo" style="margin-bottom:10px">';
+  h += '<button class="'+(f.ginMode==='OR'?'active':'')+'" onclick="invSetModo(\'ginMode\',\'OR\')">Al menos uno</button>';
+  h += '<button class="'+(f.ginMode==='AND'?'active':'')+'" onclick="invSetModo(\'ginMode\',\'AND\')">Todos (AND)</button></div>';
+  h += '<div class="inv-check-list">' + Object.keys(INV_DX_GINECO_LABELS).map(function(k){
+    const checked = f.ginInc.includes(k);
+    return '<label class="inv-check-pill'+(checked?' checked':'')+'"><input type="checkbox" '+(checked?'checked':'')+' onchange="invTogglePill(\'ginInc\',\''+k+'\')"/>'+escHtml(INV_DX_GINECO_LABELS[k])+'</label>';
+  }).join('') + '</div>';
+  h += '<div class="inv-check-sub">Excluir si tiene (NOT)</div>';
+  h += '<div class="inv-check-list">' + Object.keys(INV_DX_GINECO_LABELS).map(function(k){
+    const checked = f.ginExc.includes(k);
+    return '<label class="inv-check-pill excl'+(checked?' checked':'')+'"><input type="checkbox" '+(checked?'checked':'')+' onchange="invTogglePill(\'ginExc\',\''+k+'\')"/>'+escHtml(INV_DX_GINECO_LABELS[k])+'</label>';
   }).join('') + '</div>';
   h += invBlockClose();
 
@@ -24300,7 +24399,7 @@ function invTogglePill(kind, key) {
   const arr = invFiltros[kind];
   const idx = arr.indexOf(key);
   if(idx>=0) arr.splice(idx,1); else arr.push(key);
-  const opp = {dxInc:'dxExc', dxExc:'dxInc', farmInc:'farmExc', farmExc:'farmInc'}[kind];
+  const opp = {dxInc:'dxExc', dxExc:'dxInc', famInc:'famExc', famExc:'famInc', ginInc:'ginExc', ginExc:'ginInc', farmInc:'farmExc', farmExc:'farmInc'}[kind];
   if(opp && idx<0) { const oi = invFiltros[opp].indexOf(key); if(oi>=0) invFiltros[opp].splice(oi,1); }
   invRenderFiltrosPanel();
   invActualizarBadge();
@@ -24316,6 +24415,8 @@ function invContarFiltrosActivos() {
   if(f.edadMin!=='' || f.edadMax!=='') n++;
   if(f.sexo) n++; if(f.cobertura) n++; if(f.tabaquismo) n++;
   if(f.dxInc.length) n++; if(f.dxExc.length) n++;
+  if(f.famInc.length) n++; if(f.famExc.length) n++;
+  if(f.ginInc.length) n++; if(f.ginExc.length) n++;
   if(f.farmInc.length) n++; if(f.farmExc.length) n++; if(f.farmEspecifico) n++;
   n += Object.keys(f.lab).filter(function(k){ return f.lab[k] && (f.lab[k].min!=='' || f.lab[k].max!==''); }).length;
   n += Object.keys(f.ant).filter(function(k){ return f.ant[k] && (f.ant[k].min!=='' || f.ant[k].max!==''); }).length;
@@ -24360,7 +24461,7 @@ async function invAplicarFiltros() {
   });
   if(!candidatos.length) return invRenderCohorteVacia();
 
-  if(f.dxInc.length || f.dxExc.length || f.tabaquismo || f.alimentacion || ascvdActivo) {
+  if(f.dxInc.length || f.dxExc.length || f.famInc.length || f.famExc.length || f.ginInc.length || f.ginExc.length || f.tabaquismo || f.alimentacion || ascvdActivo) {
     const { data } = await sb.from('paciente_clinica').select('*').in('dni_paciente', candidatos.map(function(p){return p.dni;}));
     clinicaMap = {}; (data||[]).forEach(function(c){ clinicaMap[c.dni_paciente]=c; });
     candidatos = candidatos.filter(function(p){
@@ -24370,6 +24471,16 @@ async function invAplicarFiltros() {
         if(f.dxMode==='AND' ? !tiene.every(Boolean) : !tiene.some(Boolean)) return false;
       }
       if(f.dxExc.length && f.dxExc.some(function(k){ return !!c['dx_'+k]; })) return false;
+      if(f.famInc.length) {
+        const tiene = f.famInc.map(function(k){ return !!c['fam_'+k]; });
+        if(f.famMode==='AND' ? !tiene.every(Boolean) : !tiene.some(Boolean)) return false;
+      }
+      if(f.famExc.length && f.famExc.some(function(k){ return !!c['fam_'+k]; })) return false;
+      if(f.ginInc.length) {
+        const tiene = f.ginInc.map(function(k){ return !!c['dx_'+k]; });
+        if(f.ginMode==='AND' ? !tiene.every(Boolean) : !tiene.some(Boolean)) return false;
+      }
+      if(f.ginExc.length && f.ginExc.some(function(k){ return !!c['dx_'+k]; })) return false;
       if(f.tabaquismo && c.tabaquismo !== f.tabaquismo) return false;
       if(f.alimentacion && !(c.alimentacion||'').toLowerCase().includes(f.alimentacion.toLowerCase())) return false;
       return true;
@@ -24573,11 +24684,12 @@ async function invFetchYArmarCohorte(patients) {
   const cont = document.getElementById('inv-resultado');
   cont.innerHTML = '<div class="inv-empty"><div>⏳</div><p>Armando cohorte...</p></div>';
   const dnis = patients.map(function(p){ return p.dni; });
-  const [clinicaR, medsR, tablasR, taMap] = await Promise.all([
+  const [clinicaR, medsR, tablasR, taMap, turnosData] = await Promise.all([
     sb.from('paciente_clinica').select('*').in('dni_paciente', dnis),
     sb.from('medicacion').select('*').eq('activo', true).in('dni_paciente', dnis),
     sb.from('paciente_tablas').select('dni_paciente,tipo,datos').in('dni_paciente', dnis).in('tipo', ['lab','ant']),
     invUltimasTAsBulk(dnis),
+    invFetchTurnosData(),
   ]);
   const clinicaMap = {}; (clinicaR.data||[]).forEach(function(c){ clinicaMap[c.dni_paciente]=c; });
   const medsMap = {}; (medsR.data||[]).forEach(function(m){ (medsMap[m.dni_paciente]=medsMap[m.dni_paciente]||[]).push(m); });
@@ -24585,6 +24697,16 @@ async function invFetchYArmarCohorte(patients) {
   (tablasR.data||[]).forEach(function(row){
     const parsed = invParseTablaJSON(row.datos);
     if(row.tipo==='lab') labMap[row.dni_paciente]=parsed; else antMap[row.dni_paciente]=parsed;
+  });
+  // Motivo(s) de consulta: agregados desde todos los turnos agendados de cada paciente
+  const motivosMap = {};
+  Object.keys(turnosData).forEach(function(key){
+    const t = turnosData[key];
+    if(!t || !t.dni_paciente) return;
+    const arr = turnoMotivosArr(t);
+    if(!arr.length) return;
+    const set = motivosMap[t.dni_paciente] || (motivosMap[t.dni_paciente] = new Set());
+    arr.forEach(function(m){ set.add(m); });
   });
   const prevPac = pacienteActual;
   patients.forEach(function(p){
@@ -24599,7 +24721,16 @@ async function invFetchYArmarCohorte(patients) {
   Object.keys(medsMap).forEach(function(k){ invCohortCache.meds[k]=medsMap[k]; });
   Object.keys(labMap).forEach(function(k){ invCohortCache.lab[k]=labMap[k]; });
   Object.keys(antMap).forEach(function(k){ invCohortCache.ant[k]=antMap[k]; });
-  invConstruirFilasCohorte(patients, clinicaMap, medsMap, labMap, antMap, taMap);
+  Object.keys(motivosMap).forEach(function(k){ invCohortCache.motivos[k]=Array.from(motivosMap[k]); });
+  invConstruirFilasCohorte(patients, clinicaMap, medsMap, labMap, antMap, taMap, motivosMap);
+}
+
+// ── Trae el JSON de turnos de agenda (mismo origen que usa Gestión Profesional) ──
+async function invFetchTurnosData() {
+  try {
+    const r = await sb.from('urcym_agenda_config').select('value').eq('key','turnos').maybeSingle();
+    return r.data && r.data.value ? JSON.parse(r.data.value) : {};
+  } catch(e) { return {}; }
 }
 
 function invRiesgoHeuristico(p, c) {
@@ -24620,18 +24751,20 @@ function invRiesgoHeuristico(p, c) {
   return 'bajo';
 }
 
-function invConstruirFilasCohorte(candidatos, clinicaMap, medsMap, labMap, antMap, taMap) {
+function invConstruirFilasCohorte(candidatos, clinicaMap, medsMap, labMap, antMap, taMap, motivosMap) {
   const getLab = function(dni, key){ const r = invUltimoValor(labMap[dni], LAB_FILAS, key); return r ? parseFloat(r.valor) : null; };
   const getAnt = function(dni, key){ const r = invUltimoValor(antMap[dni], ANT_FILAS, key); return r ? parseFloat(r.valor) : null; };
   invCohortResults = candidatos.map(function(p){
     const c = clinicaMap[p.dni] || invCohortCache.clinica[p.dni] || {};
     const meds = medsMap[p.dni] || invCohortCache.meds[p.dni] || [];
     const dxKeys = Object.keys(INV_DX_LABELS).filter(function(k){ return !!c['dx_'+k]; });
+    const motivosArr = (motivosMap && motivosMap[p.dni] ? Array.from(motivosMap[p.dni]) : null) || invCohortCache.motivos[p.dni] || [];
     return {
       dni: p.dni, apellido: p.apellido||'', nombre: p.nombre||'',
       edad: edadDesde(p.fecha_nacimiento), sexo: p.sexo||'', cobertura: p.obra_social||'',
       dxKeys: dxKeys, farmacosTxt: meds.map(function(m){ return m.farmaco; }).filter(Boolean).join(', '),
       tabaquismo: c.tabaquismo||'',
+      motivoConsultaTxt: motivosArr.join(', '),
       hba1c: getLab(p.dni,'HbA1c'), glucemia: getLab(p.dni,'Glucemia'), ct: getLab(p.dni,'CT'),
       hdl: getLab(p.dni,'HDL'), tg: getLab(p.dni,'TG'), ldl: getLab(p.dni,'LDL_MH'), nohdl: getLab(p.dni,'noHDL'),
       creatinina: getLab(p.dni,'Creatinina'), egfr: getLab(p.dni,'MDRD'), rac: getLab(p.dni,'RAC'),
@@ -24677,14 +24810,14 @@ function invRenderCohorte() {
   h += '</div></div>';
 
   h += '<div class="inv-cohort-table-wrap"><table class="inv-cohort-table"><thead><tr><th style="width:30px"></th>';
-  const cols = [['apellido','Paciente'],['dni','DNI'],['dxKeys','Diagnósticos clave'],['farmacosTxt','Fármacos'],['hba1c','HbA1c'],['grasaVisceral','Grasa visceral'],['ascvd','ASCVD 10a'],['riesgo','Riesgo CV']];
+  const cols = [['apellido','Paciente'],['dni','DNI'],['dxKeys','Diagnósticos clave'],['motivoConsultaTxt','Motivo de consulta'],['farmacosTxt','Fármacos'],['hba1c','HbA1c'],['grasaVisceral','Grasa visceral'],['ascvd','ASCVD 10a'],['riesgo','Riesgo CV']];
   cols.forEach(function(cc){
     const sorted = invCohortSort.col===cc[0];
     h += '<th class="'+(sorted?'sorted '+invCohortSort.dir:'')+'" onclick="invOrdenarCohorte(\''+cc[0]+'\')">'+cc[1]+'</th>';
   });
   h += '</tr></thead><tbody>';
   if(!pageRows.length) {
-    h += '<tr><td colspan="9" style="text-align:center;padding:30px;color:var(--text-soft)">Sin pacientes en esta página.</td></tr>';
+    h += '<tr><td colspan="10" style="text-align:center;padding:30px;color:var(--text-soft)">Sin pacientes en esta página.</td></tr>';
   }
   pageRows.forEach(function(r){
     const dniEsc = String(r.dni).replace(/'/g,"\\'");
@@ -24696,6 +24829,7 @@ function invRenderCohorte() {
     h += '<td class="rowclick" onclick="invSeleccionar(\''+dniEsc+'\')"><div class="inv-cohort-dx">'+(r.dxKeys.length ?
       r.dxKeys.slice(0,4).map(function(k){ return '<span>'+escHtml(INV_DX_LABELS[k]||k)+'</span>'; }).join('') + (r.dxKeys.length>4?'<span>+'+(r.dxKeys.length-4)+'</span>':'')
       : '<span style="background:var(--gray);color:var(--text-soft)">—</span>')+'</div></td>';
+    h += '<td class="rowclick" onclick="invSeleccionar(\''+dniEsc+'\')" style="font-size:12px">'+(r.motivoConsultaTxt?escHtml(r.motivoConsultaTxt):'<span style="color:var(--text-soft)">—</span>')+'</td>';
     h += '<td class="rowclick inv-cohort-farm" onclick="invSeleccionar(\''+dniEsc+'\')">'+(r.farmacosTxt?escHtml(r.farmacosTxt):'—')+'</td>';
     h += '<td class="rowclick" onclick="invSeleccionar(\''+dniEsc+'\')">'+(r.hba1c!=null?r.hba1c+'%':'—')+'</td>';
     h += '<td class="rowclick" onclick="invSeleccionar(\''+dniEsc+'\')">'+(r.grasaVisceral!=null?r.grasaVisceral:'—')+'</td>';
@@ -24788,6 +24922,7 @@ function invEjecutarExport(formato) {
     if(invExportVarsSel.sexo) o['Sexo'] = r.sexo;
     if(invExportVarsSel.cobertura) o['Cobertura'] = r.cobertura||'';
     if(invExportVarsSel.diagnosticos) o['Diagnósticos'] = r.dxKeys.map(function(k){ return INV_DX_LABELS[k]||k; }).join('; ');
+    if(invExportVarsSel.motivoconsulta) o['Motivo de consulta'] = r.motivoConsultaTxt||'';
     if(invExportVarsSel.farmacos) o['Fármacos'] = r.farmacosTxt||'';
     if(invExportVarsSel.tabaquismo) o['Tabaquismo'] = r.tabaquismo||'';
     if(invExportVarsSel.hba1c) o['HbA1c (%)'] = r.hba1c!=null?r.hba1c:'';
