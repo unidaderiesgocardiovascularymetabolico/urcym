@@ -4757,12 +4757,12 @@ const users = {
   barbara: {
     password:'1234', name:'Dra. Bárbara Guerrero', role:'Hipertensión · Obesidad',
     titulo:'Dra. Bárbara A. Guerrero', mp:'M.P: 118052', admin:true, readonly:false,
-    especialidades:['Especialista en Medicina Interna','Especialista en Hipertensión Arterial','Postgrado en Lípidos y Obesidad']
+    especialidades:['Posgrado en Obesidad','Posgrado en Lípidos','Especialista en Hipertensión Arterial']
   },
   omar: {
     password:'1234', name:'Dr. Omar Bertani', role:'Diabetes · Hipertensión',
     titulo:'Dr. Omar B. Bertani', mp:'M.P: 118269', admin:true, readonly:false,
-    especialidades:['Especialista en Medicina Interna','Especialista en Hipertensión Arterial','Especialista en Diabetes']
+    especialidades:['Especialista en Hipertensión Arterial','Especialista en Diabetes']
   },
   invitado: {
     password:'invitado', name:'Invitado', role:'Solo lectura',
@@ -5076,6 +5076,9 @@ const ANT_FILAS = [
     ref:(v)=>parseFloat(v)>12,
     refTxt:'>12 (riesgo elevado)'},
   {label:'Fuera de presión (cm)', key:'FueraPres', unidades:['cm'], defU:0, ref:null},
+  {label:'Fuerza de prensión (kg)', key:'FuerzaPresion', unidades:['kg'], defU:0,
+    ref:(v,s)=>parseFloat(v)<(s==='F'?16:27),
+    refTxt:'<16kg (M) / <27kg (H) — sarcopenia (EWGSOP2)'},
 ];
 
 const LAB_PERFILES = {
@@ -11957,15 +11960,17 @@ async function dbtIniciar(dni) {
   const sexo = p.sexo === 'Femenino' ? 'F' : 'M';
   const edad = (p.fecha_nacimiento || p.fnac) ? edadDesde(p.fecha_nacimiento || p.fnac) : null;
 
-  const claves = ['HbA1c','Glucemia','LDL_MH','noHDL','TG','RAC','MDRD'];
+  const claves = ['HbA1c','Glucemia','LDL_MH','noHDL','TG','RAC','MDRD','ApoB','TGP'];
   const lab = {};
   claves.forEach(k => lab[k] = dbtUltimoYPrevio(labDatos, LAB_FILAS, k));
   const hdlSerie = dbtUltimoYPrevio(labDatos, LAB_FILAS, 'HDL');
+  lab.HDL = hdlSerie;
 
   const ant = {
     GrasaVisceral: dbtUltimoYPrevio(antDatos, ANT_FILAS, 'GrasaVisceral'),
     Cintura: dbtUltimoYPrevio(antDatos, ANT_FILAS, 'Cintura'),
     IMC: dbtUltimoYPrevio(antDatos, ANT_FILAS, 'IMC'),
+    FuerzaPresion: dbtUltimoYPrevio(antDatos, ANT_FILAS, 'FuerzaPresion'),
   };
 
   const taHist = await dbtHistorialTA(dni);
@@ -12016,6 +12021,59 @@ function dbtParametro(key, previo, actual, dir, meta, peor, unidad, label, metaO
   return { key, label, unidad, previo, actual, meta:m, dir, pct, estado, tend, msg };
 }
 
+// ¿El paciente tiene diagnóstico de diabetes (DBT1, DBT2 u otra)? Sólo por diagnóstico marcado por el médico.
+function dbtEsDiabetico() {
+  const c = evolClinicaSnapshot?.clinica || {};
+  return !!(c.dx_dbt1 || c.dx_dbt2 || c.dx_dbt_otro);
+}
+// Meta de glucemia en ayunas: <100 mg/dL (rango pre-DBT) o <130 mg/dL si el paciente ya tiene diagnóstico de diabetes.
+function dbtMetaGlucemia() { return dbtEsDiabetico() ? 130 : 100; }
+
+// Metas de LDL y ApoB según categoría de riesgo cardiovascular (ESC/EAS 2019).
+const DBT_METAS_LIP_POR_RIESGO = {
+  muy_alto: { ldl:55,  apoB:65  },
+  alto:     { ldl:70,  apoB:80  },
+  moderado: { ldl:100, apoB:100 },
+  bajo:     { ldl:116, apoB:100 },
+  sin_dato: { ldl:70,  apoB:90  }, // provisorio, mientras no hay criterio clínico ni score cargado
+};
+// Badge visual por categoría de riesgo CV (misma paleta de 4 niveles usada para presión arterial).
+const DBT_RIESGO_CV_BADGE = {
+  bajo:     { emoji:'🟢', label:'Bajo',      bg:'#ecfdf5', color:'#059669' },
+  moderado: { emoji:'🟡', label:'Moderado',  bg:'#fef3c7', color:'#d97706' },
+  alto:     { emoji:'🟠', label:'Alto',      bg:'#f47316', color:'#7c2d12' },
+  muy_alto: { emoji:'🚨', label:'Muy alto',  bg:'#7c2d12', color:'#ffffff' },
+  sin_dato: { emoji:'⚪', label:'Sin datos', bg:'#f1f5f9', color:'#94a3b8' },
+};
+// Categoría de riesgo CV combinada: primero criterios clínicos (ECV establecida, DBT con daño de
+// órgano blanco, ERC avanzada, ≥3 factores mayores); si ninguno aplica, se usa el score de riesgo
+// ya calculado en el sistema (PREVENT/SCORE2/ASCVD, guardado en d.riesgoActual, % a 10 años).
+function dbtClasificarRiesgoCV(d) {
+  const c = evolClinicaSnapshot?.clinica || {};
+  const egfr = d?.lab?.MDRD?.actual?.valor;
+  const dbtDx = dbtEsDiabetico();
+  const danoOrgano = !!(c.dx_albuminuria || c.dx_rp_dbt || c.dx_neu_dbt || (egfr!=null && egfr<60));
+  const ecvEstablecida = !!(c.dx_iam || c.dx_acv || c.dx_eap || c.dx_atero_subcl || c.dx_icc);
+  const factoresMayores = ['dx_hta','dx_hta2','dx_dis','dx_hiperu','dx_sob','dx_obe'].filter(k=>c[k]).length;
+
+  if(ecvEstablecida || (egfr!=null && egfr<30) || (dbtDx && danoOrgano) || (dbtDx && factoresMayores>=3))
+    return { cat:'muy_alto', label:'Muy alto', detalle:'criterio clínico', fuente:'clinico' };
+  if((egfr!=null && egfr<60) || (dbtDx && (danoOrgano || factoresMayores>=1)))
+    return { cat:'alto', label:'Alto', detalle:'criterio clínico', fuente:'clinico' };
+  if(d?.riesgoActual != null) {
+    const r = d.riesgoActual;
+    const cat = r>=20 ? 'muy_alto' : r>=7.5 ? 'alto' : r>=5 ? 'moderado' : 'bajo';
+    const label = {muy_alto:'Muy alto', alto:'Alto', moderado:'Moderado', bajo:'Bajo'}[cat];
+    return { cat, label, detalle: r+'% a 10 años', fuente:'score' };
+  }
+  return { cat:'sin_dato', label:'Sin datos suficientes', detalle:'', fuente:null };
+}
+
+// Fuerza de prensión (dinamometría) — cortes de baja fuerza EWGSOP2: <27kg hombres, <16kg mujeres.
+function dbtMetaFuerzaPresion(sexo) {
+  return sexo === 'F' ? { meta:16, peor:8 } : { meta:27, peor:14 };
+}
+
 function dbtRenderPanel() {
   const cont = document.getElementById('dbt_contenido');
   if(!cont || !_dbtData) return;
@@ -12032,13 +12090,17 @@ function dbtRenderPanel() {
   }
 
   const cinturaMeta = dbtCinturaMeta(d.p.sexo), cinturaPeor = dbtCinturaPeor(d.p.sexo);
+  const riesgoCV = dbtClasificarRiesgoCV(d);
+  const metasLip = DBT_METAS_LIP_POR_RIESGO[riesgoCV.cat] || DBT_METAS_LIP_POR_RIESGO.sin_dato;
 
   // ── Parámetros por eje ──────────────────────────────────────
-  const pLDL   = dbtParametro('LDL_MH', d.lab.LDL_MH.previo?.valor, d.lab.LDL_MH.actual?.valor, 'menor');
+  const pLDL   = dbtParametro('LDL_MH', d.lab.LDL_MH.previo?.valor, d.lab.LDL_MH.actual?.valor, 'menor', metasLip.ldl, metasLip.ldl+120, 'mg/dL', 'Colesterol LDL');
   const pTA    = d.taActual ? dbtParametro('TAS', d.taPrevio?d.taPrevio.s:null, d.taActual.s, 'menor') : null;
   const pHbA1c = dbtParametro('HbA1c', d.lab.HbA1c.previo?.valor, d.lab.HbA1c.actual?.valor, 'menor');
   const pGV    = dbtParametro('GrasaVisceral', d.ant.GrasaVisceral.previo?.valor, d.ant.GrasaVisceral.actual?.valor, 'menor');
   const pCint  = dbtParametro('Cintura', d.ant.Cintura.previo?.valor, d.ant.Cintura.actual?.valor, 'menor', cinturaMeta, cinturaPeor, 'cm', 'tu perímetro de cintura');
+  const metaFza = dbtMetaFuerzaPresion(d.p.sexo);
+  const pFuerza = d.ant.FuerzaPresion.actual ? dbtParametro('FuerzaPresion', d.ant.FuerzaPresion.previo?.valor, d.ant.FuerzaPresion.actual?.valor, 'mayor', metaFza.meta, metaFza.peor, 'kg', 'Fuerza de prensión (sarcopenia)') : null;
   const pRAC   = d.lab.RAC.actual ? dbtParametro('RAC', d.lab.RAC.previo?.valor, d.lab.RAC.actual?.valor, 'menor') : null;
   const pMDRD  = d.lab.MDRD.actual ? dbtParametro('MDRD', d.lab.MDRD.previo?.valor, d.lab.MDRD.actual?.valor, 'mayor') : null;
 
@@ -12051,7 +12113,7 @@ function dbtRenderPanel() {
   };
   const estCorazon = pillarEstado(pLDL, pTA);
   const estMetabolico = pillarEstado(pHbA1c);
-  const estComposicion = pillarEstado(pGV, pCint);
+  const estComposicion = pillarEstado(pGV, pCint, pFuerza);
   const estRenal = pillarEstado(pRAC, pMDRD);
 
   // ── Reconocimientos (mejoras reales detectadas) ───────────
@@ -12066,6 +12128,8 @@ function dbtRenderPanel() {
     logros.push('mantuviste o mejoraste tu presión arterial (' + d.taActual.s+'/'+d.taActual.d + ' mmHg)');
   if(d.ant.Cintura.previo && d.ant.Cintura.actual && d.ant.Cintura.actual.valor < d.ant.Cintura.previo.valor)
     logros.push('tu perímetro de cintura se redujo ' + dbtFmt(d.ant.Cintura.previo.valor - d.ant.Cintura.actual.valor) + ' cm');
+  if(d.ant.FuerzaPresion.previo && d.ant.FuerzaPresion.actual && d.ant.FuerzaPresion.actual.valor > d.ant.FuerzaPresion.previo.valor)
+    logros.push('tu fuerza de prensión mejoró de ' + dbtFmt(d.ant.FuerzaPresion.previo.valor) + ' a ' + dbtFmt(d.ant.FuerzaPresion.actual.valor) + ' kg');
 
   // ── Render de una tarjeta-parámetro (badge + tendencia + barra + mensaje) ──
   function paramCardHtml(param) {
@@ -12092,6 +12156,7 @@ function dbtRenderPanel() {
       <div class="dbt-card-icon">❤️</div>
       <div class="dbt-card-title">Corazón y Vasos</div>
       ${pillarBadge(estCorazon)}
+      ${riesgoCV.cat!=='sin_dato' ? `<div class="dbt-param-msg" style="margin:2px 0 6px">Riesgo CV: <b>${riesgoCV.label}</b>${riesgoCV.detalle?' ('+riesgoCV.detalle+')':''} → meta LDL &lt; ${metasLip.ldl} mg/dL</div>` : ''}
       ${paramCardHtml(pLDL)}
       ${pTA ? paramCardHtml(pTA) : ''}
     </div>`;
@@ -12109,6 +12174,7 @@ function dbtRenderPanel() {
       ${pillarBadge(estComposicion)}
       ${paramCardHtml(pGV)}
       ${paramCardHtml(pCint)}
+      ${pFuerza ? paramCardHtml(pFuerza) : '<div class="dbt-param-msg">Sin fuerza de prensión (dinamometría) cargada aún — clave para evaluar sarcopenia.</div>'}
     </div>`;
   const cardRenal = `
     <div class="dbt-card">
@@ -12201,15 +12267,20 @@ function dbtImprimirInforme() {
   const profNombre = cu.name || '', profTitulo = cu.titulo || '', profMP = cu.mp || '';
 
   const cinturaMeta = dbtCinturaMeta(p.sexo), cinturaPeor = dbtCinturaPeor(p.sexo);
+  const riesgoCV = dbtClasificarRiesgoCV(d);
+  const metasLip = DBT_METAS_LIP_POR_RIESGO[riesgoCV.cat] || DBT_METAS_LIP_POR_RIESGO.sin_dato;
+  const metaGlu = dbtMetaGlucemia();
 
-  const pLDL   = dbtParametro('LDL_MH', d.lab.LDL_MH.previo?.valor, d.lab.LDL_MH.actual?.valor, 'menor');
+  const pLDL   = dbtParametro('LDL_MH', d.lab.LDL_MH.previo?.valor, d.lab.LDL_MH.actual?.valor, 'menor', metasLip.ldl, metasLip.ldl+120, 'mg/dL', 'Colesterol LDL');
   const pTA    = d.taActual ? dbtParametro('TAS', d.taPrevio?d.taPrevio.s:null, d.taActual.s, 'menor') : null;
   const pHbA1c = dbtParametro('HbA1c', d.lab.HbA1c.previo?.valor, d.lab.HbA1c.actual?.valor, 'menor');
-  const pGlu   = d.lab.Glucemia.actual ? dbtParametro('Glucemia', d.lab.Glucemia.previo?.valor, d.lab.Glucemia.actual?.valor, 'menor') : null;
+  const pGlu   = d.lab.Glucemia.actual ? dbtParametro('Glucemia', d.lab.Glucemia.previo?.valor, d.lab.Glucemia.actual?.valor, 'menor', metaGlu, 260, 'mg/dL', 'Glucemia en ayunas') : null;
   const pNoHDL = dbtParametro('noHDL', d.lab.noHDL.previo?.valor, d.lab.noHDL.actual?.valor, 'menor');
   const pTG    = dbtParametro('TG', d.lab.TG.previo?.valor, d.lab.TG.actual?.valor, 'menor');
   const pGV    = dbtParametro('GrasaVisceral', d.ant.GrasaVisceral.previo?.valor, d.ant.GrasaVisceral.actual?.valor, 'menor');
   const pCint  = dbtParametro('Cintura', d.ant.Cintura.previo?.valor, d.ant.Cintura.actual?.valor, 'menor', cinturaMeta, cinturaPeor, 'cm', 'tu perímetro de cintura');
+  const metaFza = dbtMetaFuerzaPresion(p.sexo);
+  const pFuerza = d.ant.FuerzaPresion.actual ? dbtParametro('FuerzaPresion', d.ant.FuerzaPresion.previo?.valor, d.ant.FuerzaPresion.actual?.valor, 'mayor', metaFza.meta, metaFza.peor, 'kg', 'Fuerza de prensión (sarcopenia)') : null;
   const pRAC   = d.lab.RAC.actual ? dbtParametro('RAC', d.lab.RAC.previo?.valor, d.lab.RAC.actual?.valor, 'menor') : null;
   const pMDRD  = d.lab.MDRD.actual ? dbtParametro('MDRD', d.lab.MDRD.previo?.valor, d.lab.MDRD.actual?.valor, 'mayor') : null;
 
@@ -12228,7 +12299,7 @@ function dbtImprimirInforme() {
     </tr>`;
   };
 
-  const filas = [pHbA1c, pGlu, pLDL, pNoHDL, pTG, pTA, pGV, pCint, pRAC, pMDRD].map(filaTabla).join('');
+  const filas = [pHbA1c, pGlu, pLDL, pNoHDL, pTG, pTA, pGV, pCint, pFuerza, pRAC, pMDRD].map(filaTabla).join('');
 
   const simSeccion = (d.riesgoActual!=null && d.riesgoMeta!=null) ? (() => {
     const ESCALA = 30;
@@ -15201,6 +15272,27 @@ const ADIP_FACTORES_ACTIVIDAD = [
 
 // Estima TMB (Mifflin-St Jeor), GET y objetivos según tipo de tratamiento.
 // Devuelve null si faltan datos antropométricos básicos.
+// Peso ideal (fórmula de Hamwi) — base para el peso ajustado en obesidad.
+function calcularIBWHamwiKg(alturaCm, sexo) {
+  if(!alturaCm) return null;
+  const pulgadasSobre5pies = (alturaCm - 152.4) / 2.54;
+  const base = sexo === 'F' ? 45.5 : 48;
+  const porPulgada = sexo === 'F' ? 2.2 : 2.7;
+  return base + porPulgada * pulgadasSobre5pies;
+}
+// Peso ajustado para meta proteica en obesidad (Academy of Nutrition and Dietetics / ESPEN):
+// Peso ajustado = Peso ideal + 0.25 × (Peso actual − Peso ideal). Se usa sólo con IMC ≥30 y
+// peso actual por encima del ideal; si no, se usa directamente el peso actual.
+function calcularPesoAjustadoKg(pesoActual, alturaCm, sexo) {
+  const ibw = calcularIBWHamwiKg(alturaCm, sexo);
+  if(!ibw || !pesoActual || !alturaCm) return { pesoProt: pesoActual, ibw, ajustado:false };
+  const imc = pesoActual / Math.pow(alturaCm/100, 2);
+  if(imc >= 30 && pesoActual > ibw) {
+    return { pesoProt: ibw + 0.25*(pesoActual - ibw), ibw, ajustado:true };
+  }
+  return { pesoProt: pesoActual, ibw, ajustado:false };
+}
+
 function adipCalcularEstimacionNutricional(trat) {
   const peso  = getPesoActualKg();
   const talla = getTallaActualCm();
@@ -15217,7 +15309,9 @@ function adipCalcularEstimacionNutricional(trat) {
     : (10*peso + 6.25*talla - 5*edad + 5);
   const get = tmb * actObj.factor;
 
-  const protMin = peso * 1.2, protMax = peso * 1.5;
+  const pa = calcularPesoAjustadoKg(peso, talla, sexo);
+  const protMin = pa.pesoProt * 1.2, protMax = pa.pesoProt * 1.5;
+  const pesoProtLabel = pa.ajustado ? 'peso ajustado' : 'peso actual';
   const tipo = (trat && trat.tipo_tratamiento) || 'farmacologico';
 
   let objetivoCal = null, piso = null, deficit = 500;
@@ -15226,7 +15320,7 @@ function adipCalcularEstimacionNutricional(trat) {
     objetivoCal = Math.max(get - deficit, piso);
   }
 
-  return { ok:true, peso, talla, edad, sexo, actObj, tmb, get, protMin, protMax, tipo, objetivoCal, piso, deficit };
+  return { ok:true, peso, talla, edad, sexo, actObj, tmb, get, ibw:pa.ibw, pesoAjustado:pa.pesoProt, pesoProtLabel, protMin, protMax, tipo, objetivoCal, piso, deficit };
 }
 
 function adipCalcularRequerimientos() {
@@ -15260,7 +15354,7 @@ function adipCalcularRequerimientos() {
           • %EWL (exceso de peso perdido) esperado: <b>50–70%</b> a los 12–18 meses<br>
           • %TWL (peso total perdido) esperado: <b>25–35%</b> a los 12–18 meses<br>
           • El requerimiento calórico varía según la etapa post-quirúrgica (líquida → puré → blanda → general); no se estima un valor único.<br>
-          • Proteína objetivo: <b>${r.protMin.toFixed(0)}–${r.protMax.toFixed(0)} g/día</b> (1.2–1.5 g/kg peso actual) para preservar masa magra.
+          • Proteína objetivo: <b>${r.protMin.toFixed(0)}–${r.protMax.toFixed(0)} g/día</b> (1.2–1.5 g/kg ${r.pesoProtLabel}) para preservar masa magra.
         </div>
       </div>`;
   } else {
@@ -15270,7 +15364,7 @@ function adipCalcularRequerimientos() {
         <div style="font-size:12px;color:#334155;line-height:1.7">
           • Consumo estimado de mantenimiento (GET): <b>${Math.round(r.get)} kcal/día</b><br>
           • Objetivo con déficit moderado (~${r.deficit} kcal/día): <b>${Math.round(r.objetivoCal)} kcal/día</b>${r.objetivoCal===r.piso?' (piso de seguridad)':''}<br>
-          • Proteína objetivo: <b>${r.protMin.toFixed(0)}–${r.protMax.toFixed(0)} g/día</b> (1.2–1.5 g/kg peso actual)<br>
+          • Proteína objetivo: <b>${r.protMin.toFixed(0)}–${r.protMax.toFixed(0)} g/día</b> (1.2–1.5 g/kg ${r.pesoProtLabel})<br>
           • Meta de descenso esperable con agonistas GLP-1/asociaciones: <b>~15–20%</b> del peso total a 12–18 meses.
         </div>
       </div>`;
@@ -15281,6 +15375,7 @@ function adipCalcularRequerimientos() {
       TMB (Mifflin-St Jeor): <b>${Math.round(r.tmb)} kcal/día</b> · Factor actividad: <b>×${r.actObj.factor}</b> (${r.actObj.label}) · GET (mantenimiento): <b>${Math.round(r.get)} kcal/día</b>
     </div>
     ${objetivoHtml}
+    ${r.pesoAjustado===r.peso ? '' : `<div style="font-size:10.5px;color:#6d28d9;margin-top:6px">Meta proteica calculada sobre <b>peso ajustado</b> (Academy of Nutrition and Dietetics/ESPEN: peso guía + 25% del exceso): peso guía (Hamwi) ≈ ${r.ibw.toFixed(1)} kg → peso ajustado ≈ ${r.pesoAjustado.toFixed(1)} kg. <i>El peso guía es solo un valor de referencia usado para estimar otras variables; no es necesario ni el objetivo alcanzarlo.</i></div>`}
     <div style="font-size:10px;color:#94a3b8;font-style:italic;margin-top:6px">Estimación orientativa según ecuación de Mifflin-St Jeor y nivel de actividad reportado; ajustar según criterio clínico.</div>
   `;
   marcarDirty('adip');
@@ -15773,11 +15868,11 @@ function _adipGenerarHTMLInforme(trat, modoModal, opts) {
       const objBlock = r.tipo === 'bariatrica'
         ? `<div class="nutri-row"><span>%EWL esperado (12–18 meses)</span><b>50–70%</b></div>
            <div class="nutri-row"><span>%TWL esperado (12–18 meses)</span><b>25–35%</b></div>
-           <div class="nutri-row"><span>Proteína objetivo</span><b>${r.protMin.toFixed(0)}–${r.protMax.toFixed(0)} g/día</b> (1.2–1.5 g/kg)</div>
+           <div class="nutri-row"><span>Proteína objetivo</span><b>${r.protMin.toFixed(0)}–${r.protMax.toFixed(0)} g/día</b> (1.2–1.5 g/kg ${r.pesoProtLabel})</div>
            <div class="nutri-nota2">El requerimiento calórico varía según etapa post-quirúrgica; no se estima un valor único.</div>`
         : `<div class="nutri-row"><span>GET (mantenimiento)</span><b>${Math.round(r.get)} kcal/día</b></div>
            <div class="nutri-row"><span>Objetivo con déficit moderado</span><b>${Math.round(r.objetivoCal)} kcal/día</b></div>
-           <div class="nutri-row"><span>Proteína objetivo</span><b>${r.protMin.toFixed(0)}–${r.protMax.toFixed(0)} g/día</b> (1.2–1.5 g/kg)</div>
+           <div class="nutri-row"><span>Proteína objetivo</span><b>${r.protMin.toFixed(0)}–${r.protMax.toFixed(0)} g/día</b> (1.2–1.5 g/kg ${r.pesoProtLabel})</div>
            <div class="nutri-row"><span>Meta de descenso esperable (12–18 meses)</span><b>~15–20% del peso total</b></div>`;
       nutriHTML = `
   <div class="nutri-panel">
@@ -16384,22 +16479,50 @@ async function obeImprimirInforme(opts, btnEl) {
   }
 }
 
+// Clasificación de presión arterial de consultorio, por estadios — Consenso de Hipertensión Arterial 2018
+// (Sociedad Argentina de Cardiología / Sociedad Argentina de Hipertensión Arterial / Federación Argentina
+// de Cardiología), válida para mayores de 16 años. Recibe {s,d} = promedio de la última toma cargada
+// (ya promediado en dbtHistorialTA) y devuelve etiqueta + color con la misma paleta de 5 niveles
+// (risk-low → risk-critical). Cuando sistólica y diastólica caen en categorías distintas, se toma la más alta.
+function obeClasificarTA(ta) {
+  if(!ta || ta.s==null || ta.d==null || isNaN(ta.s) || isNaN(ta.d)) {
+    return { label:'Sin datos', emoji:'⚪', bg:'#f1f5f9', color:'#94a3b8' };
+  }
+  const s = ta.s, d = ta.d;
+  const NIVELES = [
+    { label:'Normal',      emoji:'🟢', bg:'#ecfdf5', color:'#059669' }, // risk-low      · S<130 y/o D<85
+    { label:'Limítrofe',   emoji:'🟡', bg:'#fef3c7', color:'#d97706' }, // risk-moderate · S 130-139 y/o D 85-89
+    { label:'HTA Nivel 1', emoji:'🔴', bg:'#fef2f2', color:'#dc2626' }, // risk-elevated · S 140-159 y/o D 90-99
+    { label:'HTA Nivel 2', emoji:'🟠', bg:'#f47316', color:'#7c2d12' }, // risk-high     · S 160-179 y/o D 100-109
+    { label:'HTA Nivel 3', emoji:'🚨', bg:'#7c2d12', color:'#ffffff' }, // risk-critical · S≥180 y/o D≥110
+  ];
+  const catS = s>=180 ? 4 : s>=160 ? 3 : s>=140 ? 2 : s>=130 ? 1 : 0;
+  const catD = d>=110 ? 4 : d>=100 ? 3 : d>=90  ? 2 : d>=85  ? 1 : 0;
+  const nivel = Math.max(catS, catD);
+  const aislada = s>=140 && d<90; // hipertensión sistólica aislada (fila propia de la tabla del consenso)
+  const base = NIVELES[nivel];
+  return aislada ? Object.assign({}, base, { label: base.label + ' (sistólica aislada)' }) : base;
+}
+
 // ── SECCIÓN 1: Informe general y simulación (tablero + margen de protección) ──
 function _obeSeccionGeneral(d, trat) {
   if(!d) return '<div class="obe-empty">Todavía no hay datos suficientes cargados en Evolucionar para armar el tablero de salud cardiometabólica.</div>';
 
   const cinturaMeta = dbtCinturaMeta(d.sexo), cinturaPeor = dbtCinturaPeor(d.sexo);
-  const pLDL  = dbtParametro('LDL_MH', d.lab.LDL_MH.previo?.valor, d.lab.LDL_MH.actual?.valor, 'menor');
+  const riesgoCV = dbtClasificarRiesgoCV(d);
+  const metasLip = DBT_METAS_LIP_POR_RIESGO[riesgoCV.cat] || DBT_METAS_LIP_POR_RIESGO.sin_dato;
+  const pLDL  = dbtParametro('LDL_MH', d.lab.LDL_MH.previo?.valor, d.lab.LDL_MH.actual?.valor, 'menor', metasLip.ldl, metasLip.ldl+120, 'mg/dL', 'Colesterol LDL');
   const pTA   = d.taActual ? dbtParametro('TAS', d.taPrevio?d.taPrevio.s:null, d.taActual.s, 'menor') : null;
   const pHbA1c= dbtParametro('HbA1c', d.lab.HbA1c.previo?.valor, d.lab.HbA1c.actual?.valor, 'menor');
   const pGV   = dbtParametro('GrasaVisceral', d.ant.GrasaVisceral.previo?.valor, d.ant.GrasaVisceral.actual?.valor, 'menor');
   const pCint = dbtParametro('Cintura', d.ant.Cintura.previo?.valor, d.ant.Cintura.actual?.valor, 'menor', cinturaMeta, cinturaPeor, 'cm', 'tu perímetro de cintura');
+  const metaFza = dbtMetaFuerzaPresion(d.sexo);
+  const pFuerza = d.ant.FuerzaPresion.actual ? dbtParametro('FuerzaPresion', d.ant.FuerzaPresion.previo?.valor, d.ant.FuerzaPresion.actual?.valor, 'mayor', metaFza.meta, metaFza.peor, 'kg', 'Fuerza de prensión (sarcopenia)') : null;
 
   const rango4 = { en_meta:0, cerca:1, oportunidad:2, sin_dato:-1 };
   const pillarEstado = (...ps) => { const v = ps.filter(x=>x && x.estado!=='sin_dato'); if(!v.length) return 'sin_dato'; return v.reduce((peor,x)=> rango4[x.estado]>rango4[peor] ? x.estado : peor, 'en_meta'); };
-  const estVascular    = pillarEstado(pLDL, pTA);
-  const estMetabolico  = pillarEstado(pHbA1c);
-  const estComposicion = pillarEstado(pGV, pCint);
+  const taStage        = obeClasificarTA(d.taActual);
+  const estComposicion = pillarEstado(pGV, pCint, pFuerza);
 
   // Perfil hepático / grado de esteatosis (última nota cargada, si existe)
   let estHepatico = 'sin_dato', hepTxt = '';
@@ -16419,13 +16542,46 @@ function _obeSeccionGeneral(d, trat) {
     estHepatico = /severa|avanzad|cirrosis/.test(low) ? 'oportunidad' : /leve|moderad|grado i\b/.test(low) ? 'cerca' : /no|ausente|normal|negativ/.test(low) ? 'en_meta' : 'cerca';
   }
 
+  // ── Evaluación metabólica: glucemia, HbA1c, ApoB, Lp(a), TGP, triglicéridos, LDL, HDL y esteatosis hepática ──
+  const metaGlu   = dbtMetaGlucemia();
+  const pGlucemia = dbtParametro('Glucemia', d.lab.Glucemia.previo?.valor, d.lab.Glucemia.actual?.valor, 'menor', metaGlu, 260, 'mg/dL', 'Glucemia en ayunas');
+  const pTG       = dbtParametro('TG', d.lab.TG.previo?.valor, d.lab.TG.actual?.valor, 'menor');
+  const pApoB     = dbtParametro('ApoB', d.lab.ApoB.previo?.valor, d.lab.ApoB.actual?.valor, 'menor', metasLip.apoB, metasLip.apoB+60, 'mg/dL', 'ApoB');
+  const metaHDL   = d.sexo==='F' ? 50 : 40;
+  const pHDL      = d.lab.HDL.actual ? dbtParametro('HDL', d.lab.HDL.previo?.valor, d.lab.HDL.actual?.valor, 'mayor', metaHDL, 20, 'mg/dL', 'Colesterol HDL') : null;
+  const pTGP      = dbtParametro('TGP', d.lab.TGP.previo?.valor, d.lab.TGP.actual?.valor, 'menor', 40, 120, 'U/L', 'TGP (ALT)');
+  const lpaSerie  = (labDatos.lpa||[]).filter(e=>e && e.valor!=='' && e.valor!=null);
+  const lpaActualE= lpaSerie.length ? lpaSerie[lpaSerie.length-1] : null;
+  const lpaPrevE  = lpaSerie.length>=2 ? lpaSerie[lpaSerie.length-2] : null;
+  let pLpa = null;
+  if(lpaActualE) {
+    const esNmol = (lpaActualE.unidad||'mg/dL')==='nmol/L';
+    pLpa = dbtParametro('Lpa', lpaPrevE?parseFloat(lpaPrevE.valor):null, parseFloat(lpaActualE.valor), 'menor',
+      esNmol?75:30, esNmol?300:150, lpaActualE.unidad||'mg/dL', 'Lp(a)');
+  }
+  const estMetabolico = pillarEstado(pGlucemia, pHbA1c, pApoB, pLpa, pTGP, pTG, pLDL, pHDL, { estado: estHepatico });
+  const metNotaItems = [
+    pGlucemia.estado!=='sin_dato' && pGlucemia.estado!=='en_meta' ? 'Glucemia' : null,
+    pHbA1c.estado!=='sin_dato' && pHbA1c.estado!=='en_meta' ? 'HbA1c' : null,
+    pApoB.estado!=='sin_dato' && pApoB.estado!=='en_meta' ? 'ApoB' : null,
+    pLpa && pLpa.estado!=='sin_dato' && pLpa.estado!=='en_meta' ? 'Lp(a)' : null,
+    pTGP.estado!=='sin_dato' && pTGP.estado!=='en_meta' ? 'TGP' : null,
+    pTG.estado!=='sin_dato' && pTG.estado!=='en_meta' ? 'Triglicéridos' : null,
+    pLDL.estado!=='sin_dato' && pLDL.estado!=='en_meta' ? 'LDL' : null,
+    pHDL && pHDL.estado!=='sin_dato' && pHDL.estado!=='en_meta' ? 'HDL' : null,
+    estHepatico!=='sin_dato' && estHepatico!=='en_meta' ? 'Esteatosis hepática' : null,
+  ].filter(Boolean);
+  const metNotaBase = metNotaItems.length ? 'A trabajar: '+metNotaItems.join(', ') : (estMetabolico==='en_meta' ? 'Todos los parámetros evaluados en meta' : '');
+  const riesgoTxt = riesgoCV.cat!=='sin_dato' ? `Riesgo CV: ${riesgoCV.label}${riesgoCV.detalle?' ('+riesgoCV.detalle+')':''} — meta LDL &lt;${metasLip.ldl} · ApoB &lt;${metasLip.apoB} mg/dL` : '';
+  const metNotaTxt = [riesgoTxt, metNotaBase].filter(Boolean).join('<br>');
+
   const badge = est => { const b = DBT_ESTADO_BADGE[est]; return `<span class="obe-badge" style="background:${b.bg};color:${b.color}">${b.emoji} ${b.label}</span>`; };
   const tablero = `
     <div class="obe-tablero">
-      <div class="obe-tablero-item"><span class="obe-tablero-lbl">❤️ Salud vascular</span>${badge(estVascular)}</div>
-      <div class="obe-tablero-item"><span class="obe-tablero-lbl">🩸 Salud metabólica</span>${badge(estMetabolico)}</div>
-      <div class="obe-tablero-item"><span class="obe-tablero-lbl">📐 Composición corporal</span>${badge(estComposicion)}</div>
-      <div class="obe-tablero-item"><span class="obe-tablero-lbl">🫀 Perfil hepático</span>${badge(estHepatico)}${hepTxt?`<div class="obe-tablero-nota">${hepTxt}</div>`:''}</div>
+      <div class="obe-tablero-item"><span class="obe-tablero-lbl">❤️ Evaluación de presión arterial</span><span class="obe-badge" style="background:${taStage.bg};color:${taStage.color}">${taStage.emoji} ${taStage.label}</span>${d.taActual?`<div class="obe-tablero-nota">${d.taActual.s}/${d.taActual.d} mmHg — promedio de la última toma${d.taActual.fecha?' ('+d.taActual.fecha+')':''}</div>`:''}</div>
+      <div class="obe-tablero-item"><span class="obe-tablero-lbl">🩸 Evaluación metabólica</span>${badge(estMetabolico)}${metNotaTxt?`<div class="obe-tablero-nota">${metNotaTxt}</div>`:''}</div>
+      <div class="obe-tablero-item"><span class="obe-tablero-lbl">📐 Composición corporal</span>${badge(estComposicion)}${pFuerza?`<div class="obe-tablero-nota">Fuerza de prensión: ${dbtFmt(pFuerza.actual)} kg (meta ${d.sexo==='F'?'≥16':'≥27'} kg)</div>`:'<div class="obe-tablero-nota">Sin fuerza de prensión cargada — clave para evaluar sarcopenia</div>'}</div>
+      <div class="obe-tablero-item"><span class="obe-tablero-lbl">🛡️ Riesgo cardiovascular global</span><span class="obe-badge" style="background:${DBT_RIESGO_CV_BADGE[riesgoCV.cat].bg};color:${DBT_RIESGO_CV_BADGE[riesgoCV.cat].color}">${DBT_RIESGO_CV_BADGE[riesgoCV.cat].emoji} ${riesgoCV.label}</span>${riesgoCV.cat!=='sin_dato'?`<div class="obe-tablero-nota">${riesgoCV.fuente==='score'?'Score a 10 años: '+riesgoCV.detalle:riesgoCV.detalle}</div>`:'<div class="obe-tablero-nota">Faltan datos para calcular el riesgo (score o diagnósticos cargados)</div>'}</div>
     </div>`;
 
   let simHtml;
@@ -16468,6 +16624,8 @@ function _obeSeccionAntro(d) {
   const GV    = d.ant.GrasaVisceral;
   const PGr   = dbtUltimoYPrevio(antDatos, ANT_FILAS, 'PctGrasa');
   const PMus  = dbtUltimoYPrevio(antDatos, ANT_FILAS, 'PctMusculo');
+  const Fza   = d.ant.FuerzaPresion;
+  const metaFza = dbtMetaFuerzaPresion(d.sexo);
 
   const cinturaMeta = dbtCinturaMeta(d.sexo), cinturaPeor = dbtCinturaPeor(d.sexo);
 
@@ -16523,13 +16681,15 @@ function _obeSeccionAntro(d) {
     filaConBarra('Peso', Peso.previo?.valor, Peso.actual?.valor, 'menor', pesoObj||(Peso.actual?.valor*0.9), (Peso.actual?.valor||0)*1.3, 'kg', pesoObj?('≈ '+pesoObj+' kg'):null) +
     filaConBarra('IMC', IMCs.previo?.valor, IMCs.actual?.valor, 'menor', 24.9, 40, 'kg/m²') +
     filaConBarra('Perímetro de cintura', Cint.previo?.valor, Cint.actual?.valor, 'menor', cinturaMeta, cinturaPeor, 'cm') +
-    filaConBarra('% Grasa corporal', PGr.previo?.valor, PGr.actual?.valor, 'menor', grasaMeta.meta, grasaMeta.peor, '%') +
     filaConBarra('% Grasa visceral (score)', GV.previo?.valor, GV.actual?.valor, 'menor', 12, 30, '') +
+    filaConBarra('Fuerza de prensión (sarcopenia)', Fza.previo?.valor, Fza.actual?.valor, 'mayor', metaFza.meta, metaFza.peor, 'kg') +
+    filaConBarra('% Grasa corporal', PGr.previo?.valor, PGr.actual?.valor, 'menor', grasaMeta.meta, grasaMeta.peor, '%') +
     filaSinMeta('Masa muscular (% músculo)', PMus.previo?.valor, PMus.actual?.valor, '%', true);
 
   const logros = [];
   if(GV.previo && GV.actual && GV.actual.valor < GV.previo.valor) logros.push('tu grasa visceral bajó de '+dbtFmt(GV.previo.valor)+' a '+dbtFmt(GV.actual.valor));
   if(Cint.previo && Cint.actual && Cint.actual.valor < Cint.previo.valor) logros.push('tu perímetro de cintura se redujo '+dbtFmt(Cint.previo.valor-Cint.actual.valor)+' cm');
+  if(Fza.previo && Fza.actual && Fza.actual.valor > Fza.previo.valor) logros.push('tu fuerza de prensión mejoró de '+dbtFmt(Fza.previo.valor)+' a '+dbtFmt(Fza.actual.valor)+' kg');
   if(PMus.previo && PMus.actual && PMus.actual.valor > PMus.previo.valor) logros.push('tu porcentaje de masa muscular aumentó de '+dbtFmt(PMus.previo.valor)+'% a '+dbtFmt(PMus.actual.valor)+'%');
 
   return `
@@ -16554,19 +16714,20 @@ function _obeSeccionNutri(trat) {
   const objBlock = r.tipo === 'bariatrica'
     ? `<div class="nutri-row"><span>%EWL esperado (12–18 meses)</span><b>50–70%</b></div>
        <div class="nutri-row"><span>%TWL esperado (12–18 meses)</span><b>25–35%</b></div>
-       <div class="nutri-row"><span>Proteína objetivo</span><b>${r.protMin.toFixed(0)}–${r.protMax.toFixed(0)} g/día</b> (1.2–1.5 g/kg peso actual)</div>
+       <div class="nutri-row"><span>Proteína objetivo</span><b>${r.protMin.toFixed(0)}–${r.protMax.toFixed(0)} g/día</b> (1.2–1.5 g/kg ${r.pesoProtLabel})</div>
        <div class="nutri-row"><span>Calcio objetivo</span><b>${reqCalcio} mg/día</b></div>
        <div class="nutri-nota2">El requerimiento calórico varía según la etapa post-quirúrgica; no se estima un valor único.</div>`
     : `<div class="nutri-row"><span>Gasto calórico basal (TMB)</span><b>${Math.round(r.tmb)} kcal/día</b></div>
        <div class="nutri-row"><span>Requerimiento calórico ajustado (GET)</span><b>${Math.round(r.get)} kcal/día</b></div>
        <div class="nutri-row"><span>Meta calórica con déficit moderado</span><b>${Math.round(r.objetivoCal)} kcal/día</b></div>
-       <div class="nutri-row"><span>Meta proteica</span><b>${r.protMin.toFixed(0)}–${r.protMax.toFixed(0)} g/día</b> (1.2–1.5 g/kg peso actual)</div>
+       <div class="nutri-row"><span>Meta proteica</span><b>${r.protMin.toFixed(0)}–${r.protMax.toFixed(0)} g/día</b> (1.2–1.5 g/kg ${r.pesoProtLabel})</div>
        <div class="nutri-row"><span>Meta de calcio</span><b>${reqCalcio} mg/día</b></div>`;
   return `
     <h2 class="obe-sec">🧮 Requerimientos nutricionales</h2>
     <div class="nutri-panel">
       <div class="nutri-datos">Peso: <b>${r.peso.toFixed(1)} kg</b> · Talla: <b>${r.talla} cm</b> · Nivel de actividad: <b>${r.actObj.label}</b></div>
       ${objBlock}
+      ${r.pesoAjustado===r.peso ? '' : `<div class="nutri-nota2">La meta proteica se calculó sobre el <b>peso ajustado</b> (peso guía + 25% del exceso de peso, según Academy of Nutrition and Dietetics/ESPEN): peso guía ≈ ${r.ibw.toFixed(1)} kg → peso ajustado ≈ ${r.pesoAjustado.toFixed(1)} kg. <i>El peso guía es solo un valor de referencia usado para estimar otras variables; no es necesario ni el objetivo alcanzarlo.</i></div>`}
       <div class="nutri-nota2">🥩 La proteína protege tu masa muscular durante el descenso de peso: priorizá una fuente en cada comida principal. 🦴 El calcio cuida tu salud ósea — especialmente importante mientras estás bajando de peso — a través de lácteos (o alternativas fortificadas), legumbres y vegetales de hoja verde.</div>
       <div class="nutri-nota2" style="color:#166534">🥗 Recordá también sumar frutas, verduras, legumbres y pescado (pilares del patrón DASH) y sostener una buena hidratación durante el día.</div>
       <div class="nutri-nota2" style="color:#94a3b8">Estas son recomendaciones generales, orientativas; no reemplazan una evaluación nutricional individual.</div>
