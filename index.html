@@ -10435,16 +10435,22 @@ function renderActItems() {
   const cumpleMod = minModEq >= 150;
   const cumpleFuerza = diasFuerza >= 2;
   const pct = Math.min(100, Math.round(minModEq / 150 * 100));
+  // Sedentario "real" = sin ninguna actividad registrada (ni siquiera leve).
+  // Si hay minutos leves pero el equivalente moderado sigue en 0, no es sedentarismo:
+  // es actividad que todavía no alcanza la intensidad que pide el objetivo OMS.
+  const sinNadaRegistrado = minModEq === 0 && minLeve === 0;
 
-  const colorBarra = pct >= 100 ? '#22c55e' : pct >= 50 ? '#f59e0b' : '#ef4444';
-  const iconObj = pct >= 100 ? '✅' : pct >= 50 ? '⚠️' : '❌';
+  const colorBarra = pct >= 100 ? '#22c55e' : pct >= 50 ? '#f59e0b' : sinNadaRegistrado ? '#ef4444' : '#f59e0b';
+  const iconObj = pct >= 100 ? '✅' : pct >= 50 ? '⚠️' : sinNadaRegistrado ? '❌' : '⚠️';
   const msgObj  = pct >= 100 ? 'Cumple objetivos OMS (≥150 min/sem mod. equivalente)' :
                   pct >= 50  ? 'Actividad insuficiente – por debajo del objetivo OMS' :
-                               'Sedentarismo o actividad muy baja';
+                  sinNadaRegistrado ? 'Sedentarismo o actividad muy baja' :
+                  pct > 0 ? 'Actividad insuficiente – muy por debajo del objetivo OMS' :
+                            'Tiene actividad leve, pero no alcanza la intensidad que exige el objetivo OMS (moderada/intensa)';
 
   resBox.style.display = 'block';
-  resBox.style.background = pct >= 100 ? '#f0faf4' : pct >= 50 ? '#fffbeb' : '#fff5f5';
-  resBox.style.border = '1.5px solid ' + (pct >= 100 ? '#bbf7d0' : pct >= 50 ? '#fde68a' : '#fecaca');
+  resBox.style.background = pct >= 100 ? '#f0faf4' : pct >= 50 ? '#fffbeb' : sinNadaRegistrado ? '#fff5f5' : '#fffbeb';
+  resBox.style.border = '1.5px solid ' + (pct >= 100 ? '#bbf7d0' : pct >= 50 ? '#fde68a' : sinNadaRegistrado ? '#fecaca' : '#fde68a');
   resBox.innerHTML = `
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
       <strong style="font-size:12px;color:#333">📊 Resumen semanal</strong>
@@ -10457,6 +10463,7 @@ function renderActItems() {
       <span>⚡ Equiv. mod.: <strong>${minModEq} / 150 min</strong></span>
       ${diasFuerza ? '<span>💪 Fuerza: <strong>'+diasFuerza+' días/sem '+(cumpleFuerza?'✅':'(falta 1 más para OMS)')+'</strong></span>' : ''}
     </div>
+    ${(minLeve > 0 && minModEq < 150) ? '<div style="font-size:10.5px;color:#92400e;font-style:italic;margin-bottom:8px">ℹ️ Los minutos de intensidad leve suman al bienestar general, pero el objetivo OMS de 150 min/sem se cuenta solo con actividad moderada o intensa.</div>' : ''}
     <div style="background:#e5e7eb;border-radius:99px;height:8px;overflow:hidden">
       <div style="height:100%;width:${pct}%;background:${colorBarra};border-radius:99px;transition:width .4s"></div>
     </div>
