@@ -12186,7 +12186,8 @@ function dbtRenderPanel() {
       <div class="dbt-card-icon">❤️</div>
       <div class="dbt-card-title">Corazón y Vasos</div>
       ${pillarBadge(estCorazon)}
-      ${riesgoCV.cat!=='sin_dato' ? `<div class="dbt-param-msg" style="margin:2px 0 6px">Riesgo CV: <b>${riesgoCV.label}</b>${riesgoCV.detalle?' ('+riesgoCV.detalle+')':''} → meta LDL &lt; ${metasLip.ldl} mg/dL</div>` : ''}
+      ${riesgoCV.cat!=='sin_dato' ? `<div class="dbt-param-msg" style="margin:2px 0 6px">Riesgo CV: <b>${riesgoCV.label}</b>${riesgoCV.detalle?' ('+riesgoCV.detalle+')':''} → meta LDL &lt; ${metasLip.ldl} mg/dL</div>
+      <div style="font-size:10.5px;color:#64748b;line-height:1.6;font-style:italic;margin:0 0 8px;padding:6px 8px;background:#f8fafc;border-radius:8px">ℹ️ Esta categoría es una <b>estimación estadística</b>, no un diagnóstico ni una certeza sobre lo que te va a pasar — no es motivo de alarma. La usamos para decidir qué tan exigente tiene que ser tu meta: <b>a mayor riesgo estimado, más bajo fijamos el objetivo de LDL</b> (y de presión, cintura, etc.), justamente para compensarlo. Con los controles, el tratamiento y los cambios de hábitos que venimos trabajando, estamos haciendo todo lo posible para bajarlo.</div>` : ''}
       ${paramCardHtml(pLDL)}
       ${pTA ? paramCardHtml(pTA) : ''}
     </div>`;
@@ -12331,6 +12332,11 @@ function dbtImprimirInforme() {
 
   const filas = [pHbA1c, pGlu, pLDL, pNoHDL, pTG, pTA, pGV, pCint, pFuerza, pRAC, pMDRD].map(filaTabla).join('');
 
+  const riesgoCatTxt = { muy_alto:'Muy alto', alto:'Alto', moderado:'Moderado', bajo:'Bajo' }[riesgoCV.cat] || '';
+  const riesgoCatColor = { muy_alto:'#dc2626', alto:'#ea580c', moderado:'#ca8a04', bajo:'#16a34a' }[riesgoCV.cat] || '#64748b';
+  const notaTranquilidad = `
+    <div class="nota-riesgo">ℹ️ Esta categoría es una <b>estimación estadística</b>, no un diagnóstico ni una certeza sobre lo que va a pasar — no es motivo de alarma. La usamos para decidir qué tan exigentes tienen que ser tus metas: <b>a mayor riesgo estimado, más bajo fijamos el objetivo de LDL</b> (y de presión, cintura, etc.), justamente para compensarlo. Con los controles, el tratamiento y los cambios de hábitos que venimos trabajando en conjunto, estamos haciendo todo lo posible para reducirlo.</div>`;
+
   const simSeccion = (d.riesgoActual!=null && d.riesgoMeta!=null) ? (() => {
     const ESCALA = 30;
     const pctActualBar = Math.max(4, Math.min(100, Math.round(d.riesgoActual/ESCALA*100)));
@@ -12340,12 +12346,19 @@ function dbtImprimirInforme() {
     return `
     <div class="sim-box">
       <div class="sim-title">🛡️ Tu margen de protección</div>
+      ${riesgoCatTxt ? `<p><b>Categoría de riesgo cardiovascular:</b> <span style="color:${riesgoCatColor};font-weight:800">${riesgoCatTxt}</span>${riesgoCV.detalle?' ('+riesgoCV.detalle+')':''}</p>` : ''}
       <p>Comparando tu riesgo cardiovascular estimado a 10 años con tus valores actuales frente al escenario donde alcanzás tus metas:</p>
       <div class="sim-bar-row"><span class="sim-bar-lbl">Riesgo actual</span>${dbtBarraHTML(pctActualBar, colorPct(d.riesgoActual))}<b style="color:${colorPct(d.riesgoActual)}">${d.riesgoActual}%</b></div>
       <div class="sim-bar-row"><span class="sim-bar-lbl">Alcanzando metas</span>${dbtBarraHTML(pctMetaBar, colorPct(d.riesgoMeta))}<b style="color:${colorPct(d.riesgoMeta)}">${d.riesgoMeta}%</b></div>
       <p><b>Alcanzar tus metas de presión, LDL y grasa visceral podría reducir tu riesgo en hasta ${reduccion} puntos porcentuales</b>, protegiendo tu corazón, tu cerebro y tus riñones — es decir, más años de vida saludable.</p>
+      ${notaTranquilidad}
     </div>`;
-  })() : '';
+  })() : (riesgoCatTxt ? `
+    <div class="sim-box">
+      <div class="sim-title">🛡️ Tu margen de protección</div>
+      <p><b>Categoría de riesgo cardiovascular:</b> <span style="color:${riesgoCatColor};font-weight:800">${riesgoCatTxt}</span>${riesgoCV.detalle?' ('+riesgoCV.detalle+')':''}</p>
+      ${notaTranquilidad}
+    </div>` : '');
 
   const html = `<!DOCTYPE html><html lang="es-AR"><head><meta charset="UTF-8"/>
   <title>Informe Diabetes — ${nombre}</title>
@@ -12377,6 +12390,7 @@ function dbtImprimirInforme() {
     .sim-box p{font-size:11.5px;color:#166534;line-height:1.6;margin:8px 0}
     .sim-bar-row{display:grid;grid-template-columns:140px 1fr 50px;align-items:center;gap:10px;margin:8px 0;font-size:11px;color:#166534}
     .sim-bar-lbl{font-weight:600}
+    .nota-riesgo{font-size:10.5px;color:#475569;line-height:1.6;font-style:italic;background:rgba(255,255,255,.6);border-radius:8px;padding:8px 10px;margin-top:10px}
     .commit-box{background:white;border:1.5px solid #e2e8f0;border-radius:14px;padding:16px 20px}
     .commit-box li{font-size:11.5px;line-height:1.8;margin-left:18px;color:#334155}
     .closing{text-align:center;font-size:13px;font-weight:700;color:#166534;background:#f0fdf4;border:1.5px solid #bbf7d0;border-radius:12px;padding:14px;margin-top:20px}
