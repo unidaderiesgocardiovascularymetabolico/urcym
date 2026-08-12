@@ -21471,6 +21471,22 @@ window.cargarProxConsultas = cargarProxConsultas;
     var p=iso.split('-'); return p[2]+'/'+p[1]+'/'+p[0];
   }
 
+  // ── Caché de la config de turnos (JSON pesado, único por carga)
+  // Se resetea al empezar cada finCargar() y se comparte entre
+  // finCargarDatos() y finCargarGrafico() para no bajarlo dos veces.
+  var _finTurnosCachePromise = null;
+  function finGetTurnosData(){
+    if(_finTurnosCachePromise) return _finTurnosCachePromise;
+    _finTurnosCachePromise = sb.from('urcym_agenda_config').select('value').eq('key','turnos').maybeSingle()
+      .then(function(r){
+        var data = {};
+        try { if(r.data && r.data.value) data = JSON.parse(r.data.value); } catch(e){}
+        return data;
+      })
+      .catch(function(){ return {}; });
+    return _finTurnosCachePromise;
+  }
+
   // ── Init
   window.finInit = function(){
     console.log('[Finanzas] finInit ejecutado');
@@ -21492,6 +21508,7 @@ window.cargarProxConsultas = cargarProxConsultas;
     if(!finMesActual) finMesActual=hoyYM();
     var r=mesRango(finMesActual);
     console.log('[Finanzas] rango:', r.desde, '->', r.hasta);
+    _finTurnosCachePromise = null; // refrescar turnos una sola vez por carga, compartido entre ambas funciones
     finCargarDatos(r.desde, r.hasta);
     finCargarGrafico();
   };
@@ -21501,12 +21518,25 @@ window.cargarProxConsultas = cargarProxConsultas;
       var el=$id(id); if(el) el.textContent='...';
     });
     try {
-      // Turnos pagados
-      var turnosData = {};
-      try {
-        var cfgRows = await sb.from('urcym_agenda_config').select('value').eq('key','turnos').maybeSingle();
-        if(cfgRows.data && cfgRows.data.value) turnosData = JSON.parse(cfgRows.data.value);
-      } catch(e){}
+      var mesActual = finMesActual || hoyYM();
+
+      // Todas las consultas son independientes entre sí: se lanzan en paralelo
+      // en vez de esperarlas una por una (antes tardaba la suma de los 6 round-trips).
+      var resultados = await Promise.all([
+        finGetTurnosData(),                                                                 // 0: turnos (cacheado, compartido con el gráfico)
+        sb.from('urcym_recetas').select('*').gte('fecha',desde).lte('fecha',hasta),          // 1
+        sb.from('urcym_ingresos').select('*').gte('fecha',desde).lte('fecha',hasta).order('fecha',{ascending:true}), // 2
+        sb.from('urcym_gastos').select('*').gte('fecha',desde).lte('fecha',hasta).order('fecha',{ascending:true}),   // 3
+        sb.from('urcym_personal').select('*').eq('mes', mesActual),                          // 4
+        finCargarTarifasOsde()                                                               // 5
+      ]);
+
+      var turnosData = resultados[0] || {};
+      var recRows = resultados[1];
+      var ingRows = resultados[2];
+      var gasRows = resultados[3];
+      var persRows = resultados[4];
+      // resultados[5]: finCargarTarifasOsde ya dejó finOsdeTarifas actualizado como efecto secundario
 
       var turnosList = [];
       var turnosOsdeList = [];
@@ -21535,7 +21565,6 @@ window.cargarProxConsultas = cargarProxConsultas;
       });
 
       // Recetas — separadas: particulares (plata ya entrada) vs OSDE (a cobrar)
-      var recRows = await sb.from('urcym_recetas').select('*').gte('fecha',desde).lte('fecha',hasta);
       var recAllList = (recRows.data||[]).map(function(r){
         return {fecha:r.fecha, hora:r.hora||'', monto:Number(r.monto||0), tipo:r.tipo,
           origen: r.tipo==='particular'?'receta_particular':'receta_osde',
@@ -21545,23 +21574,18 @@ window.cargarProxConsultas = cargarProxConsultas;
       var recOsdeList = recAllList.filter(function(r){ return r.tipo==='osde'; });
 
       // Ingresos manuales
-      var ingRows = await sb.from('urcym_ingresos').select('*').gte('fecha',desde).lte('fecha',hasta).order('fecha',{ascending:true});
       var ingList = (ingRows.data||[]).map(function(r){
         return {id:r.id, fecha:r.fecha, monto:Number(r.monto||0), origen:r.origen||'manual',
           categoria:r.categoria, descripcion:r.descripcion||'', prof:r.prof||''};
       });
 
       // Gastos consultorio (NO incluye personal — tabla separada)
-      var gasRows = await sb.from('urcym_gastos').select('*').gte('fecha',desde).lte('fecha',hasta).order('fecha',{ascending:true});
       var gasList = (gasRows.data||[]);
 
       // Gastos personales desde su propia tabla
-      var mesActual = finMesActual || hoyYM();
-      var persRows = await sb.from('urcym_personal').select('*').eq('mes', mesActual);
       var persList = (persRows.data||[]);
 
       // OSDE: contar turnos y recetas OSDE del mes
-      await finCargarTarifasOsde();
       var countOsdeConsultas=0, countOsdeRecetas=0;
       Object.keys(turnosData).forEach(function(key){
         var parts=key.split('_'); if(parts.length<3) return;
@@ -21867,25 +21891,23 @@ window.cargarProxConsultas = cargarProxConsultas;
       var lastMes=meses[meses.length-1]; var lp=lastMes.split('-');
       var lastDay=new Date(parseInt(lp[0]),parseInt(lp[1]),0).getDate();
       var hasta=lastMes+'-'+(lastDay<10?'0':'')+lastDay;
-      var recR=await sb.from('urcym_recetas').select('fecha,monto').gte('fecha',desde).lte('fecha',hasta);
+      var resultados=await Promise.all([
+        sb.from('urcym_recetas').select('fecha,monto').gte('fecha',desde).lte('fecha',hasta),
+        sb.from('urcym_ingresos').select('fecha,monto').gte('fecha',desde).lte('fecha',hasta),
+        finGetTurnosData(), // mismo JSON cacheado que ya bajó finCargarDatos — no se vuelve a pedir
+        sb.from('urcym_gastos').select('fecha,monto').gte('fecha',desde).lte('fecha',hasta)
+      ]);
+      var recR=resultados[0], ingR=resultados[1], td=resultados[2]||{}, gasR=resultados[3];
       (recR.data||[]).forEach(function(r){ var ym=r.fecha.substring(0,7); if(dataMap[ym]) dataMap[ym].ing+=Number(r.monto||0); });
-      var ingR=await sb.from('urcym_ingresos').select('fecha,monto').gte('fecha',desde).lte('fecha',hasta);
       (ingR.data||[]).forEach(function(r){ var ym=r.fecha.substring(0,7); if(dataMap[ym]) dataMap[ym].ing+=Number(r.monto||0); });
-      try{
-        var cfgR=await sb.from('urcym_agenda_config').select('value').eq('key','turnos').maybeSingle();
-        if(cfgR.data&&cfgR.data.value){
-          var td=JSON.parse(cfgR.data.value);
-          Object.keys(td).forEach(function(key){
-            var parts=key.split('_'); if(parts.length<3) return;
-            var fecha=parts[0]; var ym=fecha.substring(0,7);
-            if(!dataMap[ym]) return;
-            var t=td[key];
-            if(t.pago==='pagado'&&t.monto&&Number(t.monto)>0) dataMap[ym].ing+=Number(t.monto);
-            else if(t.pago==='señado'&&t.sena&&Number(t.sena)>0) dataMap[ym].ing+=Number(t.sena);
-          });
-        }
-      }catch(e){}
-      var gasR=await sb.from('urcym_gastos').select('fecha,monto').gte('fecha',desde).lte('fecha',hasta);
+      Object.keys(td).forEach(function(key){
+        var parts=key.split('_'); if(parts.length<3) return;
+        var fecha=parts[0]; var ym=fecha.substring(0,7);
+        if(!dataMap[ym]) return;
+        var t=td[key];
+        if(t.pago==='pagado'&&t.monto&&Number(t.monto)>0) dataMap[ym].ing+=Number(t.monto);
+        else if(t.pago==='señado'&&t.sena&&Number(t.sena)>0) dataMap[ym].ing+=Number(t.sena);
+      });
       (gasR.data||[]).forEach(function(g){ var ym=g.fecha.substring(0,7); if(dataMap[ym]) dataMap[ym].gas+=Number(g.monto||0); });
 
       var maxVal=1;
