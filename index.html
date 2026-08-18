@@ -99,9 +99,12 @@
       color:var(--text); font-weight:600;
     }
     .nav-tab.patient-nav-tab.active {
-      background:var(--blue-light); color:var(--blue); border-color:rgba(48,137,202,.28);
-      border-bottom-color:var(--blue);
+      background:var(--blue); color:var(--white); border-color:var(--blue-dark);
+      border-bottom:3px solid var(--blue-dark);
+      box-shadow:0 2px 10px rgba(48,137,202,.35);
     }
+    .nav-tab.patient-nav-tab.active .patient-tab-close { color:rgba(255,255,255,.8); }
+    .nav-tab.patient-nav-tab.active .patient-tab-close:hover { background:rgba(255,255,255,.25); color:var(--white); }
     .patient-tab-name { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     .patient-tab-close {
       width:18px; height:18px; border:none; border-radius:50%; background:transparent;
@@ -3994,7 +3997,7 @@
       </div>
       <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
         <button onclick="minimizarModalHabitos()" title="Minimizar (podés seguir escribiendo la evolución)" style="background:rgba(255,255,255,.2);border:none;border-radius:50%;width:32px;height:32px;color:white;font-size:16px;cursor:pointer;line-height:1;display:flex;align-items:center;justify-content:center">─</button>
-        <button onclick="cerrarModalHabitos()" style="background:rgba(255,255,255,.2);border:none;border-radius:50%;width:32px;height:32px;color:white;font-size:18px;cursor:pointer;line-height:1">×</button>
+        <button onclick="cancelarModalHabitos()" style="background:rgba(255,255,255,.2);border:none;border-radius:50%;width:32px;height:32px;color:white;font-size:18px;cursor:pointer;line-height:1">×</button>
       </div>
     </div>
 
@@ -4290,7 +4293,7 @@
 
     <!-- FOOTER -->
     <div style="padding:14px 22px;border-top:1px solid #e5eaf0;display:flex;justify-content:space-between;align-items:center;background:#f8fbfe;border-radius:0 0 20px 20px;margin-top:14px;gap:8px">
-      <button onclick="cerrarModalHabitos()" style="padding:9px 18px;border:1.5px solid #dde3ec;border-radius:10px;background:white;font-size:13px;font-weight:500;color:#64748b;cursor:pointer;font-family:var(--font-main)">Cancelar</button>
+      <button onclick="cancelarModalHabitos()" style="padding:9px 18px;border:1.5px solid #dde3ec;border-radius:10px;background:white;font-size:13px;font-weight:500;color:#64748b;cursor:pointer;font-family:var(--font-main)">Cancelar</button>
       <button onclick="abrirOpcionesInformeHabitos()" style="padding:9px 16px;border:1.5px solid #16a34a;border-radius:10px;background:#f0fdf4;color:#16a34a;font-size:13px;font-weight:600;cursor:pointer;font-family:var(--font-main)">🖨️ Informe</button>
       <button onclick="confirmarModalHabitos()" style="padding:9px 22px;border:none;border-radius:10px;background:#2a9496;color:white;font-size:13px;font-weight:700;cursor:pointer;font-family:var(--font-main);box-shadow:0 4px 14px rgba(42,148,150,.3)">✓ Confirmar</button>
     </div>
@@ -4492,7 +4495,7 @@
       </label>
     </div>
     <div class="form-actions" style="flex-wrap:wrap;gap:8px">
-      <button class="btn btn-secondary" style="flex:1;min-width:120px" onclick="cerrarModal('modalReceta')">Cancelar</button>
+      <button class="btn btn-secondary" style="flex:1;min-width:120px" onclick="cerrarModalReceta()">Cancelar</button>
       <button class="btn btn-teal" style="flex:1;min-width:120px" onclick="generarPDF('receta')">📄 Descargar PDF</button>
       <button class="btn" style="flex:1;min-width:120px;background:#00b894" onclick="enviarPorMail('receta')">✉️ Enviar por mail</button>
     </div>
@@ -4595,7 +4598,7 @@
       </select>
     </div>
     <div class="form-actions" style="flex-wrap:wrap;gap:8px">
-      <button class="btn btn-secondary" style="flex:1;min-width:120px" onclick="cerrarModal('modalIndicaciones')">Cancelar</button>
+      <button class="btn btn-secondary" style="flex:1;min-width:120px" onclick="cerrarModalIndicaciones()">Cancelar</button>
       <button class="btn btn-teal" style="flex:1;min-width:120px" onclick="generarPDF('indicaciones')">📄 Descargar PDF</button>
       <button class="btn" style="flex:1;min-width:120px;background:#00b894" onclick="enviarPorMail('indicaciones')">✉️ Enviar por mail</button>
     </div>
@@ -6297,7 +6300,11 @@ function doLogin() {
     document.getElementById('errorMsg').classList.add('visible');
   }
 }
-function logout() {
+async function logout() {
+  if(pacienteActual && document.getElementById('page-evolucion')?.classList.contains('active')) {
+    const puedeSalir = await _resolverSalidaEvolucion();
+    if(!puedeSalir) return;
+  }
   currentUser = null; selectedUser = null;
   window._cu = null; window._su = null;
   document.getElementById('password').value = '';
@@ -6308,7 +6315,11 @@ function logout() {
   document.getElementById('login_pwd_section').style.display = 'none';
   document.getElementById('errorMsg').classList.remove('visible');
 }
-function cambiarUsuario() {
+async function cambiarUsuario() {
+  if(pacienteActual && document.getElementById('page-evolucion')?.classList.contains('active')) {
+    const puedeSalir = await _resolverSalidaEvolucion();
+    if(!puedeSalir) return;
+  }
   // Vuelve al login sin cerrar sesión completamente — solo resetea selección
   currentUser = null; selectedUser = null;
   document.getElementById('password').value = '';
@@ -6454,7 +6465,7 @@ function _limpiarEstadoPestana(dni) {
 }
 
 // ─── BORRADOR PERSISTENTE EN localStorage (sobrevive cierre de pestaña/apagón) ────
-// Guarda TODO en localStorage: evolución + tablas (lab/ant/mdpa) + campos numéricos
+// Guarda TODO en localStorage: evolución + tablas (lab/ant/est/vac/mdpa/adip) + campos numéricos
 function _guardarDraftLocal(dni) {
   if(!dni) return;
   try {
@@ -6467,8 +6478,13 @@ function _guardarDraftLocal(dni) {
       campos: {},
       lab:  labDatos  ? JSON.parse(JSON.stringify(labDatos))  : null,
       ant:  antDatos  ? JSON.parse(JSON.stringify(antDatos))  : null,
+      est:  (_dirty.est && estDatos) ? JSON.parse(JSON.stringify(estDatos)) : null,
+      vac:  (_dirty.vac && vacDatos) ? JSON.parse(JSON.stringify(vacDatos)) : null,
       mdpa: (mdpaPacDni === dni && mdpaEstudios && mdpaEstudios.length)
         ? { estudios: JSON.parse(JSON.stringify(mdpaEstudios)), idx: mdpaIdx }
+        : null,
+      adip: (_dirty.adip && adipPacDni === dni && typeof adipTratamientos !== 'undefined' && adipTratamientos.length)
+        ? { tratamientos: JSON.parse(JSON.stringify(adipTratamientos)), idx: adipIdx }
         : null
     };
     ['evol_ta1s','evol_ta1d','evol_ta2s','evol_ta2d','evol_ta3s','evol_ta3d',
@@ -6486,7 +6502,7 @@ function _guardarDraftLocal(dni) {
 
     const hayCambios = draft.html || draft.indicaciones ||
       Object.values(draft.campos).some(v => v !== '' && v !== false) ||
-      !!draft.mdpa;
+      !!draft.mdpa || !!draft.est || !!draft.vac || !!draft.adip;
     if(hayCambios) {
       localStorage.setItem('urcym_draft_' + dni, JSON.stringify(draft));
     }
@@ -6510,8 +6526,17 @@ function _restaurarDraftLocal(dni) {
       if(typeof val === 'boolean') el.checked = val;
       else el.value = val;
     });
-    if(draft.lab && labDatos) { Object.assign(labDatos, draft.lab); renderTablaGenerica(labDatos, LAB_FILAS, 'lab_tabla_wrap'); }
-    if(draft.ant && antDatos) { Object.assign(antDatos, draft.ant); renderTablaGenerica(antDatos, ANT_FILAS, 'ant_tabla_wrap'); }
+    if(draft.lab && labDatos) { Object.assign(labDatos, draft.lab); renderTablaGenerica(labDatos, LAB_FILAS, 'lab_tabla_wrap'); marcarDirty('lab'); }
+    if(draft.ant && antDatos) { Object.assign(antDatos, draft.ant); renderTablaGenerica(antDatos, ANT_FILAS, 'ant_tabla_wrap'); marcarDirty('ant'); }
+    if(draft.est && estDatos) { Object.assign(estDatos, draft.est); renderTablaGenerica(estDatos, EST_FILAS, 'est_tabla_wrap'); marcarDirty('est'); }
+    if(draft.vac && vacDatos) { Object.assign(vacDatos, draft.vac); marcarDirty('vac'); }
+    if(draft.adip && draft.adip.tratamientos && draft.adip.tratamientos.length && typeof adipTratamientos !== 'undefined') {
+      adipPacDni = dni;
+      adipTratamientos = draft.adip.tratamientos;
+      adipIdx = typeof draft.adip.idx === 'number' ? draft.adip.idx : -1;
+      marcarDirty('adip');
+      if(typeof adipRenderPills === 'function') adipRenderPills();
+    }
     if(draft.mdpa && draft.mdpa.estudios && draft.mdpa.estudios.length) {
       mdpaPacDni   = dni;
       mdpaEstudios = draft.mdpa.estudios;
@@ -6539,6 +6564,25 @@ function _restaurarDraftLocal(dni) {
 function _limpiarDraftLocal(dni) {
   if(!dni) return;
   try { localStorage.removeItem('urcym_draft_' + dni); } catch(e) {}
+}
+
+// ─── DESCARTE REAL de la evolución en curso ────────────────────────────────
+// Se usa cuando el usuario elige explícitamente "descartar"/"cerrar sin guardar".
+// A diferencia de simplemente navegar afuera, esto BORRA de verdad: el editor,
+// el flag dirty, el borrador de sesión y el borrador persistente. Si esto no se
+// hace, el borrador vuelve a aparecer (banner de recuperación o pestaña con ●)
+// aunque el usuario ya haya dicho que no lo quiere guardar.
+function _descartarBorradorEvolucion(dni) {
+  if(!dni) return;
+  const editor = document.getElementById('evol_editor');
+  if(editor) editor.innerHTML = '';
+  _dirty.evol = false;
+  if(!_dirty.lab && !_dirty.ant && !_dirty.est && !_dirty.vac && !_dirty.mdpa && !_dirty.adip) _tabDirty = false;
+  sessionStorage.removeItem('urcym_tab_' + dni);
+  _marcarPestanaConBorrador(dni, false);
+  _limpiarDraftLocal(dni);
+  const banner = document.getElementById('banner-recuperacion');
+  if(banner && pacienteActual && String(pacienteActual.dni) === String(dni)) banner.style.display = 'none';
 }
 
 // Devuelve el timestamp del borrador local (o null)
@@ -6694,8 +6738,9 @@ function renderTabsPacientes(dniActivo) {
     const span = document.createElement('span');
     span.className = 'patient-tab-name';
     const tieneBorrador = sessionStorage.getItem('urcym_tab_' + t.dni) !== null;
+    const esActiva = String(t.dni) === String(dniActivo);
     span.textContent = tieneBorrador ? '● ' + t.nombre : t.nombre;
-    if(tieneBorrador) span.style.color = 'var(--teal)';
+    if(tieneBorrador) span.style.color = esActiva ? '#d4f5f5' : 'var(--teal)';
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'patient-tab-close';
@@ -6769,7 +6814,13 @@ async function cerrarTabPaciente(ev, dni) {
     }
   }
 
-  _limpiarEstadoPestana(dni);
+  _descartarBorradorEvolucion(dni);
+  if(esPacienteActual) {
+    // La pestaña se cierra: lo que no se haya guardado explícitamente arriba
+    // queda descartado de verdad, no debe seguir marcado como "pendiente".
+    _dirty.lab = false; _dirty.ant = false; _dirty.est = false; _dirty.vac = false; _dirty.mdpa = false; _dirty.adip = false;
+    _tabDirty = false;
+  }
   pacienteTabsAbiertas = pacienteTabsAbiertas.filter(t => String(t.dni) !== String(dni));
   renderTabsPacientes(pacienteActual && pacienteActual.dni);
   if(pacienteActual && String(pacienteActual.dni) === String(dni)) {
@@ -6783,10 +6834,22 @@ function marcarTabPacienteActiva(dni) {
   else document.querySelectorAll('.patient-nav-tab').forEach(t => t.classList.remove('active'));
 }
 
-function showPage(page) {
+async function showPage(page) {
   // Control de acceso: finanzas completa solo para admins
   if(page === 'finanzas' && currentUser && !currentUser.admin) {
     page = 'mis-pacientes';
+  }
+
+  // Si hay cambios sin guardar en la evolución (texto, laboratorio, antropometría,
+  // estudios, vacunación, MDPA o adiposidad), preguntar ANTES de salir — sin
+  // importar por dónde se intente salir (pestañas de arriba, tarjetas del
+  // Inicio, Salir, etc.), no solo por el botón "← Volver".
+  if(page !== 'evolucion' && pacienteActual) {
+    const evolActiva = document.getElementById('page-evolucion')?.classList.contains('active');
+    if(evolActiva) {
+      const puedeSalir = await _resolverSalidaEvolucion();
+      if(!puedeSalir) return; // canceló, o guardarEvolucion() ya está navegando por su cuenta
+    }
   }
 
   // SEGURIDAD: si no vamos a "evolucion", ocultar la ficha del paciente
@@ -6803,14 +6866,6 @@ function showPage(page) {
         const panel = document.getElementById(id);
         if(panel) panel.style.display = 'none';
       });
-    }
-  }
-
-  // Si se sale de evolución yendo a otra sección principal, guardar borrador en sesión
-  if(page !== 'evolucion' && pacienteActual && pacienteActual.dni) {
-    const editor = document.getElementById('evol_editor');
-    if(editor && editor.innerText && editor.innerText.trim()) {
-      _guardarEstadoPestana(pacienteActual.dni);
     }
   }
 
@@ -7807,6 +7862,21 @@ function generarPDF(tipo) {
 // ===== MODAL PACIENTE =====
 function cerrarModal(id) { document.getElementById(id).classList.remove('open'); if(id === 'modalPaciente') { _editandoDesdeEvolucion = false; _nombreViejoEnAgenda = null; } }
 
+// Indicaciones y Receta: si hay contenido escrito que no se descargó/envió,
+// confirmar antes de cerrar para no perderlo por error (Cancelar, click afuera).
+function cerrarModalIndicaciones() {
+  const el = document.getElementById('ind_contenido');
+  const hayContenido = el && el.innerHTML.trim() && el.innerHTML.trim() !== '<br>';
+  if(hayContenido && !confirm('¿Cerrar sin guardar estas indicaciones? Se va a perder lo que escribiste.')) return;
+  cerrarModal('modalIndicaciones');
+}
+function cerrarModalReceta() {
+  const el = document.getElementById('rec_contenido');
+  const hayContenido = el && el.value && el.value.trim();
+  if(hayContenido && !confirm('¿Cerrar sin guardar esta receta? Se va a perder lo que escribiste.')) return;
+  cerrarModal('modalReceta');
+}
+
 function abrirModalNuevo() {
   modoEdicion = false; dniEdicion = null; _nombreViejoEnAgenda = null;
   document.getElementById('modalTitulo').textContent = 'Nuevo Paciente';
@@ -8627,10 +8697,16 @@ async function cargarDatosClinica(dni) {
   } catch(e) {}
 }
 
-['modalPaciente','modalReceta','modalIndicaciones','modalHistorialDx','modalHistorialMed','modalLabRO'].forEach(id=>{
+['modalPaciente','modalHistorialDx','modalHistorialMed','modalLabRO'].forEach(id=>{
   const el = document.getElementById(id);
   if(el) el.addEventListener('click',function(e){
     if(e.target===this) cerrarModal(id);
+  });
+});
+['modalReceta','modalIndicaciones'].forEach(id=>{
+  const el = document.getElementById(id);
+  if(el) el.addEventListener('click',function(e){
+    if(e.target===this) (id==='modalReceta' ? cerrarModalReceta() : cerrarModalIndicaciones());
   });
 });
 
@@ -9399,7 +9475,7 @@ async function abrirEvolucion(dni) {
   await cargarVacunacion(p.dni);
   // Los datos recién cargados son la versión guardada en BD: ningún flag de "cambios sin guardar"
   // debe sobrevivir de un paciente al otro (eran globales y se filtraban entre pestañas).
-  _dirty.lab = false; _dirty.ant = false; _dirty.est = false; _dirty.vac = false; _dirty.mdpa = false; _dirty.adip = false;
+  _dirty.lab = false; _dirty.ant = false; _dirty.est = false; _dirty.vac = false; _dirty.mdpa = false; _dirty.adip = false; _dirty.evol = false;
   _tabDirty = false;
   // Antropometría del panel lateral: si no hay borrador de esta sesión, autocompletar con el
   // último peso/talla/cintura registrados en la tabla de Antropometría (recién cargada arriba).
@@ -9412,7 +9488,11 @@ async function abrirEvolucion(dni) {
     // También limpiar draft local porque el sesión es más reciente
     _limpiarDraftLocal(p.dni);
   } else {
-    await restaurarBorradorEvol(p.dni);
+    // Nota: antes acá se restauraba en silencio un borrador viejo desde Supabase
+    // (tabla evol_borrador, mecanismo obsoleto). Se quitó porque cargaba texto sin
+    // avisar al usuario y eso disparaba el aviso de "cambios sin guardar" en pacientes
+    // que en realidad no habían tocado nada en esta sesión. La recuperación de borradores
+    // ahora se maneja solo a través del banner de abajo (localStorage), que es explícito.
     // Verificar si hay borrador persistente en localStorage (cierre inesperado)
     const tsDraft = _tsDraftLocal(p.dni);
     if(tsDraft) {
@@ -9624,10 +9704,18 @@ async function _hcEliminarEntrada(id, fechaStr) {
   renderHistoria(_historialData, false);
 }
 
-async function volverDesdeEvolucion() {
+// Verifica si hay cambios sin guardar en la evolución actual y, si los hay,
+// pregunta qué hacer. Devuelve true si es seguro continuar con la navegación
+// que la llamó, o false si hay que quedarse (canceló, o ya se está navegando
+// por otro lado como parte de guardarEvolucion()).
+// Usada tanto por "← Volver" como, de forma centralizada, por showPage()
+// (para que Inicio/Pacientes/Agenda/Finanzas/Salir también pregunten).
+async function _resolverSalidaEvolucion() {
   const hayDirtyTablas = _dirty.lab || _dirty.ant || _dirty.est || _dirty.vac || _dirty.mdpa || _dirty.adip;
   const editorConTexto = !!document.getElementById('evol_editor').innerText.trim();
   const hayDirtyEvol = _dirty.evol || editorConTexto;
+
+  if(!hayDirtyTablas && !hayDirtyEvol) return true;
 
   if(hayDirtyTablas) {
     // Hay pestañas con datos sin guardar → modal con checkboxes
@@ -9644,20 +9732,31 @@ async function volverDesdeEvolucion() {
       btnSecundarioLabel: 'Volver sin guardar',
       btnSecundarioGuarda: false
     });
-    if(elegidas === null) return; // canceló
+    if(elegidas === null) return false; // canceló, se queda donde estaba
     for(const tab of tabsPendientes) {
       if(elegidas.has(tab.key)) await tab.fn();
+      else limpiarDirty(tab.key); // lo no elegido se descarta de verdad: no debe volver a preguntar
     }
-    if(pacienteActual) _guardarEstadoPestana(pacienteActual.dni);
-  } else if(hayDirtyEvol) {
-    const accion = await mostrarGuardModal('La evolución no fue guardada. ¿Qué querés hacer?');
-    if(accion === 'cancelar') return;
-    if(accion === 'guardar') {
-      await guardarEvolucion();
-      return;
+    if(pacienteActual) {
+      if(hayDirtyEvol) _guardarEstadoPestana(pacienteActual.dni); // conserva el texto de evolución como borrador
+      else _descartarBorradorEvolucion(pacienteActual.dni);
     }
-    if(pacienteActual) _guardarEstadoPestana(pacienteActual.dni);
+    return true;
   }
+
+  // Solo hay cambios en el texto de la evolución (sin pestañas de tablas dirty)
+  const accion = await mostrarGuardModal('La evolución no fue guardada. ¿Qué querés hacer?');
+  if(accion === 'cancelar') return false;
+  if(accion === 'guardar') {
+    await guardarEvolucion(); // guardarEvolucion() ya limpia todo y navega por su cuenta
+    return false;
+  }
+  // descartar de verdad
+  if(pacienteActual) _descartarBorradorEvolucion(pacienteActual.dni);
+  return true;
+}
+
+async function volverDesdeEvolucion() {
   showPage('pacientes');
 }
 
@@ -10475,6 +10574,16 @@ function cerrarModalHabitos() {
   document.getElementById('modal_habitos_upd').style.display = 'none';
   document.body.style.overflow = '';
   quitarChipHabitosMin();
+}
+
+// Botón X / Cancelar del modal: si hay una actualización de tratamiento
+// cargada (o una selección a medio completar) que todavía no se volcó a la
+// evolución, confirmar antes de cerrar para no perderla por error.
+function cancelarModalHabitos() {
+  const hayPendiente = (typeof updTtoItems !== 'undefined' && updTtoItems.length > 0) ||
+    (typeof haySeleccionTto === 'function' && haySeleccionTto());
+  if(hayPendiente && !confirm('Hay una actualización de tratamiento cargada que todavía no se volcó a la evolución. ¿Cerrar de todos modos? Se va a perder.')) return;
+  cerrarModalHabitos();
 }
 
 // ── Minimizar/restaurar: permite seguir escribiendo en "Evolucionar" ──────
