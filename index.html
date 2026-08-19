@@ -6404,76 +6404,86 @@ function doLogin() {
     else { document.getElementById('errorMsg').classList.add('visible'); return; }
   }
   if(pwd === users[selectedUser].password) {
-    currentUser = users[selectedUser];
-    window._cu = currentUser;
-    window._su = selectedUser;
-    console.log('[URCyM login] window._cu set:', window._cu, '_su:', window._su);
-    document.getElementById('loginCard').style.display = 'none';
-    document.getElementById('app').style.display = 'block';
-    document.getElementById('topbarUser').textContent = currentUser.mp ? currentUser.titulo + ' · ' + currentUser.mp : currentUser.titulo;
-    document.getElementById('dashWelcome').textContent = 'Hola, ' + currentUser.name;
-    // Verificar esquema de base de datos al iniciar
-    verificarEsquema();
-    // Mostrar/ocultar tabs según rol
-    var navFinanzas = document.getElementById('nav-tab-finanzas');
-    var navMisPacientes = document.getElementById('nav-tab-mis-pacientes');
-    var navAgenda = document.getElementById('nav-tab-agenda');
-    var navGestion = document.getElementById('nav-tab-gestion');
-    var navInvestigacion = document.getElementById('nav-tab-investigacion');
-    if(currentUser.admin) {
-      if(navFinanzas) navFinanzas.style.display = '';
-      if(navMisPacientes) navMisPacientes.style.display = 'none';
-      if(navGestion) navGestion.style.display = '';
-      if(navInvestigacion) navInvestigacion.style.display = '';
-      if(navAgenda) navAgenda.textContent = 'Agenda';
-      // Admin: ver todos los profesionales en la agenda
-      if(typeof profFilter !== 'undefined') profFilter = [];
-      var pillsWrap = document.getElementById('ag-prof-pills');
-      if(pillsWrap) pillsWrap.style.display = '';
-      if(typeof syncPillsUI === 'function') syncPillsUI();
-    } else {
-      if(navFinanzas) navFinanzas.style.display = 'none';
-      if(navMisPacientes) navMisPacientes.style.display = currentUser.readonly ? 'none' : '';
-      if(navGestion) navGestion.style.display = 'none';
-      if(navInvestigacion) navInvestigacion.style.display = 'none';
-      if(navAgenda) navAgenda.textContent = currentUser.readonly ? 'Agenda' : 'Mi Agenda';
-      // No-admin: fijar filtro a su propio prof
-      var profMap = {barbara:'BG', omar:'OB'};
-      var miProf = profMap[selectedUser] || '';
-      if(typeof profFilter !== 'undefined') profFilter = miProf ? [miProf] : [];
-      // Ocultar pills de filtro
-      var pillsWrap = document.getElementById('ag-prof-pills');
-      if(pillsWrap) pillsWrap.style.display = currentUser.readonly ? '' : 'none';
-      if(typeof syncPillsUI === 'function') syncPillsUI();
-    }
-    // Ocultar cambio de contraseña para invitado
-    var btnCambiarPwd = document.getElementById('btn-cambiar-pwd');
-    if(btnCambiarPwd) btnCambiarPwd.style.display = currentUser.readonly ? 'none' : '';
-    cargarPacientes();
-    // Re-renderizar agenda con el filtro del usuario logueado
-    if(typeof renderGrid === 'function') renderGrid();
-    // Modo solo lectura para invitado
-    if(currentUser.readonly) {
-      // Mostrar banner de solo lectura
-      var roBar = document.getElementById('urcym-readonly-bar');
-      if(!roBar){
-        roBar = document.createElement('div');
-        roBar.id = 'urcym-readonly-bar';
-        roBar.style.cssText = 'background:#fef9c3;border-bottom:1.5px solid #fde047;padding:7px 24px;font-size:12px;font-weight:600;color:#713f12;text-align:center;letter-spacing:.02em;z-index:99;';
-        roBar.textContent = '👁 Modo solo lectura — los cambios no se guardarán';
-        var navTabsEl = document.querySelector('.nav-tabs');
-        if(navTabsEl && navTabsEl.parentNode) navTabsEl.parentNode.insertBefore(roBar, navTabsEl.nextSibling);
-      }
-      roBar.style.display = '';
-      // Interceptar guardado para bloquear
-      window._readonlyMode = true;
-    } else {
-      var roBar2 = document.getElementById('urcym-readonly-bar');
-      if(roBar2) roBar2.style.display = 'none';
-      window._readonlyMode = false;
-    }
+    try { sessionStorage.setItem('urcym_session_user', selectedUser); } catch(e) {}
+    _activarSesion(selectedUser);
   } else {
     document.getElementById('errorMsg').classList.add('visible');
+  }
+}
+
+// Aplica la sesión de un usuario ya validado. La usa tanto doLogin() (login manual,
+// contraseña ya verificada) como la restauración automática al recargar la página
+// (ej: al publicar una nueva versión del index.html), para no tener que loguearse
+// de nuevo ni perder las pestañas de pacientes abiertas en cada actualización.
+function _activarSesion(userKey) {
+  selectedUser = userKey;
+  currentUser = users[selectedUser];
+  window._cu = currentUser;
+  window._su = selectedUser;
+  console.log('[URCyM login] window._cu set:', window._cu, '_su:', window._su);
+  document.getElementById('loginCard').style.display = 'none';
+  document.getElementById('app').style.display = 'block';
+  document.getElementById('topbarUser').textContent = currentUser.mp ? currentUser.titulo + ' · ' + currentUser.mp : currentUser.titulo;
+  document.getElementById('dashWelcome').textContent = 'Hola, ' + currentUser.name;
+  // Verificar esquema de base de datos al iniciar
+  verificarEsquema();
+  // Mostrar/ocultar tabs según rol
+  var navFinanzas = document.getElementById('nav-tab-finanzas');
+  var navMisPacientes = document.getElementById('nav-tab-mis-pacientes');
+  var navAgenda = document.getElementById('nav-tab-agenda');
+  var navGestion = document.getElementById('nav-tab-gestion');
+  var navInvestigacion = document.getElementById('nav-tab-investigacion');
+  if(currentUser.admin) {
+    if(navFinanzas) navFinanzas.style.display = '';
+    if(navMisPacientes) navMisPacientes.style.display = 'none';
+    if(navGestion) navGestion.style.display = '';
+    if(navInvestigacion) navInvestigacion.style.display = '';
+    if(navAgenda) navAgenda.textContent = 'Agenda';
+    // Admin: ver todos los profesionales en la agenda
+    if(typeof profFilter !== 'undefined') profFilter = [];
+    var pillsWrap = document.getElementById('ag-prof-pills');
+    if(pillsWrap) pillsWrap.style.display = '';
+    if(typeof syncPillsUI === 'function') syncPillsUI();
+  } else {
+    if(navFinanzas) navFinanzas.style.display = 'none';
+    if(navMisPacientes) navMisPacientes.style.display = currentUser.readonly ? 'none' : '';
+    if(navGestion) navGestion.style.display = 'none';
+    if(navInvestigacion) navInvestigacion.style.display = 'none';
+    if(navAgenda) navAgenda.textContent = currentUser.readonly ? 'Agenda' : 'Mi Agenda';
+    // No-admin: fijar filtro a su propio prof
+    var profMap = {barbara:'BG', omar:'OB'};
+    var miProf = profMap[selectedUser] || '';
+    if(typeof profFilter !== 'undefined') profFilter = miProf ? [miProf] : [];
+    // Ocultar pills de filtro
+    var pillsWrap = document.getElementById('ag-prof-pills');
+    if(pillsWrap) pillsWrap.style.display = currentUser.readonly ? '' : 'none';
+    if(typeof syncPillsUI === 'function') syncPillsUI();
+  }
+  // Ocultar cambio de contraseña para invitado
+  var btnCambiarPwd = document.getElementById('btn-cambiar-pwd');
+  if(btnCambiarPwd) btnCambiarPwd.style.display = currentUser.readonly ? 'none' : '';
+  cargarPacientes().then(function(){ _restaurarPestanasAbiertas(); });
+  // Re-renderizar agenda con el filtro del usuario logueado
+  if(typeof renderGrid === 'function') renderGrid();
+  // Modo solo lectura para invitado
+  if(currentUser.readonly) {
+    // Mostrar banner de solo lectura
+    var roBar = document.getElementById('urcym-readonly-bar');
+    if(!roBar){
+      roBar = document.createElement('div');
+      roBar.id = 'urcym-readonly-bar';
+      roBar.style.cssText = 'background:#fef9c3;border-bottom:1.5px solid #fde047;padding:7px 24px;font-size:12px;font-weight:600;color:#713f12;text-align:center;letter-spacing:.02em;z-index:99;';
+      roBar.textContent = '👁 Modo solo lectura — los cambios no se guardarán';
+      var navTabsEl = document.querySelector('.nav-tabs');
+      if(navTabsEl && navTabsEl.parentNode) navTabsEl.parentNode.insertBefore(roBar, navTabsEl.nextSibling);
+    }
+    roBar.style.display = '';
+    // Interceptar guardado para bloquear
+    window._readonlyMode = true;
+  } else {
+    var roBar2 = document.getElementById('urcym-readonly-bar');
+    if(roBar2) roBar2.style.display = 'none';
+    window._readonlyMode = false;
   }
 }
 async function logout() {
@@ -6483,6 +6493,7 @@ async function logout() {
   }
   currentUser = null; selectedUser = null;
   window._cu = null; window._su = null;
+  try { sessionStorage.removeItem('urcym_session_user'); sessionStorage.removeItem('urcym_open_tabs'); } catch(e) {}
   document.getElementById('password').value = '';
   document.getElementById('app').style.display = 'none';
   document.getElementById('loginCard').style.display = 'flex';
@@ -6498,6 +6509,7 @@ async function cambiarUsuario() {
   }
   // Vuelve al login sin cerrar sesión completamente — solo resetea selección
   currentUser = null; selectedUser = null;
+  try { sessionStorage.removeItem('urcym_session_user'); } catch(e) {}
   document.getElementById('password').value = '';
   document.getElementById('app').style.display = 'none';
   document.getElementById('loginCard').style.display = 'flex';
@@ -6804,6 +6816,17 @@ function _iniciarAutoGuardadoLocal() {
 }
 _iniciarAutoGuardadoLocal();
 
+// ─── RESTAURACIÓN AUTOMÁTICA DE SESIÓN AL CARGAR LA PÁGINA ───
+// Si ya había una sesión iniciada en esta pestaña del navegador (sessionStorage),
+// evita tener que loguearse de nuevo y volver a abrir todos los pacientes cada vez
+// que se recarga la página (por ejemplo al publicar una actualización del index.html).
+(function _intentarRestaurarSesion() {
+  try {
+    const savedUser = sessionStorage.getItem('urcym_session_user');
+    if(savedUser && users[savedUser]) _activarSesion(savedUser);
+  } catch(e) {}
+})();
+
 // Muestra/oculta el punto naranja "●" en la pestaña del paciente
 function _marcarPestanaConBorrador(dni, tiene) {
   document.querySelectorAll('.patient-nav-tab').forEach(tab => {
@@ -6853,6 +6876,32 @@ function nombreCortoPaciente(p) {
   return (ape + (nom ? ', ' + nom.split(' ')[0] : '')).trim() || p.dni || 'Paciente';
 }
 
+// ─── PERSISTENCIA DE LA LISTA DE PESTAÑAS ABIERTAS (sessionStorage) ───
+// Guarda qué pacientes están abiertos y cuál está activo. Se usa para
+// restaurarlos automáticamente si se recarga la página (ej: al publicar una
+// actualización del index.html) y así no perder todas las pestañas abiertas.
+// Vive en sessionStorage: se borra solo al cerrar la pestaña del navegador,
+// nunca sobrevive de un día a otro.
+function _guardarListaPestanasAbiertas(dniActivo) {
+  try {
+    sessionStorage.setItem('urcym_open_tabs', JSON.stringify({ tabs: pacienteTabsAbiertas, activo: dniActivo || null }));
+  } catch(e) {}
+}
+
+// Restaura las pestañas guardadas (si las hay) y reabre el paciente que estaba activo.
+// No hace nada si no hay nada guardado (login normal / primera vez en la pestaña del navegador).
+async function _restaurarPestanasAbiertas() {
+  let data = null;
+  try { data = JSON.parse(sessionStorage.getItem('urcym_open_tabs') || 'null'); } catch(e) {}
+  if(!data || !Array.isArray(data.tabs) || !data.tabs.length) return;
+  pacienteTabsAbiertas = data.tabs;
+  renderTabsPacientes(data.activo);
+  if(data.activo) {
+    const p = pacientesData.find(x => String(x.dni) === String(data.activo));
+    if(p) await abrirEvolucion(p.dni);
+  }
+}
+
 function abrirTabPaciente(p) {
   if(!p || !p.dni) return;
   const existe = pacienteTabsAbiertas.some(t => String(t.dni) === String(p.dni));
@@ -6863,6 +6912,7 @@ function abrirTabPaciente(p) {
 function renderTabsPacientes(dniActivo) {
   const nav = document.querySelector('.nav-tabs');
   if(!nav) return;
+  _guardarListaPestanasAbiertas(dniActivo);
   nav.querySelectorAll('.patient-nav-tab').forEach(t => t.remove());
   pacienteTabsAbiertas.forEach(t => {
     const tab = document.createElement('div');
