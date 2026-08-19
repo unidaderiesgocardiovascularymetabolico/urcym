@@ -7066,17 +7066,13 @@ async function showPage(page) {
     page = 'mis-pacientes';
   }
 
-  // Si hay cambios sin guardar en la evolución (texto, laboratorio, antropometría,
-  // estudios, vacunación, MDPA o adiposidad), preguntar ANTES de salir — sin
-  // importar por dónde se intente salir (pestañas de arriba, tarjetas del
-  // Inicio, Salir, etc.), no solo por el botón "← Volver".
-  if(page !== 'evolucion' && pacienteActual) {
-    const evolActiva = document.getElementById('page-evolucion')?.classList.contains('active');
-    if(evolActiva) {
-      const puedeSalir = await _resolverSalidaEvolucion();
-      if(!puedeSalir) return; // canceló, o guardarEvolucion() ya está navegando por su cuenta
-    }
-  }
+  // NOTA: antes acá se forzaba un modal de "guardar / descartar / cancelar" cada vez
+  // que se navegaba a otra sección (Agenda, Inicio, etc.) con una evolución en curso.
+  // Se sacó: navegar a otra sección NO cierra la pestaña del paciente ni borra nada —
+  // la ficha queda tal cual en memoria y al volver a ese mismo paciente (abrirEvolucion,
+  // más abajo) ya no se recarga desde la base de datos, así que no hay nada que perder.
+  // El aviso real de "cambios sin guardar" sigue existiendo al cerrar la pestaña del
+  // paciente, cerrar sesión, cambiar de usuario, o cerrar/recargar el navegador.
 
   // SEGURIDAD: si no vamos a "evolucion", ocultar la ficha del paciente
   // (y TODAS sus subtablas: lab, antropometría, estudios, vacunación, mdpa,
@@ -9690,6 +9686,14 @@ async function guardarAntYVolver() {
 async function abrirEvolucion(dni) {
   const p = pacientesData.find(x=>String(x.dni)===String(dni));
   if(!p) return;
+  // Si ya es el paciente activo (ej: se navegó a Agenda/Inicio y ahora se vuelve a
+  // entrar a su ficha, sea por su pestaña o por otro acceso), NO recargar nada desde
+  // la base de datos: eso pisaría con lo último guardado cualquier cambio sin guardar
+  // en Laboratorio/Antropometría/Estudios/etc. Solo se vuelve a mostrar la página.
+  if(pacienteActual && String(pacienteActual.dni) === String(dni)) {
+    showPage('evolucion');
+    return;
+  }
   // IMPORTANTE: si hay guardados de lab/ant/est pendientes (debounce de 800ms) del paciente
   // que se está dejando, hay que esperarlos a que terminen ANTES de tocar pacienteActual/labDatos.
   // Si no, el guardado pendiente se ejecuta después y graba los datos del paciente anterior
