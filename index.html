@@ -12109,7 +12109,10 @@ const DBT_METAS = {
   MDRD:         { meta: 60,  peor: 15,  dir:'mayor', label:'Filtrado glomerular (eGFR)', unidad:'mL/min/1.73m²' },
   TAS:          { meta: 130, peor: 180, dir:'menor', label:'Presión arterial (sistólica)', unidad:'mmHg' },
 };
-function dbtCinturaMeta(sexo) { return sexo === 'Femenino' ? 88 : 102; }
+// Acepta tanto 'F'/'Femenino' como 'M'/'Masculino' (distintas partes del sistema pasan el sexo
+// en uno u otro formato), para que la meta no dependa de qué convención usó quien llama.
+function _esFemenino(sexo) { return sexo === 'F' || sexo === 'Femenino'; }
+function dbtCinturaMeta(sexo) { return _esFemenino(sexo) ? 88 : 102; }
 function dbtCinturaPeor(sexo) { return dbtCinturaMeta(sexo) + 25; }
 
 // % de avance hacia la meta (0-100), en base al rango [peor → meta]
@@ -12289,7 +12292,7 @@ function dbtClasificarRiesgoCV(d) {
 
 // Fuerza de prensión (dinamometría) — cortes de baja fuerza EWGSOP2: <27kg hombres, <16kg mujeres.
 function dbtMetaFuerzaPresion(sexo) {
-  return sexo === 'F' ? { meta:16, peor:8 } : { meta:27, peor:14 };
+  return _esFemenino(sexo) ? { meta:16, peor:8 } : { meta:27, peor:14 };
 }
 
 function dbtRenderPanel() {
@@ -16507,7 +16510,7 @@ function _lipSeccionNutri(d) {
     <div class="nutri-panel" style="margin-top:12px">
       <div class="nutri-hdr2">Pautas alimentarias con evidencia para dislipemia</div>
       <div class="nutri-row"><span>🧈 Grasas saturadas</span><b>&lt; 7% del valor calórico total</b></div>
-      <div class="nutri-row"><span>🚫 Grasas trans (fritos, ultraprocesados)</span><b>Evitar</b></div>
+      <div class="nutri-row"><span>🚫 Grasas trans (fritos, ultraprocesados)</span><b>Disminuir</b></div>
       <div class="nutri-row"><span>🌾 Fibra total</span><b>25–30 g/día</b></div>
       <div class="nutri-row"><span>🌾 Fibra soluble (avena, legumbres, psyllium)</span><b>10–25 g/día</b></div>
       <div class="nutri-row"><span>🐟 Pescado azul (omega-3)</span><b>2 veces/semana</b></div>
@@ -17119,7 +17122,7 @@ ${profNombre ? `<div class="prof-strip"><span class="prof-name">${profNombre}</s
 
 // Meta de % de grasa corporal según sexo (umbral de riesgo elevado usado en ANT_FILAS, tomado como techo "peor caso")
 function obePctGrasaMeta(sexo) {
-  return sexo === 'F' ? { meta: 32, peor: 45 } : { meta: 24, peor: 38 };
+  return _esFemenino(sexo) ? { meta: 32, peor: 45 } : { meta: 24, peor: 38 };
 }
 // Peso objetivo funcional en base a IMC 24.9 (techo de rango normal), calculado a partir de la talla — referencia, no objetivo rígido.
 function obePesoObjetivo(tallaCm) {
