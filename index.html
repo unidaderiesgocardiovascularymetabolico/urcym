@@ -2993,6 +2993,7 @@
         <button class="pac-tab-main" id="ptab-est" onclick="switchPacMainTab('est')">📋 Estudios</button>
         <button class="pac-tab-main" id="ptab-vac" onclick="switchPacMainTab('vac')">💉 Vacunación</button>
         <button class="pac-tab-main" id="ptab-mdpa" onclick="switchPacMainTab('mdpa')"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:1em;height:1em;vertical-align:-0.15em"><rect x="2.5" y="5" width="8" height="11" rx="1.3" stroke="currentColor" stroke-width="1.3"/><rect x="4" y="7" width="5" height="3" rx="0.5" stroke="currentColor" stroke-width="1.1"/><path d="M4.2 12.3h1.3M6.4 12.3h1.3M4.2 13.9h3.5" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/><path d="M10.5 9.5h2.3" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/><path d="M13 6.3c3.6-0.6 6.7 1.6 6.9 4.9c0.2 3.3-2.4 5.7-5.7 5.4c-2.1-0.2-3.5-1.9-3.1-3.6c0.3-1.4 1.9-2.1 3.1-1.4c0.9 0.5 0.9 1.7 0.1 2.1" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg> MDPA</button>
+        <button class="pac-tab-main" id="ptab-cardio" onclick="switchPacMainTab('cardio')">🫀 Cardiometabólico</button>
         <button class="pac-tab-main" id="ptab-adip" onclick="switchPacMainTab('adip')">🎯 Adiposidad</button>
         <button class="pac-tab-main" id="ptab-lip" onclick="switchPacMainTab('lip')">🧈 Lípidos</button>
         <button class="pac-tab-main" id="ptab-calc" onclick="switchPacMainTab('calc')">🧮 Calculadoras</button>
@@ -3435,6 +3436,15 @@
           </div>
         </div>
       </div><!-- /pmain-mdpa -->
+
+      <!-- PANEL CARDIOMETABÓLICO — cada tarjeta genera su propio informe personalizado
+           (voz/título propios de cada área), igual que las tarjetas de Adiposidad -->
+      <div id="pmain-cardio" style="display:none;padding:16px 28px 28px;width:100%;box-sizing:border-box">
+        <div style="margin-bottom:16px">
+          <span style="font-size:12px;color:var(--text-soft);font-style:italic">🫀 Evaluación cardiometabólica — elegí qué informe generar según lo que tenga cargado este paciente</span>
+        </div>
+        <div id="cardio_cards_grid"></div>
+      </div><!-- /pmain-cardio -->
 
       <!-- PANEL ADIPOSIDAD -->
       <div id="pmain-adip" style="display:none;padding:16px 28px 28px;width:100%;box-sizing:border-box">
@@ -4079,6 +4089,68 @@
   </div>
 </div>
 <!-- FIN MODAL OPCIONES INFORME DE EVOLUCIÓN — OBESIDAD -->
+
+<!-- MODAL OPCIONES INFORME CARDIOMETABÓLICO (combina Adiposidad + Lípidos + Diabetes) -->
+<div id="cardio_modal_opciones_informe" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:10000;align-items:center;justify-content:center;overflow-y:auto">
+  <div style="background:white;border-radius:16px;width:100%;max-width:440px;padding:26px;box-shadow:0 20px 60px rgba(0,0,0,.25);margin:24px 0">
+    <div style="font-family:var(--font-display);font-size:16px;font-weight:700;color:var(--text);margin-bottom:4px">🫀 Informe Cardiometabólico</div>
+    <div style="font-size:12px;color:var(--text-soft);margin-bottom:18px">Elegí qué secciones incluir de cada área. El orden se respeta tal cual quedan marcados abajo.</div>
+
+    <div style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--text-soft);margin-bottom:8px">General</div>
+    <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:16px">
+      <label style="display:flex;align-items:center;gap:10px;font-size:13px;font-weight:500;color:#1e293b;cursor:pointer;padding:10px 12px;border:1.5px solid var(--border);border-radius:10px;background:var(--gray)">
+        <input type="checkbox" id="cardio_chk_general" checked style="width:16px;height:16px;accent-color:var(--blue)">
+        🛡️ Riesgo cardiometabólico y perfil clínico
+      </label>
+      <label style="display:flex;align-items:center;gap:10px;font-size:13px;font-weight:500;color:#1e293b;cursor:pointer;padding:10px 12px;border:1.5px solid var(--border);border-radius:10px;background:var(--gray)">
+        <input type="checkbox" id="cardio_chk_antro" checked style="width:16px;height:16px;accent-color:var(--blue)">
+        📏 Antropometría
+      </label>
+    </div>
+
+    <div style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--text-soft);margin-bottom:8px">🎯 Adiposidad</div>
+    <div id="cardio_adip_wrap" style="display:flex;flex-direction:column;gap:10px;margin-bottom:16px">
+      <label style="display:flex;align-items:center;gap:10px;font-size:13px;font-weight:500;color:#1e293b;cursor:pointer;padding:10px 12px;border:1.5px solid var(--border);border-radius:10px;background:var(--gray)">
+        <input type="checkbox" id="cardio_chk_adip" style="width:16px;height:16px;accent-color:var(--blue)">
+        🎯 Tratamiento de adiposidad
+      </label>
+      <label style="display:flex;align-items:center;gap:10px;font-size:13px;font-weight:500;color:#1e293b;cursor:pointer;padding:10px 12px;border:1.5px solid var(--border);border-radius:10px;background:var(--gray)">
+        <input type="checkbox" id="cardio_chk_reqpeso" checked style="width:16px;height:16px;accent-color:var(--blue)">
+        🧮 Requerimientos nutricionales (control de peso)
+      </label>
+      <label style="display:flex;align-items:center;gap:10px;font-size:13px;font-weight:500;color:#1e293b;cursor:pointer;padding:10px 12px;border:1.5px solid var(--border);border-radius:10px;background:var(--gray)">
+        <input type="checkbox" id="cardio_chk_efca" style="width:16px;height:16px;accent-color:var(--blue)">
+        🧭 Encuesta de fenotipo alimentario (EFCA)
+      </label>
+    </div>
+
+    <div style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--text-soft);margin-bottom:8px">🧈 Lípidos</div>
+    <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:16px">
+      <label style="display:flex;align-items:center;gap:10px;font-size:13px;font-weight:500;color:#1e293b;cursor:pointer;padding:10px 12px;border:1.5px solid var(--border);border-radius:10px;background:var(--gray)">
+        <input type="checkbox" id="cardio_chk_nutri" checked style="width:16px;height:16px;accent-color:var(--blue)">
+        🧮 Objetivos nutricionales (lípidos)
+      </label>
+      <label style="display:flex;align-items:center;gap:10px;font-size:13px;font-weight:500;color:#1e293b;cursor:pointer;padding:10px 12px;border:1.5px solid var(--border);border-radius:10px;background:var(--gray)">
+        <input type="checkbox" id="cardio_chk_actividad" checked style="width:16px;height:16px;accent-color:var(--blue)">
+        🏃 Actividad física y ejercicio
+      </label>
+    </div>
+
+    <div style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--text-soft);margin-bottom:8px">Cierre</div>
+    <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:20px">
+      <label style="display:flex;align-items:center;gap:10px;font-size:13px;font-weight:500;color:#1e293b;cursor:pointer;padding:10px 12px;border:1.5px solid var(--border);border-radius:10px;background:var(--gray)">
+        <input type="checkbox" id="cardio_chk_cierre" checked style="width:16px;height:16px;accent-color:var(--blue)">
+        🤝 Compromisos y próximos pasos
+      </label>
+    </div>
+
+    <div style="display:flex;justify-content:space-between;gap:8px">
+      <button onclick="cardioCerrarOpcionesInforme()" style="padding:9px 18px;border:1.5px solid var(--border);border-radius:10px;background:white;font-size:13px;font-weight:500;color:var(--text-soft);cursor:pointer;font-family:var(--font-main)">Cancelar</button>
+      <button onclick="cardioGenerarInformeConOpciones()" style="padding:9px 22px;border:none;border-radius:10px;background:var(--blue);color:white;font-size:13px;font-weight:700;cursor:pointer;font-family:var(--font-main)">🖨️ Generar</button>
+    </div>
+  </div>
+</div>
+<!-- FIN MODAL OPCIONES INFORME CARDIOMETABÓLICO -->
 
 <!-- MODAL HÁBITOS: ACTIVIDAD FÍSICA + ALIMENTACIÓN -->
 <div id="modal_habitos_upd" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.48);z-index:1200;align-items:flex-start;justify-content:center;padding:16px;overflow-y:auto">
@@ -8884,7 +8956,7 @@ async function switchPacMainTab(tab) {
   // Al salir de calculadoras, volver siempre a la lista (no dejarla abierta en un detalle)
   if(_tabActivo === 'calc' && tab !== 'calc' && window.cerrarCalculadora) cerrarCalculadora();
   _tabActivo = tab;
-  ['evol','lab','ant','est','vac','mdpa','adip','lip','calc','dbt'].forEach(t => {
+  ['evol','lab','ant','est','vac','mdpa','cardio','adip','lip','calc','dbt'].forEach(t => {
     const panel = document.getElementById('pmain-'+t);
     const btn = document.getElementById('ptab-'+t);
     if(panel) panel.style.display = t===tab ? 'block' : 'none';
@@ -8942,6 +9014,9 @@ async function switchPacMainTab(tab) {
   }
   if(tab==='mdpa' && pacienteActual) {
     mdpaIniciar(pacienteActual.dni);
+  }
+  if(tab==='cardio' && pacienteActual) {
+    cardioIniciar(pacienteActual.dni);
   }
   if(tab==='adip' && pacienteActual) {
     adipIniciar(pacienteActual.dni);
@@ -12677,52 +12752,57 @@ function dbtImprimirInforme() {
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
     *{box-sizing:border-box;margin:0;padding:0}
-    body{font-family:'Inter',sans-serif;font-size:12px;color:#1e293b;background:#f8fafc;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-    .report-header{background:linear-gradient(135deg,#0c4a6e 0%,#1e3a5f 60%,#312e81 100%);color:white;padding:26px 34px 22px;display:flex;align-items:center;gap:18px}
+    body{font-family:'Inter',sans-serif;font-size:14.5px;line-height:1.5;color:#1e293b;background:#f8fafc;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    .report-header{background:linear-gradient(135deg,#0c4a6e 0%,#1e3a5f 60%,#312e81 100%);color:white;padding:26px 34px 22px;display:flex;align-items:center;gap:18px;flex-wrap:wrap}
     .logo-circle{width:52px;height:52px;border-radius:50%;background:rgba(255,255,255,.15);border:2px solid rgba(255,255,255,.3);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:24px}
-    .header-title{font-size:21px;font-weight:800}
-    .header-sub{font-size:11px;color:rgba(255,255,255,.75);margin-top:3px;text-transform:uppercase;letter-spacing:.05em}
-    .header-fecha{margin-left:auto;text-align:right;font-size:10px;color:rgba(255,255,255,.65)}
-    .header-fecha strong{display:block;font-size:12px;color:white}
+    .header-title{font-size:22px;font-weight:800}
+    .header-sub{font-size:12px;color:rgba(255,255,255,.75);margin-top:3px;text-transform:uppercase;letter-spacing:.05em}
+    .header-fecha{margin-left:auto;text-align:right;font-size:11.5px;color:rgba(255,255,255,.65)}
+    .header-fecha strong{display:block;font-size:13px;color:white}
     .paciente-bar{background:white;border-bottom:3px solid #0c4a6e;padding:14px 34px;display:flex;gap:26px;flex-wrap:wrap}
-    .pac-chip-label{font-size:8.5px;font-weight:700;text-transform:uppercase;color:#94a3b8}
-    .pac-chip-val{font-size:13px;font-weight:700;color:#0c4a6e}
-    .body-wrap{padding:22px 34px 30px;max-width:960px;margin:0 auto}
-    .welcome{background:#eff6ff;border:1.5px solid #bfdbfe;border-radius:14px;padding:16px 20px;font-size:12.5px;line-height:1.7;color:#1e3a5f;margin-bottom:20px}
+    .pac-chip-label{font-size:10px;font-weight:700;text-transform:uppercase;color:#94a3b8}
+    .pac-chip-val{font-size:14.5px;font-weight:700;color:#0c4a6e}
+    .body-wrap{padding:22px 24px 30px;max-width:960px;margin:0 auto}
+    .welcome{background:#eff6ff;border:1.5px solid #bfdbfe;border-radius:14px;padding:16px 20px;font-size:14px;line-height:1.7;color:#1e3a5f;margin-bottom:20px}
     .welcome b{color:#0c4a6e}
-    h2.sec{font-size:14px;font-weight:800;color:#0c4a6e;margin:22px 0 10px;display:flex;align-items:center;gap:6px}
-    table{border-collapse:collapse;width:100%;font-size:10.5px;background:white;border-radius:10px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.06)}
-    th{background:#0c4a6e;color:white;padding:8px 8px;font-size:9px;text-transform:uppercase;letter-spacing:.03em}
+    h2.sec{font-size:16px;font-weight:800;color:#0c4a6e;margin:22px 0 10px;display:flex;align-items:center;gap:6px}
+    table{border-collapse:collapse;width:100%;font-size:13px;background:white;border-radius:10px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.06)}
+    th{background:#0c4a6e;color:white;padding:8px 8px;font-size:11px;text-transform:uppercase;letter-spacing:.03em}
     th:first-child{text-align:left}
-    td{padding:7px 8px;text-align:center;border-bottom:1px solid #f1f5f9}
+    td{padding:8px 8px;text-align:center;border-bottom:1px solid #f1f5f9}
     td.row-label{text-align:left;font-weight:600;color:#1e3a5f;background:#f8fafc}
-    .pill{display:inline-block;padding:2px 8px;border-radius:20px;font-size:9.5px;font-weight:700;white-space:nowrap}
+    .pill{display:inline-block;padding:3px 9px;border-radius:20px;font-size:11px;font-weight:700;white-space:nowrap}
     .sim-box{background:linear-gradient(135deg,#f0fdf4,#ecfeff);border:1.5px solid #bbf7d0;border-radius:14px;padding:18px 20px}
-    .sim-title{font-size:15px;font-weight:800;color:#166534;margin-bottom:8px}
-    .sim-box p{font-size:13px;color:#166534;line-height:1.65;margin:8px 0}
-    .sim-bar-row{display:grid;grid-template-columns:140px 1fr 50px;align-items:center;gap:10px;margin:8px 0;font-size:12.5px;color:#166534}
+    .sim-title{font-size:16px;font-weight:800;color:#166534;margin-bottom:8px}
+    .sim-box p{font-size:14px;color:#166534;line-height:1.65;margin:8px 0}
+    .sim-bar-row{display:grid;grid-template-columns:140px 1fr 50px;align-items:center;gap:10px;margin:8px 0;font-size:13px;color:#166534}
     .sim-bar-lbl{font-weight:600}
-    .nota-riesgo{font-size:12.5px;color:#475569;line-height:1.65;font-style:italic;background:rgba(255,255,255,.6);border-radius:8px;padding:10px 12px;margin-top:10px}
+    .nota-riesgo{font-size:13px;color:#475569;line-height:1.65;font-style:italic;background:rgba(255,255,255,.6);border-radius:8px;padding:10px 12px;margin-top:10px}
     .perfil-box{background:white;border:1.5px solid #e2e8f0;border-radius:14px;padding:16px 20px}
     .perfil-row{margin-bottom:14px}.perfil-row:last-child{margin-bottom:0}
-    .perfil-lbl{display:block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#0c4a6e;margin-bottom:7px}
+    .perfil-lbl{display:block;font-size:12.5px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#0c4a6e;margin-bottom:7px}
     .perfil-chips{display:flex;flex-wrap:wrap;gap:6px}
-    .perfil-chip{background:#eff6ff;color:#1e3a5f;border:1px solid #bfdbfe;border-radius:20px;padding:4px 12px;font-size:12.5px;font-weight:600}
+    .perfil-chip{background:#eff6ff;color:#1e3a5f;border:1px solid #bfdbfe;border-radius:20px;padding:4px 12px;font-size:13px;font-weight:600}
     .perfil-chip.fam{background:#f0fdf4;color:#166534;border-color:#bbf7d0}
-    .perfil-chip.med{background:#faf5ff;color:#6d28d9;border-color:#e9d5ff}
-    .perfil-empty{color:#94a3b8;font-size:12.5px;font-style:italic}
-    .perfil-tabaco{font-size:12.5px;line-height:1.6;padding:10px 12px;border-radius:10px;margin-top:2px}
+    .perfil-chip.med{background:#f6f4fa;color:#5b4b8a;border-color:#e0d9ee}
+    .perfil-empty{color:#94a3b8;font-size:13px;font-style:italic}
+    .perfil-tabaco{font-size:13px;line-height:1.6;padding:10px 12px;border-radius:10px;margin-top:2px}
     .perfil-tabaco.warn{background:#fff7ed;color:#9a3412;border:1px solid #fed7aa}
     .perfil-tabaco.ok{background:#f0fdf4;color:#166534;border:1px solid #bbf7d0}
     .commit-box{background:white;border:1.5px solid #e2e8f0;border-radius:14px;padding:16px 20px}
-    .commit-box li{font-size:11.5px;line-height:1.8;margin-left:18px;color:#334155}
-    .closing{text-align:center;font-size:13px;font-weight:700;color:#166534;background:#f0fdf4;border:1.5px solid #bbf7d0;border-radius:12px;padding:14px;margin-top:20px}
-    .report-footer{margin-top:20px;padding-top:12px;border-top:1px solid #e2e8f0;display:flex;justify-content:space-between;font-size:8.5px;color:#94a3b8}
+    .commit-box li{font-size:13px;line-height:1.8;margin-left:18px;color:#334155}
+    .closing{text-align:center;font-size:14.5px;font-weight:700;color:#166534;background:#f0fdf4;border:1.5px solid #bbf7d0;border-radius:12px;padding:14px;margin-top:20px}
+    .report-footer{margin-top:20px;padding-top:12px;border-top:1px solid #e2e8f0;display:flex;justify-content:space-between;font-size:10px;color:#94a3b8;flex-wrap:wrap;gap:4px}
     @media print{ body{background:white} @page{margin:8mm 10mm;size:A4 portrait} }
+    @media (max-width:520px){
+      .report-header,.paciente-bar,.body-wrap{padding-left:18px;padding-right:18px}
+      .sim-bar-row{grid-template-columns:1fr;text-align:left}
+      body{font-size:15px}
+    }
   </style></head><body>
   <div class="report-header">
     <div class="logo-circle">🩸</div>
-    <div><div class="header-title">Tu Informe Cardiometabólico</div><div class="header-sub">Seguimiento de Diabetes · Evolucionar</div></div>
+    <div><div class="header-title">Tu Informe de Diabetes</div><div class="header-sub">Seguimiento de Diabetes · Evolucionar</div></div>
     <div class="header-fecha"><strong>${fechaHoyTxt}</strong>Informe generado para el paciente</div>
   </div>
   <div class="paciente-bar">
@@ -12732,7 +12812,7 @@ function dbtImprimirInforme() {
   </div>
   <div class="body-wrap">
     <div class="welcome">Hola${p.nombre?', '+p.nombre:''} 👋 <br><br>
-      Gracias por sostener tu seguimiento con nosotros. Este informe reúne, en conjunto, cómo viene evolucionando <b>tu salud cardiometabólica</b>: no sólo el control del azúcar, sino también tu corazón, tus riñones y tu composición corporal — todo lo que en conjunto protege tu calidad de vida y tu longevidad.
+      Gracias por sostener tu seguimiento con nosotros. Este informe reúne cómo viene evolucionando <b>tu control de la diabetes</b>: tu glucemia, tu HbA1c y tu función renal, junto con el resto de tu salud cardiovascular — todo lo que en conjunto protege tu calidad de vida y tu longevidad.
     </div>
 
     ${perfilSeccion}
@@ -16320,64 +16400,69 @@ function _adipGenerarHTMLInforme(trat, modoModal, opts) {
 
   const estilos = `
     *{box-sizing:border-box;margin:0;padding:0}
-    body{font-family:'Inter',sans-serif;font-size:11px;color:#1e293b;background:#f8fafc;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-    .rh{background:linear-gradient(135deg,#0c4a6e 0%,#1e3a5f 60%,#312e81 100%);color:white;padding:24px 32px 20px;display:flex;align-items:center;gap:20px}
+    body{font-family:'Inter',sans-serif;font-size:14.5px;line-height:1.5;color:#1e293b;background:#f8fafc;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    .rh{background:linear-gradient(135deg,#0c4a6e 0%,#1e3a5f 60%,#312e81 100%);color:white;padding:24px 32px 20px;display:flex;align-items:center;gap:20px;flex-wrap:wrap}
     .rh-ico{width:52px;height:52px;border-radius:50%;background:rgba(255,255,255,.15);border:2px solid rgba(255,255,255,.3);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:22px}
-    .rh-txt{flex:1}
-    .rh-title{font-size:20px;font-weight:800;letter-spacing:.02em;line-height:1.1}
-    .rh-sub{font-size:11px;color:rgba(255,255,255,.7);margin-top:3px;letter-spacing:.04em;text-transform:uppercase}
-    .rh-fecha{text-align:right;font-size:10px;color:rgba(255,255,255,.6);line-height:1.7}
-    .rh-fecha strong{display:block;font-size:12px;color:rgba(255,255,255,.9);font-weight:600}
+    .rh-txt{flex:1;min-width:180px}
+    .rh-title{font-size:21px;font-weight:800;letter-spacing:.02em;line-height:1.2}
+    .rh-sub{font-size:12px;color:rgba(255,255,255,.7);margin-top:3px;letter-spacing:.04em;text-transform:uppercase}
+    .rh-fecha{text-align:right;font-size:11.5px;color:rgba(255,255,255,.6);line-height:1.7}
+    .rh-fecha strong{display:block;font-size:13px;color:rgba(255,255,255,.9);font-weight:600}
     .pac-bar{background:white;border-bottom:3px solid #0c4a6e;padding:14px 32px;display:flex;align-items:center;gap:24px;flex-wrap:wrap}
     .pac-chip{display:flex;flex-direction:column}
-    .pac-lbl{font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#94a3b8;margin-bottom:2px}
-    .pac-val{font-size:13px;font-weight:700;color:#0c4a6e}
+    .pac-lbl{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#94a3b8;margin-bottom:2px}
+    .pac-val{font-size:14.5px;font-weight:700;color:#0c4a6e}
     .pac-div{width:1px;height:32px;background:#e2e8f0;flex-shrink:0}
-    .prof-strip{background:#f0f9ff;border-left:4px solid #0369a1;padding:10px 32px;display:flex;align-items:center;gap:10px;font-size:10.5px}
-    .prof-name{font-weight:700;color:#0c4a6e;font-size:11.5px}
+    .prof-strip{background:#f0f9ff;border-left:4px solid #0369a1;padding:10px 32px;display:flex;align-items:center;gap:10px;font-size:12px;flex-wrap:wrap}
+    .prof-name{font-weight:700;color:#0c4a6e;font-size:13px}
     .prof-sep{color:#bae6fd;font-size:14px}
     .prof-mp{color:#0369a1;font-weight:600}
     .prof-esp{color:#64748b;font-style:italic}
     .body{padding:20px 32px 28px}
     .info-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px}
     .chip{background:white;border:1px solid #e2e8f0;border-radius:10px;padding:10px 14px;box-shadow:0 1px 3px rgba(0,0,0,.05)}
-    .chip-lbl{font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#94a3b8;margin-bottom:3px}
-    .chip-val{font-size:13px;font-weight:700;color:#0c4a6e}
+    .chip-lbl{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#94a3b8;margin-bottom:3px}
+    .chip-val{font-size:14.5px;font-weight:700;color:#0c4a6e}
     .chk-panel{background:white;border-radius:10px;box-shadow:0 1px 4px rgba(0,0,0,.07);overflow:hidden;border:1px solid #e2e8f0;margin-bottom:16px}
-    .chk-hdr{background:#0c4a6e;color:white;padding:10px 14px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em}
-    .chk-row{display:flex;align-items:flex-start;gap:10px;padding:10px 14px;border-bottom:1px solid #f1f5f9;font-size:11px}
+    .chk-hdr{background:#0c4a6e;color:white;padding:10px 14px;font-size:12.5px;font-weight:700;text-transform:uppercase;letter-spacing:.06em}
+    .chk-row{display:flex;align-items:flex-start;gap:10px;padding:11px 14px;border-bottom:1px solid #f1f5f9;font-size:13px}
     .chk-row:last-child{border-bottom:none}
-    .chk-ico{font-size:13px;font-weight:800;flex-shrink:0}
+    .chk-ico{font-size:14px;font-weight:800;flex-shrink:0}
     .chk-ok .chk-ico{color:#16a34a}
     .chk-pend .chk-ico{color:#cbd5e1}
     .chk-ok .chk-txt{color:#1e293b}
     .chk-pend .chk-txt{color:#94a3b8}
-    .chk-nota{display:flex;gap:8px;align-items:flex-start;padding:10px 14px;font-size:10px;color:#64748b;font-style:italic;line-height:1.5;background:#f8fafc}
+    .chk-nota{display:flex;gap:8px;align-items:flex-start;padding:10px 14px;font-size:11.5px;color:#64748b;font-style:italic;line-height:1.5;background:#f8fafc}
     .turno-box{display:flex;align-items:flex-start;gap:12px;background:#fffbeb;border:1.5px solid #fcd34d;border-radius:10px;padding:12px 16px;margin-bottom:16px}
     .turno-ico{font-size:18px;flex-shrink:0}
-    .turno-txt{font-size:11px;color:#78350f;line-height:1.5}
+    .turno-txt{font-size:12.5px;color:#78350f;line-height:1.5}
     .anti-box{background:#fdf5f4;border:1.5px solid #f0c9c5;border-radius:10px;padding:14px 18px;margin-bottom:16px}
-    .anti-title{font-size:11px;font-weight:700;color:#c2483b;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px}
-    .anti-txt{font-size:11.5px;color:#334155;line-height:1.5}
+    .anti-title{font-size:12.5px;font-weight:700;color:#c2483b;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px}
+    .anti-txt{font-size:13px;color:#334155;line-height:1.5}
     .nota-box{background:#fffbeb;border:1.5px solid #fcd34d;border-radius:10px;padding:14px 18px;margin-bottom:16px}
-    .nota-title{font-size:11px;font-weight:700;color:#92400e;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px}
-    .nota-txt{font-size:11.5px;color:#334155;line-height:1.5;white-space:pre-wrap}
-    .footer{margin-top:16px;padding-top:10px;border-top:1px solid #e2e8f0;display:flex;align-items:center;justify-content:space-between;font-size:8.5px;color:#94a3b8}
+    .nota-title{font-size:12.5px;font-weight:700;color:#92400e;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px}
+    .nota-txt{font-size:13px;color:#334155;line-height:1.5;white-space:pre-wrap}
+    .footer{margin-top:16px;padding-top:10px;border-top:1px solid #e2e8f0;display:flex;align-items:center;justify-content:space-between;font-size:10px;color:#94a3b8;flex-wrap:wrap;gap:4px}
     .footer-brand{font-weight:700;color:#64748b;letter-spacing:.04em;text-transform:uppercase}
-    .nutri-panel{background:#f5f3ff;border:1.5px solid #ddd6fe;border-radius:10px;padding:14px 16px;margin-bottom:16px}
-    .nutri-hdr2{font-size:11px;font-weight:700;color:#6d28d9;text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px}
-    .nutri-datos{font-size:10.5px;color:#64748b;margin-bottom:8px}
-    .nutri-row{display:flex;justify-content:space-between;gap:10px;font-size:11.5px;color:#334155;padding:5px 0;border-bottom:1px dashed #e2d9fb}
+    .nutri-panel{background:#f6f4fa;border:1.5px solid #d9d2ea;border-radius:10px;padding:14px 16px;margin-bottom:16px}
+    .nutri-hdr2{font-size:12.5px;font-weight:700;color:#5b4b8a;text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px}
+    .nutri-datos{font-size:12px;color:#64748b;margin-bottom:8px}
+    .nutri-row{display:flex;justify-content:space-between;gap:10px;font-size:13px;color:#334155;padding:5px 0;border-bottom:1px dashed #e2d9fb}
     .nutri-row:last-of-type{border-bottom:none}
     .nutri-row b{color:#0c4a6e}
-    .nutri-nota2{font-size:9.5px;color:#8b5cf6;font-style:italic;margin-top:8px}
-    .nutri-empty{font-size:11px;color:#94a3b8}
-    .antro-table{width:100%;border-collapse:collapse;font-size:10.5px;margin-top:4px}
-    .antro-table th,.antro-table td{border:1px solid #e2e8f0;padding:5px 8px;text-align:center}
-    .antro-table th{background:#ede9fe;color:#6d28d9;font-weight:700}
+    .nutri-nota2{font-size:11px;color:#8677b3;font-style:italic;margin-top:8px}
+    .nutri-empty{font-size:12.5px;color:#94a3b8}
+    .antro-table{width:100%;border-collapse:collapse;font-size:12.5px;margin-top:4px}
+    .antro-table th,.antro-table td{border:1px solid #e2e8f0;padding:6px 8px;text-align:center}
+    .antro-table th{background:#eae5f2;color:#5b4b8a;font-weight:700}
     .antro-table td:first-child{text-align:left;font-weight:600;color:#334155;background:#faf9ff}
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
     @media print{body{background:white}@page{margin:8mm 10mm;size:A4}.rh,.chk-hdr,.nutri-hdr2,.antro-table th{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+    @media (max-width:520px){
+      .rh,.pac-bar,.prof-strip,.body{padding-left:18px;padding-right:18px}
+      .info-grid{grid-template-columns:repeat(2,1fr)}
+      body{font-size:15px}
+    }
   `;
 
   const tituloTrat = esBar ? 'Adiposidad — Tratamiento Bariátrico' : 'Adiposidad — Tratamiento Farmacológico';
@@ -16606,6 +16691,115 @@ function _lipSeccionGeneral(d) {
     ${simHtml}`;
 }
 
+// Misma lógica de cálculo que _lipSeccionGeneral (mismo tablero, misma
+// simulación de riesgo) — solo cambia el texto de bienvenida, que acá habla
+// en términos genéricos de salud cardiometabólica en lugar de enfocarse en
+// el control lipídico. Se usa para la tarjeta "Evaluación general" de la
+// solapa Cardiometabólico.
+function _cardioSeccionGeneral(d) {
+  if(!d) return '<div class="obe-empty">Todavía no hay datos suficientes cargados en Evolucionar para armar el tablero de riesgo cardiometabólico.</div>';
+
+  const cinturaMeta = dbtCinturaMeta(d.sexo), cinturaPeor = dbtCinturaPeor(d.sexo);
+  const riesgoCV = dbtClasificarRiesgoCV(d);
+  const metasLip = DBT_METAS_LIP_POR_RIESGO[riesgoCV.cat] || DBT_METAS_LIP_POR_RIESGO.sin_dato;
+  const pLDL  = dbtParametro('LDL_MH', d.lab.LDL_MH.previo?.valor, d.lab.LDL_MH.actual?.valor, 'menor', metasLip.ldl, metasLip.ldl+120, 'mg/dL', 'Colesterol LDL');
+  const pTA   = d.taActual ? dbtParametro('TAS', d.taPrevio?d.taPrevio.s:null, d.taActual.s, 'menor') : null;
+  const pHbA1c= dbtParametro('HbA1c', d.lab.HbA1c.previo?.valor, d.lab.HbA1c.actual?.valor, 'menor');
+  const pGV   = dbtParametro('GrasaVisceral', d.ant.GrasaVisceral.previo?.valor, d.ant.GrasaVisceral.actual?.valor, 'menor');
+  const pCint = dbtParametro('Cintura', d.ant.Cintura.previo?.valor, d.ant.Cintura.actual?.valor, 'menor', cinturaMeta, cinturaPeor, 'cm', 'tu perímetro de cintura');
+  const metaFza = dbtMetaFuerzaPresion(d.sexo);
+  const pFuerza = d.ant.FuerzaPresion.actual ? dbtParametro('FuerzaPresion', d.ant.FuerzaPresion.previo?.valor, d.ant.FuerzaPresion.actual?.valor, 'mayor', metaFza.meta, metaFza.peor, 'kg', 'Fuerza de prensión (sarcopenia)') : null;
+
+  const rango4 = { en_meta:0, cerca:1, oportunidad:2, sin_dato:-1 };
+  const pillarEstado = (...ps) => { const v = ps.filter(x=>x && x.estado!=='sin_dato'); if(!v.length) return 'sin_dato'; return v.reduce((peor,x)=> rango4[x.estado]>rango4[peor] ? x.estado : peor, 'en_meta'); };
+  const taStage        = obeClasificarTA(d.taActual);
+  const estComposicion = pillarEstado(pGV, pCint, pFuerza);
+
+  let estHepatico = 'sin_dato', hepTxt = '';
+  try {
+    if(typeof estDatos !== 'undefined' && estDatos?.columnas?.length) {
+      const fi = EST_FILAS.findIndex(f=>f.key==='ecoabd_Est');
+      if(fi>=0) {
+        for(let ci = estDatos.columnas.length-1; ci>=0; ci--) {
+          const v = (estDatos.filas[fi]||[])[ci];
+          if(v) { hepTxt = String(v); break; }
+        }
+      }
+    }
+  } catch(e) {}
+  if(hepTxt) {
+    const low = hepTxt.toLowerCase();
+    estHepatico = /severa|avanzad|cirrosis/.test(low) ? 'oportunidad' : /leve|moderad|grado i\b/.test(low) ? 'cerca' : /no|ausente|normal|negativ/.test(low) ? 'en_meta' : 'cerca';
+  }
+
+  const metaGlu   = dbtMetaGlucemia();
+  const pGlucemia = dbtParametro('Glucemia', d.lab.Glucemia.previo?.valor, d.lab.Glucemia.actual?.valor, 'menor', metaGlu, 260, 'mg/dL', 'Glucemia en ayunas');
+  const pTG       = dbtParametro('TG', d.lab.TG.previo?.valor, d.lab.TG.actual?.valor, 'menor');
+  const pApoB     = dbtParametro('ApoB', d.lab.ApoB.previo?.valor, d.lab.ApoB.actual?.valor, 'menor', metasLip.apoB, metasLip.apoB+60, 'mg/dL', 'ApoB');
+  const metaHDL   = d.sexo==='F' ? 50 : 40;
+  const pHDL      = d.lab.HDL.actual ? dbtParametro('HDL', d.lab.HDL.previo?.valor, d.lab.HDL.actual?.valor, 'mayor', metaHDL, 20, 'mg/dL', 'Colesterol HDL') : null;
+  const pTGP      = dbtParametro('TGP', d.lab.TGP.previo?.valor, d.lab.TGP.actual?.valor, 'menor', 40, 120, 'U/L', 'TGP (ALT)');
+  const lpaSerie  = (labDatos.lpa||[]).filter(e=>e && e.valor!=='' && e.valor!=null);
+  const lpaActualE= lpaSerie.length ? lpaSerie[lpaSerie.length-1] : null;
+  const lpaPrevE  = lpaSerie.length>=2 ? lpaSerie[lpaSerie.length-2] : null;
+  let pLpa = null;
+  if(lpaActualE) {
+    const esNmol = (lpaActualE.unidad||'mg/dL')==='nmol/L';
+    pLpa = dbtParametro('Lpa', lpaPrevE?parseFloat(lpaPrevE.valor):null, parseFloat(lpaActualE.valor), 'menor',
+      esNmol?75:30, esNmol?300:150, lpaActualE.unidad||'mg/dL', 'Lp(a)');
+  }
+  const estMetabolico = pillarEstado(pGlucemia, pHbA1c, pApoB, pLpa, pTGP, pTG, pLDL, pHDL, { estado: estHepatico });
+  const metNotaItems = [
+    pApoB.estado!=='sin_dato' && pApoB.estado!=='en_meta' ? 'ApoB' : null,
+    pLpa && pLpa.estado!=='sin_dato' && pLpa.estado!=='en_meta' ? 'Lp(a)' : null,
+    pTG.estado!=='sin_dato' && pTG.estado!=='en_meta' ? 'Triglicéridos' : null,
+    pLDL.estado!=='sin_dato' && pLDL.estado!=='en_meta' ? 'LDL' : null,
+    pHDL && pHDL.estado!=='sin_dato' && pHDL.estado!=='en_meta' ? 'HDL' : null,
+    pTGP.estado!=='sin_dato' && pTGP.estado!=='en_meta' ? 'TGP' : null,
+    pGlucemia.estado!=='sin_dato' && pGlucemia.estado!=='en_meta' ? 'Glucemia' : null,
+    pHbA1c.estado!=='sin_dato' && pHbA1c.estado!=='en_meta' ? 'HbA1c' : null,
+    estHepatico!=='sin_dato' && estHepatico!=='en_meta' ? 'Esteatosis hepática' : null,
+  ].filter(Boolean);
+  const metNotaBase = metNotaItems.length ? 'A trabajar: '+metNotaItems.join(', ') : (estMetabolico==='en_meta' ? 'Todos los parámetros evaluados en meta' : '');
+  const riesgoTxt = riesgoCV.cat!=='sin_dato' ? `Riesgo CV: ${riesgoCV.label}${riesgoCV.detalle?' ('+riesgoCV.detalle+')':''} — meta LDL &lt;${metasLip.ldl} · ApoB &lt;${metasLip.apoB} mg/dL` : '';
+  const metNotaTxt = [riesgoTxt, metNotaBase].filter(Boolean).join('<br>');
+
+  const badge = est => { const b = DBT_ESTADO_BADGE[est]; return `<span class="obe-badge" style="background:${b.bg};color:${b.color}">${b.emoji} ${b.label}</span>`; };
+  const tablero = `
+    <div class="obe-tablero">
+      <div class="obe-tablero-item"><span class="obe-tablero-lbl">🧈 Perfil lipídico y metabólico</span>${badge(estMetabolico)}${metNotaTxt?`<div class="obe-tablero-nota">${metNotaTxt}</div>`:''}</div>
+      <div class="obe-tablero-item"><span class="obe-tablero-lbl">🛡️ Riesgo cardiovascular global</span><span class="obe-badge" style="background:${DBT_RIESGO_CV_BADGE[riesgoCV.cat].bg};color:${DBT_RIESGO_CV_BADGE[riesgoCV.cat].color}">${DBT_RIESGO_CV_BADGE[riesgoCV.cat].emoji} ${riesgoCV.label}</span>${riesgoCV.cat!=='sin_dato'?`<div class="obe-tablero-nota">${riesgoCV.fuente==='score'?'Score a 10 años: '+riesgoCV.detalle:riesgoCV.detalle}</div>`:'<div class="obe-tablero-nota">Faltan datos para calcular el riesgo (score o diagnósticos cargados)</div>'}</div>
+      <div class="obe-tablero-item"><span class="obe-tablero-lbl">❤️ Evaluación de presión arterial</span><span class="obe-badge" style="background:${taStage.bg};color:${taStage.color}">${taStage.emoji} ${taStage.label}</span>${d.taActual?`<div class="obe-tablero-nota">${d.taActual.s}/${d.taActual.d} mmHg — promedio de la última toma${d.taActual.fecha?' ('+d.taActual.fecha+')':''}</div>`:''}</div>
+      <div class="obe-tablero-item"><span class="obe-tablero-lbl">📐 Composición corporal</span>${badge(estComposicion)}${pFuerza?`<div class="obe-tablero-nota">Fuerza de prensión: ${dbtFmt(pFuerza.actual)} kg (meta ${d.sexo==='F'?'≥16':'≥27'} kg)</div>`:'<div class="obe-tablero-nota">Sin fuerza de prensión cargada — clave para evaluar sarcopenia</div>'}</div>
+    </div>`;
+
+  let simHtml;
+  if(d.riesgoActual != null && d.riesgoMeta != null) {
+    const ESCALA = 30;
+    const pctActualBar = Math.max(4, Math.min(100, Math.round(d.riesgoActual/ESCALA*100)));
+    const pctMetaBar = Math.max(4, Math.min(100, Math.round(d.riesgoMeta/ESCALA*100)));
+    const colorPct = pct => pct<5?'#16a34a':pct<7.5?'#ca8a04':pct<20?'#ea580c':'#dc2626';
+    const reduccion = Math.max(0, Math.round((d.riesgoActual - d.riesgoMeta)*10)/10);
+    simHtml = `
+    <div class="sim-box">
+      <div class="sim-title">🛡️ Tu margen de protección</div>
+      <p>Comparando tu riesgo cardiovascular estimado a 10 años con tus valores actuales frente al escenario donde alcanzás tus metas de colesterol, presión arterial y estilo de vida:</p>
+      <div class="sim-bar-row"><span class="sim-bar-lbl">Carga cardiometabólica actual</span>${dbtBarraHTML(pctActualBar, colorPct(d.riesgoActual))}<b style="color:${colorPct(d.riesgoActual)}">${d.riesgoActual}%</b></div>
+      <div class="sim-bar-row"><span class="sim-bar-lbl">Riesgo proyectado a metas</span>${dbtBarraHTML(pctMetaBar, colorPct(d.riesgoMeta))}<b style="color:${colorPct(d.riesgoMeta)}">${d.riesgoMeta}%</b></div>
+      <p><b>Alcanzar tus metas de LDL y presión arterial podría reducir tu riesgo estimado en hasta ${reduccion} puntos porcentuales</b>, protegiendo tus arterias y sumando años de vida cardiovascular saludable.</p>
+    </div>`;
+  } else {
+    simHtml = `<div class="sim-box"><div class="sim-title">🛡️ Tu margen de protección</div><p>A medida que se completen más controles (presión arterial, colesterol y función renal) vamos a poder simular acá tu beneficio futuro.</p></div>`;
+  }
+
+  return `
+    <div class="obe-welcome">Hola${d.p?.nombre?', '+d.p.nombre:''} 👋<br><br>Este informe reúne una <b>evaluación cardiometabólica</b> completa: cómo está tu corazón, tus arterias, tu metabolismo y tu composición corporal en conjunto — más allá de un valor de laboratorio aislado.</div>
+    <h2 class="obe-sec">🛡️ Tablero de riesgo cardiometabólico</h2>
+    ${tablero}
+    <h2 class="obe-sec">🛡️ Simulación de beneficio futuro</h2>
+    ${simHtml}`;
+}
+
 // ── SECCIÓN 2: Objetivos nutricionales para dislipemia ──
 // A diferencia de Adiposidad (que estima requerimiento calórico/proteico para
 // descenso de peso), acá el foco es la composición de la dieta: grasas,
@@ -16681,7 +16875,7 @@ function _lipSeccionActividad(d) {
       <div class="nutri-row"><span>💪 Fuerza muscular</span><b>${tieneFuerza?'En curso ('+diasFuerza+' días/sem)':'Meta: 2–3 sesiones/semana'}</b></div>
       <div class="nutri-row"><span>🚶 Entrenamiento cardiovascular</span><b>Meta: ≥150 min/semana (equivalente moderado)</b></div>
       <div class="nutri-row"><span>👣 Pasos diarios</span><b>Meta orientativa: 8.000–10.000 pasos/día</b></div>
-      ${detalle ? `<div style="margin-top:10px"><div style="font-size:10.5px;font-weight:700;color:#6d28d9;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Actividad reportada actualmente</div><ul style="margin:0 0 0 16px;font-size:11.5px;color:#334155;line-height:1.7">${detalle}</ul></div>` : '<div class="nutri-empty" style="margin-top:8px">Todavía no hay actividad física reportada por el paciente.</div>'}
+      ${detalle ? `<div style="margin-top:10px"><div style="font-size:12.5px;font-weight:700;color:#5b4b8a;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Actividad reportada actualmente</div><ul style="margin:0 0 0 16px;font-size:13px;color:#334155;line-height:1.7">${detalle}</ul></div>` : '<div class="nutri-empty" style="margin-top:8px">Todavía no hay actividad física reportada por el paciente.</div>'}
       <div style="margin-top:10px">
         <div class="nutri-datos">Capacidad funcional actual vs. meta semanal</div>
         ${dbtBarraHTML(pctFuncional, colorFuncional)}
@@ -16734,55 +16928,61 @@ function _lipGenerarHTMLInforme(opts) {
   const estilos = `
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
     *{box-sizing:border-box;margin:0;padding:0}
-    body{font-family:'Inter',sans-serif;font-size:12px;color:#1e293b;background:#f8fafc;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-    .report-header{background:linear-gradient(135deg,#0c4a6e 0%,#1e3a5f 55%,#312e81 100%);color:white;padding:26px 34px 22px;display:flex;align-items:center;gap:18px}
+    body{font-family:'Inter',sans-serif;font-size:14.5px;line-height:1.5;color:#1e293b;background:#f8fafc;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    .report-header{background:linear-gradient(135deg,#0c4a6e 0%,#1e3a5f 55%,#312e81 100%);color:white;padding:26px 34px 22px;display:flex;align-items:center;gap:18px;flex-wrap:wrap}
     .logo-circle{width:52px;height:52px;border-radius:50%;background:rgba(255,255,255,.15);border:2px solid rgba(255,255,255,.3);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:24px}
-    .header-title{font-size:21px;font-weight:800}
-    .header-sub{font-size:11px;color:rgba(255,255,255,.75);margin-top:3px;text-transform:uppercase;letter-spacing:.05em}
-    .header-fecha{margin-left:auto;text-align:right;font-size:10px;color:rgba(255,255,255,.65)}
-    .header-fecha strong{display:block;font-size:12px;color:white}
+    .header-title{font-size:22px;font-weight:800}
+    .header-sub{font-size:12px;color:rgba(255,255,255,.75);margin-top:3px;text-transform:uppercase;letter-spacing:.05em}
+    .header-fecha{margin-left:auto;text-align:right;font-size:11.5px;color:rgba(255,255,255,.65)}
+    .header-fecha strong{display:block;font-size:13px;color:white}
     .paciente-bar{background:white;border-bottom:3px solid #0c4a6e;padding:14px 34px;display:flex;gap:26px;flex-wrap:wrap}
-    .pac-chip-label{font-size:8.5px;font-weight:700;text-transform:uppercase;color:#94a3b8}
-    .pac-chip-val{font-size:13px;font-weight:700;color:#0c4a6e}
-    .body-wrap{padding:22px 34px 30px;max-width:960px;margin:0 auto}
-    .obe-welcome{background:#f0f9ff;border:1.5px solid #bae6fd;border-radius:14px;padding:16px 20px;font-size:12.5px;line-height:1.7;color:#0c4a6e;margin-bottom:20px}
+    .pac-chip-label{font-size:10px;font-weight:700;text-transform:uppercase;color:#94a3b8}
+    .pac-chip-val{font-size:14.5px;font-weight:700;color:#0c4a6e}
+    .body-wrap{padding:22px 24px 30px;max-width:960px;margin:0 auto}
+    .obe-welcome{background:#f0f9ff;border:1.5px solid #bae6fd;border-radius:14px;padding:16px 20px;font-size:14px;line-height:1.7;color:#0c4a6e;margin-bottom:20px}
     .obe-welcome b{color:#0369a1}
-    h2.obe-sec{font-size:14px;font-weight:800;color:#0c4a6e;margin:22px 0 10px;display:flex;align-items:center;gap:6px}
-    table{border-collapse:collapse;width:100%;font-size:10.5px;background:white;border-radius:10px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.06)}
-    th{background:#0c4a6e;color:white;padding:8px 8px;font-size:9px;text-transform:uppercase;letter-spacing:.03em}
+    h2.obe-sec{font-size:16px;font-weight:800;color:#0c4a6e;margin:22px 0 10px;display:flex;align-items:center;gap:6px}
+    table{border-collapse:collapse;width:100%;font-size:13px;background:white;border-radius:10px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.06)}
+    th{background:#0c4a6e;color:white;padding:8px 8px;font-size:11px;text-transform:uppercase;letter-spacing:.03em}
     th:first-child{text-align:left}
-    td{padding:7px 8px;text-align:center;border-bottom:1px solid #f1f5f9}
+    td{padding:8px 8px;text-align:center;border-bottom:1px solid #f1f5f9}
     td.row-label{text-align:left;font-weight:600;color:#0c4a6e;background:#f8fafc}
-    .pill{display:inline-block;padding:2px 8px;border-radius:20px;font-size:9.5px;font-weight:700;white-space:nowrap}
+    .pill{display:inline-block;padding:3px 9px;border-radius:20px;font-size:11px;font-weight:700;white-space:nowrap}
     .obe-tablero{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:6px}
     .obe-tablero-item{background:white;border:1px solid #e2e8f0;border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:6px}
-    .obe-tablero-lbl{font-size:11px;font-weight:700;color:#334155}
-    .obe-badge{display:inline-block;padding:3px 10px;border-radius:20px;font-size:10.5px;font-weight:700;width:fit-content}
-    .obe-tablero-nota{font-size:9.5px;color:#64748b;font-style:italic}
-    .obe-msg{font-size:11px;color:#475569;line-height:1.6;margin-top:8px}
+    .obe-tablero-lbl{font-size:12.5px;font-weight:700;color:#334155}
+    .obe-badge{display:inline-block;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:700;width:fit-content}
+    .obe-tablero-nota{font-size:11px;color:#64748b;font-style:italic}
+    .obe-msg{font-size:12.5px;color:#475569;line-height:1.6;margin-top:8px}
     .sim-box{background:linear-gradient(135deg,#f0f9ff,#ecfeff);border:1.5px solid #bae6fd;border-radius:14px;padding:18px 20px}
-    .sim-title{font-size:13.5px;font-weight:800;color:#0c4a6e;margin-bottom:8px}
-    .sim-box p{font-size:11.5px;color:#0c4a6e;line-height:1.6;margin:8px 0}
-    .sim-bar-row{display:grid;grid-template-columns:170px 1fr 50px;align-items:center;gap:10px;margin:8px 0;font-size:11px;color:#0c4a6e}
+    .sim-title{font-size:15px;font-weight:800;color:#0c4a6e;margin-bottom:8px}
+    .sim-box p{font-size:13px;color:#0c4a6e;line-height:1.6;margin:8px 0}
+    .sim-bar-row{display:grid;grid-template-columns:150px 1fr 50px;align-items:center;gap:10px;margin:8px 0;font-size:12.5px;color:#0c4a6e}
     .sim-bar-lbl{font-weight:600}
-    .nutri-panel{background:#f5f3ff;border:1.5px solid #ddd6fe;border-radius:10px;padding:14px 16px}
-    .nutri-hdr2{font-size:11px;font-weight:700;color:#6d28d9;text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px}
-    .nutri-datos{font-size:10.5px;color:#64748b;margin-bottom:8px}
-    .nutri-row{display:flex;justify-content:space-between;gap:10px;font-size:11.5px;color:#334155;padding:5px 0;border-bottom:1px dashed #e2d9fb}
+    .nutri-panel{background:#f6f4fa;border:1.5px solid #d9d2ea;border-radius:10px;padding:14px 16px}
+    .nutri-hdr2{font-size:12.5px;font-weight:700;color:#5b4b8a;text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px}
+    .nutri-datos{font-size:12px;color:#64748b;margin-bottom:8px}
+    .nutri-row{display:flex;justify-content:space-between;gap:10px;font-size:13px;color:#334155;padding:5px 0;border-bottom:1px dashed #e2d9fb}
     .nutri-row:last-of-type{border-bottom:none}
     .nutri-row b{color:#0c4a6e}
-    .nutri-nota2{font-size:9.5px;color:#8b5cf6;font-style:italic;margin-top:8px}
-    .nutri-empty{font-size:11px;color:#94a3b8}
+    .nutri-nota2{font-size:11px;color:#8677b3;font-style:italic;margin-top:8px}
+    .nutri-empty{font-size:12.5px;color:#94a3b8}
     .commit-box{background:white;border:1.5px solid #e2e8f0;border-radius:14px;padding:16px 20px}
-    .commit-box li{font-size:11.5px;line-height:1.8;margin-left:18px;color:#334155}
-    .closing{text-align:center;font-size:13px;font-weight:700;color:#0c4a6e;background:#f0f9ff;border:1.5px solid #bae6fd;border-radius:12px;padding:14px;margin-top:20px}
-    .obe-empty{font-size:11.5px;color:#94a3b8;background:white;border:1px solid #e2e8f0;border-radius:10px;padding:14px}
+    .commit-box li{font-size:13px;line-height:1.8;margin-left:18px;color:#334155}
+    .closing{text-align:center;font-size:14.5px;font-weight:700;color:#0c4a6e;background:#f0f9ff;border:1.5px solid #bae6fd;border-radius:12px;padding:14px;margin-top:20px}
+    .obe-empty{font-size:13px;color:#94a3b8;background:white;border:1px solid #e2e8f0;border-radius:10px;padding:14px}
     .obe-aviso{display:flex;gap:10px;align-items:flex-start;background:#fffbeb;border:1.5px solid #fcd34d;border-radius:12px;padding:12px 16px;margin-top:10px}
     .obe-aviso-ico{font-size:16px;flex-shrink:0}
-    .obe-aviso-txt{font-size:11px;color:#78350f;line-height:1.6}
+    .obe-aviso-txt{font-size:12.5px;color:#78350f;line-height:1.6}
     .obe-aviso-txt b{color:#92400e}
-    .report-footer{margin-top:20px;padding-top:12px;border-top:1px solid #e2e8f0;display:flex;justify-content:space-between;font-size:8.5px;color:#94a3b8}
+    .report-footer{margin-top:20px;padding-top:12px;border-top:1px solid #e2e8f0;display:flex;justify-content:space-between;font-size:10px;color:#94a3b8;flex-wrap:wrap;gap:4px}
     @media print{ body{background:white} @page{margin:8mm 10mm;size:A4 portrait} }
+    @media (max-width:520px){
+      .report-header,.paciente-bar,.body-wrap{padding-left:18px;padding-right:18px}
+      .obe-tablero{grid-template-columns:1fr}
+      .sim-bar-row{grid-template-columns:1fr;text-align:left}
+      body{font-size:15px}
+    }
   `;
 
   const html = `<!DOCTYPE html><html lang="es-AR"><head><meta charset="UTF-8"/>
@@ -17169,39 +17369,44 @@ function _efcaGenerarHTMLInforme(encuesta, calc) {
 
   const estilos = `
     *{box-sizing:border-box;margin:0;padding:0}
-    body{font-family:'Inter',sans-serif;font-size:11px;color:#1e293b;background:#f8fafc;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-    .rh{background:linear-gradient(135deg,#0c4a6e 0%,#1e3a5f 60%,#312e81 100%);color:white;padding:24px 32px 20px;display:flex;align-items:center;gap:20px}
+    body{font-family:'Inter',sans-serif;font-size:14px;line-height:1.5;color:#1e293b;background:#f8fafc;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    .rh{background:linear-gradient(135deg,#0c4a6e 0%,#1e3a5f 60%,#312e81 100%);color:white;padding:24px 32px 20px;display:flex;align-items:center;gap:20px;flex-wrap:wrap}
     .rh-ico{width:52px;height:52px;border-radius:50%;background:rgba(255,255,255,.15);border:2px solid rgba(255,255,255,.3);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:22px}
-    .rh-txt{flex:1}
-    .rh-title{font-size:20px;font-weight:800;letter-spacing:.02em;line-height:1.1}
-    .rh-sub{font-size:11px;color:rgba(255,255,255,.7);margin-top:3px;letter-spacing:.04em;text-transform:uppercase}
-    .rh-fecha{text-align:right;font-size:10px;color:rgba(255,255,255,.6);line-height:1.7}
-    .rh-fecha strong{display:block;font-size:12px;color:rgba(255,255,255,.9);font-weight:600}
+    .rh-txt{flex:1;min-width:180px}
+    .rh-title{font-size:20px;font-weight:800;letter-spacing:.02em;line-height:1.2}
+    .rh-sub{font-size:12px;color:rgba(255,255,255,.7);margin-top:3px;letter-spacing:.04em;text-transform:uppercase}
+    .rh-fecha{text-align:right;font-size:11.5px;color:rgba(255,255,255,.6);line-height:1.7}
+    .rh-fecha strong{display:block;font-size:13px;color:rgba(255,255,255,.9);font-weight:600}
     .pac-bar{background:white;border-bottom:3px solid #0c4a6e;padding:14px 32px;display:flex;align-items:center;gap:24px;flex-wrap:wrap}
     .pac-chip{display:flex;flex-direction:column}
-    .pac-lbl{font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#94a3b8;margin-bottom:2px}
-    .pac-val{font-size:13px;font-weight:700;color:#0c4a6e}
+    .pac-lbl{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#94a3b8;margin-bottom:2px}
+    .pac-val{font-size:14px;font-weight:700;color:#0c4a6e}
     .pac-div{width:1px;height:32px;background:#e2e8f0;flex-shrink:0}
-    .prof-strip{background:#f0f9ff;border-left:4px solid #0369a1;padding:10px 32px;display:flex;align-items:center;gap:10px;font-size:10.5px}
-    .prof-name{font-weight:700;color:#0c4a6e;font-size:11.5px}
+    .prof-strip{background:#f0f9ff;border-left:4px solid #0369a1;padding:10px 32px;display:flex;align-items:center;gap:10px;font-size:12px;flex-wrap:wrap}
+    .prof-name{font-weight:700;color:#0c4a6e;font-size:13px}
     .prof-sep{color:#bae6fd;font-size:14px}
     .prof-mp{color:#0369a1;font-weight:600}
     .prof-esp{color:#64748b;font-style:italic}
     .body{padding:20px 32px 28px}
-    .total-box{background:#0c4a6e;color:white;border-radius:10px;padding:14px 18px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between}
-    .total-lbl{font-size:9px;text-transform:uppercase;letter-spacing:.06em;opacity:.75}
-    .total-val{font-size:20px;font-weight:800}
-    .predom-box{background:#e8f3fc;border:1.5px solid #3089ca;border-radius:10px;padding:12px 16px;margin-bottom:16px;font-size:11.5px;color:#0c4a6e;font-weight:600}
+    .total-box{background:#0c4a6e;color:white;border-radius:10px;padding:14px 18px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px}
+    .total-lbl{font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;opacity:.75}
+    .total-val{font-size:21px;font-weight:800}
+    .predom-box{background:#e8f3fc;border:1.5px solid #3089ca;border-radius:10px;padding:12px 16px;margin-bottom:16px;font-size:13px;color:#0c4a6e;font-weight:600}
     .efca-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:16px}
     .efca-card{border:1.5px solid #e2e8f0;border-radius:10px;padding:10px 14px}
-    .efca-card-lbl{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#64748b}
-    .efca-card-val{font-size:15px;font-weight:800;margin:3px 0}
-    .efca-card-desc{font-size:9.5px;color:#64748b;line-height:1.4}
-    .footer{margin-top:16px;padding-top:10px;border-top:1px solid #e2e8f0;display:flex;align-items:center;justify-content:space-between;font-size:8.5px;color:#94a3b8}
+    .efca-card-lbl{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#64748b}
+    .efca-card-val{font-size:17px;font-weight:800;margin:3px 0}
+    .efca-card-desc{font-size:11px;color:#64748b;line-height:1.4}
+    .footer{margin-top:16px;padding-top:10px;border-top:1px solid #e2e8f0;display:flex;align-items:center;justify-content:space-between;font-size:10px;color:#94a3b8;flex-wrap:wrap;gap:4px}
     .footer-brand{font-weight:700;color:#64748b;letter-spacing:.04em;text-transform:uppercase}
-    .biblio{font-size:8.5px;color:#94a3b8;font-style:italic;margin-top:10px;line-height:1.4}
+    .biblio{font-size:10px;color:#94a3b8;font-style:italic;margin-top:10px;line-height:1.4}
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
     @media print{body{background:white}@page{margin:8mm 10mm;size:A4}.rh,.total-box{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+    @media (max-width:520px){
+      .rh,.pac-bar,.prof-strip,.body{padding-left:18px;padding-right:18px}
+      .efca-grid{grid-template-columns:1fr}
+      body{font-size:15px}
+    }
   `;
 
   const cuerpo = `
@@ -17238,6 +17443,282 @@ ${profNombre ? `<div class="prof-strip"><span class="prof-name">${profNombre}</s
 }
 
 // ── fin EFCA ──
+
+// ══════════════════════════════════════════════════════════════════
+// SOLAPA CARDIOMETABÓLICA — resumen conjunto de Adiposidad, Lípidos y
+// Diabetes. No recalcula nada por su cuenta: reutiliza los mismos datos y
+// bloques de informe ya validados en cada módulo (_dbtData, _lipSeccion*,
+// _obeSeccionAntro, EFCA) para que el resumen y el informe combinado nunca
+// queden desincronizados de lo que se ve en cada solapa individual.
+// ══════════════════════════════════════════════════════════════════
+
+async function cardioIniciar(dni) {
+  const cont = document.getElementById('cardio_cards_grid');
+  if(cont) cont.innerHTML = '<div class="obe-empty">Cargando…</div>';
+  try { if(typeof dbtIniciar === 'function') await dbtIniciar(dni); } catch(e) { console.warn('cardioIniciar/dbt:', e); }
+  try { if(typeof adipIniciar === 'function') await adipIniciar(dni); } catch(e) { console.warn('cardioIniciar/adip:', e); }
+  try { if(typeof efcaIniciar === 'function') await efcaIniciar(dni); } catch(e) { console.warn('cardioIniciar/efca:', e); }
+  // Preselecciona el tratamiento más reciente (si hay) para que la tarjeta
+  // "Tratamiento" pueda abrir directamente su modal de opciones de informe.
+  if(typeof adipTratamientos !== 'undefined' && adipTratamientos.length) adipIdx = 0;
+  cardioRenderCards();
+}
+
+function cardioAbrirTratamientoAdip() {
+  if(!(typeof adipTratamientos !== 'undefined' && adipTratamientos.length)) {
+    alert('Este paciente todavía no tiene un tratamiento de adiposidad cargado. Cargalo desde la solapa Adiposidad.');
+    return;
+  }
+  if(adipIdx < 0) adipIdx = 0;
+  adipAbrirOpcionesInforme();
+}
+
+// Arma la grilla de tarjetas de la solapa Cardiometabólico — una por cada
+// pieza de informe disponible, agrupadas por área. Cada tarjeta dispara el
+// generador propio de esa área (obe/lip/dbt), así el informe resultante
+// queda personalizado: el general habla de cardiometabolismo, el de
+// Adiposidad habla de adiposidad, el de Lípidos habla de lípidos, etc. La
+// actividad física se muestra una sola vez (es el mismo contenido en
+// Adiposidad y Lípidos, no tiene sentido duplicarla).
+function cardioRenderCards() {
+  const cont = document.getElementById('cardio_cards_grid');
+  if(!cont) return;
+  const hayTrat = !!(typeof adipTratamientos !== 'undefined' && adipTratamientos.length);
+  const hayEfca = !!(typeof efcaEncuestas !== 'undefined' && efcaEncuestas.length);
+
+  const grupo = (titulo, cardsHTML) => `
+    <div style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--text-soft);margin:0 0 8px">${titulo}</div>
+    <div class="adip-blocks-row" style="margin-bottom:22px">${cardsHTML}</div>`;
+
+  const card = (icon, titulo, sub, onclick) => `
+    <div class="adip-block" onclick="${onclick}">
+      <span class="adip-block-icon">${icon}</span>
+      <span class="adip-block-title">${titulo}</span>
+      <span class="adip-block-sub">${sub}</span>
+    </div>`;
+
+  const cardGeneral =
+    card('🛡️', 'Evaluación general', 'Riesgo cardiometabólico', "cardioImprimirInforme({general:true},this)") +
+    card('📏', 'Antropometría', 'Composición corporal', "cardioImprimirInforme({antro:true},this)") +
+    card('🏃', 'Actividad física', 'Informe para el paciente', "cardioImprimirInforme({actividad:true},this)") +
+    card('🧾', 'Informe combinado', 'Elegís qué incluir', "cardioAbrirOpcionesInforme()");
+
+  const cardAdip =
+    card('🎯', 'Tratamiento', hayTrat ? 'Pauta e indicaciones' : 'Sin tratamiento cargado', "cardioAbrirTratamientoAdip()") +
+    card('🧮', 'Requerimientos nutricionales', 'Informe para el paciente', "obeImprimirInforme({general:false,antro:false,nutri:true,actividad:false},this)") +
+    card('🧭', 'Encuesta EFCA', hayEfca ? 'Ver último resultado' : 'Cargar encuesta', hayEfca ? "efcaAbrirPrevia(0)" : "efcaAbrirNueva()");
+
+  const cardLip =
+    card('🧈', 'Evaluación y metas', 'Riesgo y objetivo LDL/ApoB', "lipImprimirInforme({general:true,antro:false,nutri:false,actividad:false},this)") +
+    card('🧮', 'Objetivos nutricionales', 'Informe para el paciente', "lipImprimirInforme({general:false,antro:false,nutri:true,actividad:false},this)");
+
+  const cardDbt =
+    card('🩸', 'Informe completo', 'Indicadores, riesgo y compromisos', "dbtImprimirInforme()");
+
+  cont.innerHTML =
+    grupo('General', cardGeneral) +
+    grupo('🎯 Adiposidad', cardAdip) +
+    grupo('🧈 Lípidos', cardLip) +
+    grupo('🩸 Diabetes', cardDbt);
+}
+
+// ── Bloque de tratamiento de adiposidad para el informe combinado ──
+function _cardioSeccionAdiposidad(trat) {
+  if(!trat) return '';
+  const esBar = trat.tipo_tratamiento === 'bariatrica';
+  const fmtF = f => f ? new Date(f+'T12:00:00').toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'}) : '—';
+  return `
+    <h2 class="obe-sec">🎯 Tratamiento de adiposidad</h2>
+    <div class="nutri-panel">
+      <div class="nutri-hdr2">${esBar ? 'Tratamiento bariátrico' : 'Tratamiento farmacológico'}</div>
+      <div class="nutri-row"><span>${esBar?'Tipo de cirugía':'Droga'}</span><b>${esBar?(trat.tipo_cirugia||'—'):(trat.droga||'—')}</b></div>
+      ${!esBar ? `<div class="nutri-row"><span>Dosis</span><b>${trat.dosis||'—'}</b></div>` : ''}
+      <div class="nutri-row"><span>Fecha de inicio</span><b>${fmtF(trat.fecha_inicio)}</b></div>
+      <div class="nutri-row"><span>1er control a partir de</span><b>${fmtF(trat.fecha_control)}</b></div>
+    </div>`;
+}
+
+// ── Bloque de la última encuesta EFCA para el informe combinado ──
+function _cardioSeccionEfca() {
+  if(typeof efcaEncuestas === 'undefined' || !efcaEncuestas.length || typeof efcaCalcular !== 'function') return '';
+  const fmtF = f => f ? new Date(f+'T12:00:00').toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'}) : '—';
+  const enc = efcaEncuestas[0];
+  const calc = efcaCalcular(enc.respuestas || {});
+  const filasSubs = Object.keys(EFCA_SUBS).map(key => {
+    const s = EFCA_SUBS[key];
+    const r = calc.subs[key];
+    return `<div class="nutri-row"><span>${s.icono} ${s.label}</span><b>${r.score} · ${r.nivel.toUpperCase()}</b></div>`;
+  }).join('');
+  const predomTxt = calc.predominantes.length
+    ? calc.predominantes.map(k => EFCA_SUBS[k].icono + ' ' + EFCA_SUBS[k].label).join(' · ')
+    : 'Sin fenotipo predominante marcado';
+  return `
+    <h2 class="obe-sec">🧭 Encuesta de fenotipo alimentario (EFCA) — ${fmtF(enc.fecha)}</h2>
+    <div class="nutri-panel">
+      <div class="nutri-datos">Puntaje total: <b>${calc.total.score} / 80</b> (${calc.total.nivel.toUpperCase()})</div>
+      ${filasSubs}
+      <div class="nutri-nota2">Fenotipo(s) predominante(s): ${predomTxt}</div>
+    </div>`;
+}
+
+function cardioAbrirOpcionesInforme() {
+  if(!pacienteActual) return;
+  const hayTrat = !!(typeof adipTratamientos !== 'undefined' && adipTratamientos.length);
+  const hayEfca = !!(typeof efcaEncuestas !== 'undefined' && efcaEncuestas.length);
+  const chkAdip = document.getElementById('cardio_chk_adip');
+  if(chkAdip) chkAdip.checked = hayTrat;
+  const chkEfca = document.getElementById('cardio_chk_efca');
+  if(chkEfca) chkEfca.checked = hayEfca;
+  const m = document.getElementById('cardio_modal_opciones_informe');
+  if(m) { m.style.display = 'flex'; document.body.style.overflow = 'hidden'; }
+}
+function cardioCerrarOpcionesInforme() {
+  const m = document.getElementById('cardio_modal_opciones_informe');
+  if(m) m.style.display = 'none';
+  document.body.style.overflow = '';
+}
+async function cardioGenerarInformeConOpciones() {
+  const opts = {
+    general:   !!(document.getElementById('cardio_chk_general')||{}).checked,
+    antro:     !!(document.getElementById('cardio_chk_antro')||{}).checked,
+    adip:      !!(document.getElementById('cardio_chk_adip')||{}).checked,
+    reqpeso:   !!(document.getElementById('cardio_chk_reqpeso')||{}).checked,
+    efca:      !!(document.getElementById('cardio_chk_efca')||{}).checked,
+    nutri:     !!(document.getElementById('cardio_chk_nutri')||{}).checked,
+    actividad: !!(document.getElementById('cardio_chk_actividad')||{}).checked,
+    cierre:    !!(document.getElementById('cardio_chk_cierre')||{}).checked,
+  };
+  cardioCerrarOpcionesInforme();
+  await cardioImprimirInforme(opts);
+}
+
+async function cardioImprimirInforme(opts, btnEl) {
+  if(!pacienteActual) return;
+  const textoOriginal = btnEl ? btnEl.textContent : null;
+  if(btnEl) { btnEl.disabled = true; btnEl.textContent = '⏳ Generando…'; }
+  try {
+    if(typeof dbtIniciar === 'function') { try { await dbtIniciar(pacienteActual.dni); } catch(e) { console.warn('cardioImprimirInforme dbtIniciar:', e); } }
+    const html = _cardioGenerarHTMLInforme(opts);
+    const win = window.open('', '_blank', 'width=960,height=800');
+    if(!win) { alert('Bloqueador de popups activo. Permitir para este sitio.'); return; }
+    win.document.write(html);
+    win.document.close();
+    win.focus();
+    setTimeout(() => win.print(), 450);
+  } finally {
+    if(btnEl) { btnEl.disabled = false; btnEl.textContent = textoOriginal; }
+  }
+}
+
+function _cardioGenerarHTMLInforme(opts) {
+  const d = _dbtData;
+  const p = pacienteActual || {};
+  const nombre = ((p.apellido||'') + ', ' + (p.nombre||'')).trim().replace(/^,\s*/,'');
+  const edad = d?.edad != null ? d.edad+' años' : '';
+  const cu = window._cu || (window._su && typeof users !== 'undefined' ? (users[window._su]||{}) : {});
+  const profNombre = cu.name || '', profTitulo = cu.titulo || '', profMP = cu.mp || '';
+  const fechaHoyTxt = new Date().toLocaleDateString('es-AR', {day:'2-digit', month:'long', year:'numeric'});
+  const trat = (typeof adipTratamientos !== 'undefined' && adipTratamientos.length) ? adipTratamientos[0] : null;
+
+  const secciones = [
+    opts.general   ? _cardioSeccionGeneral(d)     : '',
+    opts.antro     ? _obeSeccionAntro(d)          : '',
+    opts.adip      ? _cardioSeccionAdiposidad(trat) : '',
+    opts.reqpeso && typeof _obeSeccionNutri === 'function' ? _obeSeccionNutri(trat) : '',
+    opts.efca      ? _cardioSeccionEfca()         : '',
+    opts.nutri     ? _lipSeccionNutri(d)          : '',
+    opts.actividad ? _lipSeccionActividad(d)      : '',
+    opts.cierre    ? _lipSeccionCierre(d, opts)   : '',
+  ].filter(Boolean).join('');
+
+  // Reutiliza los mismos estilos que ya usan Adiposidad/Lípidos (misma familia de
+  // clases: .nutri-panel, .obe-tablero, .sim-box, .commit-box) para que el
+  // informe combinado se vea consistente con los individuales.
+  const estilos = `
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:'Inter',sans-serif;font-size:14.5px;line-height:1.5;color:#1e293b;background:#f8fafc;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    .report-header{background:linear-gradient(135deg,#0c4a6e 0%,#1e3a5f 55%,#312e81 100%);color:white;padding:26px 34px 22px;display:flex;align-items:center;gap:18px;flex-wrap:wrap}
+    .logo-circle{width:52px;height:52px;border-radius:50%;background:rgba(255,255,255,.15);border:2px solid rgba(255,255,255,.3);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:24px}
+    .header-title{font-size:22px;font-weight:800}
+    .header-sub{font-size:12px;color:rgba(255,255,255,.75);margin-top:3px;text-transform:uppercase;letter-spacing:.05em}
+    .header-fecha{margin-left:auto;text-align:right;font-size:11.5px;color:rgba(255,255,255,.65)}
+    .header-fecha strong{display:block;font-size:13px;color:white}
+    .paciente-bar{background:white;border-bottom:3px solid #0c4a6e;padding:14px 34px;display:flex;gap:26px;flex-wrap:wrap}
+    .pac-chip-label{font-size:10px;font-weight:700;text-transform:uppercase;color:#94a3b8}
+    .pac-chip-val{font-size:14.5px;font-weight:700;color:#0c4a6e}
+    .body-wrap{padding:22px 24px 30px;max-width:960px;margin:0 auto}
+    .obe-welcome{background:#f0f9ff;border:1.5px solid #bae6fd;border-radius:14px;padding:16px 20px;font-size:14px;line-height:1.7;color:#0c4a6e;margin-bottom:20px}
+    .obe-welcome b{color:#0369a1}
+    h2.obe-sec{font-size:16px;font-weight:800;color:#0c4a6e;margin:22px 0 10px;display:flex;align-items:center;gap:6px}
+    table{border-collapse:collapse;width:100%;font-size:13px;background:white;border-radius:10px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.06)}
+    th{background:#0c4a6e;color:white;padding:8px 8px;font-size:11px;text-transform:uppercase;letter-spacing:.03em}
+    th:first-child{text-align:left}
+    td{padding:8px 8px;text-align:center;border-bottom:1px solid #f1f5f9}
+    td.row-label{text-align:left;font-weight:600;color:#0c4a6e;background:#f8fafc}
+    .pill{display:inline-block;padding:3px 9px;border-radius:20px;font-size:11px;font-weight:700;white-space:nowrap}
+    .obe-tablero{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:6px}
+    .obe-tablero-item{background:white;border:1px solid #e2e8f0;border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:6px}
+    .obe-tablero-lbl{font-size:12.5px;font-weight:700;color:#334155}
+    .obe-badge{display:inline-block;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:700;width:fit-content}
+    .obe-tablero-nota{font-size:11px;color:#64748b;font-style:italic}
+    .obe-msg{font-size:12.5px;color:#475569;line-height:1.6;margin-top:8px}
+    .sim-box{background:linear-gradient(135deg,#f0f9ff,#ecfeff);border:1.5px solid #bae6fd;border-radius:14px;padding:18px 20px}
+    .sim-title{font-size:15px;font-weight:800;color:#0c4a6e;margin-bottom:8px}
+    .sim-box p{font-size:13px;color:#0c4a6e;line-height:1.6;margin:8px 0}
+    .sim-bar-row{display:grid;grid-template-columns:150px 1fr 50px;align-items:center;gap:10px;margin:8px 0;font-size:12.5px;color:#0c4a6e}
+    .sim-bar-lbl{font-weight:600}
+    .nutri-panel{background:#f6f4fa;border:1.5px solid #d9d2ea;border-radius:10px;padding:14px 16px;margin-bottom:12px}
+    .nutri-hdr2{font-size:12.5px;font-weight:700;color:#5b4b8a;text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px}
+    .nutri-datos{font-size:12px;color:#64748b;margin-bottom:8px}
+    .nutri-row{display:flex;justify-content:space-between;gap:10px;font-size:13px;color:#334155;padding:5px 0;border-bottom:1px dashed #e2d9fb}
+    .nutri-row:last-of-type{border-bottom:none}
+    .nutri-row b{color:#0c4a6e}
+    .nutri-nota2{font-size:11px;color:#8677b3;font-style:italic;margin-top:8px}
+    .nutri-empty{font-size:12.5px;color:#94a3b8}
+    .commit-box{background:white;border:1.5px solid #e2e8f0;border-radius:14px;padding:16px 20px}
+    .commit-box li{font-size:13px;line-height:1.8;margin-left:18px;color:#334155}
+    .closing{text-align:center;font-size:14.5px;font-weight:700;color:#0c4a6e;background:#f0f9ff;border:1.5px solid #bae6fd;border-radius:12px;padding:14px;margin-top:20px}
+    .obe-empty{font-size:13px;color:#94a3b8;background:white;border:1px solid #e2e8f0;border-radius:10px;padding:14px}
+    .obe-aviso{display:flex;gap:10px;align-items:flex-start;background:#fffbeb;border:1.5px solid #fcd34d;border-radius:12px;padding:12px 16px;margin-top:10px}
+    .obe-aviso-ico{font-size:16px;flex-shrink:0}
+    .obe-aviso-txt{font-size:12.5px;color:#78350f;line-height:1.6}
+    .obe-aviso-txt b{color:#92400e}
+    .antro-table{width:100%;border-collapse:collapse;font-size:12.5px;margin-top:4px}
+    .antro-table th,.antro-table td{border:1px solid #e2e8f0;padding:6px 8px;text-align:center}
+    .antro-table th{background:#eae5f2;color:#5b4b8a;font-weight:700}
+    .antro-table td:first-child{text-align:left;font-weight:600;color:#334155;background:#faf9ff}
+    .report-footer{margin-top:20px;padding-top:12px;border-top:1px solid #e2e8f0;display:flex;justify-content:space-between;font-size:10px;color:#94a3b8;flex-wrap:wrap;gap:4px}
+    @media print{ body{background:white} @page{margin:8mm 10mm;size:A4 portrait} }
+    @media (max-width:520px){
+      .report-header,.paciente-bar,.body-wrap{padding-left:18px;padding-right:18px}
+      .obe-tablero{grid-template-columns:1fr}
+      .sim-bar-row{grid-template-columns:1fr;text-align:left}
+      body{font-size:15px}
+    }
+  `;
+
+  return `<!DOCTYPE html><html lang="es-AR"><head><meta charset="UTF-8"/>
+  <title>Informe Cardiometabólico — ${nombre}</title>
+  <style>${estilos}</style></head><body>
+  <div class="report-header">
+    <div class="logo-circle">🫀</div>
+    <div><div class="header-title">Tu Informe Cardiometabólico</div><div class="header-sub">Adiposidad · Lípidos · Diabetes · Evolucionar</div></div>
+    <div class="header-fecha"><strong>${fechaHoyTxt}</strong>Informe generado para el paciente</div>
+  </div>
+  <div class="paciente-bar">
+    <div><div class="pac-chip-label">Paciente</div><div class="pac-chip-val">${nombre}</div></div>
+    ${edad?`<div><div class="pac-chip-label">Edad</div><div class="pac-chip-val">${edad}</div></div>`:''}
+    ${profNombre?`<div><div class="pac-chip-label">Profesional</div><div class="pac-chip-val">${profTitulo||profNombre}${profMP?' · M.P. '+_soloMP(profMP):''}</div></div>`:''}
+  </div>
+  <div class="body-wrap">
+    ${secciones || '<div class="obe-empty">No se seleccionó ninguna sección para incluir en el informe.</div>'}
+    <div class="report-footer"><span>Evaluaciones Cardiometabólicas · Evolucionar</span><span>Documento educativo para el paciente · No reemplaza la indicación médica</span></div>
+  </div>
+  </body></html>`;
+}
+
+// ── fin CARDIOMETABÓLICO ──
 
 // ══════════════════════════════════════════════════════════════════
 // INFORME DE EVOLUCIÓN — OBESIDAD (informe dinámico y modular para el paciente)
@@ -17598,7 +18079,7 @@ function _obeSeccionActividad(d) {
       <div class="nutri-row"><span>💪 Fuerza muscular</span><b>${tieneFuerza?'En curso ('+diasFuerza+' días/sem)':'Meta: 2–3 sesiones/semana'}</b></div>
       <div class="nutri-row"><span>🚶 Entrenamiento cardiovascular</span><b>Meta: ≥150 min/semana (equivalente moderado)</b></div>
       <div class="nutri-row"><span>👣 Pasos diarios</span><b>Meta orientativa: 8.000–10.000 pasos/día</b></div>
-      ${detalle ? `<div style="margin-top:10px"><div style="font-size:10.5px;font-weight:700;color:#6d28d9;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Actividad reportada actualmente</div><ul style="margin:0 0 0 16px;font-size:11.5px;color:#334155;line-height:1.7">${detalle}</ul></div>` : '<div class="nutri-empty" style="margin-top:8px">Todavía no hay actividad física reportada por el paciente.</div>'}
+      ${detalle ? `<div style="margin-top:10px"><div style="font-size:12.5px;font-weight:700;color:#5b4b8a;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Actividad reportada actualmente</div><ul style="margin:0 0 0 16px;font-size:13px;color:#334155;line-height:1.7">${detalle}</ul></div>` : '<div class="nutri-empty" style="margin-top:8px">Todavía no hay actividad física reportada por el paciente.</div>'}
       <div style="margin-top:10px">
         <div class="nutri-datos">Capacidad funcional actual vs. meta semanal</div>
         ${dbtBarraHTML(pctFuncional, colorFuncional)}
@@ -17650,55 +18131,61 @@ function _obeGenerarHTMLInforme(opts) {
   const estilos = `
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
     *{box-sizing:border-box;margin:0;padding:0}
-    body{font-family:'Inter',sans-serif;font-size:12px;color:#1e293b;background:#f8fafc;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-    .report-header{background:linear-gradient(135deg,#166534 0%,#15803d 55%,#0c4a6e 100%);color:white;padding:26px 34px 22px;display:flex;align-items:center;gap:18px}
+    body{font-family:'Inter',sans-serif;font-size:14.5px;line-height:1.5;color:#1e293b;background:#f8fafc;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    .report-header{background:linear-gradient(135deg,#166534 0%,#15803d 55%,#0c4a6e 100%);color:white;padding:26px 34px 22px;display:flex;align-items:center;gap:18px;flex-wrap:wrap}
     .logo-circle{width:52px;height:52px;border-radius:50%;background:rgba(255,255,255,.15);border:2px solid rgba(255,255,255,.3);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:24px}
-    .header-title{font-size:21px;font-weight:800}
-    .header-sub{font-size:11px;color:rgba(255,255,255,.75);margin-top:3px;text-transform:uppercase;letter-spacing:.05em}
-    .header-fecha{margin-left:auto;text-align:right;font-size:10px;color:rgba(255,255,255,.65)}
-    .header-fecha strong{display:block;font-size:12px;color:white}
+    .header-title{font-size:22px;font-weight:800}
+    .header-sub{font-size:12px;color:rgba(255,255,255,.75);margin-top:3px;text-transform:uppercase;letter-spacing:.05em}
+    .header-fecha{margin-left:auto;text-align:right;font-size:11.5px;color:rgba(255,255,255,.65)}
+    .header-fecha strong{display:block;font-size:13px;color:white}
     .paciente-bar{background:white;border-bottom:3px solid #166534;padding:14px 34px;display:flex;gap:26px;flex-wrap:wrap}
-    .pac-chip-label{font-size:8.5px;font-weight:700;text-transform:uppercase;color:#94a3b8}
-    .pac-chip-val{font-size:13px;font-weight:700;color:#166534}
-    .body-wrap{padding:22px 34px 30px;max-width:960px;margin:0 auto}
-    .obe-welcome{background:#f0fdf4;border:1.5px solid #bbf7d0;border-radius:14px;padding:16px 20px;font-size:12.5px;line-height:1.7;color:#14532d;margin-bottom:20px}
+    .pac-chip-label{font-size:10px;font-weight:700;text-transform:uppercase;color:#94a3b8}
+    .pac-chip-val{font-size:14.5px;font-weight:700;color:#166534}
+    .body-wrap{padding:22px 24px 30px;max-width:960px;margin:0 auto}
+    .obe-welcome{background:#f0fdf4;border:1.5px solid #bbf7d0;border-radius:14px;padding:16px 20px;font-size:14px;line-height:1.7;color:#14532d;margin-bottom:20px}
     .obe-welcome b{color:#166534}
-    h2.obe-sec{font-size:14px;font-weight:800;color:#166534;margin:22px 0 10px;display:flex;align-items:center;gap:6px}
-    table{border-collapse:collapse;width:100%;font-size:10.5px;background:white;border-radius:10px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.06)}
-    th{background:#166534;color:white;padding:8px 8px;font-size:9px;text-transform:uppercase;letter-spacing:.03em}
+    h2.obe-sec{font-size:16px;font-weight:800;color:#166534;margin:22px 0 10px;display:flex;align-items:center;gap:6px}
+    table{border-collapse:collapse;width:100%;font-size:13px;background:white;border-radius:10px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.06)}
+    th{background:#166534;color:white;padding:8px 8px;font-size:11px;text-transform:uppercase;letter-spacing:.03em}
     th:first-child{text-align:left}
-    td{padding:7px 8px;text-align:center;border-bottom:1px solid #f1f5f9}
+    td{padding:8px 8px;text-align:center;border-bottom:1px solid #f1f5f9}
     td.row-label{text-align:left;font-weight:600;color:#166534;background:#f8fafc}
-    .pill{display:inline-block;padding:2px 8px;border-radius:20px;font-size:9.5px;font-weight:700;white-space:nowrap}
+    .pill{display:inline-block;padding:3px 9px;border-radius:20px;font-size:11px;font-weight:700;white-space:nowrap}
     .obe-tablero{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:6px}
     .obe-tablero-item{background:white;border:1px solid #e2e8f0;border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:6px}
-    .obe-tablero-lbl{font-size:11px;font-weight:700;color:#334155}
-    .obe-badge{display:inline-block;padding:3px 10px;border-radius:20px;font-size:10.5px;font-weight:700;width:fit-content}
-    .obe-tablero-nota{font-size:9.5px;color:#64748b;font-style:italic}
-    .obe-msg{font-size:11px;color:#475569;line-height:1.6;margin-top:8px}
+    .obe-tablero-lbl{font-size:12.5px;font-weight:700;color:#334155}
+    .obe-badge{display:inline-block;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:700;width:fit-content}
+    .obe-tablero-nota{font-size:11px;color:#64748b;font-style:italic}
+    .obe-msg{font-size:12.5px;color:#475569;line-height:1.6;margin-top:8px}
     .sim-box{background:linear-gradient(135deg,#f0fdf4,#ecfeff);border:1.5px solid #bbf7d0;border-radius:14px;padding:18px 20px}
-    .sim-title{font-size:13.5px;font-weight:800;color:#166534;margin-bottom:8px}
-    .sim-box p{font-size:11.5px;color:#166534;line-height:1.6;margin:8px 0}
-    .sim-bar-row{display:grid;grid-template-columns:170px 1fr 50px;align-items:center;gap:10px;margin:8px 0;font-size:11px;color:#166534}
+    .sim-title{font-size:15px;font-weight:800;color:#166534;margin-bottom:8px}
+    .sim-box p{font-size:13px;color:#166534;line-height:1.6;margin:8px 0}
+    .sim-bar-row{display:grid;grid-template-columns:150px 1fr 50px;align-items:center;gap:10px;margin:8px 0;font-size:12.5px;color:#166534}
     .sim-bar-lbl{font-weight:600}
-    .nutri-panel{background:#f5f3ff;border:1.5px solid #ddd6fe;border-radius:10px;padding:14px 16px}
-    .nutri-hdr2{font-size:11px;font-weight:700;color:#6d28d9;text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px}
-    .nutri-datos{font-size:10.5px;color:#64748b;margin-bottom:8px}
-    .nutri-row{display:flex;justify-content:space-between;gap:10px;font-size:11.5px;color:#334155;padding:5px 0;border-bottom:1px dashed #e2d9fb}
+    .nutri-panel{background:#f6f4fa;border:1.5px solid #d9d2ea;border-radius:10px;padding:14px 16px}
+    .nutri-hdr2{font-size:12.5px;font-weight:700;color:#5b4b8a;text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px}
+    .nutri-datos{font-size:12px;color:#64748b;margin-bottom:8px}
+    .nutri-row{display:flex;justify-content:space-between;gap:10px;font-size:13px;color:#334155;padding:5px 0;border-bottom:1px dashed #e2d9fb}
     .nutri-row:last-of-type{border-bottom:none}
     .nutri-row b{color:#166534}
-    .nutri-nota2{font-size:9.5px;color:#8b5cf6;font-style:italic;margin-top:8px}
-    .nutri-empty{font-size:11px;color:#94a3b8}
+    .nutri-nota2{font-size:11px;color:#8677b3;font-style:italic;margin-top:8px}
+    .nutri-empty{font-size:12.5px;color:#94a3b8}
     .commit-box{background:white;border:1.5px solid #e2e8f0;border-radius:14px;padding:16px 20px}
-    .commit-box li{font-size:11.5px;line-height:1.8;margin-left:18px;color:#334155}
-    .closing{text-align:center;font-size:13px;font-weight:700;color:#166534;background:#f0fdf4;border:1.5px solid #bbf7d0;border-radius:12px;padding:14px;margin-top:20px}
-    .obe-empty{font-size:11.5px;color:#94a3b8;background:white;border:1px solid #e2e8f0;border-radius:10px;padding:14px}
+    .commit-box li{font-size:13px;line-height:1.8;margin-left:18px;color:#334155}
+    .closing{text-align:center;font-size:14.5px;font-weight:700;color:#166534;background:#f0fdf4;border:1.5px solid #bbf7d0;border-radius:12px;padding:14px;margin-top:20px}
+    .obe-empty{font-size:13px;color:#94a3b8;background:white;border:1px solid #e2e8f0;border-radius:10px;padding:14px}
     .obe-aviso{display:flex;gap:10px;align-items:flex-start;background:#fffbeb;border:1.5px solid #fcd34d;border-radius:12px;padding:12px 16px;margin-top:10px}
     .obe-aviso-ico{font-size:16px;flex-shrink:0}
-    .obe-aviso-txt{font-size:11px;color:#78350f;line-height:1.6}
+    .obe-aviso-txt{font-size:12.5px;color:#78350f;line-height:1.6}
     .obe-aviso-txt b{color:#92400e}
-    .report-footer{margin-top:20px;padding-top:12px;border-top:1px solid #e2e8f0;display:flex;justify-content:space-between;font-size:8.5px;color:#94a3b8}
+    .report-footer{margin-top:20px;padding-top:12px;border-top:1px solid #e2e8f0;display:flex;justify-content:space-between;font-size:10px;color:#94a3b8;flex-wrap:wrap;gap:4px}
     @media print{ body{background:white} @page{margin:8mm 10mm;size:A4 portrait} }
+    @media (max-width:520px){
+      .report-header,.paciente-bar,.body-wrap{padding-left:18px;padding-right:18px}
+      .obe-tablero{grid-template-columns:1fr}
+      .sim-bar-row{grid-template-columns:1fr;text-align:left}
+      body{font-size:15px}
+    }
   `;
 
   const html = `<!DOCTYPE html><html lang="es-AR"><head><meta charset="UTF-8"/>
@@ -17706,7 +18193,7 @@ function _obeGenerarHTMLInforme(opts) {
   <style>${estilos}</style></head><body>
   <div class="report-header">
     <div class="logo-circle">🛡️</div>
-    <div><div class="header-title">Tu Informe Cardiometabólico</div><div class="header-sub">Seguimiento de Adiposidad · Evolucionar</div></div>
+    <div><div class="header-title">Tu Informe de Adiposidad</div><div class="header-sub">Seguimiento de Adiposidad · Evolucionar</div></div>
     <div class="header-fecha"><strong>${fechaHoyTxt}</strong>Informe generado para el paciente</div>
   </div>
   <div class="paciente-bar">
