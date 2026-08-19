@@ -6164,6 +6164,7 @@ function agregarColumnaManual(tipo) {
   if(tipo==='est' && !estDatos.filas.length) { estDatos.filas = Array(20).fill(null).map(()=>[]); }
   const newIdx = insertarColumnaEnOrden(datos, fechaHoy());
   if(tipo==='lab') _colEditando = null; // la columna nueva pasa a ser la activa/editable
+  if(tipo==='est') precargarPesoTallaEco(newIdx);
   renderTablaGenerica(datos, filas, wrapId, newIdx);
   sincronizarRO();
   guardarDatosPac(saveWrap);
@@ -11971,6 +11972,27 @@ function getUltimoValorAnt(key) {
   }
   return null;
 }
+// Autocompleta Peso/Talla del ecocardiograma (columna ci de Estudios complementarios) con el
+// último valor cargado en Antropometría, si existe. Si no hay dato en Antropometría, deja el
+// campo vacío para que se pueda cargar manualmente (el campo ya es editable). Nunca pisa un
+// valor que ya esté cargado en esa columna.
+function precargarPesoTallaEco(ci) {
+  const fiPeso = EST_FILAS.findIndex(f=>f.key==='eco_Peso');
+  const fiTalla = EST_FILAS.findIndex(f=>f.key==='eco_Talla');
+  if(fiPeso<0 || fiTalla<0) return;
+  if(!estDatos.filas[fiPeso]) estDatos.filas[fiPeso] = [];
+  if(!estDatos.filas[fiTalla]) estDatos.filas[fiTalla] = [];
+  if(!estDatos.filas[fiPeso][ci]) {
+    const p = getUltimoValorAnt('Peso');
+    if(p != null) estDatos.filas[fiPeso][ci] = p+'';
+  }
+  if(!estDatos.filas[fiTalla][ci]) {
+    const t = getUltimoValorAnt('Altura');
+    if(t != null) estDatos.filas[fiTalla][ci] = t+'';
+  }
+  calcEstValues(estDatos, EST_FILAS);
+}
+
 function precargarAntropometriaSidebar() {
   let huboAutocompletado = false;
   const pesoEl = document.getElementById('evol_peso');
@@ -21995,7 +22017,7 @@ loadLocal();  // async, carga en background y llama renderGrid al final
               : c.tabaquismo === 'actual' ? '<span class="evh-habito-malo">Fumador (' + py + ' PA)</span>'
               : c.tabaquismo === 'social' ? '<span style="color:#e08c3a;font-weight:600">Fumador social</span>'
               : c.tabaquismo              ? '<span style="color:#e08c3a;font-weight:600">Ex fumador (' + py + ' PA)</span>'
-              : '';
+              : '<span style="color:var(--text-soft);font-style:italic">Tabaquismo: no completado</span>';
       var gr  = Math.round(
         (Number(c.alcohol_cerveza) || 0) * 13 + (Number(c.alcohol_vino) || 0) * 14 +
         (Number(c.alcohol_fernet)  || 0) * 22 + (Number(c.alcohol_blanca) || 0) * 14 +
@@ -22029,7 +22051,7 @@ loadLocal();  // async, carga en background y llama renderGrid al final
             ? '<span class="evh-habito-malo">Sedentario</span>'
             : c.actividad_fisica
             ? '<span class="evh-habito-bien">' + esc(c.actividad_fisica) + '</span>'
-            : '';
+            : '<span style="color:var(--text-soft);font-style:italic">Actividad física: no completado</span>';
       }
       hab = [t, a, act].filter(Boolean).join('<br>') || hab;
     }
