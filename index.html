@@ -3982,6 +3982,14 @@
         <input type="checkbox" id="adip_chk_inf_antro" style="width:16px;height:16px;accent-color:var(--blue)">
         📏 Antropometría (evolución peso/IMC/cintura)
       </label>
+      <label style="display:flex;align-items:center;gap:10px;font-size:13px;font-weight:500;color:#1e293b;cursor:pointer;padding:10px 12px;border:1.5px solid var(--border);border-radius:10px;background:var(--gray)">
+        <input type="checkbox" id="adip_chk_inf_efca" style="width:16px;height:16px;accent-color:var(--blue)">
+        🧭 Encuesta de fenotipo alimentario (EFCA)
+      </label>
+    </div>
+    <div id="adip_efca_sin_datos" style="display:none;align-items:center;justify-content:space-between;gap:10px;background:#fff7ed;border:1.5px solid #fed7aa;border-radius:10px;padding:10px 12px;margin:-10px 0 20px;font-size:12px;color:#9a3412">
+      <span>Este paciente todavía no tiene una encuesta EFCA cargada.</span>
+      <button type="button" onclick="adipAbrirEfcaDesdeInforme()" style="flex-shrink:0;padding:6px 12px;border:none;border-radius:8px;background:#ea580c;color:white;font-size:12px;font-weight:700;cursor:pointer;font-family:var(--font-main);white-space:nowrap">+ Cargar EFCA</button>
     </div>
     <div style="display:flex;justify-content:space-between;gap:8px">
       <button onclick="adipCerrarOpcionesInforme()" style="padding:9px 18px;border:1.5px solid var(--border);border-radius:10px;background:white;font-size:13px;font-weight:500;color:var(--text-soft);cursor:pointer;font-family:var(--font-main)">Cancelar</button>
@@ -16073,6 +16081,11 @@ function adipAbrirOpcionesInforme() {
   const trat = adipTratamientos[adipIdx];
   const chkAntro = document.getElementById('adip_chk_inf_antro');
   if(chkAntro) chkAntro.checked = !!(typeof antDatos !== 'undefined' && antDatos?.columnas?.length);
+  const hayEfca = !!(typeof efcaEncuestas !== 'undefined' && efcaEncuestas.length);
+  const chkEfca = document.getElementById('adip_chk_inf_efca');
+  if(chkEfca) chkEfca.checked = hayEfca;
+  const avisoEfca = document.getElementById('adip_efca_sin_datos');
+  if(avisoEfca) avisoEfca.style.display = hayEfca ? 'none' : 'flex';
 
   // Precargar datos del tratamiento por si el profesional quiere modificar algo antes de generar
   const fFecha = document.getElementById('adip_inf_fecha_control');
@@ -16131,9 +16144,19 @@ function adipGenerarInformeConOpciones() {
     indic: !!(document.getElementById('adip_chk_inf_indic')||{}).checked,
     nutri: !!(document.getElementById('adip_chk_inf_nutri')||{}).checked,
     antro: !!(document.getElementById('adip_chk_inf_antro')||{}).checked,
+    efca:  !!(document.getElementById('adip_chk_inf_efca')||{}).checked,
   };
   adipCerrarOpcionesInforme();
   adipImprimirInforme(opts);
+}
+
+// Acceso rápido a "cargar EFCA" desde el modal de opciones del informe, para
+// pacientes que todavía no tienen ninguna encuesta. Al completarla, el
+// checkbox de EFCA en el informe se vuelve a evaluar la próxima vez que se
+// abra el modal de opciones.
+function adipAbrirEfcaDesdeInforme() {
+  adipCerrarOpcionesInforme();
+  if(typeof efcaAbrirNueva === 'function') efcaAbrirNueva();
 }
 
 let _adipInformeTratamiento = null;
@@ -16273,6 +16296,28 @@ function _adipGenerarHTMLInforme(trat, modoModal, opts) {
     }
   }
 
+  // ── Bloque: encuesta EFCA (opcional) — usa la última encuesta cargada ──
+  let efcaHTML = '';
+  if(opts.efca && typeof efcaEncuestas !== 'undefined' && efcaEncuestas.length && typeof efcaCalcular === 'function') {
+    const enc = efcaEncuestas[0];
+    const calc = efcaCalcular(enc.respuestas || {});
+    const filasSubs = Object.keys(EFCA_SUBS).map(key => {
+      const s = EFCA_SUBS[key];
+      const r = calc.subs[key];
+      return `<div class="nutri-row"><span>${s.icono} ${s.label}</span><b>${r.score} · ${r.nivel.toUpperCase()}</b></div>`;
+    }).join('');
+    const predomTxt = calc.predominantes.length
+      ? calc.predominantes.map(k => EFCA_SUBS[k].icono + ' ' + EFCA_SUBS[k].label).join(' · ')
+      : 'Sin fenotipo predominante marcado';
+    efcaHTML = `
+  <div class="nutri-panel">
+    <div class="nutri-hdr2">🧭 Encuesta de fenotipo alimentario (EFCA) — ${fmtF(enc.fecha)}</div>
+    <div class="nutri-datos">Puntaje total: <b>${calc.total.score} / 80</b> (${calc.total.nivel.toUpperCase()})</div>
+    ${filasSubs}
+    <div class="nutri-nota2">Fenotipo(s) predominante(s): ${predomTxt}</div>
+  </div>`;
+  }
+
   const estilos = `
     *{box-sizing:border-box;margin:0;padding:0}
     body{font-family:'Inter',sans-serif;font-size:11px;color:#1e293b;background:#f8fafc;-webkit-print-color-adjust:exact;print-color-adjust:exact}
@@ -16376,6 +16421,8 @@ ${profNombre ? `<div class="prof-strip"><span class="prof-name">${profNombre}</s
   ${nutriHTML}
 
   ${antroHTML}
+
+  ${efcaHTML}
 
   <div class="footer">
     <span class="footer-brand">Evaluaciones Cardiometabólicas</span>
