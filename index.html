@@ -7403,7 +7403,14 @@ function abrirDocumento(tipo, dni) {
     document.getElementById('ind_paciente').value = p.apellido + ', ' + p.nombre;
     document.getElementById('ind_dni').value = p.dni;
     document.getElementById('ind_fecha').value = hoy;
-    var indEl = document.getElementById('ind_contenido'); if(indEl){ indEl.innerHTML = ''; }
+    var indEl = document.getElementById('ind_contenido');
+    if(indEl){
+      // Restaurar borrador si existe (no perder lo escrito la vez anterior);
+      // si no hay nada guardado, arranca en blanco como siempre.
+      var _draftInd = null;
+      try { _draftInd = localStorage.getItem('urcym_doc_ind_' + p.dni); } catch(e) {}
+      indEl.innerHTML = _draftInd || '';
+    }
     // Resetear selector de hoja
     var indWrap = document.getElementById('ind_tipo_hoja_wrap');
     if(indWrap) indWrap.style.display = _esBG_OB ? '' : 'none';
@@ -8077,6 +8084,7 @@ function generarPDF(tipo) {
   } else {
     const elIClean = document.getElementById('ind_contenido');
     if (elIClean) elIClean.innerHTML = '';
+    if (p) _limpiarDraftIndicacionesDoc(p.dni);
     cerrarModal('modalIndicaciones');
   }
   }); // fin _getLogoPNG
@@ -8091,6 +8099,7 @@ function cerrarModalIndicaciones() {
   const el = document.getElementById('ind_contenido');
   const hayContenido = el && el.innerHTML.trim() && el.innerHTML.trim() !== '<br>';
   if(hayContenido && !confirm('¿Cerrar sin guardar estas indicaciones? Se va a perder lo que escribiste.')) return;
+  if(pacienteActual) _limpiarDraftIndicacionesDoc(pacienteActual.dni);
   cerrarModal('modalIndicaciones');
 }
 function cerrarModalReceta() {
@@ -8926,6 +8935,36 @@ async function cargarDatosClinica(dni) {
     if(e.target===this) cerrarModal(id);
   });
 });
+// ─── BORRADOR DEL DOCUMENTO "INDICACIONES" (ind_contenido) ────────────────
+// A diferencia del cuadro de indicaciones dentro de Evolución (que ya se
+// autoguarda), este documento independiente (se abre desde la ficha del
+// paciente para imprimir/enviar indicaciones sueltas) no tenía ningún
+// borrador: si se navegaba afuera, se recargaba la página, o se volvía a
+// abrir el mismo documento, el texto escrito se perdía sin aviso. Se guarda
+// en localStorage por paciente para que sobreviva navegación y recargas.
+function _guardarDraftIndicacionesDoc(dni) {
+  if(!dni) return;
+  try {
+    const el = document.getElementById('ind_contenido');
+    const html = el ? el.innerHTML : '';
+    if(html && html.trim() && html.trim() !== '<br>') {
+      localStorage.setItem('urcym_doc_ind_' + dni, html);
+    } else {
+      localStorage.removeItem('urcym_doc_ind_' + dni);
+    }
+  } catch(e) {}
+}
+function _limpiarDraftIndicacionesDoc(dni) {
+  if(!dni) return;
+  try { localStorage.removeItem('urcym_doc_ind_' + dni); } catch(e) {}
+}
+(function() {
+  const el = document.getElementById('ind_contenido');
+  if(el) el.addEventListener('input', function() {
+    if(pacienteActual) _guardarDraftIndicacionesDoc(pacienteActual.dni);
+  });
+})();
+
 ['modalReceta','modalIndicaciones'].forEach(id=>{
   const el = document.getElementById(id);
   if(el) el.addEventListener('click',function(e){
