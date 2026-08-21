@@ -7561,7 +7561,7 @@ function _pdfPatientBar(doc, p, fechaStr, PW, ML, MR, headerEndY) {
 /* ─────────────────────────────────────────────────── */
 /*  FIRMA Y SELLO                                      */
 /* ─────────────────────────────────────────────────── */
-function _pdfFirma(doc, u, PW, PH, ML, firmaKey, pieAltura) {
+function _pdfFirma(doc, u, PW, PH, ML, firmaKey, pieAltura, opts) {
   // Solo muestra la firma del profesional logueado si eligió incluirla
   if (!firmaKey || firmaKey === 'ninguna') return;
   const MR = 8;   // margen derecho en mm
@@ -7579,7 +7579,10 @@ function _pdfFirma(doc, u, PW, PH, ML, firmaKey, pieAltura) {
 
     // Ancho máximo en mm para que la firma no ocupe demasiado espacio
     // Barbara es casi cuadrada → usamos ancho menor para que no quede enorme
-    const FW = (firmaKey === 'barbara') ? 34 : 40;
+    // opts.scale (0-1) la reduce cuando no entra completa al pie de la última
+    // página con texto, para no tener que abrir una hoja nueva casi vacía.
+    const scale = (opts && opts.scale) ? opts.scale : 1;
+    const FW = ((firmaKey === 'barbara') ? 34 : 40) * scale;
     const FH = FW * ratio;           // alto proporcional real
     const FX = PW - MR - FW;        // alineada a la derecha
     const FY = PH - footerH - FH - 4;    // justo encima del footer, con 4mm de margen
@@ -7598,6 +7601,25 @@ function _alturaFirmaMM(firmaKey) {
   const ratio = ratios[firmaKey] || 1;
   const FW = (firmaKey === 'barbara') ? 34 : 40;
   return FW * ratio;
+}
+
+// Decide dónde y cómo dibujar la firma al cierre del documento:
+// - Si entra completa en el espacio libre de la página actual (debajo del
+//   último renglón de texto y por encima del pie), se deja a tamaño normal ahí.
+// - Si no entra completa pero queda un lugar razonable, se ACHICA (nunca por
+//   debajo de un tamaño legible) para que quepa igual en la misma hoja, en vez
+//   de abrir una página nueva casi en blanco solo para la firma.
+// - Únicamente si no queda espacio aprovechable, se pasa a una hoja nueva
+//   (mismo criterio que antes).
+// Devuelve { curY, scale } — curY puede cambiar si se agregó una página.
+function _ubicarFirma(firmaKey, PH, footerHPie, curY, addPageFn) {
+  if (!firmaKey || firmaKey === 'ninguna') return { curY, scale: 1 };
+  const alturaFirma = _alturaFirmaMM(firmaKey);
+  const disponible = PH - footerHPie - curY - 4;
+  if (disponible >= alturaFirma) return { curY, scale: 1 };
+  const MIN_ALTURA = alturaFirma * 0.45; // por debajo de esto, quedaría ilegible
+  if (disponible >= MIN_ALTURA) return { curY, scale: disponible / alturaFirma };
+  return { curY: addPageFn(), scale: 1 };
 }
 
 // Dibuja una lista de segmentos con formato mixto (de _parseRichTextSegments).
@@ -8155,16 +8177,17 @@ function generarPDF(tipo) {
     }
   }
 
-  // Solo pasa a una página nueva por la firma si el texto realmente termina
-  // invadiendo la zona donde se dibuja (mismo margen de 4mm que usa _pdfFirma).
-  // curYFinal ya representa el renglón real final (receta o indicaciones).
+  // Ubicar la firma: si no entra completa al pie de esta página pero hay
+  // lugar razonable, se dibuja más chica ahí mismo (nunca se abre una hoja
+  // nueva casi en blanco solo por la firma, salvo que de verdad no entre).
+  let _firmaScale = 1;
   if (firmaKey !== 'ninguna') {
-    const alturaFirma = _alturaFirmaMM(firmaKey);
-    const zonaFirmaTop = PH - footerHPie - alturaFirma - 4;
-    if (curYFinal > zonaFirmaTop) { curYFinal = _addPageWithHeader(); }
+    const _ubic = _ubicarFirma(firmaKey, PH, footerHPie, curYFinal, _addPageWithHeader);
+    curYFinal = _ubic.curY;
+    _firmaScale = _ubic.scale;
   }
 
-  _pdfFirma(doc, u, PW, PH, ML, firmaKey, footerHPie);
+  _pdfFirma(doc, u, PW, PH, ML, firmaKey, footerHPie, { scale: _firmaScale });
   if (usarOtro) { _pdfFooterOtro(doc, u, PW, PH, direccionPie); } else { _pdfFooter(doc, PW, PH); }
 
   const np = p ? [p.apellido, p.nombre].filter(Boolean).join('_').replace(/\s+/g, '_') || 'doc' : 'doc';
@@ -11554,16 +11577,17 @@ function _crearPDFIndicacionesEvol(txt, usarOtro) {
     addPageFn: _addIndPage, defaultColor: [35, 35, 35]
   });
 
-  // La firma solo pasa a una hoja nueva si el texto realmente termina
-  // invadiendo el espacio donde se dibuja (mismo margen de 4mm que usa _pdfFirma).
-  // curY ya representa el renglón real donde terminó el texto.
+  // Ubicar la firma: si no entra completa al pie de esta página pero hay
+  // lugar razonable, se dibuja más chica ahí mismo, en vez de abrir una hoja
+  // nueva casi en blanco solo por la firma.
+  let _firmaScaleEvol = 1;
   if (_firmaKeyEvol !== 'ninguna') {
-    const alturaFirma = _alturaFirmaMM(_firmaKeyEvol);
-    const zonaFirmaTop = PH - footerHPie - alturaFirma - 4;
-    if (curY > zonaFirmaTop) { curY = _addIndPage(); }
+    const _ubicEvol = _ubicarFirma(_firmaKeyEvol, PH, footerHPie, curY, _addIndPage);
+    curY = _ubicEvol.curY;
+    _firmaScaleEvol = _ubicEvol.scale;
   }
 
-  _pdfFirma(doc, u, PW, PH, ML, _firmaKeyEvol, footerHPie);
+  _pdfFirma(doc, u, PW, PH, ML, _firmaKeyEvol, footerHPie, { scale: _firmaScaleEvol });
   _pdfFooterOtro(doc, u, PW, PH, direccionPie);
 
   return { doc, filename, hoy };
@@ -25799,16 +25823,17 @@ function generarPDFDocLibre() {
     const _firmaKeyBase = (_unameDoc.includes('omar') || _unameDoc === 'ob') ? 'omar' : 'barbara';
     const firmaKey = inclFirma ? _firmaKeyBase : 'ninguna';
 
-    // Solo pasa a página nueva por la firma si el texto realmente invade esa
-    // zona (mismo margen de 4mm que usa _pdfFirma). curY ya representa el
-    // renglón real final.
+    // Ubicar la firma: si no entra completa al pie de esta página pero hay
+    // lugar razonable, se dibuja más chica ahí mismo, en vez de abrir una
+    // hoja nueva casi en blanco solo por la firma.
+    let _firmaScaleDoc = 1;
     if (firmaKey !== 'ninguna') {
-      const alturaFirma = _alturaFirmaMM(firmaKey);
-      const zonaFirmaTop = PH - footerHPie - alturaFirma - 4;
-      if (curY > zonaFirmaTop) { curY = _addDocLibrePage(); }
+      const _ubicDoc = _ubicarFirma(firmaKey, PH, footerHPie, curY, _addDocLibrePage);
+      curY = _ubicDoc.curY;
+      _firmaScaleDoc = _ubicDoc.scale;
     }
 
-    _pdfFirma(doc, u, PW, PH, ML, firmaKey, footerHPie);
+    _pdfFirma(doc, u, PW, PH, ML, firmaKey, footerHPie, { scale: _firmaScaleDoc });
     _pdfFooterOtro(doc, u, PW, PH, direccionPie);
 
     doc.save(filename);
