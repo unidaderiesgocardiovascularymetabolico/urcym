@@ -7600,11 +7600,19 @@ function _alturaFirmaMM(firmaKey) {
   return FW * ratio;
 }
 
-// Dibuja una lista de segmentos con formato mixto (de _parseRichTextSegments) en
-// flujo continuo, palabra por palabra — para que negrita/cursiva/color/subrayado
-// dentro de una misma frase sigan corridos en el mismo renglón, en vez de que
-// cada cambio de estilo empiece un renglón nuevo (que se veía como un "enter").
-// opts: { ML, maxWidth, lineH, fontSize, startY, maxY, addPageFn, defaultColor, newLineGapFactor }
+// Dibuja una lista de segmentos con formato mixto (de _parseRichTextSegments).
+// Arma primero las palabras (con sus estilos, incluso si una palabra queda
+// partida entre dos segmentos con distinto formato), las agrupa en párrafos
+// separados por los saltos de línea reales (Enter del usuario), arma los
+// renglones (word-wrap) dentro de cada párrafo, y finalmente los dibuja:
+// - Todos los renglones de un párrafo salvo el último se JUSTIFICAN
+//   (se reparte el espacio sobrante entre palabras para que el texto llegue
+//   al margen derecho), igual que en un procesador de texto.
+// - El último renglón de cada párrafo queda alineado a la izquierda (normal).
+// - Los renglones en blanco (párrafos vacíos = doble Enter) sólo avanzan
+//   el cursor, sin justificar ni dibujar nada.
+// opts: { ML, maxWidth, lineH, fontSize, startY, maxY, addPageFn, defaultColor,
+//         newLineGapFactor, justify (default true) }
 // addPageFn() agrega una hoja nueva y devuelve el Y donde debe arrancar el contenido.
 // Devuelve el Y final tras dibujar todo.
 function _dibujarSegmentosPDF(doc, segments, opts) {
@@ -7615,49 +7623,106 @@ function _dibujarSegmentosPDF(doc, segments, opts) {
   const maxY = opts.maxY;
   const addPageFn = opts.addPageFn;
   const defaultColor = opts.defaultColor || [35, 35, 35];
+  const gapFactor = opts.newLineGapFactor != null ? opts.newLineGapFactor : 1;
+  const justify = opts.justify !== false;
 
-  let curX = ML;
-  let curY = opts.startY;
+  // ── 1) Armar palabras con su(s) estilo(s), agrupadas en párrafos ──────
+  const paragraphs = [];
+  let currentPara = [];
+  let currentWordChunks = null;
 
-  function nuevaLinea() {
-    curX = ML;
-    curY += lineH;
-    if (curY > maxY) { curY = addPageFn(); curX = ML; }
+  function flushWord() {
+    if (currentWordChunks && currentWordChunks.length) {
+      let w = 0;
+      currentWordChunks.forEach(c => { w += c.width; });
+      currentPara.push({ chunks: currentWordChunks, width: w });
+    }
+    currentWordChunks = null;
   }
 
   segments.forEach((seg) => {
     if (seg.isNewLine) {
-      curX = ML;
-      curY += lineH * (opts.newLineGapFactor != null ? opts.newLineGapFactor : 1);
-      if (curY > maxY) { curY = addPageFn(); }
-      curX = ML;
+      flushWord();
+      paragraphs.push(currentPara);
+      currentPara = [];
       return;
     }
     const fontStyle = seg.bold && seg.italic ? 'bolditalic' : seg.bold ? 'bold' : seg.italic ? 'italic' : 'normal';
     doc.setFont('helvetica', fontStyle);
     doc.setFontSize(fontSize);
-    const rgb = seg.color ? _hexToRgb(seg.color) : defaultColor;
-    doc.setTextColor(rgb[0], rgb[1], rgb[2]);
 
-    // Tokenizar preservando los espacios, para cortar solo entre palabras
-    const tokens = seg.text.match(/\S+\s*|\s+/g) || [];
-    tokens.forEach((tok) => {
-      if (/^\s+$/.test(tok) && curX === ML) return; // no arrancar un renglón con un espacio suelto
-      const tokW = doc.getTextWidth(tok);
-      if (curX + tokW > ML + maxWidth && curX > ML) { nuevaLinea(); }
-      doc.text(tok, curX, curY);
-      if (seg.underline) {
-        const trimmed = tok.replace(/\s+$/, '');
-        if (trimmed) {
-          const trimW = doc.getTextWidth(trimmed);
+    // Partir preservando espacios, para saber dónde empieza/termina cada palabra
+    const parts = seg.text.match(/\S+|\s+/g) || [];
+    parts.forEach((part) => {
+      if (/^\s+$/.test(part)) { flushWord(); return; }
+      const w = doc.getTextWidth(part);
+      if (!currentWordChunks) currentWordChunks = [];
+      currentWordChunks.push({ text: part, bold: seg.bold, italic: seg.italic, color: seg.color, underline: seg.underline, width: w });
+    });
+  });
+  flushWord();
+  paragraphs.push(currentPara);
+  // Descartar el párrafo final si quedó vacío (artefacto del cierre del bucle,
+  // no un renglón en blanco intencional).
+  if (paragraphs.length && paragraphs[paragraphs.length - 1].length === 0) paragraphs.pop();
+
+  // Ancho de un espacio simple, para armar los renglones
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(fontSize);
+  const spaceW = doc.getTextWidth(' ');
+
+  // ── 2) Armar renglones físicos por párrafo (word-wrap) ────────────────
+  const lines = [];
+  paragraphs.forEach((para) => {
+    if (para.length === 0) { lines.push({ words: [], isLastOfParagraph: true, isBlank: true }); return; }
+    let curLine = [];
+    let curW = 0;
+    para.forEach((w) => {
+      const addW = curLine.length ? spaceW + w.width : w.width;
+      if (curLine.length && curW + addW > maxWidth) {
+        lines.push({ words: curLine, isLastOfParagraph: false });
+        curLine = [w];
+        curW = w.width;
+      } else {
+        curLine.push(w);
+        curW += addW;
+      }
+    });
+    if (curLine.length) lines.push({ words: curLine, isLastOfParagraph: true });
+  });
+
+  // ── 3) Dibujar, justificando los renglones que correspondan ────────────
+  let curY = opts.startY;
+
+  function drawLine(line) {
+    const words = line.words;
+    const naturalWidth = words.reduce((s, w) => s + w.width, 0) + spaceW * (words.length - 1);
+    const shouldJustify = justify && !line.isLastOfParagraph && words.length > 1;
+    const extraSpace = shouldJustify ? Math.max(0, (maxWidth - naturalWidth) / (words.length - 1)) : 0;
+    let x = ML;
+    words.forEach((w, i) => {
+      w.chunks.forEach((c) => {
+        const fontStyle = c.bold && c.italic ? 'bolditalic' : c.bold ? 'bold' : c.italic ? 'italic' : 'normal';
+        doc.setFont('helvetica', fontStyle);
+        doc.setFontSize(fontSize);
+        const rgb = c.color ? _hexToRgb(c.color) : defaultColor;
+        doc.setTextColor(rgb[0], rgb[1], rgb[2]);
+        doc.text(c.text, x, curY);
+        if (c.underline) {
           const ulY = curY + 0.7;
           doc.setLineWidth(0.15);
           doc.setDrawColor(rgb[0], rgb[1], rgb[2]);
-          doc.line(curX, ulY, curX + trimW, ulY);
+          doc.line(x, ulY, x + c.width, ulY);
         }
-      }
-      curX += tokW;
+        x += c.width;
+      });
+      x += spaceW + (i < words.length - 1 ? extraSpace : 0);
     });
+  }
+
+  lines.forEach((line) => {
+    if (curY > maxY) { curY = addPageFn(); }
+    if (!line.isBlank) drawLine(line);
+    curY += lineH * (line.isBlank ? gapFactor : 1);
   });
 
   return curY;
@@ -7945,10 +8010,20 @@ function _parseRichTextSegments(container) {
   }
 
   walkChildren(Array.from(container.childNodes), false, false, null, false, true);
-  // Colapsar saltos de línea consecutivos (por si quedó alguno duplicado)
+  // Colapsar saltos de línea consecutivos EXCESIVOS (3 o más seguidos),
+  // pero conservando hasta 2 seguidos: eso es lo que representa un renglón
+  // en blanco intencional (doble Enter del usuario para separar párrafos).
+  // Antes esto colapsaba SIEMPRE a 1, por lo que los renglones en blanco
+  // (dobles Enter) desaparecían del PDF.
   var sinDuplicados = [];
+  var _rachaSaltos = 0;
   segments.forEach(function(s){
-    if(s.isNewLine && sinDuplicados.length && sinDuplicados[sinDuplicados.length-1].isNewLine) return;
+    if(s.isNewLine){
+      _rachaSaltos++;
+      if(_rachaSaltos > 2) return; // 3° salto consecutivo en adelante: descartar
+    } else {
+      _rachaSaltos = 0;
+    }
     sinDuplicados.push(s);
   });
   segments = sinDuplicados;
@@ -7997,6 +8072,27 @@ function generarPDF(tipo) {
   const contentMaxY = PH - 90;
   const contentH = contentMaxY - cY;
 
+  // Límite dinámico compartido: 4mm libres arriba del pie (18 o 24mm según
+  // incluya dirección). Se usa tanto para "receta" como para "indicaciones"
+  // para que el texto largo pagine en vez de quedar tapado por el footer.
+  const maxYMid = PH - footerHPie - 11;
+
+  function _addPageWithHeader() {
+    // Indicador "continúa..." al pie de la página actual
+    const continY = usarOtro ? (PH - footerHPie - 7) : (PH - 56 - 2);
+    doc.setFont('helvetica', 'italic');
+    doc.setFontSize(7);
+    doc.setTextColor(140, 140, 155);
+    doc.text('( continúa en la página siguiente )', PW / 2, continY, { align: 'center' });
+    // Footer en página actual antes de agregar nueva
+    if (usarOtro) { _pdfFooterOtro(doc, u, PW, PH, direccionPie); } else { _pdfFooter(doc, PW, PH); }
+    doc.addPage();
+    const newHeaderEndY = usarOtro ? _pdfHeaderOtro(doc, u, PW, ML) : _pdfHeader(doc, u, PW, ML);
+    return newHeaderEndY + 8;
+  }
+
+  let curYFinal = cY;
+
   if (tipo === 'receta') {
     // ── Caja Rp/ ──────────────────────────────────
 
@@ -8011,11 +8107,29 @@ function generarPDF(tipo) {
              || document.querySelector('#modalReceta textarea')
              || document.getElementById('receta_editor');
     if (elR) {
-      const txt = (elR.innerText || elR.textContent || elR.value || '').trim();
-      if (txt) {
+      // Extraer segmentos de texto con formato (respeta Enter, justifica y
+      // pagina igual que "Indicaciones" en vez de un doc.text() sin límites
+      // que podía quedar tapado por el footer al final de la hoja).
+      // Si es un <textarea> (texto plano, sin HTML), armar los segmentos
+      // a partir de su .value dividiendo por saltos de línea reales.
+      let segments;
+      if (elR.tagName === 'TEXTAREA') {
+        const lineas = (elR.value || '').split('\n');
+        segments = [];
+        lineas.forEach((linea, idx) => {
+          if (idx > 0) segments.push({ text: '', bold: false, italic: false, color: null, underline: false, isNewLine: true });
+          if (linea) segments.push({ text: linea, bold: false, italic: false, color: null, underline: false, isNewLine: false });
+        });
+      } else {
+        segments = _parseRichTextSegments(elR);
+      }
+      if (segments.length) {
         doc.setFont('helvetica', 'normal'); doc.setFontSize(10);
         doc.setTextColor(..._C.oscuro);
-        doc.text(doc.splitTextToSize(txt, W - 8), ML + 4, cY + 13);
+        curYFinal = _dibujarSegmentosPDF(doc, segments, {
+          ML: ML + 4, maxWidth: W - 8, lineH: 6, fontSize: 10, startY: cY + 13, maxY: maxYMid,
+          addPageFn: _addPageWithHeader, defaultColor: _C.oscuro
+        });
       }
     }
 
@@ -8033,42 +8147,21 @@ function generarPDF(tipo) {
       // Extraer segmentos de texto con formato desde el HTML rico
       const segments = _parseRichTextSegments(elI);
       if (segments.length) {
-        let curY = cY + 13;
-        const lineH = 5.6;
-        // Casi toda la hoja disponible para el texto en cualquier página;
-        // el espacio de la firma se reserva según su tamaño real (ver más abajo).
-        // Límite dinámico: 4mm libres arriba del pie (18 o 24mm según incluya dirección).
-        const maxYMid = PH - footerHPie - 11;
-
-        function _addPageWithHeader() {
-          // Indicador "continúa..." al pie de la página actual
-          const continY = usarOtro ? (PH - footerHPie - 7) : (PH - 56 - 2);
-          doc.setFont('helvetica', 'italic');
-          doc.setFontSize(7);
-          doc.setTextColor(140, 140, 155);
-          doc.text('( continúa en la página siguiente )', PW / 2, continY, { align: 'center' });
-          // Footer en página actual antes de agregar nueva
-          if (usarOtro) { _pdfFooterOtro(doc, u, PW, PH, direccionPie); } else { _pdfFooter(doc, PW, PH); }
-          doc.addPage();
-          const newHeaderEndY = usarOtro ? _pdfHeaderOtro(doc, u, PW, ML) : _pdfHeader(doc, u, PW, ML);
-          return newHeaderEndY + 8;
-        }
-
-        curY = _dibujarSegmentosPDF(doc, segments, {
-          ML: ML + 4, maxWidth: W - 8, lineH, fontSize: 8, startY: curY, maxY: maxYMid,
+        curYFinal = _dibujarSegmentosPDF(doc, segments, {
+          ML: ML + 4, maxWidth: W - 8, lineH: 5.6, fontSize: 8, startY: cY + 13, maxY: maxYMid,
           addPageFn: _addPageWithHeader, defaultColor: _C.oscuro
         });
-
-        // Solo pasa a una página nueva por la firma si el texto realmente
-        // termina invadiendo la zona donde se dibuja (mismo margen de 4mm
-        // que usa _pdfFirma). curY ya representa el renglón real final.
-        if (firmaKey !== 'ninguna') {
-          const alturaFirma = _alturaFirmaMM(firmaKey);
-          const zonaFirmaTop = PH - footerHPie - alturaFirma - 4;
-          if (curY > zonaFirmaTop) { curY = _addPageWithHeader(); }
-        }
       }
     }
+  }
+
+  // Solo pasa a una página nueva por la firma si el texto realmente termina
+  // invadiendo la zona donde se dibuja (mismo margen de 4mm que usa _pdfFirma).
+  // curYFinal ya representa el renglón real final (receta o indicaciones).
+  if (firmaKey !== 'ninguna') {
+    const alturaFirma = _alturaFirmaMM(firmaKey);
+    const zonaFirmaTop = PH - footerHPie - alturaFirma - 4;
+    if (curYFinal > zonaFirmaTop) { curYFinal = _addPageWithHeader(); }
   }
 
   _pdfFirma(doc, u, PW, PH, ML, firmaKey, footerHPie);
