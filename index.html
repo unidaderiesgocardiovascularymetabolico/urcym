@@ -4735,6 +4735,33 @@
   </div>
 </div>
 
+<!-- MODAL MEDIDAS ANTROPOMÉTRICAS ALTERNATIVAS (obesidad grado avanzado / medición estándar no factible) -->
+<div class="modal-overlay" id="modalMedidasAlt">
+  <div class="modal" style="max-width:520px;max-height:88vh;overflow-y:auto">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+      <div class="modal-title" style="margin:0">📏 Medidas alternativas</div>
+      <button onclick="cerrarModal('modalMedidasAlt')" style="border:none;background:none;font-size:20px;cursor:pointer;color:#6b7a8d">✕</button>
+    </div>
+    <div style="font-size:12px;color:var(--text-soft);margin-bottom:14px;line-height:1.5">
+      Para pacientes con obesidad de tan alto grado que no permite tomar peso, talla o perímetros en la forma habitual. Elegí las que necesites — se agregan como filas nuevas a la tabla de este paciente.
+    </div>
+    <div id="medidas_alt_lista" style="display:flex;flex-direction:column;gap:2px;margin-bottom:14px"></div>
+    <div style="border-top:1px solid var(--border);padding-top:12px;margin-bottom:6px">
+      <label style="font-size:11px;color:var(--text-soft);text-transform:uppercase;font-weight:600">Agregar otra medida</label>
+      <div style="display:flex;gap:8px;margin-top:6px">
+        <input type="text" id="medidas_alt_custom" placeholder="Ej: Circunferencia de muñeca" style="flex:1;padding:6px 10px;border:1.5px solid #dde3ec;border-radius:8px;font-size:13px;font-family:var(--font-main)"/>
+        <button onclick="_medidasAltAgregarCustom()" style="padding:6px 12px;border:1.5px solid var(--blue);border-radius:8px;background:var(--blue-light);color:var(--blue);font-size:12px;cursor:pointer;font-family:var(--font-main)">+</button>
+      </div>
+      <div id="medidas_alt_custom_lista" style="display:flex;flex-direction:column;gap:2px;margin-top:8px"></div>
+    </div>
+    <div class="chk-nota" style="margin-bottom:14px">ℹ️ Estas medidas segmentarias/alternativas son una herramienta orientativa de seguimiento individual para pacientes en quienes la antropometría estándar (cintura, cadera) no es factible por el grado de adiposidad. No tienen puntos de corte de riesgo validados ni reemplazan al IMC, la cintura o el índice cintura/estatura: sirven para comparar al mismo paciente contra sí mismo a lo largo del tiempo, no para clasificar riesgo.</div>
+    <div style="display:flex;gap:10px;justify-content:flex-end">
+      <button class="btn btn-secondary" onclick="cerrarModal('modalMedidasAlt')">Cancelar</button>
+      <button class="btn btn-teal" onclick="_medidasAltConfirmar()">Agregar seleccionadas</button>
+    </div>
+  </div>
+</div>
+
 
 
 <!-- MODAL PREVISUALIZACIÓN PDF -->
@@ -4882,8 +4909,14 @@ function navegarCeldaTabla(el, e) {
   const esEst = ['est_tabla_wrap','evest_wrap'].includes(wrapId);
   const datos = esLab ? labDatos : esEst ? estDatos : antDatos;
   const filas = esLab ? LAB_FILAS : esEst ? EST_FILAS : ANT_FILAS;
-  const todosFilas = [...filas, ...(datos.extraFilas||[]).map(lbl=>({label:lbl,key:'extra_'+lbl}))];
+  const todosFilasBase = [...filas, ...(datos.extraFilas||[]).map(lbl=>({label:lbl,key:'extra_'+lbl}))];
+  // Navegar en el orden VISUAL (mismo `orden` que usan las funciones de render), no en el
+  // orden físico del array — así las flechas siguen el mismo camino que ve el ojo.
+  const todosFilas = todosFilasBase
+    .map((f, i) => ({f, fi:i}))
+    .sort((a, b) => (a.f.orden ?? (1000 + a.fi)) - (b.f.orden ?? (1000 + b.fi)));
   const nCols = datos.columnas.length;
+  const posActual = todosFilas.findIndex(x => x.fi === fi);
 
   let targetFi = fi, targetCi = ci;
 
@@ -4891,26 +4924,26 @@ function navegarCeldaTabla(el, e) {
     if(ci + 1 < nCols) { targetCi = ci + 1; }
     else {
       targetCi = 0;
-      let next = fi + 1;
-      while(next < todosFilas.length && (todosFilas[next].cat || todosFilas[next].calc)) next++;
-      if(next < todosFilas.length) targetFi = next;
+      let next = posActual + 1;
+      while(next < todosFilas.length && (todosFilas[next].f.cat || todosFilas[next].f.calc)) next++;
+      if(next < todosFilas.length) targetFi = todosFilas[next].fi;
     }
   } else if(key === 'ArrowLeft' || (isTab && e.shiftKey)) {
     if(ci - 1 >= 0) { targetCi = ci - 1; }
     else {
       targetCi = nCols - 1;
-      let prev = fi - 1;
-      while(prev >= 0 && (todosFilas[prev].cat || todosFilas[prev].calc)) prev--;
-      if(prev >= 0) targetFi = prev;
+      let prev = posActual - 1;
+      while(prev >= 0 && (todosFilas[prev].f.cat || todosFilas[prev].f.calc)) prev--;
+      if(prev >= 0) targetFi = todosFilas[prev].fi;
     }
   } else if(key === 'ArrowDown' || key === 'Enter') {
-    let next = fi + 1;
-    while(next < todosFilas.length && (todosFilas[next].cat || todosFilas[next].calc)) next++;
-    if(next < todosFilas.length) targetFi = next;
+    let next = posActual + 1;
+    while(next < todosFilas.length && (todosFilas[next].f.cat || todosFilas[next].f.calc)) next++;
+    if(next < todosFilas.length) targetFi = todosFilas[next].fi;
   } else if(key === 'ArrowUp') {
-    let prev = fi - 1;
-    while(prev >= 0 && (todosFilas[prev].cat || todosFilas[prev].calc)) prev--;
-    if(prev >= 0) targetFi = prev;
+    let prev = posActual - 1;
+    while(prev >= 0 && (todosFilas[prev].f.cat || todosFilas[prev].f.calc)) prev--;
+    if(prev >= 0) targetFi = todosFilas[prev].fi;
   }
 
   if(targetFi === fi && targetCi === ci) return;
@@ -5117,35 +5150,43 @@ const LAB_FILAS = [
 ];
 
 
+// NOTA: el orden FÍSICO de este array no se toca (cada fila ya tiene datos guardados
+// en Supabase indexados por su posición acá — antDatos.filas[fi]). Para reordenar la
+// TABLA visualmente sin romper los datos históricos de los pacientes, se usa el campo
+// `orden` (ver renderTablaGenerica / renderTablaReadonly, que ordenan por él antes de
+// pintar, pero siguen leyendo/escribiendo con el fi ORIGINAL de este array).
 const ANT_FILAS = [
-  {label:'Peso (kg)',       key:'Peso',        unidades:['kg'],    defU:0, ref:null},
-  {label:'Altura (cm)',     key:'Altura',      unidades:['cm'],    defU:0, ref:null},
+  {label:'Peso (kg)',       key:'Peso',        unidades:['kg'],    defU:0, ref:null, orden:10},
+  {label:'Altura (cm)',     key:'Altura',      unidades:['cm'],    defU:0, ref:null, orden:20},
   {label:'IMC',             key:'IMC',         unidades:['kg/m²'], defU:0, calc:true,
     ref:(v)=>parseFloat(v)>=25,
-    refTxt:'≥25 kg/m²'},
+    refTxt:'≥25 kg/m²', orden:70},
   {label:'Cintura (cm)',    key:'Cintura',     unidades:['cm'],    defU:0,
     ref:(v,s)=>parseFloat(v)>=(s==='F'?88:102),
-    refTxt:'≥102cm (H) / ≥88cm (M)'},
-  {label:'Cadera (cm)',     key:'Cadera',      unidades:['cm'],    defU:0, ref:null},
+    refTxt:'≥102cm (H) / ≥88cm (M)', orden:80},
+  {label:'Cadera (cm)',     key:'Cadera',      unidades:['cm'],    defU:0, ref:null, orden:90},
   {label:'Cuello (cm)',     key:'Cuello',      unidades:['cm'],    defU:0,
     ref:(v,s)=>parseFloat(v)>=(s==='F'?34:39),
-    refTxt:'≥39cm (H) / ≥34cm (M)'},
+    refTxt:'≥39cm (H) / ≥34cm (M)', orden:100},
   {label:'Cintura/Estatura',key:'CintEst',     unidades:['ratio'], defU:0, calc:true,
     ref:(v)=>parseFloat(v)>0.50,
-    refTxt:'>0.50'},
+    refTxt:'>0.50', orden:110},
   {label:'Cintura/Cadera',  key:'CintCad',     unidades:['ratio'], defU:0, calc:true,
     ref:(v,s)=>parseFloat(v)>(s==='F'?0.85:0.90),
-    refTxt:'>0.90 (H) / >0.85 (M)'},
+    refTxt:'>0.90 (H) / >0.85 (M)', orden:120},
   {label:'% grasa',         key:'PctGrasa',    unidades:['%'],     defU:0,
     ref:(v,s)=>parseFloat(v)>(s==='F'?33:25),
-    refTxt:'>25% (H) / >33% (M)'},
-  {label:'% músculo',       key:'PctMusculo',  unidades:['%'],     defU:0, ref:null},
+    refTxt:'>25% (H) / >33% (M)', orden:40},
+  {label:'% músculo',       key:'PctMusculo',  unidades:['%'],     defU:0, ref:null, orden:50},
   {label:'Grasa visceral',  key:'GrasaVisceral',unidades:[''],     defU:0,
     ref:(v)=>parseFloat(v)>12,
-    refTxt:'>12 (riesgo elevado)'},
+    refTxt:'>12 (riesgo elevado)', orden:130},
   {label:'Fuerza de prensión (kg)', key:'FuerzaPresion', unidades:['kg'], defU:0,
     ref:(v,s)=>parseFloat(v)<(s==='F'?16:27),
-    refTxt:'<16kg (M) / <27kg (H) — sarcopenia (EWGSOP2)'},
+    refTxt:'<16kg (M) / <27kg (H) — sarcopenia (EWGSOP2)', orden:140},
+  // Separadores visuales — sin key, no guardan datos, se pueden agregar al final sin riesgo.
+  {cat:true, label:'PORCENTAJES', orden:35},
+  {cat:true, label:'MEDIDAS CORPORALES', orden:65},
 ];
 
 const LAB_PERFILES = {
@@ -5263,7 +5304,12 @@ function renderTablaReadonly(datos, filas, wrapId) {
     return;
   }
   const sexoPac = pacienteActual?.sexo==='Femenino'?'F':'H';
-  const allFilas = [...filas, ...(datos.extraFilas||[]).map(lbl=>({label:lbl,key:'extra_'+lbl,unidades:[''],defU:0,ref:null}))];
+  const allFilasBase = [...filas, ...(datos.extraFilas||[]).map(lbl=>({label:lbl,key:'extra_'+lbl,unidades:[''],defU:0,ref:null}))];
+  // Se pinta según `orden` (si la fila lo define) sin alterar el fi real de guardado.
+  const allFilas = allFilasBase
+    .map((f, fi) => ({f, fi}))
+    .sort((a, b) => (a.f.orden ?? (1000 + a.fi)) - (b.f.orden ?? (1000 + b.fi)))
+    .map(({f, fi}) => ({...f, __fi: fi}));
   if(wrapId === 'rolab_wrap' || wrapId === 'labro_wrap') calcLabValues(datos, filas);
   if(wrapId === 'roant_wrap') calcAntValues(datos, filas);
 
@@ -5281,7 +5327,8 @@ function renderTablaReadonly(datos, filas, wrapId) {
   });
   const filasVisibles = [];
   let catPendiente = null;
-  allFilas.forEach((f, fi) => {
+  allFilas.forEach((f) => {
+    const fi = f.__fi;
     if(f.cat) { catPendiente = {f, fi}; return; }
     if(tieneValor(fi)) {
       if(catPendiente) { filasVisibles.push({...catPendiente, esCat:true}); catPendiente = null; }
@@ -5346,6 +5393,10 @@ function renderTablaReadonly(datos, filas, wrapId) {
     });
     h += '</tr>';
   });
+  const isAntRO = (wrapId === 'roant_wrap');
+  if(isAntRO && datos.extraFilas && datos.extraFilas.length && filasVisibles.some(x => x.f.key && x.f.key.startsWith('extra_'))) {
+    h += '<tr><td colspan="'+(2+fechasVisibles.length)+'" style="padding:8px 14px;border:1px solid var(--border);background:#fffbea;font-size:11px;color:#8a6d3b;line-height:1.5">ℹ️ Las filas agregadas (medidas segmentarias/alternativas) son una herramienta orientativa de seguimiento cuando la antropometría estándar no es factible por el grado de adiposidad. No tienen puntos de corte de riesgo validados ni reemplazan al IMC, la cintura o el índice cintura/estatura: sirven para comparar al mismo paciente contra sí mismo en el tiempo.</td></tr>';
+  }
   h += '</tbody></table></div>';
   wrap.innerHTML = h;
 }
@@ -5572,7 +5623,12 @@ function renderTablaGenerica(datos, filas, wrapId, newColIdx) {
   if(isLab) calcLabValues(datos, filas);
   if(isAnt) calcAntValues(datos, filas);
   if(isEst) calcEstValues(datos, filas);
-  const todosFilas = [...filas, ...datos.extraFilas.map(lbl=>({label:lbl,key:'extra_'+lbl,unidades:[''],defU:0,ref:null}))];
+  const todosFilasBase = [...filas, ...datos.extraFilas.map(lbl=>({label:lbl,key:'extra_'+lbl,unidades:[''],defU:0,ref:null}))];
+  // Se pinta según `orden` (si la fila lo define) sin alterar el fi real de guardado.
+  const todosFilas = todosFilasBase
+    .map((f, fi) => ({f, fi}))
+    .sort((a, b) => (a.f.orden ?? (1000 + a.fi)) - (b.f.orden ?? (1000 + b.fi)))
+    .map(({f, fi}) => ({...f, __fi: fi}));
   const nci = newColIdx !== undefined ? newColIdx : (datos.columnas.length > 0 ? datos.columnas.length - 1 : 0);
   const lastIdx = datos.columnas.length - 1;
   const sexoPac = pacienteActual?.sexo==='Femenino'?'F':'H';
@@ -5606,7 +5662,8 @@ function renderTablaGenerica(datos, filas, wrapId, newColIdx) {
 
   // ── BODY
   h += '<tbody>';
-  todosFilas.forEach((f, fi) => {
+  todosFilas.forEach((f) => {
+    const fi = f.__fi;
     if(f.cat) {
       h += '<tr><td colspan="'+(1+datos.columnas.length)+'" style="background:#dbeafe;color:var(--blue);font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;padding:5px 14px;border:1px solid var(--border)">'+f.label+'</td></tr>';
       return;
@@ -5680,7 +5737,13 @@ function renderTablaGenerica(datos, filas, wrapId, newColIdx) {
     h += '<tr><td colspan="'+(1+datos.columnas.length)+'" style="padding:6px 12px;border:1px solid var(--border);background:#f8f9fc">';
     h += '<input type="text" id="new_row_input_'+wrapId+'" placeholder="Agregar parámetro..." style="padding:4px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:12px;font-family:var(--font-main);width:220px;margin-right:8px"/>';
     h += '<button onclick="agregarFilaExtra(\''+wrapId+'\')" style="padding:4px 12px;border:1.5px solid var(--blue);border-radius:6px;background:var(--blue-light);color:var(--blue);font-size:11px;cursor:pointer;font-family:var(--font-main)">+ Agregar fila</button>';
+    if(isAnt) {
+      h += '<button onclick="abrirModalMedidasAlt(\''+wrapId+'\')" style="padding:4px 12px;border:1.5px solid var(--teal);border-radius:6px;background:#f0faf7;color:var(--teal);font-size:11px;cursor:pointer;font-family:var(--font-main);margin-left:6px">📏 Medidas alternativas</button>';
+    }
     h += '</td></tr>';
+  }
+  if(isAnt && datos.extraFilas && datos.extraFilas.length) {
+    h += '<tr><td colspan="'+(1+datos.columnas.length)+'" style="padding:8px 14px;border:1px solid var(--border);background:#fffbea;font-size:11px;color:#8a6d3b;line-height:1.5">ℹ️ Las filas agregadas (medidas segmentarias/alternativas) son una herramienta orientativa de seguimiento cuando la antropometría estándar no es factible por el grado de adiposidad. No tienen puntos de corte de riesgo validados ni reemplazan al IMC, la cintura o el índice cintura/estatura: sirven para comparar al mismo paciente contra sí mismo en el tiempo.</td></tr>';
   }
   h += '</tbody></table>';
   wrap.innerHTML = h;
@@ -5721,6 +5784,89 @@ function renderTablaGenerica(datos, filas, wrapId, newColIdx) {
       ta.style.height = Math.max(52, ta.scrollHeight) + 'px';
     });
   }, 0);
+}
+
+// ── Medidas antropométricas alternativas ──────────────────────────────────
+// Para pacientes con obesidad de grado tan avanzado que no permite tomar peso,
+// talla, cintura o cadera de la forma habitual. Ofrece un set por defecto de
+// medidas segmentarias/alternativas + la posibilidad de agregar otras propias.
+// Se guardan igual que cualquier fila extra (antDatos.extraFilas), así que
+// heredan automáticamente el guardado, el cálculo de alertas (ninguna, por ser
+// orientativas) y la nota científica que se muestra debajo de la tabla.
+const MEDIDAS_ALT_DEFAULT = [
+  'Brazo derecho (cm)',
+  'Brazo izquierdo (cm)',
+  'Pierna derecha (cm)',
+  'Pierna izquierda (cm)',
+  'Bajo busto o pecho, según corresponda (cm)',
+  'Cintura alta (cm)',
+  'Cintura baja (cm)',
+  'Pantorrilla (cm)',
+  'Diámetro sagital abdominal (cm)',
+];
+let _medidasAltWrapId = null;
+let _medidasAltCustomStaged = [];
+
+function abrirModalMedidasAlt(wrapId) {
+  _medidasAltWrapId = wrapId;
+  _medidasAltCustomStaged = [];
+  const datos = ['evlab_wrap','lab_tabla_wrap'].includes(wrapId) ? labDatos :
+                ['evest_wrap','est_tabla_wrap'].includes(wrapId) ? estDatos : antDatos;
+  const yaAgregadas = datos.extraFilas || [];
+  const lista = document.getElementById('medidas_alt_lista');
+  lista.innerHTML = MEDIDAS_ALT_DEFAULT.map(lbl => {
+    const checked = yaAgregadas.includes(lbl);
+    const safeId = 'malt_' + lbl.replace(/[^a-zA-Z0-9]/g, '_');
+    return '<label style="display:flex;align-items:center;gap:8px;font-size:13px;padding:5px 2px;cursor:'+(checked?'default':'pointer')+';color:'+(checked?'var(--text-soft)':'var(--text)')+'">'
+      + '<input type="checkbox" id="'+safeId+'" value="'+lbl.replace(/"/g,'&quot;')+'" '+(checked?'checked disabled':'')+' style="width:16px;height:16px;cursor:'+(checked?'default':'pointer')+'"/>'
+      + lbl + (checked?' <span style="font-size:10px;color:var(--teal)">(ya agregada)</span>':'')
+      + '</label>';
+  }).join('');
+  document.getElementById('medidas_alt_custom').value = '';
+  _medidasAltRenderCustomLista();
+  document.getElementById('modalMedidasAlt').classList.add('open');
+}
+
+function _medidasAltRenderCustomLista() {
+  const box = document.getElementById('medidas_alt_custom_lista');
+  box.innerHTML = _medidasAltCustomStaged.map((lbl,i) =>
+    '<div style="display:flex;align-items:center;justify-content:space-between;font-size:12.5px;padding:3px 2px">'
+    + '<span>+ '+lbl+'</span>'
+    + '<button onclick="_medidasAltQuitarCustom('+i+')" style="border:none;background:none;color:#94a3b8;cursor:pointer;font-size:13px">✕</button>'
+    + '</div>'
+  ).join('');
+}
+
+function _medidasAltAgregarCustom() {
+  const input = document.getElementById('medidas_alt_custom');
+  const val = input.value.trim();
+  if(!val) return;
+  if(!_medidasAltCustomStaged.includes(val)) _medidasAltCustomStaged.push(val);
+  input.value = '';
+  _medidasAltRenderCustomLista();
+}
+
+function _medidasAltQuitarCustom(i) {
+  _medidasAltCustomStaged.splice(i,1);
+  _medidasAltRenderCustomLista();
+}
+
+function _medidasAltConfirmar() {
+  const wrapId = _medidasAltWrapId;
+  if(!wrapId) return;
+  const datos = ['evlab_wrap','lab_tabla_wrap'].includes(wrapId) ? labDatos :
+                ['evest_wrap','est_tabla_wrap'].includes(wrapId) ? estDatos : antDatos;
+  if(!datos.extraFilas) datos.extraFilas = [];
+  const seleccionadas = Array.from(document.querySelectorAll('#medidas_alt_lista input[type="checkbox"]:checked:not(:disabled)')).map(cb => cb.value);
+  [...seleccionadas, ..._medidasAltCustomStaged].forEach(lbl => {
+    if(!datos.extraFilas.includes(lbl)) datos.extraFilas.push(lbl);
+  });
+  cerrarModal('modalMedidasAlt');
+  const filas = ['evlab_wrap','lab_tabla_wrap'].includes(wrapId)?LAB_FILAS:['evest_wrap','est_tabla_wrap'].includes(wrapId)?EST_FILAS:ANT_FILAS;
+  const saveWrap = ['evlab_wrap','lab_tabla_wrap'].includes(wrapId)?'lab_tabla_wrap':['evest_wrap','est_tabla_wrap'].includes(wrapId)?'est_tabla_wrap':'ant_tabla_wrap';
+  guardarDatosPac(saveWrap);
+  renderTablaGenerica(datos, filas, wrapId);
+  sincronizarRO();
 }
 
 function agregarFilaExtra(wrapId) {
@@ -11337,7 +11483,9 @@ function renderAntropometriaInforme(datos, wrapId){
     wrap.innerHTML = '<div style="text-align:center;padding:32px 20px;color:var(--text-soft)"><div style="font-size:32px;margin-bottom:10px">📋</div><p style="font-size:13px">Sin valores cargados aún.</p></div>';
     return;
   }
-  const filasConDato = ANT_FILAS.filter(f => colsMostrar.some(ci => get(f.key, ci) != null));
+  const filasConDato = [...ANT_FILAS]
+    .sort((a, b) => (a.orden ?? 999) - (b.orden ?? 999))
+    .filter(f => colsMostrar.some(ci => get(f.key, ci) != null));
   const fmtF = iso => { try { return new Date(iso + 'T12:00:00').toLocaleDateString('es-AR', {day:'2-digit', month:'2-digit', year:'2-digit'}); } catch(e){ return iso; } };
 
   const theadCols = colsMostrar.map(ci => '<th>' + fmtF(datos.columnas[ci]) + '</th>').join('');
