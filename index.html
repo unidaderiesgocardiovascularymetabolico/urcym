@@ -4830,6 +4830,18 @@ const { createClient } = supabase;
 // En los lugares donde el HTML antepone su propia etiqueta "M.P." hay que limpiar ese
 // prefijo primero, si no queda duplicado ("M.P. M.P: 118052").
 function _soloMP(v){ return String(v||'').replace(/^\s*M\.?\s*P\.?\s*:?\s*/i,'').trim(); }
+// Iniciales del profesional logueado, para el sello circular de los informes
+// (reemplaza íconos/emoji genéricos por algo propio de cada profesional).
+function _profIniciales(){
+  const su = (window._su || '').toLowerCase();
+  if(su === 'barbara') return 'BG';
+  if(su === 'omar') return 'OB';
+  const cu = window._cu || {};
+  const nombre = (cu.name || cu.titulo || '').replace(/^(Dra?\.|Lic\.|Dr\.)\s*/i,'').trim();
+  const partes = nombre.split(/\s+/).filter(Boolean);
+  if(partes.length >= 2) return (partes[0][0] + partes[partes.length-1][0]).toUpperCase();
+  return partes[0] ? partes[0].slice(0,2).toUpperCase() : '·';
+}
 var sb = createClient(
   'https://qdjzetylyojfjdottjrk.supabase.co',
   'sb_publishable_qe6L1Uc7mRwsen7lzZlllw_DzOXonwL',
@@ -12735,29 +12747,29 @@ function dbtImprimirInforme() {
   const html = `<!DOCTYPE html><html lang="es-AR"><head><meta charset="UTF-8"/>
   <title>Informe Diabetes — ${nombre}</title>
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Amiko:wght@400;600;700&family=Encode+Sans:wght@300;400;500;600;700&display=swap');
     *{box-sizing:border-box;margin:0;padding:0}
-    body{font-family:'Inter',sans-serif;font-size:12px;color:#1e293b;background:#f8fafc;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-    .report-header{background:linear-gradient(135deg,#0c4a6e 0%,#1e3a5f 60%,#312e81 100%);color:white;padding:26px 34px 22px;display:flex;align-items:center;gap:18px}
-    .logo-circle{width:52px;height:52px;border-radius:50%;background:rgba(255,255,255,.15);border:2px solid rgba(255,255,255,.3);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:24px}
-    .header-title{font-size:21px;font-weight:800}
+    body{font-family:'Encode Sans',sans-serif;font-size:12px;color:#1e293b;background:#f8fafc;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    .report-header{background:linear-gradient(135deg,#1f6aab 0%,#4dbcbe 100%);color:white;padding:26px 34px 22px;display:flex;align-items:center;gap:18px}
+    .logo-circle{width:52px;height:52px;border-radius:50%;background:rgba(255,255,255,.15);border:2px solid rgba(255,255,255,.3);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-family:'Amiko',sans-serif;font-size:16px;font-weight:700;letter-spacing:.02em}
+    .header-title{font-family:'Amiko',sans-serif;font-size:21px;font-weight:700}
     .header-sub{font-size:11px;color:rgba(255,255,255,.75);margin-top:3px;text-transform:uppercase;letter-spacing:.05em}
     .header-fecha{margin-left:auto;text-align:right;font-size:10px;color:rgba(255,255,255,.65)}
     .header-fecha strong{display:block;font-size:12px;color:white}
-    .paciente-bar{background:white;border-bottom:3px solid #0c4a6e;padding:14px 34px;display:flex;gap:26px;flex-wrap:wrap}
+    .paciente-bar{background:white;border-bottom:3px solid #1f6aab;padding:14px 34px;display:flex;gap:26px;flex-wrap:wrap}
     .pac-chip-label{font-size:8.5px;font-weight:700;text-transform:uppercase;color:#94a3b8}
-    .pac-chip-val{font-size:13px;font-weight:700;color:#0c4a6e}
+    .pac-chip-val{font-size:13px;font-weight:700;color:#1f6aab}
     .body-wrap{padding:22px 34px 30px;max-width:960px;margin:0 auto}
-    .welcome{background:#eff6ff;border:1.5px solid #bfdbfe;border-radius:14px;padding:16px 20px;font-size:12.5px;line-height:1.7;color:#1e3a5f;margin-bottom:20px}
-    .welcome b{color:#0c4a6e}
-    h2.sec{font-size:14px;font-weight:800;color:#0c4a6e;margin:22px 0 10px;display:flex;align-items:center;gap:6px}
+    .welcome{background:#eff6ff;border:1.5px solid #bfdbfe;border-radius:14px;padding:16px 20px;font-size:12.5px;line-height:1.7;color:#3089ca;margin-bottom:20px}
+    .welcome b{color:#1f6aab}
+    h2.sec{font-size:14px;font-weight:800;color:#1f6aab;margin:22px 0 10px;display:flex;align-items:center;gap:6px}
     table{border-collapse:collapse;width:100%;font-size:10.5px;background:white;border-radius:10px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.06)}
-    th{background:#0c4a6e;color:white;padding:8px 8px;font-size:9px;text-transform:uppercase;letter-spacing:.03em}
+    th{background:#1f6aab;color:white;padding:8px 8px;font-size:9px;text-transform:uppercase;letter-spacing:.03em}
     th:first-child{text-align:left}
     td{padding:7px 8px;text-align:center;border-bottom:1px solid #f1f5f9}
-    td.row-label{text-align:left;font-weight:600;color:#1e3a5f;background:#f8fafc}
+    td.row-label{text-align:left;font-weight:600;color:#3089ca;background:#f8fafc}
     .pill{display:inline-block;padding:2px 8px;border-radius:20px;font-size:9.5px;font-weight:700;white-space:nowrap}
-    .sim-box{background:linear-gradient(135deg,#f0fdf4,#ecfeff);border:1.5px solid #bbf7d0;border-radius:14px;padding:18px 20px}
+    .sim-box{background:linear-gradient(135deg,#1f6aab 0%,#4dbcbe 100%);border:1.5px solid #bbf7d0;border-radius:14px;padding:18px 20px}
     .sim-title{font-size:15px;font-weight:800;color:#166534;margin-bottom:8px}
     .sim-box p{font-size:13px;color:#166534;line-height:1.65;margin:8px 0}
     .sim-bar-row{display:grid;grid-template-columns:140px 1fr 50px;align-items:center;gap:10px;margin:8px 0;font-size:12.5px;color:#166534}
@@ -12765,9 +12777,9 @@ function dbtImprimirInforme() {
     .nota-riesgo{font-size:12.5px;color:#475569;line-height:1.65;font-style:italic;background:rgba(255,255,255,.6);border-radius:8px;padding:10px 12px;margin-top:10px}
     .perfil-box{background:white;border:1.5px solid #e2e8f0;border-radius:14px;padding:16px 20px}
     .perfil-row{margin-bottom:14px}.perfil-row:last-child{margin-bottom:0}
-    .perfil-lbl{display:block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#0c4a6e;margin-bottom:7px}
+    .perfil-lbl{display:block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#1f6aab;margin-bottom:7px}
     .perfil-chips{display:flex;flex-wrap:wrap;gap:6px}
-    .perfil-chip{background:#eff6ff;color:#1e3a5f;border:1px solid #bfdbfe;border-radius:20px;padding:4px 12px;font-size:12.5px;font-weight:600}
+    .perfil-chip{background:#eff6ff;color:#3089ca;border:1px solid #bfdbfe;border-radius:20px;padding:4px 12px;font-size:12.5px;font-weight:600}
     .perfil-chip.fam{background:#f0fdf4;color:#166534;border-color:#bbf7d0}
     .perfil-chip.med{background:#faf5ff;color:#6d28d9;border-color:#e9d5ff}
     .perfil-empty{color:#94a3b8;font-size:12.5px;font-style:italic}
@@ -12781,7 +12793,7 @@ function dbtImprimirInforme() {
     @media print{ body{background:white} @page{margin:8mm 10mm;size:A4 portrait} }
   </style></head><body>
   <div class="report-header">
-    <div class="logo-circle">🩸</div>
+    <div class="logo-circle">${_profIniciales()}</div>
     <div><div class="header-title">Tu Informe Cardiometabólico</div><div class="header-sub">Seguimiento de Diabetes · Evolucionar</div></div>
     <div class="header-fecha"><strong>${fechaHoyTxt}</strong>Informe generado para el paciente</div>
   </div>
@@ -15213,30 +15225,30 @@ function mdpaImprimirInforme() {
 
   const html = `<!DOCTYPE html><html lang="es-AR"><head><meta charset="UTF-8"/>
 <title>MDPA — ${nombre}</title>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Amiko:wght@400;600;700&family=Encode+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
-  body{font-family:'Inter',sans-serif;font-size:11px;color:#1e293b;background:#f8fafc;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  body{font-family:'Encode Sans',sans-serif;font-size:11px;color:#1e293b;background:#f8fafc;-webkit-print-color-adjust:exact;print-color-adjust:exact}
 
   /* ── HEADER ── */
-  .report-header{background:linear-gradient(135deg,#0c4a6e 0%,#1e3a5f 60%,#312e81 100%);color:white;padding:24px 32px 20px;display:flex;align-items:center;gap:20px}
+  .report-header{background:linear-gradient(135deg,#1f6aab 0%,#4dbcbe 100%);color:white;padding:24px 32px 20px;display:flex;align-items:center;gap:20px}
   .logo-circle{width:64px;height:64px;border-radius:50%;background:rgba(255,255,255,.15);border:2px solid rgba(255,255,255,.3);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:36px}
   .header-text{flex:1}
-  .header-title{font-size:20px;font-weight:800;letter-spacing:.02em;line-height:1.1}
+  .header-title{font-family:'Amiko',sans-serif;font-size:20px;font-weight:700;letter-spacing:.02em;line-height:1.1}
   .header-sub{font-size:11px;color:rgba(255,255,255,.7);margin-top:3px;letter-spacing:.04em;text-transform:uppercase}
   .header-fecha{text-align:right;font-size:10px;color:rgba(255,255,255,.6);line-height:1.7}
   .header-fecha strong{display:block;font-size:12px;color:rgba(255,255,255,.9);font-weight:600}
 
   /* ── PACIENTE ── */
-  .paciente-bar{background:white;border-bottom:3px solid #0c4a6e;padding:14px 32px;display:flex;align-items:center;gap:24px;flex-wrap:wrap}
+  .paciente-bar{background:white;border-bottom:3px solid #1f6aab;padding:14px 32px;display:flex;align-items:center;gap:24px;flex-wrap:wrap}
   .pac-chip{display:flex;flex-direction:column}
   .pac-chip-label{font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#94a3b8;margin-bottom:2px}
-  .pac-chip-val{font-size:13px;font-weight:700;color:#0c4a6e}
+  .pac-chip-val{font-size:13px;font-weight:700;color:#1f6aab}
   .pac-divider{width:1px;height:32px;background:#e2e8f0;flex-shrink:0}
 
   /* ── PROFESIONAL ── */
   .prof-strip{background:#f0f9ff;border-left:4px solid #0369a1;padding:10px 32px;display:flex;align-items:center;gap:10px;font-size:10.5px}
-  .prof-strip-name{font-weight:700;color:#0c4a6e;font-size:11.5px}
+  .prof-strip-name{font-weight:700;color:#1f6aab;font-size:11.5px}
   .prof-strip-sep{color:#bae6fd;font-size:14px}
   .prof-strip-mp{color:#0369a1;font-weight:600}
   .prof-strip-esp{color:#64748b;font-style:italic}
@@ -15248,7 +15260,7 @@ function mdpaImprimirInforme() {
   .info-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px}
   .info-chip{background:white;border:1px solid #e2e8f0;border-radius:10px;padding:10px 14px;box-shadow:0 1px 3px rgba(0,0,0,.05)}
   .info-chip-label{font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#94a3b8;margin-bottom:3px}
-  .info-chip-val{font-size:13px;font-weight:700;color:#0c4a6e}
+  .info-chip-val{font-size:13px;font-weight:700;color:#1f6aab}
   .info-grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px}
   .chip-motivo{background:#f0fdf4;border:1px solid #86efac;border-radius:10px;padding:10px 14px}
   .chip-motivo .info-chip-label{color:#16a34a}
@@ -15276,7 +15288,7 @@ function mdpaImprimirInforme() {
   .table-caption-title{font-size:11.5px;font-weight:700;color:#1e293b;flex:1}
   .table-caption-badge{background:#dbeafe;color:#1d4ed8;font-size:9px;font-weight:700;padding:2px 8px;border-radius:20px;text-transform:uppercase;letter-spacing:.06em}
   table{border-collapse:collapse;width:100%;font-size:10.5px}
-  th{background:#0c4a6e;color:rgba(255,255,255,.95);padding:8px 8px;text-align:center;font-weight:600;font-size:9px;letter-spacing:.04em;text-transform:uppercase;white-space:nowrap}
+  th{background:#1f6aab;color:rgba(255,255,255,.95);padding:8px 8px;text-align:center;font-weight:600;font-size:9px;letter-spacing:.04em;text-transform:uppercase;white-space:nowrap}
   th.th-mat{background:#1e4e8c}
   th.th-ves{background:#1a6641}
   th.th-pp{background:#6b3a8e}
@@ -15288,12 +15300,12 @@ function mdpaImprimirInforme() {
 
   /* ── PANEL RESULTADOS ── */
   .res-panel{background:white;border-radius:10px;box-shadow:0 1px 4px rgba(0,0,0,.07);overflow:hidden;border:1px solid #e2e8f0}
-  .res-header{background:#0c4a6e;color:white;padding:8px 12px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em}
+  .res-header{background:#1f6aab;color:white;padding:8px 12px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em}
   .res-row{display:flex;justify-content:space-between;align-items:center;padding:6px 12px;border-bottom:1px solid #f1f5f9}
   .res-row:last-child{border-bottom:none}
-  .res-row-sep{height:3px;background:linear-gradient(90deg,#0c4a6e,#312e81)}
+  .res-row-sep{height:3px;background:linear-gradient(90deg,#1f6aab,#4dbcbe)}
   .res-label{font-size:9.5px;color:#64748b}
-  .res-val{font-size:13px;font-weight:700;color:#0c4a6e}
+  .res-val{font-size:13px;font-weight:700;color:#1f6aab}
   .res-sub-header{background:#f1f5f9;padding:5px 12px;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#475569}
 
   /* ── FOOTER ── */
@@ -15549,20 +15561,20 @@ function _mdpaGenerarHTMLInforme(est, modoModal) {
   // En modo modal no incluimos doctype/html/head (va embebido)
   const estilos = `
     *{box-sizing:border-box;margin:0;padding:0}
-    body,div{font-family:'Inter',sans-serif;font-size:11px;color:#1e293b}
-    .rh{background:linear-gradient(135deg,#0c4a6e 0%,#1e3a5f 60%,#312e81 100%);color:white;padding:20px 24px;display:flex;align-items:center;gap:16px;${modoModal?'border-radius:0':''};}
+    body,div{font-family:'Encode Sans',sans-serif;font-size:11px;color:#1e293b}
+    .rh{background:linear-gradient(135deg,#1f6aab 0%,#4dbcbe 100%);color:white;padding:20px 24px;display:flex;align-items:center;gap:16px;${modoModal?'border-radius:0':''};}
     .rh-ico{width:60px;height:60px;border-radius:50%;background:rgba(255,255,255,.15);border:2px solid rgba(255,255,255,.3);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:34px}
-    .rh-txt{flex:1}.rh-title{font-size:17px;font-weight:800;letter-spacing:.02em}
+    .rh-txt{flex:1}.rh-title{font-family:'Amiko',sans-serif;font-size:17px;font-weight:700;letter-spacing:.02em}
     .rh-sub{font-size:10px;color:rgba(255,255,255,.7);margin-top:2px;text-transform:uppercase;letter-spacing:.04em}
     .rh-fecha{text-align:right;font-size:10px;color:rgba(255,255,255,.6);line-height:1.7}
     .rh-fecha strong{display:block;font-size:12px;color:rgba(255,255,255,.9)}
-    .pac-bar{background:white;border-bottom:3px solid #0c4a6e;padding:12px 24px;display:flex;align-items:center;gap:20px;flex-wrap:wrap}
+    .pac-bar{background:white;border-bottom:3px solid #1f6aab;padding:12px 24px;display:flex;align-items:center;gap:20px;flex-wrap:wrap}
     .pac-chip{display:flex;flex-direction:column}
     .pac-lbl{font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#94a3b8;margin-bottom:2px}
-    .pac-val{font-size:13px;font-weight:700;color:#0c4a6e}
+    .pac-val{font-size:13px;font-weight:700;color:#1f6aab}
     .pac-div{width:1px;height:28px;background:#e2e8f0;flex-shrink:0}
     .prof-strip{background:#f0f9ff;border-left:4px solid #0369a1;padding:8px 24px;display:flex;align-items:center;gap:8px;font-size:10.5px}
-    .prof-name{font-weight:700;color:#0c4a6e;font-size:11px}
+    .prof-name{font-weight:700;color:#1f6aab;font-size:11px}
     .prof-sep{color:#bae6fd;font-size:13px}
     .prof-mp{color:#0369a1;font-weight:600}
     .prof-esp{color:#64748b;font-style:italic}
@@ -15586,23 +15598,23 @@ function _mdpaGenerarHTMLInforme(est, modoModal) {
     .tw-cap-t{font-size:11px;font-weight:700;color:#1e293b;flex:1}
     .tw-cap-b{background:#dbeafe;color:#1d4ed8;font-size:9px;font-weight:700;padding:2px 7px;border-radius:20px;text-transform:uppercase;letter-spacing:.06em}
     table{border-collapse:collapse;width:100%;font-size:10.5px}
-    th{background:#0c4a6e;color:rgba(255,255,255,.95);padding:7px 7px;text-align:center;font-weight:600;font-size:9px;letter-spacing:.04em;text-transform:uppercase;white-space:nowrap}
+    th{background:#1f6aab;color:rgba(255,255,255,.95);padding:7px 7px;text-align:center;font-weight:600;font-size:9px;letter-spacing:.04em;text-transform:uppercase;white-space:nowrap}
     th.th-mat{background:#1e4e8c}
     th.th-ves{background:#1a6641}
     td{padding:4px 6px;text-align:center;border-bottom:1px solid #f1f5f9;color:#334155}
     td.col-dia{font-weight:600;color:#1e293b;background:#f8fafc;text-align:left;padding-left:8px;white-space:nowrap;border-right:1px solid #e2e8f0}
     td.col-toma{color:#94a3b8;font-size:10px;border-right:1px solid #e2e8f0}
     .rp{background:white;border-radius:10px;overflow:hidden;border:1px solid #e2e8f0;box-shadow:0 1px 3px rgba(0,0,0,.06)}
-    .rp-hdr{background:#0c4a6e;color:white;padding:8px 12px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em}
+    .rp-hdr{background:#1f6aab;color:white;padding:8px 12px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em}
     .rr{display:flex;justify-content:space-between;align-items:center;padding:5px 12px;border-bottom:1px solid #f1f5f9}
     .rr:last-child{border-bottom:none}
-    .rr-sep{height:3px;background:linear-gradient(90deg,#0c4a6e,#312e81)}
+    .rr-sep{height:3px;background:linear-gradient(90deg,#1f6aab,#4dbcbe)}
     .rl{font-size:9.5px;color:#64748b}
-    .rv{font-size:13px;font-weight:700;color:#0c4a6e}
+    .rv{font-size:13px;font-weight:700;color:#1f6aab}
     .rr-sub{background:#f1f5f9;padding:4px 12px;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#475569}
     .footer{margin-top:16px;padding-top:10px;border-top:1px solid #e2e8f0;display:flex;align-items:center;justify-content:space-between;font-size:8.5px;color:#94a3b8}
     .footer-brand{font-weight:700;color:#64748b;letter-spacing:.04em;text-transform:uppercase}
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Amiko:wght@400;600;700&family=Encode+Sans:wght@300;400;500;600;700&display=swap');
     @media print{body{background:white}@page{margin:8mm 10mm;size:A4}.rh,.rp-hdr,.rr-sep{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
   `;
 
@@ -16343,21 +16355,21 @@ function _adipGenerarHTMLInforme(trat, modoModal, opts) {
 
   const estilos = `
     *{box-sizing:border-box;margin:0;padding:0}
-    body{font-family:'Inter',sans-serif;font-size:11px;color:#1e293b;background:#f8fafc;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-    .rh{background:linear-gradient(135deg,#0c4a6e 0%,#1e3a5f 60%,#312e81 100%);color:white;padding:24px 32px 20px;display:flex;align-items:center;gap:20px}
+    body{font-family:'Encode Sans',sans-serif;font-size:11px;color:#1e293b;background:#f8fafc;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    .rh{background:linear-gradient(135deg,#1f6aab 0%,#4dbcbe 100%);color:white;padding:24px 32px 20px;display:flex;align-items:center;gap:20px}
     .rh-ico{width:52px;height:52px;border-radius:50%;background:rgba(255,255,255,.15);border:2px solid rgba(255,255,255,.3);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:22px}
     .rh-txt{flex:1}
-    .rh-title{font-size:20px;font-weight:800;letter-spacing:.02em;line-height:1.1}
+    .rh-title{font-family:'Amiko',sans-serif;font-size:20px;font-weight:700;letter-spacing:.02em;line-height:1.1}
     .rh-sub{font-size:11px;color:rgba(255,255,255,.7);margin-top:3px;letter-spacing:.04em;text-transform:uppercase}
     .rh-fecha{text-align:right;font-size:10px;color:rgba(255,255,255,.6);line-height:1.7}
     .rh-fecha strong{display:block;font-size:12px;color:rgba(255,255,255,.9);font-weight:600}
-    .pac-bar{background:white;border-bottom:3px solid #0c4a6e;padding:14px 32px;display:flex;align-items:center;gap:24px;flex-wrap:wrap}
+    .pac-bar{background:white;border-bottom:3px solid #1f6aab;padding:14px 32px;display:flex;align-items:center;gap:24px;flex-wrap:wrap}
     .pac-chip{display:flex;flex-direction:column}
     .pac-lbl{font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#94a3b8;margin-bottom:2px}
-    .pac-val{font-size:13px;font-weight:700;color:#0c4a6e}
+    .pac-val{font-size:13px;font-weight:700;color:#1f6aab}
     .pac-div{width:1px;height:32px;background:#e2e8f0;flex-shrink:0}
     .prof-strip{background:#f0f9ff;border-left:4px solid #0369a1;padding:10px 32px;display:flex;align-items:center;gap:10px;font-size:10.5px}
-    .prof-name{font-weight:700;color:#0c4a6e;font-size:11.5px}
+    .prof-name{font-weight:700;color:#1f6aab;font-size:11.5px}
     .prof-sep{color:#bae6fd;font-size:14px}
     .prof-mp{color:#0369a1;font-weight:600}
     .prof-esp{color:#64748b;font-style:italic}
@@ -16365,9 +16377,9 @@ function _adipGenerarHTMLInforme(trat, modoModal, opts) {
     .info-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px}
     .chip{background:white;border:1px solid #e2e8f0;border-radius:10px;padding:10px 14px;box-shadow:0 1px 3px rgba(0,0,0,.05)}
     .chip-lbl{font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#94a3b8;margin-bottom:3px}
-    .chip-val{font-size:13px;font-weight:700;color:#0c4a6e}
+    .chip-val{font-size:13px;font-weight:700;color:#1f6aab}
     .chk-panel{background:white;border-radius:10px;box-shadow:0 1px 4px rgba(0,0,0,.07);overflow:hidden;border:1px solid #e2e8f0;margin-bottom:16px}
-    .chk-hdr{background:#0c4a6e;color:white;padding:10px 14px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em}
+    .chk-hdr{background:#1f6aab;color:white;padding:10px 14px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em}
     .chk-row{display:flex;align-items:flex-start;gap:10px;padding:10px 14px;border-bottom:1px solid #f1f5f9;font-size:11px}
     .chk-row:last-child{border-bottom:none}
     .chk-ico{font-size:13px;font-weight:800;flex-shrink:0}
@@ -16392,14 +16404,14 @@ function _adipGenerarHTMLInforme(trat, modoModal, opts) {
     .nutri-datos{font-size:10.5px;color:#64748b;margin-bottom:8px}
     .nutri-row{display:flex;justify-content:space-between;gap:10px;font-size:11.5px;color:#334155;padding:5px 0;border-bottom:1px dashed #e2d9fb}
     .nutri-row:last-of-type{border-bottom:none}
-    .nutri-row b{color:#0c4a6e}
+    .nutri-row b{color:#1f6aab}
     .nutri-nota2{font-size:9.5px;color:#8b5cf6;font-style:italic;margin-top:8px}
     .nutri-empty{font-size:11px;color:#94a3b8}
     .antro-table{width:100%;border-collapse:collapse;font-size:10.5px;margin-top:4px}
     .antro-table th,.antro-table td{border:1px solid #e2e8f0;padding:5px 8px;text-align:center}
     .antro-table th{background:#ede9fe;color:#6d28d9;font-weight:700}
     .antro-table td:first-child{text-align:left;font-weight:600;color:#334155;background:#faf9ff}
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Amiko:wght@400;600;700&family=Encode+Sans:wght@300;400;500;600;700&display=swap');
     @media print{body{background:white}@page{margin:8mm 10mm;size:A4}.rh,.chk-hdr,.nutri-hdr2,.antro-table th{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
   `;
 
@@ -16753,27 +16765,27 @@ function _lipGenerarHTMLInforme(opts) {
   ].filter(Boolean).join('');
 
   const estilos = `
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Amiko:wght@400;600;700&family=Encode+Sans:wght@300;400;500;600;700&display=swap');
     *{box-sizing:border-box;margin:0;padding:0}
-    body{font-family:'Inter',sans-serif;font-size:12px;color:#1e293b;background:#f8fafc;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-    .report-header{background:linear-gradient(135deg,#0c4a6e 0%,#1e3a5f 55%,#312e81 100%);color:white;padding:26px 34px 22px;display:flex;align-items:center;gap:18px}
-    .logo-circle{width:52px;height:52px;border-radius:50%;background:rgba(255,255,255,.15);border:2px solid rgba(255,255,255,.3);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:24px}
-    .header-title{font-size:21px;font-weight:800}
+    body{font-family:'Encode Sans',sans-serif;font-size:12px;color:#1e293b;background:#f8fafc;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    .report-header{background:linear-gradient(135deg,#1f6aab 0%,#4dbcbe 100%);color:white;padding:26px 34px 22px;display:flex;align-items:center;gap:18px}
+    .logo-circle{width:52px;height:52px;border-radius:50%;background:rgba(255,255,255,.15);border:2px solid rgba(255,255,255,.3);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-family:'Amiko',sans-serif;font-size:16px;font-weight:700;letter-spacing:.02em}
+    .header-title{font-family:'Amiko',sans-serif;font-size:21px;font-weight:700}
     .header-sub{font-size:11px;color:rgba(255,255,255,.75);margin-top:3px;text-transform:uppercase;letter-spacing:.05em}
     .header-fecha{margin-left:auto;text-align:right;font-size:10px;color:rgba(255,255,255,.65)}
     .header-fecha strong{display:block;font-size:12px;color:white}
-    .paciente-bar{background:white;border-bottom:3px solid #0c4a6e;padding:14px 34px;display:flex;gap:26px;flex-wrap:wrap}
+    .paciente-bar{background:white;border-bottom:3px solid #1f6aab;padding:14px 34px;display:flex;gap:26px;flex-wrap:wrap}
     .pac-chip-label{font-size:8.5px;font-weight:700;text-transform:uppercase;color:#94a3b8}
-    .pac-chip-val{font-size:13px;font-weight:700;color:#0c4a6e}
+    .pac-chip-val{font-size:13px;font-weight:700;color:#1f6aab}
     .body-wrap{padding:22px 34px 30px;max-width:960px;margin:0 auto}
-    .obe-welcome{background:#f0f9ff;border:1.5px solid #bae6fd;border-radius:14px;padding:16px 20px;font-size:12.5px;line-height:1.7;color:#0c4a6e;margin-bottom:20px}
+    .obe-welcome{background:#f0f9ff;border:1.5px solid #bae6fd;border-radius:14px;padding:16px 20px;font-size:12.5px;line-height:1.7;color:#1f6aab;margin-bottom:20px}
     .obe-welcome b{color:#0369a1}
-    h2.obe-sec{font-size:14px;font-weight:800;color:#0c4a6e;margin:22px 0 10px;display:flex;align-items:center;gap:6px}
+    h2.obe-sec{font-size:14px;font-weight:800;color:#1f6aab;margin:22px 0 10px;display:flex;align-items:center;gap:6px}
     table{border-collapse:collapse;width:100%;font-size:10.5px;background:white;border-radius:10px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.06)}
-    th{background:#0c4a6e;color:white;padding:8px 8px;font-size:9px;text-transform:uppercase;letter-spacing:.03em}
+    th{background:#1f6aab;color:white;padding:8px 8px;font-size:9px;text-transform:uppercase;letter-spacing:.03em}
     th:first-child{text-align:left}
     td{padding:7px 8px;text-align:center;border-bottom:1px solid #f1f5f9}
-    td.row-label{text-align:left;font-weight:600;color:#0c4a6e;background:#f8fafc}
+    td.row-label{text-align:left;font-weight:600;color:#1f6aab;background:#f8fafc}
     .pill{display:inline-block;padding:2px 8px;border-radius:20px;font-size:9.5px;font-weight:700;white-space:nowrap}
     .obe-tablero{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:6px}
     .obe-tablero-item{background:white;border:1px solid #e2e8f0;border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:6px}
@@ -16781,22 +16793,22 @@ function _lipGenerarHTMLInforme(opts) {
     .obe-badge{display:inline-block;padding:3px 10px;border-radius:20px;font-size:10.5px;font-weight:700;width:fit-content}
     .obe-tablero-nota{font-size:9.5px;color:#64748b;font-style:italic}
     .obe-msg{font-size:11px;color:#475569;line-height:1.6;margin-top:8px}
-    .sim-box{background:linear-gradient(135deg,#f0f9ff,#ecfeff);border:1.5px solid #bae6fd;border-radius:14px;padding:18px 20px}
-    .sim-title{font-size:13.5px;font-weight:800;color:#0c4a6e;margin-bottom:8px}
-    .sim-box p{font-size:11.5px;color:#0c4a6e;line-height:1.6;margin:8px 0}
-    .sim-bar-row{display:grid;grid-template-columns:170px 1fr 50px;align-items:center;gap:10px;margin:8px 0;font-size:11px;color:#0c4a6e}
+    .sim-box{background:linear-gradient(135deg,#1f6aab 0%,#4dbcbe 100%);border:1.5px solid #bae6fd;border-radius:14px;padding:18px 20px}
+    .sim-title{font-size:13.5px;font-weight:800;color:#1f6aab;margin-bottom:8px}
+    .sim-box p{font-size:11.5px;color:#1f6aab;line-height:1.6;margin:8px 0}
+    .sim-bar-row{display:grid;grid-template-columns:170px 1fr 50px;align-items:center;gap:10px;margin:8px 0;font-size:11px;color:#1f6aab}
     .sim-bar-lbl{font-weight:600}
     .nutri-panel{background:#f5f3ff;border:1.5px solid #ddd6fe;border-radius:10px;padding:14px 16px}
     .nutri-hdr2{font-size:11px;font-weight:700;color:#6d28d9;text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px}
     .nutri-datos{font-size:10.5px;color:#64748b;margin-bottom:8px}
     .nutri-row{display:flex;justify-content:space-between;gap:10px;font-size:11.5px;color:#334155;padding:5px 0;border-bottom:1px dashed #e2d9fb}
     .nutri-row:last-of-type{border-bottom:none}
-    .nutri-row b{color:#0c4a6e}
+    .nutri-row b{color:#1f6aab}
     .nutri-nota2{font-size:9.5px;color:#8b5cf6;font-style:italic;margin-top:8px}
     .nutri-empty{font-size:11px;color:#94a3b8}
     .commit-box{background:white;border:1.5px solid #e2e8f0;border-radius:14px;padding:16px 20px}
     .commit-box li{font-size:11.5px;line-height:1.8;margin-left:18px;color:#334155}
-    .closing{text-align:center;font-size:13px;font-weight:700;color:#0c4a6e;background:#f0f9ff;border:1.5px solid #bae6fd;border-radius:12px;padding:14px;margin-top:20px}
+    .closing{text-align:center;font-size:13px;font-weight:700;color:#1f6aab;background:#f0f9ff;border:1.5px solid #bae6fd;border-radius:12px;padding:14px;margin-top:20px}
     .obe-empty{font-size:11.5px;color:#94a3b8;background:white;border:1px solid #e2e8f0;border-radius:10px;padding:14px}
     .obe-aviso{display:flex;gap:10px;align-items:flex-start;background:#fffbeb;border:1.5px solid #fcd34d;border-radius:12px;padding:12px 16px;margin-top:10px}
     .obe-aviso-ico{font-size:16px;flex-shrink:0}
@@ -16810,7 +16822,7 @@ function _lipGenerarHTMLInforme(opts) {
   <title>Informe de Evolución — Lípidos — ${nombre}</title>
   <style>${estilos}</style></head><body>
   <div class="report-header">
-    <div class="logo-circle">🧈</div>
+    <div class="logo-circle">${_profIniciales()}</div>
     <div><div class="header-title">Tu Informe de Control Lipídico</div><div class="header-sub">Seguimiento de Lípidos · Evolucionar</div></div>
     <div class="header-fecha"><strong>${fechaHoyTxt}</strong>Informe generado para el paciente</div>
   </div>
@@ -17190,29 +17202,29 @@ function _efcaGenerarHTMLInforme(encuesta, calc) {
 
   const estilos = `
     *{box-sizing:border-box;margin:0;padding:0}
-    body{font-family:'Inter',sans-serif;font-size:11px;color:#1e293b;background:#f8fafc;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-    .rh{background:linear-gradient(135deg,#0c4a6e 0%,#1e3a5f 60%,#312e81 100%);color:white;padding:24px 32px 20px;display:flex;align-items:center;gap:20px}
+    body{font-family:'Encode Sans',sans-serif;font-size:11px;color:#1e293b;background:#f8fafc;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    .rh{background:linear-gradient(135deg,#1f6aab 0%,#4dbcbe 100%);color:white;padding:24px 32px 20px;display:flex;align-items:center;gap:20px}
     .rh-ico{width:52px;height:52px;border-radius:50%;background:rgba(255,255,255,.15);border:2px solid rgba(255,255,255,.3);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:22px}
     .rh-txt{flex:1}
-    .rh-title{font-size:20px;font-weight:800;letter-spacing:.02em;line-height:1.1}
+    .rh-title{font-family:'Amiko',sans-serif;font-size:20px;font-weight:700;letter-spacing:.02em;line-height:1.1}
     .rh-sub{font-size:11px;color:rgba(255,255,255,.7);margin-top:3px;letter-spacing:.04em;text-transform:uppercase}
     .rh-fecha{text-align:right;font-size:10px;color:rgba(255,255,255,.6);line-height:1.7}
     .rh-fecha strong{display:block;font-size:12px;color:rgba(255,255,255,.9);font-weight:600}
-    .pac-bar{background:white;border-bottom:3px solid #0c4a6e;padding:14px 32px;display:flex;align-items:center;gap:24px;flex-wrap:wrap}
+    .pac-bar{background:white;border-bottom:3px solid #1f6aab;padding:14px 32px;display:flex;align-items:center;gap:24px;flex-wrap:wrap}
     .pac-chip{display:flex;flex-direction:column}
     .pac-lbl{font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#94a3b8;margin-bottom:2px}
-    .pac-val{font-size:13px;font-weight:700;color:#0c4a6e}
+    .pac-val{font-size:13px;font-weight:700;color:#1f6aab}
     .pac-div{width:1px;height:32px;background:#e2e8f0;flex-shrink:0}
     .prof-strip{background:#f0f9ff;border-left:4px solid #0369a1;padding:10px 32px;display:flex;align-items:center;gap:10px;font-size:10.5px}
-    .prof-name{font-weight:700;color:#0c4a6e;font-size:11.5px}
+    .prof-name{font-weight:700;color:#1f6aab;font-size:11.5px}
     .prof-sep{color:#bae6fd;font-size:14px}
     .prof-mp{color:#0369a1;font-weight:600}
     .prof-esp{color:#64748b;font-style:italic}
     .body{padding:20px 32px 28px}
-    .total-box{background:#0c4a6e;color:white;border-radius:10px;padding:14px 18px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between}
+    .total-box{background:#1f6aab;color:white;border-radius:10px;padding:14px 18px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between}
     .total-lbl{font-size:9px;text-transform:uppercase;letter-spacing:.06em;opacity:.75}
     .total-val{font-size:20px;font-weight:800}
-    .predom-box{background:#e8f3fc;border:1.5px solid #3089ca;border-radius:10px;padding:12px 16px;margin-bottom:16px;font-size:11.5px;color:#0c4a6e;font-weight:600}
+    .predom-box{background:#e8f3fc;border:1.5px solid #3089ca;border-radius:10px;padding:12px 16px;margin-bottom:16px;font-size:11.5px;color:#1f6aab;font-weight:600}
     .efca-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:16px}
     .efca-card{border:1.5px solid #e2e8f0;border-radius:10px;padding:10px 14px}
     .efca-card-lbl{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#64748b}
@@ -17221,7 +17233,7 @@ function _efcaGenerarHTMLInforme(encuesta, calc) {
     .footer{margin-top:16px;padding-top:10px;border-top:1px solid #e2e8f0;display:flex;align-items:center;justify-content:space-between;font-size:8.5px;color:#94a3b8}
     .footer-brand{font-weight:700;color:#64748b;letter-spacing:.04em;text-transform:uppercase}
     .biblio{font-size:8.5px;color:#94a3b8;font-style:italic;margin-top:10px;line-height:1.4}
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Amiko:wght@400;600;700&family=Encode+Sans:wght@300;400;500;600;700&display=swap');
     @media print{body{background:white}@page{margin:8mm 10mm;size:A4}.rh,.total-box{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
   `;
 
@@ -17669,12 +17681,12 @@ function _obeGenerarHTMLInforme(opts) {
   ].filter(Boolean).join('');
 
   const estilos = `
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Amiko:wght@400;600;700&family=Encode+Sans:wght@300;400;500;600;700&display=swap');
     *{box-sizing:border-box;margin:0;padding:0}
-    body{font-family:'Inter',sans-serif;font-size:12px;color:#1e293b;background:#f8fafc;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-    .report-header{background:linear-gradient(135deg,#166534 0%,#15803d 55%,#0c4a6e 100%);color:white;padding:26px 34px 22px;display:flex;align-items:center;gap:18px}
-    .logo-circle{width:52px;height:52px;border-radius:50%;background:rgba(255,255,255,.15);border:2px solid rgba(255,255,255,.3);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:24px}
-    .header-title{font-size:21px;font-weight:800}
+    body{font-family:'Encode Sans',sans-serif;font-size:12px;color:#1e293b;background:#f8fafc;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    .report-header{background:linear-gradient(135deg,#1f6aab 0%,#4dbcbe 100%);color:white;padding:26px 34px 22px;display:flex;align-items:center;gap:18px}
+    .logo-circle{width:52px;height:52px;border-radius:50%;background:rgba(255,255,255,.15);border:2px solid rgba(255,255,255,.3);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-family:'Amiko',sans-serif;font-size:16px;font-weight:700;letter-spacing:.02em}
+    .header-title{font-family:'Amiko',sans-serif;font-size:21px;font-weight:700}
     .header-sub{font-size:11px;color:rgba(255,255,255,.75);margin-top:3px;text-transform:uppercase;letter-spacing:.05em}
     .header-fecha{margin-left:auto;text-align:right;font-size:10px;color:rgba(255,255,255,.65)}
     .header-fecha strong{display:block;font-size:12px;color:white}
@@ -17697,7 +17709,7 @@ function _obeGenerarHTMLInforme(opts) {
     .obe-badge{display:inline-block;padding:3px 10px;border-radius:20px;font-size:10.5px;font-weight:700;width:fit-content}
     .obe-tablero-nota{font-size:9.5px;color:#64748b;font-style:italic}
     .obe-msg{font-size:11px;color:#475569;line-height:1.6;margin-top:8px}
-    .sim-box{background:linear-gradient(135deg,#f0fdf4,#ecfeff);border:1.5px solid #bbf7d0;border-radius:14px;padding:18px 20px}
+    .sim-box{background:linear-gradient(135deg,#1f6aab 0%,#4dbcbe 100%);border:1.5px solid #bbf7d0;border-radius:14px;padding:18px 20px}
     .sim-title{font-size:13.5px;font-weight:800;color:#166534;margin-bottom:8px}
     .sim-box p{font-size:11.5px;color:#166534;line-height:1.6;margin:8px 0}
     .sim-bar-row{display:grid;grid-template-columns:170px 1fr 50px;align-items:center;gap:10px;margin:8px 0;font-size:11px;color:#166534}
@@ -17726,7 +17738,7 @@ function _obeGenerarHTMLInforme(opts) {
   <title>Informe de Evolución — Adiposidad — ${nombre}</title>
   <style>${estilos}</style></head><body>
   <div class="report-header">
-    <div class="logo-circle">🛡️</div>
+    <div class="logo-circle">${_profIniciales()}</div>
     <div><div class="header-title">Tu Informe Cardiometabólico</div><div class="header-sub">Seguimiento de Adiposidad · Evolucionar</div></div>
     <div class="header-fecha"><strong>${fechaHoyTxt}</strong>Informe generado para el paciente</div>
   </div>
@@ -23923,24 +23935,24 @@ function imprimirInformeAnt() {
 <meta charset="UTF-8"/>
 <title>Informe Antropometría — ${nombre}</title>
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=Amiko:wght@400;600;700&family=Encode+Sans:wght@300;400;500;600;700&display=swap');
   *{box-sizing:border-box;margin:0;padding:0}
-  body{font-family:'Inter',sans-serif;font-size:11px;color:#1e293b;background:#f8fafc;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  body{font-family:'Encode Sans',sans-serif;font-size:11px;color:#1e293b;background:#f8fafc;-webkit-print-color-adjust:exact;print-color-adjust:exact}
 
   /* ── HEADER ── */
-  .report-header{background:linear-gradient(135deg,#0c4a6e 0%,#1e3a5f 60%,#312e81 100%);color:white;padding:24px 32px 20px;display:flex;align-items:center;gap:20px}
-  .logo-circle{width:52px;height:52px;border-radius:50%;background:rgba(255,255,255,.15);border:2px solid rgba(255,255,255,.3);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:22px}
+  .report-header{background:linear-gradient(135deg,#1f6aab 0%,#3089ca 100%);color:white;padding:24px 32px 20px;display:flex;align-items:center;gap:20px}
+  .logo-circle{width:52px;height:52px;border-radius:50%;background:rgba(255,255,255,.15);border:2px solid rgba(255,255,255,.3);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-family:'Amiko',sans-serif;font-size:16px;font-weight:700;letter-spacing:.02em}
   .header-text{flex:1}
-  .header-title{font-size:20px;font-weight:800;letter-spacing:.02em;line-height:1.1}
+  .header-title{font-family:'Amiko',sans-serif;font-size:20px;font-weight:700;letter-spacing:.02em;line-height:1.1}
   .header-sub{font-size:11px;color:rgba(255,255,255,.7);margin-top:3px;letter-spacing:.04em;text-transform:uppercase}
   .header-fecha{text-align:right;font-size:10px;color:rgba(255,255,255,.6);line-height:1.7}
   .header-fecha strong{display:block;font-size:12px;color:rgba(255,255,255,.9);font-weight:600}
 
   /* ── PACIENTE ── */
-  .paciente-bar{background:white;border-bottom:3px solid #0c4a6e;padding:14px 32px;display:flex;align-items:center;gap:24px;flex-wrap:wrap}
+  .paciente-bar{background:white;border-bottom:3px solid #1f6aab;padding:14px 32px;display:flex;align-items:center;gap:24px;flex-wrap:wrap}
   .pac-chip{display:flex;flex-direction:column}
   .pac-chip-label{font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#94a3b8;margin-bottom:2px}
-  .pac-chip-val{font-size:13px;font-weight:700;color:#0c4a6e}
+  .pac-chip-val{font-size:13px;font-weight:700;color:#1f6aab}
   .pac-divider{width:1px;height:32px;background:#e2e8f0;flex-shrink:0}
   .pac-sexo-badge{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:20px;font-size:10px;font-weight:600}
   .pac-sexo-badge.f{background:#fce7f3;color:#be185d}
@@ -23948,7 +23960,7 @@ function imprimirInformeAnt() {
 
   /* ── PROFESIONAL ── */
   .prof-strip{background:#f0f9ff;border-left:4px solid #0369a1;padding:10px 32px;display:flex;align-items:center;gap:10px;font-size:10.5px}
-  .prof-strip-name{font-weight:700;color:#0c4a6e;font-size:11.5px}
+  .prof-strip-name{font-weight:700;color:#1f6aab;font-size:11.5px}
   .prof-strip-sep{color:#bae6fd;font-size:14px}
   .prof-strip-mp{color:#0369a1;font-weight:600}
   .prof-strip-esp{color:#64748b;font-style:italic}
@@ -23959,18 +23971,18 @@ function imprimirInformeAnt() {
   /* ── TABLA ── */
   .table-wrap{background:white;border-radius:12px;box-shadow:0 1px 4px rgba(0,0,0,.08);overflow:hidden;border:1px solid #e2e8f0}
   .table-caption{padding:12px 16px 10px;background:white;border-bottom:1px solid #f1f5f9;display:flex;align-items:center;gap:8px}
-  .table-caption-title{font-size:12px;font-weight:700;color:#1e293b;flex:1}
+  .table-caption-title{font-family:'Amiko',sans-serif;font-size:12px;font-weight:700;color:#1e293b;flex:1}
   .table-caption-badge{background:#dbeafe;color:#1d4ed8;font-size:9px;font-weight:700;padding:2px 8px;border-radius:20px;text-transform:uppercase;letter-spacing:.06em}
   table{border-collapse:collapse;width:100%;font-size:10.5px}
-  th{background:#0c4a6e;color:rgba(255,255,255,.95);padding:9px 10px;text-align:center;font-weight:600;font-size:9.5px;letter-spacing:.04em;text-transform:uppercase;white-space:nowrap}
+  th{background:#1f6aab;color:rgba(255,255,255,.95);padding:9px 10px;text-align:center;font-weight:600;font-size:9.5px;letter-spacing:.04em;text-transform:uppercase;white-space:nowrap}
   th:first-child{text-align:left;padding-left:16px;width:130px}
-  th.tend-th{background:#1e3a5f;font-style:italic;letter-spacing:0}
+  th.tend-th{background:#3089ca;font-style:italic;letter-spacing:0}
   td{padding:7px 10px;text-align:center;border-bottom:1px solid #f1f5f9;color:#334155}
-  td.row-label{text-align:left;padding-left:16px;font-weight:600;color:#1e3a5f;background:#f8fafc;white-space:nowrap;border-right:1px solid #e2e8f0}
+  td.row-label{text-align:left;padding-left:16px;font-weight:600;color:#3089ca;background:#f8fafc;white-space:nowrap;border-right:1px solid #e2e8f0}
   td.alerta{color:#dc2626;font-weight:700;background:#fff5f5}
   td.tend-col{background:#f8fafc;border-left:1px solid #e2e8f0;font-size:11px}
   tr:nth-child(even) td:not(.row-label):not(.tend-col){background:#fafbfc}
-  tr.grupo-header td{background:linear-gradient(90deg,#1e3a5f,#0c4a6e);color:rgba(255,255,255,.9);font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;padding:5px 16px}
+  tr.grupo-header td{background:linear-gradient(90deg,#3089ca,#1f6aab);color:rgba(255,255,255,.9);font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;padding:5px 16px}
 
   /* ── LEYENDA ── */
   .leyenda{margin-top:14px;display:flex;align-items:center;gap:16px;flex-wrap:wrap}
@@ -23979,6 +23991,12 @@ function imprimirInformeAnt() {
   .ley-dot.alerta{background:#dc2626}
   .ley-dot.ok{background:#16a34a}
   .ley-dot.tend{background:#0369a1}
+
+  /* ── RECORDAR ── */
+  .recordar-box{margin-top:14px;padding:10px 14px;background:#f0f7ff;border-left:3px solid #1f6aab;border-radius:4px}
+  .recordar-titulo{font-size:9px;font-weight:700;color:#1f6aab;text-transform:uppercase;letter-spacing:.08em;margin-bottom:5px}
+  .recordar-box ul{margin:0;padding-left:16px}
+  .recordar-box li{font-size:9.5px;color:#475569;line-height:1.6}
 
   /* ── FOOTER ── */
   .report-footer{margin-top:20px;padding-top:12px;border-top:1px solid #e2e8f0;display:flex;align-items:center;justify-content:space-between;font-size:8.5px;color:#94a3b8}
@@ -23996,7 +24014,7 @@ function imprimirInformeAnt() {
 
 <!-- HEADER -->
 <div class="report-header">
-  <div class="logo-circle">❤️</div>
+  <div class="logo-circle">${_profIniciales()}</div>
   <div class="header-text">
     <div class="header-title">Seguimiento Antropométrico</div>
     <div class="header-sub">Evaluación Cardiometabólica</div>
@@ -24041,7 +24059,7 @@ ${profNombre ? `<div class="prof-strip">
 <div class="body-wrap">
   <div class="table-wrap">
     <div class="table-caption">
-      <span class="table-caption-title">📊 Evolución de mediciones</span>
+      <span class="table-caption-title">Evolución de mediciones</span>
       <span class="table-caption-badge">${nCols} control${nCols!==1?'es':''}</span>
     </div>
     <table>
@@ -24062,6 +24080,14 @@ ${profNombre ? `<div class="prof-strip">
     <div class="ley-item"><div class="ley-dot alerta"></div> Valor fuera de rango</div>
     <div class="ley-item"><div class="ley-dot ok"></div> Tendencia favorable (▼)</div>
     <div class="ley-item"><div class="ley-dot tend"></div> Tendencia desfavorable (▲)</div>
+  </div>
+
+  <div class="recordar-box">
+    <div class="recordar-titulo">Recordar</div>
+    <ul>
+      <li>Estos valores son orientativos: el número puntual no es lo más importante, es solo una parte de la respuesta al tratamiento.</li>
+      <li>Las tendencias son eso, tendencias — no hay un número solitario al que haya que llegar, sino un estado de salud completo.</li>
+    </ul>
   </div>
 
   <div class="report-footer">
@@ -24763,32 +24789,32 @@ async function imprimirInformeHabitos(opts) {
   const reportHTML = `<!DOCTYPE html><html lang="es-AR"><head><meta charset="UTF-8"/>
 <title>Informe Hábitos — ${nombre}</title>
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Amiko:wght@400;600;700&family=Encode+Sans:wght@300;400;500;600;700&display=swap');
 *{box-sizing:border-box;margin:0;padding:0}
-body{font-family:'Inter',sans-serif;font-size:13px;color:#1e293b;background:#f8fafc;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-.hdr{background:linear-gradient(135deg,#134e4a,#0d9488);color:white;padding:22px 32px;display:flex;align-items:center;gap:18px}
-.hdr-icon{width:50px;height:50px;border-radius:50%;background:rgba(255,255,255,.15);border:2px solid rgba(255,255,255,.3);display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0}
-.hdr-text{flex:1}.hdr-title{font-size:19px;font-weight:800}.hdr-sub{font-size:11px;color:rgba(255,255,255,.7);margin-top:2px;text-transform:uppercase;letter-spacing:.05em}
+body{font-family:'Encode Sans',sans-serif;font-size:13px;color:#1e293b;background:#f8fafc;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.hdr{background:linear-gradient(135deg,#1f6aab 0%,#4dbcbe 100%);color:white;padding:22px 32px;display:flex;align-items:center;gap:18px}
+.hdr-icon{width:50px;height:50px;border-radius:50%;background:rgba(255,255,255,.15);border:2px solid rgba(255,255,255,.3);display:flex;align-items:center;justify-content:center;font-family:'Amiko',sans-serif;font-size:15px;font-weight:700;letter-spacing:.02em;flex-shrink:0}
+.hdr-text{flex:1}.hdr-title{font-family:'Amiko',sans-serif;font-size:19px;font-weight:700}.hdr-sub{font-size:11px;color:rgba(255,255,255,.7);margin-top:2px;text-transform:uppercase;letter-spacing:.05em}
 .hdr-right{text-align:right;font-size:11px;color:rgba(255,255,255,.65);line-height:1.8}.hdr-right strong{display:block;font-size:13px;color:white}
-.pac-bar{background:white;border-bottom:3px solid #0f766e;padding:13px 32px;display:flex;align-items:center;gap:22px;flex-wrap:wrap}
+.pac-bar{background:white;border-bottom:3px solid #4dbcbe;padding:13px 32px;display:flex;align-items:center;gap:22px;flex-wrap:wrap}
 .pac-chip{display:flex;flex-direction:column}.pac-chip-label{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#94a3b8;margin-bottom:2px}
-.pac-chip-val{font-size:14px;font-weight:700;color:#134e4a}.pac-div{width:1px;height:30px;background:#e2e8f0}
-.prof{background:#f0fdfa;border-left:4px solid #0f766e;padding:9px 32px;display:flex;align-items:center;gap:10px;font-size:12px}
-.prof-name{font-weight:700;color:#134e4a;font-size:13px}.prof-sep{color:#99f6e4;font-size:14px}.prof-mp{color:#0f766e;font-weight:600}.prof-esp{color:#64748b;font-style:italic}
+.pac-chip-val{font-size:14px;font-weight:700;color:#1f6aab}.pac-div{width:1px;height:30px;background:#e2e8f0}
+.prof{background:#f0fdfa;border-left:4px solid #4dbcbe;padding:9px 32px;display:flex;align-items:center;gap:10px;font-size:12px}
+.prof-name{font-weight:700;color:#1f6aab;font-size:13px}.prof-sep{color:#99f6e4;font-size:14px}.prof-mp{color:#4dbcbe;font-weight:600}.prof-esp{color:#64748b;font-style:italic}
 .body{padding:18px 32px 28px}
 .bloque{background:white;border-radius:11px;border:1px solid #e2e8f0;margin-bottom:11px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.06);break-inside:avoid}
-.bloque-hdr{background:linear-gradient(90deg,#134e4a,#0f766e);color:white;padding:7px 16px;display:flex;align-items:center;justify-content:space-between}
+.bloque-hdr{background:linear-gradient(90deg,#1f6aab,#4dbcbe);color:white;padding:7px 16px;display:flex;align-items:center;justify-content:space-between}
 .num{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em}.fecha{font-size:11.5px;color:rgba(255,255,255,.85)}
 .badge-act{background:#fef3c7;color:#92400e;font-size:9px;font-weight:700;padding:1px 6px;border-radius:10px;margin-left:5px}
 .bloque-body{display:grid;grid-template-columns:1fr 1fr}
 .col{padding:11px 15px;border-right:1px solid #f1f5f9}.col:last-child{border-right:none}
-.col-title{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#0f766e;margin-bottom:7px;padding-bottom:5px;border-bottom:1px solid #e2e8f0}
+.col-title{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#4dbcbe;margin-bottom:7px;padding-bottom:5px;border-bottom:1px solid #e2e8f0}
 .col-content{display:flex;flex-direction:column;gap:3px}
-.act-item{font-size:13px;color:#1e293b;padding:3px 0;border-bottom:1px solid #f8fafc;line-height:1.5}.act-item em{font-style:normal;font-weight:600;color:#0f766e}
+.act-item{font-size:13px;color:#1e293b;padding:3px 0;border-bottom:1px solid #f8fafc;line-height:1.5}.act-item em{font-style:normal;font-weight:600;color:#4dbcbe}
 .chip{display:inline-block;padding:3px 8px;border-radius:12px;font-size:11px;font-weight:600;margin:2px 2px 2px 0}
 .cg{background:#dcfce7;color:#166534}.cr{background:#fee2e2;color:#991b1b}.cb{background:#dbeafe;color:#1d4ed8}.cy{background:#fef9c3;color:#713f12}
 .nota{font-size:12px;color:#475569;font-style:italic;margin-top:5px;padding:6px 10px;background:#f8fafc;border-left:2px solid #cbd5e1;border-radius:0 4px 4px 0;line-height:1.5}
-.nota-fuerza{color:#0f766e;background:#f0fdfa;border-left-color:#0f766e;font-weight:500}
+.nota-fuerza{color:#4dbcbe;background:#f0fdfa;border-left-color:#4dbcbe;font-weight:500}
 .oms-wrap{height:7px;background:#e5e7eb;border-radius:99px;overflow:hidden;margin:6px 0 3px;width:100%}
 .oms-fill{height:100%;border-radius:99px}
 .nutri-box{margin-top:6px;padding:8px 10px;background:#f5f3ff;border:1px solid #ddd6fe;border-radius:8px}
@@ -24796,16 +24822,16 @@ body{font-family:'Inter',sans-serif;font-size:13px;color:#1e293b;background:#f8f
 .nutri-row{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:12px;color:#1e293b;padding:3px 0}
 .nutri-badge{font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;flex-shrink:0}
 .antro-table{width:100%;border-collapse:collapse;margin-bottom:14px;background:white;border-radius:11px;overflow:hidden;border:1px solid #e2e8f0;box-shadow:0 1px 3px rgba(0,0,0,.06)}
-.antro-table th{background:linear-gradient(90deg,#134e4a,#0f766e);color:white;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;padding:7px 10px;text-align:center}
+.antro-table th{background:linear-gradient(90deg,#1f6aab,#4dbcbe);color:white;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;padding:7px 10px;text-align:center}
 .antro-table th:first-child{text-align:left}
 .antro-table td{font-size:12.5px;color:#1e293b;padding:7px 10px;text-align:center;border-top:1px solid #f1f5f9}
-.antro-table td:first-child{text-align:left;font-weight:600;color:#0f766e}
-.antro-title{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#0f766e;margin:0 0 6px}
+.antro-table td:first-child{text-align:left;font-weight:600;color:#4dbcbe}
+.antro-title{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#4dbcbe;margin:0 0 6px}
 .footer{margin-top:18px;padding-top:11px;border-top:1px solid #e2e8f0;display:flex;justify-content:space-between;font-size:8px;color:#94a3b8}
 .footer-brand{font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.04em}
 @media print{body{background:white}@page{margin:8mm 10mm;size:A4}.bloque{break-inside:avoid}.hdr,.bloque-hdr{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
 </style></head><body>
-<div class="hdr"><div class="hdr-icon">🏃</div><div class="hdr-text"><div class="hdr-title">Seguimiento de Hábitos</div><div class="hdr-sub">Actividad física &amp; Alimentación</div></div>
+<div class="hdr"><div class="hdr-icon">${_profIniciales()}</div><div class="hdr-text"><div class="hdr-title">Seguimiento de Hábitos</div><div class="hdr-sub">Actividad física &amp; Alimentación</div></div>
 <div class="hdr-right"><strong>${fechaHoy}</strong>${historial.length} consulta${historial.length!==1?'s':''}</div></div>
 <div class="pac-bar">
   <div class="pac-chip"><span class="pac-chip-label">Paciente</span><span class="pac-chip-val">${nombre}</span></div>
