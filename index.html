@@ -5173,6 +5173,13 @@ const ANT_FILAS = [
   {label:'IMC',             key:'IMC',         unidades:['kg/m²'], defU:0, calc:true,
     ref:(v)=>parseFloat(v)>=25,
     refTxt:'≥25 kg/m²', orden:25},
+  {label:'% grasa',         key:'PctGrasa',    unidades:['%'],     defU:0,
+    ref:(v,s)=>parseFloat(v)>(s==='F'?33:25),
+    refTxt:'>25% (H) / >33% (M)', orden:40},
+  {label:'% músculo',       key:'PctMusculo',  unidades:['%'],     defU:0, ref:null, orden:50},
+  {label:'Grasa visceral',  key:'GrasaVisceral',unidades:[''],     defU:0,
+    ref:(v)=>parseFloat(v)>12,
+    refTxt:'>12 (riesgo elevado)', orden:55},
   {label:'Cintura (cm)',    key:'Cintura',     unidades:['cm'],    defU:0,
     ref:(v,s)=>parseFloat(v)>=(s==='F'?88:102),
     refTxt:'≥102cm (H) / ≥88cm (M)', orden:80},
@@ -5186,19 +5193,13 @@ const ANT_FILAS = [
   {label:'Cintura/Cadera',  key:'CintCad',     unidades:['ratio'], defU:0, calc:true,
     ref:(v,s)=>parseFloat(v)>(s==='F'?0.85:0.90),
     refTxt:'>0.90 (H) / >0.85 (M)', orden:120},
-  {label:'% grasa',         key:'PctGrasa',    unidades:['%'],     defU:0,
-    ref:(v,s)=>parseFloat(v)>(s==='F'?33:25),
-    refTxt:'>25% (H) / >33% (M)', orden:40},
-  {label:'% músculo',       key:'PctMusculo',  unidades:['%'],     defU:0, ref:null, orden:50},
-  {label:'Grasa visceral',  key:'GrasaVisceral',unidades:[''],     defU:0,
-    ref:(v)=>parseFloat(v)>12,
-    refTxt:'>12 (riesgo elevado)', orden:130},
   {label:'Fuerza de prensión (kg)', key:'FuerzaPresion', unidades:['kg'], defU:0,
     ref:(v,s)=>parseFloat(v)<(s==='F'?16:27),
     refTxt:'<16kg (M) / <27kg (H) — sarcopenia (EWGSOP2)', orden:140},
   // Separadores visuales — sin key, no guardan datos, se pueden agregar al final sin riesgo.
-  {cat:true, label:'PORCENTAJES', orden:35},
+  {cat:true, label:'BIOIMPEDANCIA', orden:35},
   {cat:true, label:'MEDIDAS CORPORALES', orden:65},
+  {cat:true, label:'RELACIONES', orden:105},
 ];
 
 const LAB_PERFILES = {
@@ -7065,15 +7066,20 @@ async function showPage(page) {
     page = 'mis-pacientes';
   }
 
-  // Si hay cambios sin guardar en la evolución (texto, laboratorio, antropometría,
-  // estudios, vacunación, MDPA o adiposidad), preguntar ANTES de salir — sin
-  // importar por dónde se intente salir (pestañas de arriba, tarjetas del
-  // Inicio, Salir, etc.), no solo por el botón "← Volver".
+  // Cambiar de sección (Inicio/Pacientes/Agenda/Finanzas/etc.) NUNCA debe
+  // interrumpir con un modal de "¿guardar?" — eso es lo que impedía moverse
+  // libremente entre pestañas de pacientes y el resto de la app. En vez de
+  // preguntar, el estado de la evolución en curso se guarda en silencio como
+  // borrador de esta pestaña (sessionStorage) y como borrador de recuperación
+  // (localStorage), para que quede intacto al volver. El único momento en que
+  // se pregunta explícitamente si guardar es al tocar "← Volver"
+  // (volverDesdeEvolucion) o al cerrar una pestaña de paciente con la ×
+  // (cerrarTabPaciente) — ver esas funciones.
   if(page !== 'evolucion' && pacienteActual) {
     const evolActiva = document.getElementById('page-evolucion')?.classList.contains('active');
     if(evolActiva) {
-      const puedeSalir = await _resolverSalidaEvolucion();
-      if(!puedeSalir) return; // canceló, o guardarEvolucion() ya está navegando por su cuenta
+      _guardarEstadoPestana(pacienteActual.dni);
+      _guardarDraftLocal(pacienteActual.dni);
     }
   }
 
@@ -8619,6 +8625,12 @@ async function cargarSnapshotInicial(dni) {
     sb.from('paciente_clinica').select('*').eq('dni_paciente', dni).maybeSingle(),
     sb.from('medicacion').select('*').eq('dni_paciente', dni).eq('activo', true).order('grupo')
   ]);
+  // Guard contra condición de carrera: si mientras esperábamos esta consulta
+  // el usuario ya cambió a otra pestaña de paciente, pacienteActual.dni ya no
+  // coincide con "dni". Escribir igual pisaría evolClinicaSnapshot con los
+  // datos del paciente VIEJO sobre el paciente nuevo que está en pantalla
+  // (así aparecía actividad física de otro paciente en el modal de Hábitos).
+  if(pacienteActual && String(pacienteActual.dni) !== String(dni)) return;
   if(cr.data) {
     evolClinicaSnapshot = { clinica: cr.data, medicacion: mr.data || [] };
   }
@@ -8835,6 +8847,10 @@ async function cargarDatosClinica(dni) {
   // ─────────────────────────────────────────────────────────────────────────────
 
   const { data } = await sb.from('paciente_clinica').select('*').eq('dni_paciente',dni).maybeSingle();
+  // Guard contra condición de carrera: si mientras esperábamos esta consulta el
+  // usuario ya cambió a otra pestaña de paciente, no hay que volcar estos datos
+  // (son de OTRO paciente) ni en el formulario ni en evolClinicaSnapshot.
+  if(pacienteActual && String(pacienteActual.dni) !== String(dni)) return;
   if(!data){agregarFilaMed();return;}
   // Actualizar evolClinicaSnapshot con los datos frescos de este paciente
   if(!evolClinicaSnapshot) evolClinicaSnapshot={clinica:{},medicacion:[]};
@@ -8917,6 +8933,7 @@ async function cargarDatosClinica(dni) {
   // Sincronizar evolClinicaSnapshot.medicacion con los datos frescos del paciente
   try {
     const mrFresh = await sb.from('medicacion').select('*').eq('dni_paciente', dni).eq('activo', true).order('grupo');
+    if(pacienteActual && String(pacienteActual.dni) !== String(dni)) return; // cambió de pestaña mientras esperábamos
     if(!evolClinicaSnapshot) evolClinicaSnapshot={clinica:data,medicacion:[]};
     evolClinicaSnapshot.medicacion = mrFresh.data || [];
   } catch(e) {}
@@ -9938,8 +9955,10 @@ async function _hcEliminarEntrada(id, fechaStr) {
 // pregunta qué hacer. Devuelve true si es seguro continuar con la navegación
 // que la llamó, o false si hay que quedarse (canceló, o ya se está navegando
 // por otro lado como parte de guardarEvolucion()).
-// Usada tanto por "← Volver" como, de forma centralizada, por showPage()
-// (para que Inicio/Pacientes/Agenda/Finanzas/Salir también pregunten).
+// Usada por "← Volver" (volverDesdeEvolucion) y por Salir/cambiar de usuario
+// (logout, cambiarUsuario). Cambiar de sección (Inicio/Pacientes/Agenda/
+// Finanzas) y moverse entre pestañas de pacientes NO la usan: ahí el borrador
+// se guarda solo, sin preguntar (ver showPage).
 async function _resolverSalidaEvolucion() {
   const hayDirtyTablas = _dirty.lab || _dirty.ant || _dirty.est || _dirty.vac || _dirty.mdpa || _dirty.adip;
   const editorConTexto = !!document.getElementById('evol_editor').innerText.trim();
@@ -9987,6 +10006,12 @@ async function _resolverSalidaEvolucion() {
 }
 
 async function volverDesdeEvolucion() {
+  // Único disparador (junto con la × de una pestaña, ver cerrarTabPaciente) que
+  // pregunta explícitamente si guardar antes de salir de la evolución.
+  if(pacienteActual && document.getElementById('page-evolucion')?.classList.contains('active')) {
+    const puedeSalir = await _resolverSalidaEvolucion();
+    if(!puedeSalir) return; // canceló, o guardarEvolucion() ya está navegando por su cuenta
+  }
   showPage('pacientes');
 }
 
