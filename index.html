@@ -7650,6 +7650,18 @@ function _alturaFirmaMM(firmaKey) {
 // opts: { ML, maxWidth, lineH, fontSize, startY, maxY, addPageFn, defaultColor, newLineGapFactor }
 // addPageFn() agrega una hoja nueva y devuelve el Y donde debe arrancar el contenido.
 // Devuelve el Y final tras dibujar todo.
+// Límite vertical (Y máximo) hasta donde puede llegar el texto de un PDF antes
+// de invadir el pie de página. ÚNICA fuente de verdad para este cálculo — antes
+// estaba duplicado (copiado y pegado) en 3 funciones distintas de generación de
+// PDF, cada una con su propia constante hardcodeada. Eso permitió que quedara
+// desactualizada en algunas copias cuando se agregó el pie con dirección más alto
+// (24mm vs 18mm), y el texto terminaba tapado por el pie en esos casos.
+// Si en el futuro se agrega un cuarto lugar que dibuje texto largo en un PDF,
+// debe llamar a esta función — no copiar la cuenta "PH - footerHPie - 4" de nuevo.
+function _pdfMaxYTexto(PH, footerHPie) {
+  return PH - footerHPie - 4;
+}
+
 function _dibujarSegmentosPDF(doc, segments, opts) {
   const ML = opts.ML;
   const maxWidth = opts.maxWidth;
@@ -8080,7 +8092,7 @@ function generarPDF(tipo) {
         const lineH = 5.6;
         // Casi toda la hoja disponible para el texto en cualquier página;
         // el espacio de la firma se reserva según su tamaño real (ver más abajo).
-        const maxYMid = PH - 22;
+        const maxYMid = _pdfMaxYTexto(PH, footerHPie);
 
         function _addPageWithHeader() {
           // Indicador "continúa..." al pie de la página actual
@@ -9727,7 +9739,14 @@ async function abrirEvolucion(dni) {
     ['evol_ta1s','evol_ta1d','evol_ta2s','evol_ta2d','evol_ta3s','evol_ta3d','evol_fc1','evol_fc2','evol_fc3','evol_peso','evol_talla','evol_cintura','evol_tap_s','evol_tap_d','evol_tap_fc'].forEach(id=>{
       const el = document.getElementById(id); if(el) el.value='';
     });
-    ['upd_tto'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+    // Fix: el id "upd_tto" no existe (el select real es "upd_tto_accion"), por lo
+    // que este reset nunca se aplicaba. Al no resetearse, el combo "Se cambia dosis"
+    // quedaba con las <option> de medicación cargadas para el paciente ANTERIOR
+    // (evolClinicaSnapshot es global), y esos fármacos aparecían mezclados en la
+    // pestaña del paciente nuevo hasta que el usuario tocaba el selector a mano.
+    const _selAccion = document.getElementById('upd_tto_accion');
+    if(_selAccion) _selAccion.value = 'se agrega';
+    if(typeof actualizarModoPanelTto === 'function') actualizarModoPanelTto();
     const indEl=document.getElementById('evol_indicaciones_editor');if(indEl)indEl.innerHTML='';
     _indicacionesPdfDescargado = false;
     const proxDiasEl=document.getElementById('evol_prox_dias');if(proxDiasEl)proxDiasEl.value='';
@@ -11400,7 +11419,7 @@ function _crearPDFIndicacionesEvol(txt, usarOtro) {
   doc.line(ML, curY + 2, ML + 62, curY + 2);
   curY += 8;
 
-  const maxYMidEvol = PH - 22;
+  const maxYMidEvol = _pdfMaxYTexto(PH, footerHPie);
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8);
   doc.setTextColor(35, 35, 35);
@@ -25289,7 +25308,7 @@ function generarPDFDocLibre() {
     curY += 7;
 
     // Contenido libre
-    const maxYMid = PH - 22;
+    const maxYMid = _pdfMaxYTexto(PH, footerHPie);
     doc.setFont('helvetica', 'normal'); doc.setFontSize(9);
     doc.setTextColor(35, 35, 35);
     const lineH = 6.1;
