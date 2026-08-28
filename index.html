@@ -5797,7 +5797,7 @@ function renderTablaGenerica(datos, filas, wrapId, newColIdx) {
     h += '</td></tr>';
   }
   if(isAnt && datos.extraFilas && datos.extraFilas.length) {
-    h += '<tr><td colspan="'+(1+datos.columnas.length)+'" style="padding:8px 14px;border:1px solid var(--border);background:#fffbea;font-size:11px;color:#8a6d3b;line-height:1.5">ℹ️ Las filas agregadas (medidas segmentarias/alternativas) son una herramienta orientativa de seguimiento cuando la antropometría estándar no es factible por el grado de adiposidad. No tienen puntos de corte de riesgo validados ni reemplazan al IMC, la cintura o el índice cintura/estatura: sirven para comparar al mismo paciente contra sí mismo en el tiempo.</td></tr>';
+    h += '<tr><td colspan="'+(1+datos.columnas.length)+'" style="padding:8px 14px;border:1px solid var(--border);background:#fffbea;font-size:11px;color:#8a6d3b;line-height:1.5;white-space:normal;word-wrap:break-word;overflow-wrap:break-word">ℹ️ Las filas agregadas (medidas segmentarias/alternativas) son una herramienta orientativa de seguimiento cuando la antropometría estándar no es factible por el grado de adiposidad. No tienen puntos de corte de riesgo validados ni reemplazan al IMC, la cintura o el índice cintura/estatura: sirven para comparar al mismo paciente contra sí mismo en el tiempo.</td></tr>';
   }
   h += '</tbody></table>';
   wrap.innerHTML = h;
@@ -7325,18 +7325,24 @@ function edadDesde(fecha_nac) {
   return edad;
 }
 
-function renderTabla(data) {
+function renderTabla(data, soloAlfabetico) {
   const cont = document.getElementById('tablePacientes');
   if(!data.length) {
     cont.innerHTML = '<div class="empty-state"><div>👤</div><p>No hay pacientes registrados todavía.<br>Hacé clic en "+ Nuevo paciente" para agregar el primero.</p></div>';
     return;
   }
-  // Ordenar: por fecha de última evolución (más reciente primero); sin evolución van al final
-  // Desempate: alfabético por apellido, luego nombre
+  // Ordenar: el paciente recién cargado siempre primero.
+  // Modo normal: luego por fecha de última evolución (más reciente primero); sin evolución van al final.
+  // Modo buscador (soloAlfabetico): resto en orden alfabético por apellido, luego nombre.
   const sorted = [...data].sort(function(a, b) {
-    const fa = ultimaEvolucionMap[a.dni] ? Date.parse(ultimaEvolucionMap[a.dni]) : 0;
-    const fb = ultimaEvolucionMap[b.dni] ? Date.parse(ultimaEvolucionMap[b.dni]) : 0;
-    if (fb !== fa) return fb - fa;
+    const nuevoA = a.dni === ultimoDniCargado;
+    const nuevoB = b.dni === ultimoDniCargado;
+    if (nuevoA !== nuevoB) return nuevoA ? -1 : 1;
+    if (!soloAlfabetico) {
+      const fa = ultimaEvolucionMap[a.dni] ? Date.parse(ultimaEvolucionMap[a.dni]) : 0;
+      const fb = ultimaEvolucionMap[b.dni] ? Date.parse(ultimaEvolucionMap[b.dni]) : 0;
+      if (fb !== fa) return fb - fa;
+    }
     const apA = (a.apellido || '').toLowerCase();
     const apB = (b.apellido || '').toLowerCase();
     if (apA !== apB) return apA < apB ? -1 : 1;
@@ -7394,7 +7400,8 @@ async function cargarUltimasEvoluciones(data) {
 
 function filtrarPacientes() {
   const q = document.getElementById('searchInput').value.toLowerCase();
-  renderTabla(pacientesData.filter(p=>p.apellido.toLowerCase().includes(q)||p.nombre.toLowerCase().includes(q)||p.dni.includes(q)));
+  const resultados = pacientesData.filter(p=>p.apellido.toLowerCase().includes(q)||p.nombre.toLowerCase().includes(q)||p.dni.includes(q));
+  renderTabla(resultados, !!q);
 }
 
 function evolucionarPaciente(dni) {
