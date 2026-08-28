@@ -11352,6 +11352,10 @@ async function abrirHistorialMed() {
 // por mail, que también lo genera) y se resetea a false apenas el texto
 // vuelve a cambiar, para no dar falsos positivos.
 let _indicacionesPdfDescargado = false;
+// Guarda el HTML de las indicaciones que se volcó por última vez a la evolución,
+// para poder detectar si el PDF que se está generando/enviando corresponde a
+// un texto que todavía no fue volcado (o que cambió después de volcarlo).
+let _indicacionesVolcadasHTML = null;
 
 function _marcarIndicacionesSinDescargar() {
   _indicacionesPdfDescargado = false;
@@ -11368,12 +11372,32 @@ function volcarIndicacionesAlEditor() {
   const tmp = document.createElement('div'); tmp.innerHTML = bloque;
   editor.appendChild(tmp.firstChild);
   _asegurarLineaLibreEvol(editor);
+  _indicacionesVolcadasHTML = txt;
   // Las indicaciones ya quedaron volcadas en la historia clínica (evolución).
   // Solo se borra el cuadro de texto si el PDF correspondiente ya se descargó;
   // si todavía no se descargó, se deja el texto para que no se pierda y el
   // profesional pueda generarlo/enviarlo cuando quiera.
   if(indEl && _indicacionesPdfDescargado) {
     indEl.innerHTML = '';
+  }
+}
+
+// Devuelve true si hay indicaciones cargadas cuyo contenido actual todavía
+// no coincide con lo último volcado a la evolución (o nunca se volcó).
+function _indicacionesPendientesDeVolcar() {
+  const indEl = document.getElementById('evol_indicaciones_editor');
+  const txt = indEl ? indEl.innerHTML.trim() : '';
+  if(!txt || txt === '<br>') return false;
+  return txt !== _indicacionesVolcadasHTML;
+}
+
+// Si corresponde, pregunta si se quieren volcar las indicaciones a la
+// evolución para no olvidarse de dejarlas asentadas en la historia clínica.
+function _preguntarVolcarIndicacionesSiCorresponde() {
+  if(_indicacionesPendientesDeVolcar()) {
+    if(confirm('Generaste el PDF de indicaciones, pero todavía no lo volcaste a la evolución.\n\n¿Volcarlo ahora?')) {
+      volcarIndicacionesAlEditor();
+    }
   }
 }
 
@@ -11386,6 +11410,7 @@ function generarPDFIndicacionesEvol() {
     const { doc, filename } = _crearPDFIndicacionesEvol(txt, true);
     doc.save(filename);
     _indicacionesPdfDescargado = true;
+    _preguntarVolcarIndicacionesSiCorresponde();
   });
 }
 
@@ -11471,6 +11496,7 @@ function enviarMailIndicacionesEvol() {
     const { doc, filename, hoy } = _crearPDFIndicacionesEvol(txt, true);
     doc.save(filename);
     _indicacionesPdfDescargado = true;
+    _preguntarVolcarIndicacionesSiCorresponde();
     const u = users[selectedUser];
     setTimeout(() => {
       const asunto = encodeURIComponent('Indicaciones médicas - Evaluaciones cardiometabólicas - '+hoy);
