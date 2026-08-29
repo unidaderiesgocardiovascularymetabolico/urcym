@@ -22635,8 +22635,15 @@ window.cargarProxConsultas = cargarProxConsultas;
 
       // Dinero REAL entrado este mes (caja), independientemente del mes del turno.
       // Distinto de "Ingresos del mes" de arriba, que es por mes de consulta.
-      // Recetas e ingresos manuales ya son por fecha real, así que se suman tal cual;
-      // para los turnos se busca la fecha real de cobro (cobro_fecha), sea seña o pago total.
+      // Recetas e ingresos manuales ya son por fecha real, así que se suman tal cual.
+      // Para los turnos:
+      //  - Pago total ("pagado"): normalmente se cobra el mismo día del turno, así que
+      //    por defecto se usa la fecha del turno como fecha de cobro (no depende de que
+      //    exista cobro_fecha, así los turnos ya cargados también entran bien).
+      //  - Seña ("señado"): sí puede cobrarse en un mes distinto al del turno, así que
+      //    requiere la fecha explícita de carga (cobro_fecha); si no la tiene (turno
+      //    anterior a esta función) no se puede saber cuándo entró y no se cuenta acá,
+      //    pero sigue intacta en "Ingresos del mes".
       var turnosCobradosMes = [];
       Object.keys(turnosData).forEach(function(key){
         var parts=key.split('_'); if(parts.length<3) return;
@@ -22644,14 +22651,17 @@ window.cargarProxConsultas = cargarProxConsultas;
         var t=turnosData[key];
         if(!t || !t.paciente) return;
         if(t.osde===true || t.pago==='osde') return;
-        var cf=t.cobro_fecha;
-        if(!cf) return; // turnos sin fecha de cobro registrada (previos a esta función, o sin plata)
-        if(cf<desde || cf>hasta) return; // no se cobró este mes
-        var monto=0;
-        if(t.pago==='pagado' && t.monto) monto=Number(t.monto);
-        else if(t.pago==='señado' && t.sena) monto=parseFloat(t.sena)||0;
-        if(monto<=0) return;
-        turnosCobradosMes.push({fecha:fecha, hora:parts[1], prof:t.prof, paciente:t.paciente||'', monto:monto, pago:t.pago, cobro_fecha:cf, mismoMes:(fecha>=desde&&fecha<=hasta)});
+        var monto=0, fechaCobro=null;
+        if(t.pago==='pagado' && t.monto){
+          monto=Number(t.monto);
+          fechaCobro=t.cobro_fecha||fecha;
+        } else if(t.pago==='señado' && t.sena){
+          monto=parseFloat(t.sena)||0;
+          fechaCobro=t.cobro_fecha||null;
+        }
+        if(monto<=0 || !fechaCobro) return;
+        if(fechaCobro<desde || fechaCobro>hasta) return; // no se cobró este mes
+        turnosCobradosMes.push({fecha:fecha, hora:parts[1], prof:t.prof, paciente:t.paciente||'', monto:monto, pago:t.pago, cobro_fecha:fechaCobro, mismoMes:(fecha>=desde&&fecha<=hasta)});
       });
       var totalTurnosCobradosMes = turnosCobradosMes.reduce(function(a,x){return a+x.monto;},0);
       var totalTurnosOtroMes = turnosCobradosMes.filter(function(x){return !x.mismoMes;}).reduce(function(a,x){return a+x.monto;},0);
