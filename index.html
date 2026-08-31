@@ -7683,49 +7683,95 @@ function _dibujarSegmentosPDF(doc, segments, opts) {
   const maxY = opts.maxY;
   const addPageFn = opts.addPageFn;
   const defaultColor = opts.defaultColor || [35, 35, 35];
+  // justify: si true, las líneas que se cortaron por ancho (no por Enter) se
+  // justifican repartiendo el espacio sobrante entre palabras.
+  const justify = opts.justify === true;
+  // collapseBlankLines: comportamiento histórico — colapsa Enters consecutivos
+  // (líneas en blanco) en uno solo. Si se pasa false, se respetan tal cual los
+  // tipeó el usuario (incluidos los renglones en blanco entre párrafos).
+  const collapseBlankLines = opts.collapseBlankLines !== false;
 
-  let curX = ML;
-  let curY = opts.startY;
-
-  function nuevaLinea() {
-    curX = ML;
-    curY += lineH;
-    if (curY > maxY) { curY = addPageFn(); curX = ML; }
+  let segs = segments;
+  if (collapseBlankLines) {
+    const sinDup = [];
+    segs.forEach(function(s){
+      if (s.isNewLine && sinDup.length && sinDup[sinDup.length-1].isNewLine) return;
+      sinDup.push(s);
+    });
+    segs = sinDup;
   }
 
-  segments.forEach((seg) => {
-    if (seg.isNewLine) {
-      curX = ML;
-      curY += lineH * (opts.newLineGapFactor != null ? opts.newLineGapFactor : 1);
-      if (curY > maxY) { curY = addPageFn(); }
-      curX = ML;
+  let curY = opts.startY;
+
+  function fontOf(w){ return w.bold && w.italic ? 'bolditalic' : w.bold ? 'bold' : w.italic ? 'italic' : 'normal'; }
+  function widthOf(w){
+    doc.setFont('helvetica', fontOf(w));
+    doc.setFontSize(fontSize);
+    return doc.getTextWidth(w.text);
+  }
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(fontSize);
+  const spaceW = doc.getTextWidth(' ');
+
+  // Aplanar segmentos en palabras individuales con su estilo, marcando los
+  // saltos de línea explícitos (Enter) como separadores de párrafo.
+  let palabras = [];
+  segs.forEach(function(seg){
+    if (seg.isNewLine) { palabras.push({ isBreak:true }); return; }
+    const partes = seg.text.split(/\s+/).filter(Boolean);
+    partes.forEach(function(w){
+      palabras.push({ text:w, bold:seg.bold, italic:seg.italic, color:seg.color, underline:seg.underline });
+    });
+  });
+
+  // Envolver en líneas según el ancho disponible
+  let lineas = [];
+  let cur = [];
+  let curW = 0;
+  palabras.forEach(function(w){
+    if (w.isBreak) {
+      lineas.push({ words: cur, forced: true });
+      cur = []; curW = 0;
       return;
     }
-    const fontStyle = seg.bold && seg.italic ? 'bolditalic' : seg.bold ? 'bold' : seg.italic ? 'italic' : 'normal';
-    doc.setFont('helvetica', fontStyle);
-    doc.setFontSize(fontSize);
-    const rgb = seg.color ? _hexToRgb(seg.color) : defaultColor;
-    doc.setTextColor(rgb[0], rgb[1], rgb[2]);
+    const ww = widthOf(w);
+    const addW = cur.length ? spaceW + ww : ww;
+    if (curW + addW > maxWidth && cur.length) {
+      lineas.push({ words: cur, forced: false });
+      cur = [w]; curW = ww;
+    } else {
+      cur.push(w); curW += addW;
+    }
+  });
+  if (cur.length) lineas.push({ words: cur, forced: true });
 
-    // Tokenizar preservando los espacios, para cortar solo entre palabras
-    const tokens = seg.text.match(/\S+\s*|\s+/g) || [];
-    tokens.forEach((tok) => {
-      if (/^\s+$/.test(tok) && curX === ML) return; // no arrancar un renglón con un espacio suelto
-      const tokW = doc.getTextWidth(tok);
-      if (curX + tokW > ML + maxWidth && curX > ML) { nuevaLinea(); }
-      doc.text(tok, curX, curY);
-      if (seg.underline) {
-        const trimmed = tok.replace(/\s+$/, '');
-        if (trimmed) {
-          const trimW = doc.getTextWidth(trimmed);
-          const ulY = curY + 0.7;
-          doc.setLineWidth(0.15);
-          doc.setDrawColor(rgb[0], rgb[1], rgb[2]);
-          doc.line(curX, ulY, curX + trimW, ulY);
-        }
+  // Dibujar cada línea
+  lineas.forEach(function(linea){
+    if (curY > maxY) { curY = addPageFn(); }
+    if (!linea.words.length) { curY += lineH; return; }
+    const widths = linea.words.map(widthOf);
+    const sumW = widths.reduce(function(a,b){ return a+b; }, 0);
+    const gaps = linea.words.length - 1;
+    let gapW = spaceW;
+    if (justify && !linea.forced && gaps > 0) {
+      const extra = maxWidth - sumW - gaps * spaceW;
+      if (extra > 0) gapW = spaceW + extra / gaps;
+    }
+    let x = ML;
+    linea.words.forEach(function(w, i){
+      doc.setFont('helvetica', fontOf(w));
+      doc.setFontSize(fontSize);
+      const rgb = w.color ? _hexToRgb(w.color) : defaultColor;
+      doc.setTextColor(rgb[0], rgb[1], rgb[2]);
+      doc.text(w.text, x, curY);
+      if (w.underline) {
+        const ww = widths[i];
+        doc.setLineWidth(0.15);
+        doc.setDrawColor(rgb[0], rgb[1], rgb[2]);
+        doc.line(x, curY + 0.7, x + ww, curY + 0.7);
       }
-      curX += tokW;
+      x += widths[i] + gapW;
     });
+    curY += lineH;
   });
 
   return curY;
@@ -25407,9 +25453,9 @@ function generarPDFDocLibre() {
 
     // Contenido libre
     const maxYMid = _pdfMaxYTexto(PH, footerHPie);
-    doc.setFont('helvetica', 'normal'); doc.setFontSize(9);
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(11);
     doc.setTextColor(35, 35, 35);
-    const lineH = 6.1;
+    const lineH = 7.4;
 
     function _addDocLibrePage() {
       doc.setFont('helvetica', 'italic'); doc.setFontSize(7);
@@ -25418,15 +25464,16 @@ function generarPDFDocLibre() {
       _pdfFooterOtro(doc, u, PW, PH, direccionPie);
       doc.addPage();
       const nHY = _pdfHeaderOtro(doc, u, PW, ML);
-      doc.setFont('helvetica', 'normal'); doc.setFontSize(9);
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(11);
       doc.setTextColor(35, 35, 35);
       return nHY + 8;
     }
 
     const segmentsDoc = contenidoEl ? _parseRichTextSegments(contenidoEl) : [];
     curY = _dibujarSegmentosPDF(doc, segmentsDoc, {
-      ML, maxWidth: CW, lineH, fontSize: 9, startY: curY, maxY: maxYMid,
-      addPageFn: _addDocLibrePage, defaultColor: [35, 35, 35]
+      ML, maxWidth: CW, lineH, fontSize: 11, startY: curY, maxY: maxYMid,
+      addPageFn: _addDocLibrePage, defaultColor: [35, 35, 35],
+      justify: true, collapseBlankLines: false
     });
 
     // Firma
