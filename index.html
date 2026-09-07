@@ -4657,6 +4657,16 @@
           <input type="color" id="ind_color_picker" onchange="_indSetColor(this.value)" style="opacity:0;width:1px;height:1px;position:absolute;">
         </label>
         <div style="width:1px;height:20px;background:#d0d8e4;margin:0 2px;"></div>
+        <button type="button" title="Agrandar texto seleccionado" onclick="_indCambiarTamano(1)"
+          style="width:28px;height:28px;border:1.5px solid #d0d8e4;border-radius:6px;background:white;font-size:15px;font-weight:700;cursor:pointer;color:#1a2535;display:flex;align-items:center;justify-content:center;font-family:var(--font-main);">A+</button>
+        <button type="button" title="Achicar texto seleccionado" onclick="_indCambiarTamano(-1)"
+          style="width:28px;height:28px;border:1.5px solid #d0d8e4;border-radius:6px;background:white;font-size:11px;font-weight:700;cursor:pointer;color:#1a2535;display:flex;align-items:center;justify-content:center;font-family:var(--font-main);">A-</button>
+        <div style="width:1px;height:20px;background:#d0d8e4;margin:0 2px;"></div>
+        <button type="button" title="Poner recuadro al texto seleccionado" onclick="_indToggleBorde()"
+          style="width:28px;height:28px;border:1.5px solid #d0d8e4;border-radius:6px;background:white;font-size:13px;cursor:pointer;color:#1a2535;display:flex;align-items:center;justify-content:center;">▢</button>
+        <button type="button" title="Quitar recuadro del texto seleccionado" onclick="_indQuitarBorde()"
+          style="padding:0 8px;height:28px;border:1.5px solid #d0d8e4;border-radius:6px;background:white;font-size:11px;cursor:pointer;color:#6b7a8d;">✕▢</button>
+        <div style="width:1px;height:20px;background:#d0d8e4;margin:0 2px;"></div>
         <button type="button" title="Quitar formato" onclick="document.execCommand('removeFormat')"
           style="padding:0 8px;height:28px;border:1.5px solid #d0d8e4;border-radius:6px;background:white;font-size:11px;cursor:pointer;color:#6b7a8d;">✕ fmt</button>
       </div>
@@ -8027,12 +8037,12 @@ function _docLibreSetColor(color) {
   document.execCommand('foreColor', false, color);
 }
 
-// Agranda o achica el tamaño de letra del texto seleccionado en doclibre_contenido.
+// Agranda o achica el tamaño de letra del texto seleccionado dentro del editor indicado.
 // delta:+1 agranda, -1 achica (pasos de ~1.5pt por click). El tamaño queda
 // guardado como font-size inline en un <span>, y _parseRichTextSegments lo
 // traduce a puntos para que el PDF respete el tamaño real elegido.
-function _docLibreCambiarTamano(delta) {
-  var el = document.getElementById('doclibre_contenido');
+function _editorCambiarTamano(editorId, delta) {
+  var el = document.getElementById(editorId);
   if(!el) return;
   el.focus();
   var sel = window.getSelection();
@@ -8057,9 +8067,9 @@ function _docLibreCambiarTamano(delta) {
   sel.addRange(nuevoRango);
 }
 
-// Envuelve el texto seleccionado de doclibre_contenido en un recuadro con borde.
-function _docLibreToggleBorde() {
-  var el = document.getElementById('doclibre_contenido');
+// Envuelve el texto seleccionado del editor indicado en un recuadro con borde.
+function _editorToggleBorde(editorId) {
+  var el = document.getElementById(editorId);
   if(!el) return;
   el.focus();
   var sel = window.getSelection();
@@ -8082,9 +8092,9 @@ function _docLibreToggleBorde() {
   sel.addRange(nuevoRango);
 }
 
-// Quita cualquier recuadro (borde) presente dentro de la selección de doclibre_contenido.
-function _docLibreQuitarBorde() {
-  var el = document.getElementById('doclibre_contenido');
+// Quita cualquier recuadro (borde) presente dentro de la selección del editor indicado.
+function _editorQuitarBorde(editorId) {
+  var el = document.getElementById(editorId);
   if(!el) return;
   el.focus();
   var sel = window.getSelection();
@@ -8112,6 +8122,16 @@ function _docLibreQuitarBorde() {
     }
   });
 }
+
+// Wrappers para Documento libre (mantienen los nombres usados en el HTML existente)
+function _docLibreCambiarTamano(delta) { _editorCambiarTamano('doclibre_contenido', delta); }
+function _docLibreToggleBorde() { _editorToggleBorde('doclibre_contenido'); }
+function _docLibreQuitarBorde() { _editorQuitarBorde('doclibre_contenido'); }
+
+// Wrappers para Indicaciones para el paciente
+function _indCambiarTamano(delta) { _editorCambiarTamano('ind_contenido', delta); }
+function _indToggleBorde() { _editorToggleBorde('ind_contenido'); }
+function _indQuitarBorde() { _editorQuitarBorde('ind_contenido'); }
 
 // Walk DOM nodes and extract text segments with bold/italic/color/fontSize/border info.
 // preserveBlankLines: si es true, NO colapsa los Enters/líneas en blanco consecutivos
@@ -8282,7 +8302,7 @@ function generarPDF(tipo) {
     const elI = document.getElementById('ind_contenido');
     if (elI) {
       // Extraer segmentos de texto con formato desde el HTML rico
-      const segments = _parseRichTextSegments(elI);
+      const segments = _parseRichTextSegments(elI, true);
       if (segments.length) {
         let curY = cY + 13;
         const lineH = 5.6;
@@ -8306,7 +8326,7 @@ function generarPDF(tipo) {
 
         curY = _dibujarSegmentosPDF(doc, segments, {
           ML: ML + 4, maxWidth: W - 8, lineH, fontSize: 8, startY: curY, maxY: maxYMid,
-          addPageFn: _addPageWithHeader, defaultColor: _C.oscuro
+          addPageFn: _addPageWithHeader, defaultColor: _C.oscuro, collapseBlankLines: false
         });
 
         // Solo pasa a una página nueva por la firma si el texto realmente
