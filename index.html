@@ -7704,13 +7704,19 @@ function _dibujarSegmentosPDF(doc, segments, opts) {
   let curY = opts.startY;
 
   function fontOf(w){ return w.bold && w.italic ? 'bolditalic' : w.bold ? 'bold' : w.italic ? 'italic' : 'normal'; }
+  // Tamaño real de la palabra: usa el propio (seteado con A+/A-) si lo tiene, si no el tamaño base.
+  function sizeOf(w){ return w.fontSize || fontSize; }
   function widthOf(w){
     doc.setFont('helvetica', fontOf(w));
-    doc.setFontSize(fontSize);
+    doc.setFontSize(sizeOf(w));
     return doc.getTextWidth(w.text);
   }
+  function spaceWidthFor(size){
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(size);
+    return doc.getTextWidth(' ');
+  }
   doc.setFont('helvetica', 'normal'); doc.setFontSize(fontSize);
-  const spaceW = doc.getTextWidth(' ');
 
   // Aplanar segmentos en palabras individuales con su estilo, marcando los
   // saltos de línea explícitos (Enter) como separadores de párrafo.
@@ -7719,7 +7725,7 @@ function _dibujarSegmentosPDF(doc, segments, opts) {
     if (seg.isNewLine) { palabras.push({ isBreak:true }); return; }
     const partes = seg.text.split(/\s+/).filter(Boolean);
     partes.forEach(function(w){
-      palabras.push({ text:w, bold:seg.bold, italic:seg.italic, color:seg.color, underline:seg.underline });
+      palabras.push({ text:w, bold:seg.bold, italic:seg.italic, color:seg.color, underline:seg.underline, fontSize:seg.fontSize, border:seg.border });
     });
   });
 
@@ -7734,7 +7740,8 @@ function _dibujarSegmentosPDF(doc, segments, opts) {
       return;
     }
     const ww = widthOf(w);
-    const addW = cur.length ? spaceW + ww : ww;
+    const sw = spaceWidthFor(sizeOf(w));
+    const addW = cur.length ? sw + ww : ww;
     if (curW + addW > maxWidth && cur.length) {
       lineas.push({ words: cur, forced: false });
       cur = [w]; curW = ww;
@@ -7749,29 +7756,56 @@ function _dibujarSegmentosPDF(doc, segments, opts) {
     if (curY > maxY) { curY = addPageFn(); }
     if (!linea.words.length) { curY += lineH; return; }
     const widths = linea.words.map(widthOf);
+    // Si hay texto agrandado (A+) en la línea, el renglón necesita más alto para no pisar el siguiente.
+    const maxFS = linea.words.reduce(function(m,w){ return Math.max(m, sizeOf(w)); }, fontSize);
+    const efectivoLineH = lineH * (maxFS / fontSize);
     const sumW = widths.reduce(function(a,b){ return a+b; }, 0);
     const gaps = linea.words.length - 1;
-    let gapW = spaceW;
+    const gapBase = spaceWidthFor(fontSize);
+    let gapW = gapBase;
     if (justify && !linea.forced && gaps > 0) {
-      const extra = maxWidth - sumW - gaps * spaceW;
-      if (extra > 0) gapW = spaceW + extra / gaps;
+      const extra = maxWidth - sumW - gaps * gapBase;
+      if (extra > 0) gapW = gapBase + extra / gaps;
     }
+    // Calcular posiciones X antes de dibujar, para poder trazar los recuadros detrás del texto.
     let x = ML;
+    const posiciones = [];
     linea.words.forEach(function(w, i){
-      doc.setFont('helvetica', fontOf(w));
-      doc.setFontSize(fontSize);
-      const rgb = w.color ? _hexToRgb(w.color) : defaultColor;
-      doc.setTextColor(rgb[0], rgb[1], rgb[2]);
-      doc.text(w.text, x, curY);
-      if (w.underline) {
-        const ww = widths[i];
-        doc.setLineWidth(0.15);
-        doc.setDrawColor(rgb[0], rgb[1], rgb[2]);
-        doc.line(x, curY + 0.7, x + ww, curY + 0.7);
-      }
+      posiciones.push({ x: x, w: widths[i] });
       x += widths[i] + gapW;
     });
-    curY += lineH;
+    // Agrupar palabras consecutivas marcadas con recuadro (▢) y dibujar un solo borde por grupo.
+    let gi = 0;
+    while (gi < linea.words.length) {
+      if (linea.words[gi].border) {
+        let gj = gi;
+        while (gj < linea.words.length && linea.words[gj].border) gj++;
+        const xIni = posiciones[gi].x - 1;
+        const xFin = posiciones[gj-1].x + posiciones[gj-1].w + 1;
+        const fsGrupo = linea.words.slice(gi, gj).reduce(function(m,w){ return Math.max(m, sizeOf(w)); }, fontSize);
+        const altoMM = fsGrupo * 0.3528 + 1.6;
+        doc.setDrawColor(120, 120, 135);
+        doc.setLineWidth(0.2);
+        doc.roundedRect(xIni, curY - altoMM + 1.4, xFin - xIni, altoMM, 0.8, 0.8, 'S');
+        gi = gj;
+      } else {
+        gi++;
+      }
+    }
+    linea.words.forEach(function(w, i){
+      const pos = posiciones[i];
+      doc.setFont('helvetica', fontOf(w));
+      doc.setFontSize(sizeOf(w));
+      const rgb = w.color ? _hexToRgb(w.color) : defaultColor;
+      doc.setTextColor(rgb[0], rgb[1], rgb[2]);
+      doc.text(w.text, pos.x, curY);
+      if (w.underline) {
+        doc.setLineWidth(0.15);
+        doc.setDrawColor(rgb[0], rgb[1], rgb[2]);
+        doc.line(pos.x, curY + 0.7, pos.x + pos.w, curY + 0.7);
+      }
+    });
+    curY += efectivoLineH;
   });
 
   return curY;
@@ -7993,21 +8027,111 @@ function _docLibreSetColor(color) {
   document.execCommand('foreColor', false, color);
 }
 
-// Walk DOM nodes and extract text segments with bold/italic/color info
-function _parseRichTextSegments(container) {
+// Agranda o achica el tamaño de letra del texto seleccionado en doclibre_contenido.
+// delta:+1 agranda, -1 achica (pasos de ~1.5pt por click). El tamaño queda
+// guardado como font-size inline en un <span>, y _parseRichTextSegments lo
+// traduce a puntos para que el PDF respete el tamaño real elegido.
+function _docLibreCambiarTamano(delta) {
+  var el = document.getElementById('doclibre_contenido');
+  if(!el) return;
+  el.focus();
+  var sel = window.getSelection();
+  if(!sel || !sel.rangeCount || sel.isCollapsed) {
+    _toastDocLibre('Seleccioná el texto para cambiar su tamaño');
+    return;
+  }
+  var range = sel.getRangeAt(0);
+  if(!el.contains(range.commonAncestorContainer)) return;
+  var nodoRef = range.startContainer.nodeType === 3 ? range.startContainer.parentElement : range.startContainer;
+  var actual = nodoRef ? parseFloat(getComputedStyle(nodoRef).fontSize) : 0;
+  if(!actual || isNaN(actual)) actual = 14.7; // ≈ 11pt, tamaño por defecto del PDF
+  var nuevo = Math.min(40, Math.max(9, actual + delta * 2));
+  var frag = range.extractContents();
+  var span = document.createElement('span');
+  span.style.fontSize = nuevo + 'px';
+  span.appendChild(frag);
+  range.insertNode(span);
+  var nuevoRango = document.createRange();
+  nuevoRango.selectNodeContents(span);
+  sel.removeAllRanges();
+  sel.addRange(nuevoRango);
+}
+
+// Envuelve el texto seleccionado de doclibre_contenido en un recuadro con borde.
+function _docLibreToggleBorde() {
+  var el = document.getElementById('doclibre_contenido');
+  if(!el) return;
+  el.focus();
+  var sel = window.getSelection();
+  if(!sel || !sel.rangeCount || sel.isCollapsed) {
+    _toastDocLibre('Seleccioná el texto para ponerle un recuadro');
+    return;
+  }
+  var range = sel.getRangeAt(0);
+  if(!el.contains(range.commonAncestorContainer)) return;
+  var frag = range.extractContents();
+  var span = document.createElement('span');
+  span.style.border = '1px solid #1a2535';
+  span.style.borderRadius = '3px';
+  span.style.padding = '1px 4px';
+  span.appendChild(frag);
+  range.insertNode(span);
+  var nuevoRango = document.createRange();
+  nuevoRango.selectNodeContents(span);
+  sel.removeAllRanges();
+  sel.addRange(nuevoRango);
+}
+
+// Quita cualquier recuadro (borde) presente dentro de la selección de doclibre_contenido.
+function _docLibreQuitarBorde() {
+  var el = document.getElementById('doclibre_contenido');
+  if(!el) return;
+  el.focus();
+  var sel = window.getSelection();
+  if(!sel || !sel.rangeCount) return;
+  var range = sel.getRangeAt(0);
+  if(!el.contains(range.commonAncestorContainer)) return;
+  // Recorre hacia arriba desde donde empieza la selección por si está adentro de un span con borde
+  var ancestro = range.startContainer.nodeType === 3 ? range.startContainer.parentElement : range.startContainer;
+  while(ancestro && ancestro !== el) {
+    if(ancestro.tagName === 'SPAN' && ancestro.style && ancestro.style.border) {
+      ancestro.style.border = '';
+      ancestro.style.borderRadius = '';
+      ancestro.style.padding = '';
+    }
+    ancestro = ancestro.parentElement;
+  }
+  // Y también cualquier span con borde que quede completamente dentro de la selección
+  var contenedor = range.commonAncestorContainer.nodeType === 3 ? range.commonAncestorContainer.parentElement : range.commonAncestorContainer;
+  var spans = contenedor && contenedor.querySelectorAll ? contenedor.querySelectorAll('span[style*="border"]') : [];
+  spans.forEach(function(s){
+    if(sel.containsNode(s, true)) {
+      s.style.border = '';
+      s.style.borderRadius = '';
+      s.style.padding = '';
+    }
+  });
+}
+
+// Walk DOM nodes and extract text segments with bold/italic/color/fontSize/border info.
+// preserveBlankLines: si es true, NO colapsa los Enters/líneas en blanco consecutivos
+// (se usa en Documento libre para que el PDF respete tal cual los espacios que
+// dejó el profesional). Si se omite, se mantiene el comportamiento histórico
+// (colapsa líneas en blanco duplicadas) para no afectar Indicaciones/Evolución.
+function _parseRichTextSegments(container, preserveBlankLines) {
   var segments = [];
 
   // Procesa los hijos directos del container primero para detectar
   // correctamente los saltos de línea (DIV/P = Enter en contenteditable)
-  function walkChildren(nodes, bold, italic, color, underline, isDirectChild) {
+  function walkChildren(nodes, bold, italic, color, underline, fontSize, border, isDirectChild) {
     nodes.forEach(function(node) {
       if(node.nodeType === 3) {
         var txt = node.textContent;
         if(txt) {
           var partes = txt.split('\n');
           partes.forEach(function(parte, idx) {
-            if(idx > 0) segments.push({text:'', bold:bold, italic:italic, color:color, underline:underline, isNewLine:true});
-            if(parte) segments.push({text:parte, bold:bold, italic:italic, color:color, underline:underline, isNewLine:false});
+            if(idx > 0) segments.push({text:'', bold:bold, italic:italic, color:color, underline:underline, fontSize:fontSize, border:border, isNewLine:true});
+            if(parte) segments.push({text:parte, bold:bold, italic:italic, color:color, underline:underline, fontSize:fontSize, border:border, isNewLine:false});
           });
         }
         return;
@@ -8016,18 +8140,18 @@ function _parseRichTextSegments(container) {
       var tag = node.tagName ? node.tagName.toUpperCase() : '';
 
       if(tag === 'BR') {
-        segments.push({text:'', bold:false, italic:false, color:null, underline:false, isNewLine:true});
+        segments.push({text:'', bold:false, italic:false, color:null, underline:false, fontSize:null, border:false, isNewLine:true});
         return;
       }
 
       var esBloque = isDirectChild && ['P','DIV','LI','H1','H2','H3','H4','H5','H6'].indexOf(tag) >= 0;
 
       if(esBloque && segments.length > 0) {
-        segments.push({text:'', bold:false, italic:false, color:null, underline:false, isNewLine:true});
+        segments.push({text:'', bold:false, italic:false, color:null, underline:false, fontSize:null, border:false, isNewLine:true});
         // Si el bloque está vacío (solo tiene BR o está completamente vacío), es una línea en blanco extra
         var soloTieneTextoVacio = node.textContent.trim() === '';
         if(soloTieneTextoVacio) {
-          segments.push({text:'', bold:false, italic:false, color:null, underline:false, isNewLine:true});
+          segments.push({text:'', bold:false, italic:false, color:null, underline:false, fontSize:null, border:false, isNewLine:true});
           return; // no procesar hijos del bloque vacío
         }
       }
@@ -8036,6 +8160,8 @@ function _parseRichTextSegments(container) {
       var isItalic = italic || tag==='I' || tag==='EM';
       var isUnderline = underline || tag==='U';
       var nodeColor = color;
+      var nodeFontSize = fontSize;
+      var nodeBorder = border;
 
       if(tag === 'FONT' && node.getAttribute('color')) {
         nodeColor = node.getAttribute('color');
@@ -8051,30 +8177,41 @@ function _parseRichTextSegments(container) {
         if(node.style.fontWeight==='bold'||node.style.fontWeight==='700') isBold=true;
         if(node.style.fontStyle==='italic') isItalic=true;
         if(node.style.textDecoration&&node.style.textDecoration.indexOf('underline')>=0) isUnderline=true;
+        if(node.style.fontSize) {
+          var fsPx = parseFloat(node.style.fontSize);
+          if(fsPx) nodeFontSize = fsPx * 0.75; // px → pt aproximado (96dpi)
+        }
+        if(node.style.border && node.style.border !== 'none' && node.style.border !== '0px') {
+          nodeBorder = true;
+        }
       }
 
       // Procesar hijos — los hijos de un bloque NO son hijos directos del container
-      walkChildren(Array.from(node.childNodes), isBold, isItalic, nodeColor, isUnderline, false);
+      walkChildren(Array.from(node.childNodes), isBold, isItalic, nodeColor, isUnderline, nodeFontSize, nodeBorder, false);
     });
   }
 
-  walkChildren(Array.from(container.childNodes), false, false, null, false, true);
-  // Colapsar saltos de línea consecutivos (por si quedó alguno duplicado)
-  var sinDuplicados = [];
-  segments.forEach(function(s){
-    if(s.isNewLine && sinDuplicados.length && sinDuplicados[sinDuplicados.length-1].isNewLine) return;
-    sinDuplicados.push(s);
-  });
-  segments = sinDuplicados;
+  walkChildren(Array.from(container.childNodes), false, false, null, false, null, false, true);
+
+  if (!preserveBlankLines) {
+    // Colapsar saltos de línea consecutivos (comportamiento histórico)
+    var sinDuplicados = [];
+    segments.forEach(function(s){
+      if(s.isNewLine && sinDuplicados.length && sinDuplicados[sinDuplicados.length-1].isNewLine) return;
+      sinDuplicados.push(s);
+    });
+    segments = sinDuplicados;
+  }
+
   // Merge consecutive same-style text segments on same line into one
   var merged = [];
   segments.forEach(function(s){
     if(s.isNewLine){ merged.push(s); return; }
     var last = merged[merged.length-1];
-    if(last && !last.isNewLine && last.bold===s.bold && last.italic===s.italic && last.color===s.color && last.underline===s.underline){
+    if(last && !last.isNewLine && last.bold===s.bold && last.italic===s.italic && last.color===s.color && last.underline===s.underline && last.fontSize===s.fontSize && last.border===s.border){
       last.text += s.text;
     } else {
-      merged.push({text:s.text, bold:s.bold, italic:s.italic, color:s.color, underline:s.underline, isNewLine:false});
+      merged.push({text:s.text, bold:s.bold, italic:s.italic, color:s.color, underline:s.underline, fontSize:s.fontSize, border:s.border, isNewLine:false});
     }
   });
   return merged;
@@ -25223,6 +25360,16 @@ ${profNombre?`<div class="prof"><span class="prof-name">${profNombre}</span>${pr
           <input type="color" id="doclibre_color_picker" onchange="_docLibreSetColor(this.value)" style="opacity:0;width:1px;height:1px;position:absolute;">
         </label>
         <div style="width:1px;height:20px;background:#d0d8e4;margin:0 2px;"></div>
+        <button type="button" title="Agrandar texto seleccionado" onclick="_docLibreCambiarTamano(1)"
+          style="width:28px;height:28px;border:1.5px solid #d0d8e4;border-radius:6px;background:white;font-size:15px;font-weight:700;cursor:pointer;color:#1a2535;display:flex;align-items:center;justify-content:center;font-family:var(--font-main);">A+</button>
+        <button type="button" title="Achicar texto seleccionado" onclick="_docLibreCambiarTamano(-1)"
+          style="width:28px;height:28px;border:1.5px solid #d0d8e4;border-radius:6px;background:white;font-size:11px;font-weight:700;cursor:pointer;color:#1a2535;display:flex;align-items:center;justify-content:center;font-family:var(--font-main);">A-</button>
+        <div style="width:1px;height:20px;background:#d0d8e4;margin:0 2px;"></div>
+        <button type="button" title="Poner recuadro al texto seleccionado" onclick="_docLibreToggleBorde()"
+          style="width:28px;height:28px;border:1.5px solid #d0d8e4;border-radius:6px;background:white;font-size:13px;cursor:pointer;color:#1a2535;display:flex;align-items:center;justify-content:center;">▢</button>
+        <button type="button" title="Quitar recuadro del texto seleccionado" onclick="_docLibreQuitarBorde()"
+          style="padding:0 8px;height:28px;border:1.5px solid #d0d8e4;border-radius:6px;background:white;font-size:11px;cursor:pointer;color:#6b7a8d;">✕▢</button>
+        <div style="width:1px;height:20px;background:#d0d8e4;margin:0 2px;"></div>
         <button type="button" title="Quitar formato" onclick="document.getElementById('doclibre_contenido').focus();document.execCommand('removeFormat')"
           style="padding:0 8px;height:28px;border:1.5px solid #d0d8e4;border-radius:6px;background:white;font-size:11px;cursor:pointer;color:#6b7a8d;">✕ fmt</button>
       </div>
@@ -25450,7 +25597,7 @@ function generarPDFDocLibre() {
     doc.text(tipo.toUpperCase(), ML, curY);
     doc.setLineWidth(0.2); doc.setDrawColor(..._C.gris);
     doc.line(ML, curY + 1.5, ML + doc.getTextWidth(tipo.toUpperCase()) + 2, curY + 1.5);
-    curY += 7;
+    curY += 12;
 
     // Contenido libre
     const maxYMid = _pdfMaxYTexto(PH, footerHPie);
@@ -25470,7 +25617,7 @@ function generarPDFDocLibre() {
       return nHY + 8;
     }
 
-    const segmentsDoc = contenidoEl ? _parseRichTextSegments(contenidoEl) : [];
+    const segmentsDoc = contenidoEl ? _parseRichTextSegments(contenidoEl, true) : [];
     curY = _dibujarSegmentosPDF(doc, segmentsDoc, {
       ML, maxWidth: CW, lineH, fontSize: 11, startY: curY, maxY: maxYMid,
       addPageFn: _addDocLibrePage, defaultColor: [35, 35, 35],
