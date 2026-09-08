@@ -3514,6 +3514,7 @@
             <button type="button" onclick="adipCalcularFechaControl()" title="Calcular automáticamente: 3ra dosis semanal (mismo día de la semana), 3 semanas desde el inicio" style="padding:5px 10px;border:1.5px solid var(--teal);border-radius:8px;background:var(--teal-light);color:var(--teal);font-size:11px;font-weight:600;cursor:pointer;font-family:var(--font-main)">🧮 Calcular</button>
             <div id="adip_guardado_badge" style="display:none;background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:3px 10px;font-size:11px;font-weight:600;color:#16a34a">✓ Guardado</div>
           </div>
+          <div class="mdpa-modal-help" style="margin-bottom:10px">📌 Si el/la paciente todavía no compró la medicación, podés dejar la fecha de inicio vacía: el informe le va a indicar que debe calcular el cronograma él/ella mismo/a a partir del día que se aplique la primera dosis.</div>
           <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap">
             <span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-soft)">Tipo de tratamiento:</span>
             <div style="display:flex;gap:6px">
@@ -3569,6 +3570,10 @@
                   <label class="adip-chk-item" style="display:flex;align-items:flex-start;gap:10px;padding:10px 12px;border:1.5px solid var(--border);border-radius:10px;cursor:pointer;font-size:12.5px;background:white;transition:all .15s">
                     <input type="checkbox" id="adip_chk_control" onchange="adipActualizarCampo()" style="accent-color:var(--blue);width:16px;height:16px;flex-shrink:0;margin-top:1px"/>
                     <span>Se indica que el <strong>primer control se realiza en la semana 3 de aplicación</strong> (tras la tercera dosis); se sugiere calcular la fecha con anticipación y gestionar el turno para poder reservarlo.</span>
+                  </label>
+                  <label class="adip-chk-item" style="display:flex;align-items:flex-start;gap:10px;padding:10px 12px;border:1.5px solid var(--border);border-radius:10px;cursor:pointer;font-size:12.5px;background:white;transition:all .15s">
+                    <input type="checkbox" id="adip_chk_alarma" onchange="adipActualizarCampo()" style="accent-color:var(--blue);width:16px;height:16px;flex-shrink:0;margin-top:1px"/>
+                    <span>Se indican las <strong>pautas de alarma</strong> (señales que ameritan consultar antes del próximo control): fueron detalladas en el consultorio y también constan por escrito en la guía enviada.</span>
                   </label>
                   <label class="adip-chk-item" style="display:flex;align-items:flex-start;gap:10px;padding:10px 12px;border:1.5px solid var(--border);border-radius:10px;cursor:pointer;font-size:12.5px;background:white;transition:all .15s">
                     <input type="checkbox" id="adip_chk_efectos" onchange="adipActualizarCampo()" style="accent-color:var(--blue);width:16px;height:16px;flex-shrink:0;margin-top:1px"/>
@@ -3915,8 +3920,9 @@
         </div>
       </div>
       <div>
-        <label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-soft);display:block;margin-bottom:6px">Fecha de inicio del tratamiento *</label>
+        <label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-soft);display:block;margin-bottom:6px">Fecha de inicio del tratamiento</label>
         <input type="date" lang="es-AR" id="adip_nuevo_fecha" oninput="adipNuevoAutoControl()" style="width:100%;padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:14px;font-family:var(--font-main);background:white;outline:none;box-sizing:border-box"/>
+        <span class="mdpa-modal-help">📌 Dejala vacía si el/la paciente todavía no compró la medicación: el informe le va a indicar que debe calcular el cronograma él/ella mismo/a a partir del día que se aplique la primera dosis.</span>
       </div>
       <div>
         <label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-soft);display:block;margin-bottom:6px">Fecha estipulada para el 1er control</label>
@@ -16288,7 +16294,7 @@ async function adipIniciar(dni) {
         actividad_factor: r.actividad_factor || 'sedentario',
         droga:            r.droga || '',
         dosis:            r.dosis || '',
-        chk_guia: false, chk_colocacion: false, chk_control: false, chk_efectos: false, chk_planif: false,
+        chk_guia: false, chk_colocacion: false, chk_control: false, chk_efectos: false, chk_planif: false, chk_alarma: false,
         chk_anticoncepcion: false, anticoncepcion_texto: ''
       }));
     }
@@ -16372,6 +16378,7 @@ function adipSeleccionarTratamiento(i) {
   const c5 = document.getElementById('adip_chk_colocacion'); if(c5) c5.checked = !!trat.chk_colocacion;
   const c6 = document.getElementById('adip_chk_control'); if(c6) c6.checked = !!trat.chk_control;
   const c3 = document.getElementById('adip_chk_efectos'); if(c3) c3.checked = !!trat.chk_efectos;
+  const c8 = document.getElementById('adip_chk_alarma'); if(c8) c8.checked = !!trat.chk_alarma;
   const c7 = document.getElementById('adip_chk_planif'); if(c7) c7.checked = !!trat.chk_planif;
   const c4 = document.getElementById('adip_chk_anticoncepcion'); if(c4) c4.checked = !!trat.chk_anticoncepcion;
   const txt = document.getElementById('adip_anticoncepcion_texto'); if(txt) txt.value = trat.anticoncepcion_texto || '';
@@ -16442,6 +16449,7 @@ function adipActualizarCampo() {
   const c5 = document.getElementById('adip_chk_colocacion'); if(c5) trat.chk_colocacion = c5.checked;
   const c6 = document.getElementById('adip_chk_control'); if(c6) trat.chk_control = c6.checked;
   const c3 = document.getElementById('adip_chk_efectos'); if(c3) trat.chk_efectos = c3.checked;
+  const c8 = document.getElementById('adip_chk_alarma'); if(c8) trat.chk_alarma = c8.checked;
   const c7 = document.getElementById('adip_chk_planif'); if(c7) trat.chk_planif = c7.checked;
   const c4 = document.getElementById('adip_chk_anticoncepcion'); if(c4) trat.chk_anticoncepcion = c4.checked;
   const txt = document.getElementById('adip_anticoncepcion_texto'); if(txt) trat.anticoncepcion_texto = txt.value;
@@ -16460,19 +16468,18 @@ function adipRenderResumen() {
   set('adip_r_dosis', esBar ? (trat.tipo_cirugia || '—') : (trat.dosis || '—'));
   set('adip_r_inicio', fmtF(trat.fecha_inicio));
   set('adip_r_control', fmtF(trat.fecha_control));
-  const nMarcadas = [trat.chk_guia, trat.chk_colocacion, trat.chk_control, trat.chk_efectos, trat.chk_planif].filter(Boolean).length;
-  set('adip_r_checklist', nMarcadas + ' de 5 indicaciones marcadas' + (trat.chk_anticoncepcion ? ' · doble anticoncepción indicada' : ''));
+  const nMarcadas = [trat.chk_guia, trat.chk_colocacion, trat.chk_control, trat.chk_efectos, trat.chk_planif, trat.chk_alarma].filter(Boolean).length;
+  set('adip_r_checklist', nMarcadas + ' de 6 indicaciones marcadas' + (trat.chk_anticoncepcion ? ' · doble anticoncepción indicada' : ''));
 }
 
 function adipNuevoTratamiento() {
-  const hoy = fechaHoy();
   const fn = document.getElementById('adip_nuevo_fecha');
   const fc = document.getElementById('adip_nuevo_fecha_control');
   const dr = document.getElementById('adip_nuevo_droga');
   const do_ = document.getElementById('adip_nuevo_dosis');
   const cir = document.getElementById('adip_nuevo_cirugia');
   const rf = document.getElementById('adip_nuevo_tipo_farm');
-  if(fn) fn.value = hoy;
+  if(fn) fn.value = '';
   if(fc) fc.value = '';
   if(dr) dr.value = '';
   if(do_) do_.value = '';
@@ -16494,14 +16501,13 @@ function adipCrearTratamiento() {
   const droga = dr ? dr.value.trim() : '';
   const dosis = do_ ? do_.value.trim() : '';
   const tipoCirugia = cir ? cir.value : '';
-  if(!fecha) { alert('Ingresá la fecha de inicio del tratamiento'); return; }
   adipTratamientos.unshift({
     id: 'new_' + Date.now(), fecha_inicio: fecha, fecha_control: fechaControl,
     tipo_tratamiento: esBar ? 'bariatrica' : 'farmacologico',
     tipo_cirugia: esBar ? tipoCirugia : '',
     actividad_factor: 'sedentario',
     droga: esBar ? '' : droga, dosis: esBar ? '' : dosis,
-    chk_guia: false, chk_colocacion: false, chk_control: false, chk_efectos: false, chk_planif: false,
+    chk_guia: false, chk_colocacion: false, chk_control: false, chk_efectos: false, chk_planif: false, chk_alarma: false,
     chk_anticoncepcion: false, anticoncepcion_texto: ''
   });
   document.getElementById('adip_modal_nuevo').classList.remove('open');
@@ -16578,6 +16584,7 @@ function adipVolcarAEditor() {
     [trat.chk_control, '1er control indicado en semana 3 de aplicación, sugerido gestionar turno con anticipación'],
     [trat.chk_efectos, 'guía alimentaria general entregada'],
     [trat.chk_planif, 'informada contraindicación de planificación de embarazo y uso de MAC'],
+    [trat.chk_alarma, 'pautas de alarma indicadas (consultorio y guía escrita)'],
   ].filter(x => x[0]).map(x => x[1]);
   const itemsTxt = items.length ? items.join(' · ') : 'sin indicaciones marcadas aún';
   const anticoncepcionTxt = trat.chk_anticoncepcion ? ' · Se brindó información de doble anticoncepción.' : '';
@@ -16725,10 +16732,72 @@ function _adipGenerarHTMLInforme(trat, modoModal, opts) {
 
   const item = (marcado, texto) => `<div class="chk-row ${marcado?'chk-ok':'chk-pend'}"><span class="chk-ico">${marcado?'✓':'○'}</span><span class="chk-txt">${texto}</span></div>`;
 
-  const anticoncepcionBlock = trat.chk_anticoncepcion
-    ? `<div class="anti-box">
-        <div class="anti-title">💊 Información de doble anticoncepción (tirzepatida)</div>
-        <div class="anti-txt">${(trat.anticoncepcion_texto || 'Se brindó información sobre doble anticoncepción durante el tratamiento.').replace(/\n/g,'<br>')}</div>
+  const esBar = trat.tipo_tratamiento === 'bariatrica';
+
+  // ── ¿Cuándo es tu primer control? (siempre visible: regla general + fecha concreta si se conoce) ──
+  const controlBoxHTML = !opts.indic ? '' : (fechaDesconocida
+    ? `<div class="control-box">
+    <div class="control-ico">📅</div>
+    <div class="control-txt">
+      <div class="control-title">¿Cuándo es tu primer control?</div>
+      <div>Contá desde el día que te apliques la <strong>primera dosis</strong>: las dosis siguientes van todas ese <strong>mismo día de la semana</strong>. Tu primer control corresponde después de la <strong>3ra dosis</strong> (3 semanas después de haber empezado).</div>
+      <div class="control-sub">🗓️ Todavía no tenés cargada la fecha de inicio: cuando compres la medicación y te apliques la primera dosis, calculá la fecha con esta regla y solicitá el turno con anticipación.</div>
+    </div>
+  </div>`
+    : `<div class="control-box">
+    <div class="control-ico">📅</div>
+    <div class="control-txt">
+      <div class="control-title">¿Cuándo es tu primer control?</div>
+      <div>Contá desde el día que te aplicaste la <strong>primera dosis</strong> (${fechaIni}): las dosis siguientes van todas ese <strong>mismo día de la semana</strong>. Tu primer control corresponde después de la <strong>3ra dosis</strong>.</div>
+      <div class="control-sub">✅ Según esa fecha, tu control te corresponde a partir del <strong>${fechaControl}</strong>. Esta fecha no es un turno reservado: solicitalo con anticipación para que la consulta se concrete alrededor de esa fecha.</div>
+    </div>
+  </div>`);
+
+  // ── ¿Cómo y cuándo me aplico la inyección? ──
+  const colocacionBoxHTML = (opts.indic && trat.chk_colocacion) ? `
+  <div class="faq-box">
+    <div class="faq-ico">💉</div>
+    <div class="faq-txt"><div class="faq-title">¿Cómo y cuándo me aplico la inyección?</div>
+    <div>${esBar ? 'Se te brindaron instrucciones perioperatorias/postoperatorias.' : 'Aplicá la inyección siempre el mismo día de la semana (sin importar el horario), por vía subcutánea en el abdomen, rotando el sitio en cada aplicación.'}</div></div>
+  </div>` : '';
+
+  // ── ¿Dónde encuentro más información? ──
+  const guiaBoxHTML = (opts.indic && trat.chk_guia) ? `
+  <div class="faq-box">
+    <div class="faq-ico">📘</div>
+    <div class="faq-txt"><div class="faq-title">¿Dónde encuentro más información?</div>
+    <div>Se te indicó una guía completa sobre ${esBar ? 'la cirugía' : 'el fármaco'} (para qué sirve, preguntas frecuentes, efectos adversos, pautas de alarma${esBar ? '' : ' y cronograma de aplicación'}). Te recomendamos leerla completa: ahí está el detalle de todo lo que se resume en este documento.</div></div>
+  </div>` : '';
+
+  // ── ¿Qué guía alimentaria debo seguir? ──
+  const alimentacionBoxHTML = (opts.indic && trat.chk_efectos) ? `
+  <div class="faq-box">
+    <div class="faq-ico">🍽️</div>
+    <div class="faq-txt"><div class="faq-title">¿Qué guía alimentaria debo seguir?</div>
+    <div>Se te indicó una guía alimentaria general para acompañar el tratamiento.</div></div>
+  </div>` : '';
+
+  // ── ¿Cuáles son las pautas de alarma? ──
+  const alarmaBoxHTML = (opts.indic && trat.chk_alarma) ? `
+  <div class="faq-box faq-alert">
+    <div class="faq-ico">🚨</div>
+    <div class="faq-txt"><div class="faq-title">¿Cuáles son las pautas de alarma?</div>
+    <div>Las pautas de alarma (señales que ameritan consultar antes del próximo control) fueron detalladas en el consultorio y también constan por escrito en la guía enviada.</div></div>
+  </div>` : '';
+
+  // ── ¿Puedo planificar un embarazo durante el tratamiento? ──
+  const planifBoxHTML = (opts.indic && trat.chk_planif) ? `
+  <div class="faq-box faq-alert">
+    <div class="faq-ico">🤰</div>
+    <div class="faq-txt"><div class="faq-title">¿Puedo planificar un embarazo durante el tratamiento?</div>
+    <div>No: la planificación de un embarazo está <strong>contraindicada</strong> mientras dure el tratamiento. Es importante utilizar un <strong>método anticonceptivo (MAC)</strong>.</div></div>
+  </div>` : '';
+
+  const anticoncepcionBlock = (opts.indic && trat.chk_anticoncepcion)
+    ? `<div class="faq-box faq-alert">
+        <div class="faq-ico">💊</div>
+        <div class="faq-txt"><div class="faq-title">Doble anticoncepción (tirzepatida)</div>
+        <div>${(trat.anticoncepcion_texto || 'Se brindó información sobre doble anticoncepción durante el tratamiento.').replace(/\n/g,'<br>')}</div></div>
       </div>`
     : '';
 
@@ -16739,19 +16808,8 @@ function _adipGenerarHTMLInforme(trat, modoModal, opts) {
       </div>`
     : '';
 
-  const esBar = trat.tipo_tratamiento === 'bariatrica';
-
-  // ── Bloque: pauta de inicio e indicaciones (opcional) ──
-  const indicHTML = opts.indic ? `
-  <div class="chk-panel">
-    <div class="chk-hdr">✅ Pauta de inicio e indicaciones</div>
-    ${item(trat.chk_guia, esBar ? 'Se indica la guía con toda la información sobre la cirugía (preguntas frecuentes, efectos adversos y pautas de alarma), aconsejando su lectura completa.' : 'Se indica la guía con toda la información sobre el fármaco (para qué sirve, preguntas frecuentes, efectos adversos, pautas de alarma y cronograma de aplicación), aconsejando su lectura completa.')}
-    ${item(trat.chk_colocacion, esBar ? 'Se indican instrucciones perioperatorias/postoperatorias.' : 'Se indican instrucciones de colocación del fármaco (técnica de aplicación, sitios de inyección, manejo del dispositivo) y se explica el cronograma de aplicación: se inyecta siempre el mismo día (sin importar el horario), por vía subcutánea en el abdomen, rotando el sitio en cada aplicación.')}
-    ${item(trat.chk_control, 'Se indica que el primer control se realiza en la semana 3 de aplicación (tras la tercera dosis); se sugiere calcular la fecha con anticipación y gestionar el turno para poder reservarlo.')}
-    ${item(trat.chk_efectos, 'Se indica guía alimentaria general.')}
-    ${item(trat.chk_planif, 'Se indica que la planificación de un embarazo está contraindicada durante el tratamiento; la paciente refiere comprender y utilizar método anticonceptivo (MAC).')}
-    <div class="chk-nota">ℹ️ Estos materiales son un complemento educativo: no reemplazan la consulta médica. Todo lo indicado fue conversado con el/la paciente durante esta consulta. Recordá que en la guía enviada también hay información detallada sobre el cronograma de aplicación y el primer control.</div>
-  </div>` : '';
+  // ── Nota informativa: siempre al final del documento ──
+  const infoFooterHTML = `<div class="info-footer">ℹ️ Estos materiales son un complemento educativo: no reemplazan la consulta médica. Todo lo indicado fue conversado con el/la paciente durante esta consulta. Recordá que en la guía enviada también hay información detallada sobre el cronograma de aplicación y el primer control.</div>`;
 
   // ── Bloque: requerimientos nutricionales (opcional) ──
   let nutriHTML = '';
@@ -16853,6 +16911,18 @@ function _adipGenerarHTMLInforme(trat, modoModal, opts) {
     .turno-box{display:flex;align-items:flex-start;gap:12px;background:#fffbeb;border:1.5px solid #fcd34d;border-radius:10px;padding:12px 16px;margin-bottom:16px}
     .turno-ico{font-size:18px;flex-shrink:0}
     .turno-txt{font-size:11px;color:#78350f;line-height:1.5}
+    .control-box{display:flex;gap:12px;align-items:flex-start;background:linear-gradient(135deg,#eefcfb 0%,#ffffff 100%);border:2px solid #4dbcbe;border-radius:12px;padding:14px 18px;margin-bottom:12px}
+    .control-ico{font-size:20px;flex-shrink:0}
+    .control-title{font-size:12.5px;font-weight:700;color:#1f6aab;margin-bottom:4px}
+    .control-txt{font-size:11.5px;color:#334155;line-height:1.55}
+    .control-sub{margin-top:7px;font-size:11px;color:#0f766e;font-weight:600;line-height:1.5}
+    .faq-box{display:flex;gap:12px;align-items:flex-start;background:white;border:1px solid #e2e8f0;border-radius:10px;padding:12px 16px;margin-bottom:10px;box-shadow:0 1px 3px rgba(0,0,0,.04)}
+    .faq-ico{font-size:18px;flex-shrink:0}
+    .faq-title{font-size:11.5px;font-weight:700;color:#1f6aab;margin-bottom:3px}
+    .faq-txt{font-size:11px;color:#334155;line-height:1.5}
+    .faq-alert{background:#fdf5f4;border-color:#f0c9c5}
+    .faq-alert .faq-title{color:#c2483b}
+    .info-footer{display:flex;gap:8px;align-items:flex-start;padding:12px 4px 4px;font-size:10px;color:#94a3b8;font-style:italic;line-height:1.5;margin-top:10px;border-top:1px dashed #e2e8f0}
     .anti-box{background:#fdf5f4;border:1.5px solid #f0c9c5;border-radius:10px;padding:14px 18px;margin-bottom:16px}
     .anti-title{font-size:11px;font-weight:700;color:#c2483b;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px}
     .anti-txt{font-size:11.5px;color:#334155;line-height:1.5}
@@ -16881,16 +16951,6 @@ function _adipGenerarHTMLInforme(trat, modoModal, opts) {
   const chip1 = esBar ? { lbl:'Tipo de cirugía', val: trat.tipo_cirugia || '—' } : { lbl:'Droga', val: trat.droga || '—' };
   const chip2 = esBar ? { lbl:'—', val:'' } : { lbl:'Dosis', val: trat.dosis || '—' };
 
-  const turnoBoxHTML = fechaDesconocida
-    ? `<div class="turno-box">
-    <div class="turno-ico">🗓️</div>
-    <div class="turno-txt"><strong>Todavía no tenés la fecha de inicio confirmada.</strong> El día que te apliques la primera dosis, anotalo: las dosis siguientes van todas ese mismo día de la semana. El primer control corresponde después de la 3ra dosis (a las 3 semanas de haber comenzado). Solicitá el turno con anticipación para esa fecha estimada.</div>
-  </div>`
-    : `<div class="turno-box">
-    <div class="turno-ico">⏰</div>
-    <div class="turno-txt"><strong>1er control a partir del ${fechaControl}.</strong> Esta fecha no es el día para pedir el turno, sino el momento a partir del cual el/la paciente ya debería tener el control realizado. Por eso conviene solicitar el turno con anticipación (no ese mismo día), para que la consulta se concrete alrededor de esa fecha.</div>
-  </div>`;
-
   const cuerpo = `
 <div class="rh">
   <div class="rh-ico">${esBar ? '🔪' : '🎯'}</div>
@@ -16908,14 +16968,22 @@ function _adipGenerarHTMLInforme(trat, modoModal, opts) {
 </div>
 ${profNombre ? `<div class="prof-strip"><span class="prof-name">${profNombre}</span>${profMP?`<span class="prof-sep">·</span><span class="prof-mp">${profMP}</span>`:''} ${profEspec?`<span class="prof-sep">·</span><span class="prof-esp">${profEspec}</span>`:''}</div>` : ''}
 <div class="body">
-  ${indicHTML}
-
   <div class="med-box">
     <div class="med-item"><div class="med-lbl">${chip1.lbl}</div><div class="med-val">${chip1.val}</div></div>
     ${chip2.lbl!=='—' ? `<div class="med-item"><div class="med-lbl">${chip2.lbl}</div><div class="med-val">${chip2.val}</div></div>` : ''}
   </div>
 
-  ${turnoBoxHTML}
+  ${controlBoxHTML}
+
+  ${colocacionBoxHTML}
+
+  ${guiaBoxHTML}
+
+  ${alimentacionBoxHTML}
+
+  ${alarmaBoxHTML}
+
+  ${planifBoxHTML}
 
   ${anticoncepcionBlock}
 
@@ -16924,6 +16992,8 @@ ${profNombre ? `<div class="prof-strip"><span class="prof-name">${profNombre}</s
   ${nutriHTML}
 
   ${antroHTML}
+
+  ${infoFooterHTML}
 
   <div class="footer">
     <span class="footer-brand">Evaluaciones Cardiometabólicas</span>
