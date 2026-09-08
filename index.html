@@ -3511,6 +3511,7 @@
             <div style="width:1px;height:16px;background:var(--border)"></div>
             <div style="font-size:11px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--text-soft)">📅 Fecha estipulada — 1er control:</div>
             <input type="date" lang="es-AR" id="adip_fecha_control" oninput="adipActualizarCampo()" style="padding:5px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;font-family:var(--font-main);background:white;outline:none"/>
+            <button type="button" onclick="adipCalcularFechaControl()" title="Calcular automáticamente: 3ra dosis semanal (mismo día de la semana), 3 semanas desde el inicio" style="padding:5px 10px;border:1.5px solid var(--teal);border-radius:8px;background:var(--teal-light);color:var(--teal);font-size:11px;font-weight:600;cursor:pointer;font-family:var(--font-main)">🧮 Calcular</button>
             <div id="adip_guardado_badge" style="display:none;background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:3px 10px;font-size:11px;font-weight:600;color:#16a34a">✓ Guardado</div>
           </div>
           <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap">
@@ -3915,12 +3916,12 @@
       </div>
       <div>
         <label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-soft);display:block;margin-bottom:6px">Fecha de inicio del tratamiento *</label>
-        <input type="date" lang="es-AR" id="adip_nuevo_fecha" style="width:100%;padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:14px;font-family:var(--font-main);background:white;outline:none;box-sizing:border-box"/>
+        <input type="date" lang="es-AR" id="adip_nuevo_fecha" oninput="adipNuevoAutoControl()" style="width:100%;padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:14px;font-family:var(--font-main);background:white;outline:none;box-sizing:border-box"/>
       </div>
       <div>
         <label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-soft);display:block;margin-bottom:6px">Fecha estipulada para el 1er control</label>
         <input type="date" lang="es-AR" id="adip_nuevo_fecha_control" style="width:100%;padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:14px;font-family:var(--font-main);background:white;outline:none;box-sizing:border-box"/>
-        <span class="mdpa-modal-help">⏰ Es una fecha orientativa, no un turno reservado. Recordar solicitar el turno con anticipación.</span>
+        <span class="mdpa-modal-help">⏰ Se calcula sola (3 semanas desde el inicio, 3ra dosis semanal). Es una fecha orientativa, no un turno reservado. Recordar solicitar el turno con anticipación.</span>
       </div>
       <div id="adip_nuevo_farm_wrap">
         <label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-soft);display:block;margin-bottom:6px">Droga</label>
@@ -16391,10 +16392,43 @@ function adipToggleAnticoncepcion() {
 function adipActualizarPill() {
   if(adipIdx < 0) return;
   const fi = document.getElementById('adip_fecha_inicio');
-  if(fi) adipTratamientos[adipIdx].fecha_inicio = fi.value;
+  if(fi) {
+    adipTratamientos[adipIdx].fecha_inicio = fi.value;
+    const fc = document.getElementById('adip_fecha_control');
+    if(fc && !fc.value && fi.value) {
+      fc.value = adipSumarDias(fi.value, 14);
+      adipTratamientos[adipIdx].fecha_control = fc.value;
+    }
+  }
   marcarDirty('adip');
   adipRenderPills();
   adipRenderResumen();
+}
+
+// Suma días a una fecha 'YYYY-MM-DD' y devuelve el resultado en el mismo formato.
+function adipSumarDias(fechaStr, dias) {
+  if(!fechaStr) return '';
+  const d = new Date(fechaStr + 'T12:00:00');
+  d.setDate(d.getDate() + dias);
+  return d.toISOString().slice(0,10);
+}
+
+// Calcula la fecha del 1er control: 3 semanas desde el inicio (misma día de la semana, 3ra dosis semanal).
+function adipCalcularFechaControl() {
+  const fi = document.getElementById('adip_fecha_inicio');
+  const fc = document.getElementById('adip_fecha_control');
+  if(!fi || !fi.value) { alert('Ingresá primero la fecha de inicio del tratamiento.'); return; }
+  if(fc) {
+    fc.value = adipSumarDias(fi.value, 14);
+    adipActualizarCampo();
+  }
+}
+
+// Autocompleta la fecha de control en el modal de "nuevo tratamiento" si aún está vacía.
+function adipNuevoAutoControl() {
+  const fn = document.getElementById('adip_nuevo_fecha');
+  const fc = document.getElementById('adip_nuevo_fecha_control');
+  if(fn && fc && fn.value && !fc.value) fc.value = adipSumarDias(fn.value, 14);
 }
 
 function adipActualizarCampo() {
@@ -16681,6 +16715,7 @@ function _adipGenerarHTMLInforme(trat, modoModal, opts) {
   const fmtF    = f => f ? new Date(f+'T12:00:00').toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'}) : '—';
   const fechaIni     = fmtF(trat.fecha_inicio);
   const fechaControl = fmtF(trat.fecha_control);
+  const fechaDesconocida = !trat.fecha_inicio;
 
   const profAdip     = currentUser ? users[currentUser] : null;
   const profNombre   = profAdip ? (profAdip.titulo || profAdip.name || '') : '';
@@ -16846,6 +16881,16 @@ function _adipGenerarHTMLInforme(trat, modoModal, opts) {
   const chip1 = esBar ? { lbl:'Tipo de cirugía', val: trat.tipo_cirugia || '—' } : { lbl:'Droga', val: trat.droga || '—' };
   const chip2 = esBar ? { lbl:'—', val:'' } : { lbl:'Dosis', val: trat.dosis || '—' };
 
+  const turnoBoxHTML = fechaDesconocida
+    ? `<div class="turno-box">
+    <div class="turno-ico">🗓️</div>
+    <div class="turno-txt"><strong>Todavía no tenés la fecha de inicio confirmada.</strong> El día que te apliques la primera dosis, anotalo: las dosis siguientes van todas ese mismo día de la semana. El primer control corresponde después de la 3ra dosis (a las 3 semanas de haber comenzado). Solicitá el turno con anticipación para esa fecha estimada.</div>
+  </div>`
+    : `<div class="turno-box">
+    <div class="turno-ico">⏰</div>
+    <div class="turno-txt"><strong>1er control a partir del ${fechaControl}.</strong> Esta fecha no es el día para pedir el turno, sino el momento a partir del cual el/la paciente ya debería tener el control realizado. Por eso conviene solicitar el turno con anticipación (no ese mismo día), para que la consulta se concrete alrededor de esa fecha.</div>
+  </div>`;
+
   const cuerpo = `
 <div class="rh">
   <div class="rh-ico">${esBar ? '🔪' : '🎯'}</div>
@@ -16853,7 +16898,7 @@ function _adipGenerarHTMLInforme(trat, modoModal, opts) {
     <div class="rh-title">${tituloTrat}</div>
     <div class="rh-sub">Seguimiento de inicio de tratamiento</div>
   </div>
-  <div class="rh-fecha"><strong>${fechaHoyStr}</strong>1er control a partir de: ${fechaControl}</div>
+  <div class="rh-fecha"><strong>${fechaHoyStr}</strong>${fechaDesconocida ? '1er control: a calcular desde el inicio real' : '1er control a partir de: ' + fechaControl}</div>
 </div>
 <div class="pac-bar">
   <div class="pac-chip"><span class="pac-lbl">Paciente</span><span class="pac-val">${nombre}</span></div>
@@ -16871,10 +16916,7 @@ ${profNombre ? `<div class="prof-strip"><span class="prof-name">${profNombre}</s
     <div class="med-item"><div class="med-lbl">Fecha de inicio</div><div class="med-val" style="font-size:15px">${fechaIni}</div></div>
   </div>
 
-  <div class="turno-box">
-    <div class="turno-ico">⏰</div>
-    <div class="turno-txt"><strong>1er control a partir del ${fechaControl}.</strong> Esta fecha no es el día para pedir el turno, sino el momento a partir del cual el/la paciente ya debería tener el control realizado. Por eso conviene solicitar el turno con anticipación (no ese mismo día), para que la consulta se concrete alrededor de esa fecha.</div>
-  </div>
+  ${turnoBoxHTML}
 
   ${anticoncepcionBlock}
 
