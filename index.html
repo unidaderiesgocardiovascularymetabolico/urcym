@@ -4948,6 +4948,34 @@ let dniEdicion = null;
 let ultimoDniCargado = null;
 let pacienteActual = null;
 let evolClinicaSnapshot = null;
+
+// ===== GUARDIA GENÉRICA CONTRA CONTAMINACIÓN CRUZADA ENTRE PESTAÑAS DE PACIENTE =====
+// Este tipo de bug (datos de un paciente terminando guardados bajo el DNI de otro, por
+// quedar un modal abierto/asociado a un paciente mientras pacienteActual ya cambió) se
+// corrigió puntualmente varias veces en distintos lugares. Esta es la protección genérica:
+// cualquier modal que cargue datos de un paciente debe "marcarse" con _marcarModalParaPaciente
+// al abrirse, y cualquier función que guarde esos datos debe llamar a
+// _bloquearGuardadoSiCambioDePaciente ANTES de escribir en Supabase. Si el paciente activo
+// ya no coincide con el que estaba cargado en el modal, el guardado se cancela con un aviso
+// en vez de escribirse silenciosamente en el paciente equivocado.
+function _marcarModalParaPaciente(modalId, dni) {
+  const ov = document.getElementById(modalId);
+  if(ov && dni) ov.dataset.dniPaciente = String(dni);
+}
+function _modalSigueSiendoDelPacienteActual(modalId) {
+  const ov = document.getElementById(modalId);
+  const dniModal = ov ? ov.dataset.dniPaciente : null;
+  if(!dniModal) return true; // sin registro previo (modal no marcado): no bloquear
+  return !!(pacienteActual && String(pacienteActual.dni) === String(dniModal));
+}
+function _bloquearGuardadoSiCambioDePaciente(modalId, nombreVentana) {
+  if(_modalSigueSiendoDelPacienteActual(modalId)) return false; // todo bien, no bloquear
+  alert('⚠️ Cambiaste de pestaña de paciente mientras "'+nombreVentana+'" seguía abierta.\n\n' +
+        'Para evitar guardar estos datos en el paciente equivocado, este guardado se canceló.\n' +
+        'Volvé a abrir "'+nombreVentana+'" para el paciente actual y cargá los datos de nuevo.');
+  return true; // bloquear el guardado
+}
+
 let updTtoItems = [];
 let _tabActivo = 'evol';
 let _tabDirty = false;
@@ -9051,6 +9079,10 @@ async function cargarSnapshotInicial(dni) {
 // ===== NUEVA guardarClinica CON VOLCADO =====
 async function guardarClinica() {
   if(!pacienteActual) return;
+  // Guardia contra contaminación cruzada entre pestañas: si el paciente activo ya no es
+  // el mismo para el que se abrió este modal (por ejemplo, quedó abierto y se cambió de
+  // pestaña), se cancela el guardado en vez de escribir estos datos en el paciente equivocado.
+  if(_bloquearGuardadoSiCambioDePaciente('modalClinica', 'Datos clínicos')) return;
   // Capturar el snapshot clínico previo (tal como estaba ANTES de este guardado) para poder
   // volcar solo lo nuevo/cambiado. Si es la primera vez que este paciente tiene datos clínicos
   // (evolClinicaSnapshot.clinica no existe todavía), _clinicaAnterior queda en null y se vuelca
@@ -10096,6 +10128,10 @@ async function abrirEvolucion(dni) {
     const ov = document.getElementById(id);
     if(ov) ov.classList.remove('open');
   });
+  // El modal de "Actividad física & Alimentación" (Actualización clínica) usa
+  // style.display en vez de la clase .open, así que se cierra aparte, igual con el mismo motivo.
+  if(typeof cerrarModalHabitos === 'function') cerrarModalHabitos();
+  else { const mh = document.getElementById('modal_habitos_upd'); if(mh) mh.style.display = 'none'; }
   pacienteActual = p;
   if(typeof CALC_COMPLETO !== 'undefined') Object.keys(CALC_COMPLETO).forEach(k => delete CALC_COMPLETO[k]);
   if(typeof cargarUltimaTAHistorica === 'function') _ultimaTAHistPromise = cargarUltimaTAHistorica(p.dni);
@@ -11101,6 +11137,7 @@ async function abrirModalHabitos() {
   _cargarNutriPanel('hab_upd', fuenteAli ? fuenteAli.nutri : null);
 
   document.getElementById('modal_habitos_upd').style.display = 'flex';
+  if(pacienteActual) _marcarModalParaPaciente('modal_habitos_upd', pacienteActual.dni);
   document.body.style.overflow = 'hidden';
   quitarChipHabitosMin();
   switchHTab('act');
@@ -11381,6 +11418,9 @@ function onTipoActividadChange() {
 }
 
 function confirmarModalHabitos() {
+  // Guardia contra contaminación cruzada entre pestañas: si el paciente activo ya no es
+  // el mismo para el que se abrió este modal, se cancela en vez de guardar sobre otro paciente.
+  if(_bloquearGuardadoSiCambioDePaciente('modal_habitos_upd', 'Actividad física & Alimentación')) return;
   const actCambio = (document.querySelector('input[name="hab_upd_act_cambio"]:checked')||{}).value || '';
   const actNotas  = (document.getElementById('hab_upd_act_notas')||{}).value?.trim() || '';
 
@@ -12143,6 +12183,7 @@ function formatIndCmd(cmd, val) {
 async function abrirModalClinica() {
   if(!pacienteActual) return;
   if(typeof _quitarChipMinimizado === 'function') _quitarChipMinimizado('modalClinica');
+  _marcarModalParaPaciente('modalClinica', pacienteActual.dni);
   await cargarDatosClinica(pacienteActual.dni);
   document.getElementById('modalClinica').classList.add('open');
 }
