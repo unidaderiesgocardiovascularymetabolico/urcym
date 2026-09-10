@@ -8896,7 +8896,139 @@ function generarTextoClinico(c, meds) {
   if(c.tab_notas) lines.push('<b>Notas tabaquismo:</b> '+c.tab_notas);
   if(c.med_notas) lines.push('<b>Notas medicación:</b> '+c.med_notas);
   if(!lines.length) return '';
-  return '<div class="bloque-clinico" style="font-family:Arial,sans-serif;font-size:10pt;color:#333;border:1px solid #e0e0e0;padding:8px 10px;border-radius:6px;margin-bottom:10px;line-height:1.7">'+lines.join('<br>')+'</div>';
+  return '<div class="bloque-clinico" data-modo="completo" style="font-family:Arial,sans-serif;font-size:10pt;color:#333;border:1px solid #e0e0e0;padding:8px 10px;border-radius:6px;margin-bottom:10px;line-height:1.7">'+lines.join('<br>')+'</div>';
+}
+
+// ===== VOLCADO DE SOLO LO NUEVO/CAMBIADO EN DATOS CLÍNICOS =====
+// A diferencia de generarTextoClinico (que vuelca el snapshot completo), esta función
+// compara "nuevo" contra el snapshot previo ("anterior") y arma líneas solo con lo que
+// se marcó por primera vez o cambió: diagnósticos, antecedentes familiares, antecedentes
+// quirúrgicos, medicación y notas/hábitos simples (tabaquismo, etc.).
+// Actividad física/alimentación estructuradas (JSON) NO se tocan acá: eso ya lo resuelve
+// el panel "Actualización clínica de esta consulta" (confirmarModalHabitos/volcarActualizacion).
+function generarTextoCambiosClinicos(nuevo, anterior, medsNuevo, medsAnterior) {
+  const DX_NAMES = {acv:'ACV',albuminuria:'Albuminuria',atero_subcl:'Atero Subcl.',dbt1:'DBT 1',dbt2:'DBT 2',dbt_otro:'DBT Otro',dis:'Dislipemia',eap:'EAP',epoc:'EPOC',erc:'ERC',fa:'FA',hiperu:'HiperU',hta:'HTA',hta2:'HTA 2',hvi:'HVI',iam:'IAM',icc:'ICC',masld:'MASLD',ms:'S. Metabólico',neu_dbt:'Neu DBT',obe:'Obesidad',predbt:'PreDBT',rp_dbt:'RP DBT',sahos:'SAHOS',sob:'Sobrepeso'};
+  const GINECO_NAMES = {pe:'Preeclampsia',rciu:'RCIU',ppt:'Parto Pretérmino',sop:'SOP',dbtg:'DBT Gestacional',htag:'HTA Gestacional',ms_gineco:'S. Metabólico Gineco',menopausia:'Menopausia'};
+  const DX_ALL_NAMES = Object.assign({}, DX_NAMES, GINECO_NAMES);
+  const FAM_NAMES = {hta:'HTA',dbt:'DBT',obe:'Obesidad',dis:'Dislipemia',iam:'IAM',acv:'ACV',erc:'ERC',ms:'S. Metabólico'};
+  const TABAQUISMO_LABEL = {nunca:'no fumador', actual:'fumador actual', social:'fumador social', ex:'ex fumador'};
+
+  function txt(v){ return (v===undefined||v===null) ? '' : String(v).trim(); }
+  function cambio(a,b){ return txt(a) !== txt(b); }
+  // Une un array en una enumeración en español: "A", "A y B", "A, B y C"
+  function listaEsp(arr){
+    if(!arr.length) return '';
+    if(arr.length===1) return arr[0];
+    return arr.slice(0,-1).join(', ')+' y '+arr[arr.length-1];
+  }
+
+  const lines = [];
+  anterior = anterior || {};
+
+  // Diagnósticos (altas/bajas) — una oración por categoría
+  const dxAltas = [], dxBajas = [];
+  Object.keys(DX_ALL_NAMES).forEach(function(k){
+    const key = 'dx_'+k;
+    const antes = !!anterior[key], ahora = !!nuevo[key];
+    if(ahora && !antes) dxAltas.push(DX_ALL_NAMES[k]);
+    else if(!ahora && antes) dxBajas.push(DX_ALL_NAMES[k]);
+  });
+  if(dxAltas.length) lines.push('Se agrega diagnóstico de '+listaEsp(dxAltas)+'.');
+  if(dxBajas.length) lines.push('Se retira diagnóstico de '+listaEsp(dxBajas)+'.');
+
+  // Subcampos de diagnósticos ya activos (fecha/nota/eventos) — una oración por cada uno
+  ['hta','obe'].forEach(function(dx){
+    if(!nuevo['dx_'+dx]) return;
+    if(anterior['dx_'+dx] && cambio(nuevo['dx_'+dx+'_fecha'], anterior['dx_'+dx+'_fecha']) && txt(nuevo['dx_'+dx+'_fecha']))
+      lines.push('Se actualiza la fecha de diagnóstico de '+DX_ALL_NAMES[dx]+'.');
+    if(cambio(nuevo['dx_'+dx+'_nota'], anterior['dx_'+dx+'_nota']) && txt(nuevo['dx_'+dx+'_nota']))
+      lines.push('Nota sobre '+DX_ALL_NAMES[dx]+': '+txt(nuevo['dx_'+dx+'_nota']));
+  });
+  if(nuevo.dx_menopausia) {
+    if(cambio(nuevo.dx_menopausia_edad, anterior.dx_menopausia_edad) && txt(nuevo.dx_menopausia_edad))
+      lines.push('Se actualiza la edad de diagnóstico de menopausia a '+txt(nuevo.dx_menopausia_edad)+' años.');
+    if(cambio(nuevo.dx_menopausia_nota, anterior.dx_menopausia_nota) && txt(nuevo.dx_menopausia_nota))
+      lines.push('Nota sobre menopausia: '+txt(nuevo.dx_menopausia_nota));
+  }
+  ['acv','iam'].forEach(function(dx){
+    if(!nuevo['dx_'+dx]) return;
+    const nombre = dx==='acv' ? 'ACV' : 'IAM';
+    if(cambio(nuevo['dx_'+dx+'_eventos'], anterior['dx_'+dx+'_eventos']))
+      lines.push('Se actualizan los eventos de '+nombre+'.');
+    if(cambio(nuevo['dx_'+dx+'_nota'], anterior['dx_'+dx+'_nota']) && txt(nuevo['dx_'+dx+'_nota']))
+      lines.push('Nota sobre '+nombre+': '+txt(nuevo['dx_'+dx+'_nota']));
+  });
+
+  // Antecedentes familiares (altas/bajas)
+  const famAltas = [], famBajas = [];
+  Object.keys(FAM_NAMES).forEach(function(k){
+    const key = 'fam_'+k;
+    const antes = !!anterior[key], ahora = !!nuevo[key];
+    if(ahora && !antes) famAltas.push(FAM_NAMES[k]);
+    else if(!ahora && antes) famBajas.push(FAM_NAMES[k]);
+  });
+  if(famAltas.length) lines.push('Se agrega antecedente familiar de '+listaEsp(famAltas)+'.');
+  if(famBajas.length) lines.push('Se retira antecedente familiar de '+listaEsp(famBajas)+'.');
+
+  // Antecedentes quirúrgicos (solo cirugías nuevas)
+  try {
+    const cirNuevas = _safeJ(nuevo.quirurg_cirugias, []) || [];
+    const cirPrevias = _safeJ(anterior.quirurg_cirugias, []) || [];
+    const clave = function(c){ return (c.cirugia||'')+'|'+(c.año||''); };
+    const clavesPrevias = {}; cirPrevias.forEach(function(c){ clavesPrevias[clave(c)] = true; });
+    const cirAgregadas = cirNuevas.filter(function(c){ return !clavesPrevias[clave(c)]; });
+    if(cirAgregadas.length) lines.push('Se agrega antecedente quirúrgico de '+listaEsp(cirAgregadas.map(function(c){ return c.cirugia+(c.año?' ('+c.año+')':''); }))+'.');
+  } catch(e) {}
+  if(cambio(nuevo.quirurg_notas, anterior.quirurg_notas) && txt(nuevo.quirurg_notas)) lines.push('Nota quirúrgica: '+txt(nuevo.quirurg_notas));
+
+  // Medicación (agregada / discontinuada / cambio de dosis)
+  try {
+    function normMed(m){ return {farmaco:txt(m.farmaco).toLowerCase(), dosis:txt(m.dosis), frecuencia:txt(m.frecuencia), original:m}; }
+    const nuevosN = (medsNuevo||[]).map(normMed).filter(function(m){ return m.farmaco; });
+    const anterioresN = (medsAnterior||[]).filter(function(m){ return m.activo!==false; }).map(normMed).filter(function(m){ return m.farmaco; });
+    const mapAnt = {}; anterioresN.forEach(function(m){ mapAnt[m.farmaco]=m; });
+    const mapNue = {}; nuevosN.forEach(function(m){ mapNue[m.farmaco]=m; });
+    const agregados = [], cambiosDosis = [];
+    nuevosN.forEach(function(m){
+      const prev = mapAnt[m.farmaco];
+      if(!prev) agregados.push(m.original);
+      else if(prev.dosis!==m.dosis || prev.frecuencia!==m.frecuencia) cambiosDosis.push(m.original);
+    });
+    const discontinuados = anterioresN.filter(function(m){ return !mapNue[m.farmaco]; }).map(function(m){ return m.original; });
+    if(agregados.length) lines.push('Se agrega tratamiento con '+listaEsp(agregados.map(function(m){ return m.farmaco+' '+m.dosis+(m.frecuencia?' '+m.frecuencia:''); }))+'.');
+    if(cambiosDosis.length) lines.push('Se ajusta la dosis de '+listaEsp(cambiosDosis.map(function(m){ return m.farmaco+' a '+m.dosis+(m.frecuencia?' '+m.frecuencia:''); }))+'.');
+    if(discontinuados.length) lines.push('Se discontinúa '+listaEsp(discontinuados.map(function(m){ return m.farmaco; }))+'.');
+  } catch(e) {}
+
+  // Hábitos simples (tabaquismo)
+  if(cambio(nuevo.tabaquismo, anterior.tabaquismo) && txt(nuevo.tabaquismo)) {
+    let txtTab = TABAQUISMO_LABEL[nuevo.tabaquismo] || nuevo.tabaquismo;
+    if((nuevo.tabaquismo==='actual' || nuevo.tabaquismo==='ex') && nuevo.cigarrillos_dia && nuevo.anios_fumando) {
+      txtTab += ' ('+((nuevo.cigarrillos_dia||0)*(nuevo.anios_fumando||0)/20).toFixed(1)+' PA)';
+    }
+    lines.push('Se actualiza tabaquismo: '+txtTab+'.');
+  }
+
+  // Notas generales (solo si cambiaron y tienen contenido)
+  const NOTAS = [
+    {key:'otras_enfermedades', label:'Otras enfermedades'},
+    {key:'cardio_notas', label:'Nota cardiometabólica'},
+    {key:'gineco_notas', label:'Nota ginecológica'},
+    {key:'fam_notas', label:'Nota familiar'},
+    {key:'act_notas', label:'Nota de actividad física'},
+    {key:'tox_notas', label:'Nota de tóxicos'},
+    {key:'ali_notas', label:'Nota de alimentación'},
+    {key:'alc_notas', label:'Nota de alcohol'},
+    {key:'tab_notas', label:'Nota de tabaquismo'},
+    {key:'med_notas', label:'Nota de medicación'}
+  ];
+  NOTAS.forEach(function(n){
+    if(cambio(nuevo[n.key], anterior[n.key]) && txt(nuevo[n.key])) lines.push(n.label+': '+txt(nuevo[n.key]));
+  });
+
+  if(!lines.length) return '';
+  return '<div class="bloque-clinico" data-modo="cambios" style="font-family:Arial,sans-serif;font-size:10pt;color:#333;border:1px solid #e0e0e0;padding:8px 10px;border-radius:6px;margin-bottom:10px;line-height:1.7">'+
+    '<strong style="font-size:10pt">Cambios en datos clínicos:</strong><br>'+lines.join('<br>')+'</div>';
 }
 
 // ===== SNAPSHOT CLÍNICO =====
@@ -8919,6 +9051,12 @@ async function cargarSnapshotInicial(dni) {
 // ===== NUEVA guardarClinica CON VOLCADO =====
 async function guardarClinica() {
   if(!pacienteActual) return;
+  // Capturar el snapshot clínico previo (tal como estaba ANTES de este guardado) para poder
+  // volcar solo lo nuevo/cambiado. Si es la primera vez que este paciente tiene datos clínicos
+  // (evolClinicaSnapshot.clinica no existe todavía), _clinicaAnterior queda en null y se vuelca
+  // el resumen completo esa única vez (ver más abajo).
+  const _clinicaAnterior = (evolClinicaSnapshot && evolClinicaSnapshot.clinica) ? JSON.parse(JSON.stringify(evolClinicaSnapshot.clinica)) : null;
+  const _medsAnterior = (evolClinicaSnapshot && evolClinicaSnapshot.medicacion) ? JSON.parse(JSON.stringify(evolClinicaSnapshot.medicacion)) : [];
   // Asegurar que la UI del modal esté lista
   if(typeof window.asegurarUIClinica === 'function') window.asegurarUIClinica();
   const dni = pacienteActual.dni;
@@ -9008,7 +9146,9 @@ async function guardarClinica() {
       meds.push(medData);
     }
     try {
-      const texto = generarTextoClinico(clinicaData, meds);
+      const texto = _clinicaAnterior
+        ? generarTextoCambiosClinicos(clinicaData, _clinicaAnterior, meds, _medsAnterior)
+        : generarTextoClinico(clinicaData, meds);
       if(texto) {
         const editor = document.getElementById('evol_editor');
         if(editor) {
