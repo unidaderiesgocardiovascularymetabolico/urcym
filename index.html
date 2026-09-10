@@ -10086,6 +10086,16 @@ async function abrirEvolucion(dni) {
     _quitarChipMinimizado('modalIndicaciones');
     _quitarChipMinimizado('modalDocLibre');
   }
+  // IMPORTANTE: si alguno de estos modales había quedado ABIERTO (no minimizado) al cambiar
+  // de pestaña de paciente, lo anterior no lo tocaba — seguía mostrando los datos del paciente
+  // viejo mientras pacienteActual ya apuntaba al nuevo. Un "Guardar" posterior en ese modal
+  // todavía abierto escribía esos datos viejos bajo el DNI del paciente NUEVO (contaminación
+  // cruzada entre pestañas, persistente porque quedaba guardado así en la base). Se cierran
+  // sin guardar al cambiar de paciente, para evitarlo.
+  ['modalClinica','modalIndicaciones','modalDocLibre'].forEach(function(id){
+    const ov = document.getElementById(id);
+    if(ov) ov.classList.remove('open');
+  });
   pacienteActual = p;
   if(typeof CALC_COMPLETO !== 'undefined') Object.keys(CALC_COMPLETO).forEach(k => delete CALC_COMPLETO[k]);
   if(typeof cargarUltimaTAHistorica === 'function') _ultimaTAHistPromise = cargarUltimaTAHistorica(p.dni);
