@@ -810,6 +810,15 @@
 #agenda-app .ag-turno.sa .ag-badge{background:#FAC775;color:#412402;}
 #agenda-app .ag-turno.ma{background:#DCFCE7;border-left:3px solid #22C55E;color:#14532D;}
 #agenda-app .ag-turno.ma .ag-badge{background:#86EFAC;color:#14532D;}
+/* Estado de asistencia: cambia el RELLENO del bloque, pero nunca el borde
+   izquierdo (ese sigue marcando al profesional — violeta Guerrero, azul
+   Bertani — para no perder esa referencia). */
+#agenda-app .ag-turno.asist-presente{background:#FEF9C3 !important;color:#854D0E !important;}
+#agenda-app .ag-turno.asist-presente .ag-turno-prof{color:#854D0E !important;opacity:.75;}
+#agenda-app .ag-turno.asist-atendido{background:#DCFCE7 !important;color:#14532D !important;}
+#agenda-app .ag-turno.asist-atendido .ag-turno-prof{color:#14532D !important;opacity:.75;}
+#agenda-app .ag-turno.asist-ausente{background:#FCE4E4 !important;color:#7F1D1D !important;}
+#agenda-app .ag-turno.asist-ausente .ag-turno-prof{color:#7F1D1D !important;opacity:.75;}
 #agenda-app .ag-turno.cancelado{opacity:.55;text-decoration:line-through;}
 #agenda-app .ag-turno.ag-turno-extra{border:1.5px dashed #E59500 !important;box-shadow:inset 2px 0 0 #E59500;}
 #agenda-app .ag-turno.ag-turno-video{border:1.5px dashed #7B3FC4 !important;box-shadow:inset 2px 0 0 #7B3FC4;}
@@ -19487,6 +19496,7 @@ var DEFAULT_DISP=[
 ];
 
 var turnos={}, nlBlocks=[], dispBlocks=[], instBlocks=[];
+window.turnos = turnos; // se mantiene sincronizado en cada reasignación (ver loadLocal, _silentRefresh, agRecuperarLocalStorage)
 
 // ── Motivo(s) de consulta del turno: hasta 3, guardados como array en t.notas ──
 // (compatible con turnos viejos donde t.notas era un string único)
@@ -19683,8 +19693,17 @@ function openCtxMenu(e,key){
   menu.style.cssText='position:fixed;z-index:20000;background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:4px 0;min-width:160px;box-shadow:0 4px 16px rgba(0,0,0,.12);font-family:inherit;font-size:13px;';
 
   var pago=t.pago==='pagado';
+  var presente=t.asistencia==='presente';
+  var atendido=t.asistencia==='atendido'||t.asistencia==='asistio';
   var ausente=t.asistencia==='ausente';
   var sinCargo=t.sinCargo===true;
+
+  function setAsistencia(val,activo){
+    return function(){
+      turnos[key].asistencia=activo?null:val;
+      saveLocal();renderGrid();
+    };
+  }
 
   function mkItem(label,color,handler){
     var li=document.createElement('div');
@@ -19722,10 +19741,22 @@ function openCtxMenu(e,key){
     sinCargo?'#185FA5':'#374151',
     function(){turnos[key].sinCargo=!sinCargo;saveLocal();renderGrid();}
   ));
+  var sep0=document.createElement('div');sep0.style.cssText='height:1px;background:#e5e7eb;margin:4px 0;';
+  menu.appendChild(sep0);
+  menu.appendChild(mkItem(
+    (presente?'<span style="color:#B45309">●</span> ':'<span style="opacity:.3">○</span> ')+'Presente',
+    presente?'#B45309':'#374151',
+    setAsistencia('presente',presente)
+  ));
+  menu.appendChild(mkItem(
+    (atendido?'<span style="color:#1D9E75">✓</span> ':'<span style="opacity:.3">○</span> ')+'Atendido',
+    atendido?'#1D9E75':'#374151',
+    setAsistencia('atendido',atendido)
+  ));
   menu.appendChild(mkItem(
     (ausente?'<span style="color:#E24B4A">✕</span> ':'<span style="opacity:.3">○</span> ')+'Ausente',
     ausente?'#E24B4A':'#374151',
-    function(){turnos[key].asistencia=ausente?null:'ausente';saveLocal();renderGrid();}
+    setAsistencia('ausente',ausente)
   ));
   var sep=document.createElement('div');sep.style.cssText='height:1px;background:#e5e7eb;margin:4px 0;';
   menu.appendChild(sep);
@@ -20322,13 +20353,16 @@ function renderGrid(){
 function makeTurnoEl(t,key,hPx){
   var el=document.createElement('div');
   var pc=PROF_CLS[t.prof]||'bg';
-  el.className='ag-turno '+pc+(t.estado==='cancelado'?' cancelado':'')+(t.extra?' ag-turno-extra':'')+(t.video?' ag-turno-video':'');
+  // Estado de asistencia (presente/atendido/ausente) → clase que cambia el
+  // relleno del bloque, sin tocar el borde (ese sigue siendo del profesional).
+  var asistCls=t.asistencia==='presente'?' asist-presente'
+    :(t.asistencia==='atendido'||t.asistencia==='asistio')?' asist-atendido'
+    :t.asistencia==='ausente'?' asist-ausente':'';
+  el.className='ag-turno '+pc+asistCls+(t.estado==='cancelado'?' cancelado':'')+(t.extra?' ag-turno-extra':'')+(t.video?' ag-turno-video':'');
   var dc=t.osde?'osde':(t.pago||'sin-seña');
 
   var nameColor='';
   if(t.sinCargo)nameColor='color:#185FA5;';
-  else if(t.asistencia==='asistio')nameColor='color:#1D9E75;';
-  else if(t.asistencia==='ausente')nameColor='color:#E24B4A;';
 
   var tTime=key.split('_')[1]||'';
   var tEnd=nextSlotTime(tTime,t.prof);
@@ -20376,7 +20410,9 @@ function makeTurnoEl(t,key,hPx){
     el.addEventListener('mouseenter',function(e){
       var kTime=tKey.split('_')[1]||'';
       var kEnd=nextSlotTime(kTime,turno.prof);
-      var asistLabel=turno.asistencia==='asistio'?'<span style="color:#1D9E75">Asistió ✓</span>':turno.asistencia==='ausente'?'<span style="color:#E24B4A">Ausente ✕</span>':'—';
+      var asistLabel=turno.asistencia==='presente'?'<span style="color:#B45309">● Presente</span>'
+        :(turno.asistencia==='atendido'||turno.asistencia==='asistio')?'<span style="color:#1D9E75">Atendido ✓</span>'
+        :turno.asistencia==='ausente'?'<span style="color:#E24B4A">Ausente ✕</span>':'—';
       tt.innerHTML='<div class="ag-tt-name">'+esc(turno.paciente||'—')+'</div>'
         +'<div class="ag-tt-row"><span>Hora</span><span>'+esc(kTime+(kEnd?' – '+kEnd:''))+'</span></div>'
         +'<div class="ag-tt-row"><span>Profesional</span><span>'+esc(PROF_FULL[turno.prof]||'')+'</span></div>'
@@ -21525,6 +21561,7 @@ async function agRecuperarLocalStorage(){
     var res=await sb.from('urcym_agenda_config').upsert({key:'turnos',value:JSON.stringify(merged)},{onConflict:'key'});
     if(res&&res.error){alert('Error al subir: '+res.error.message);return;}
     turnos=merged;
+    window.turnos=turnos;
     try{localStorage.setItem('urcym_ag_turnos',JSON.stringify(merged));}catch(e){}
     renderGrid();
     alert('Listo. Se fusionaron '+Object.keys(merged).length+' turnos en Supabase.');
@@ -21605,6 +21642,12 @@ async function loadLocal(){
   if(nlDB)try{localStorage.setItem(LS_NL,JSON.stringify(nlBlocks));}catch(e){}
   if(dispDB)try{localStorage.setItem(LS_D,JSON.stringify(dispBlocks));}catch(e){}
   if(instDB)try{localStorage.setItem(LS_INST,JSON.stringify(instBlocks));}catch(e){}
+
+  // "turnos" es una variable local de este módulo (dentro del IIFE del
+  // agenda-script) — se expone también en window para que otros módulos
+  // (como el Cierre) puedan leer siempre los mismos turnos que se ven acá,
+  // sin depender de otra consulta aparte a Supabase.
+  window.turnos = turnos;
 
   renderGrid();
 }
@@ -21996,6 +22039,7 @@ loadLocal();  // async, carga en background y llama renderGrid al final
             var nuevosTurnos = JSON.parse(row.value);
             if(JSON.stringify(nuevosTurnos) !== JSON.stringify(turnos)){
               turnos = nuevosTurnos;
+              window.turnos = turnos;
               try{localStorage.setItem(LS_T, row.value);}catch(e){}
               changed = true;
             }
@@ -24913,8 +24957,11 @@ window.cargarProxConsultas = cargarProxConsultas;
   // todavía no está cargada (recién abierta la página), se hace un
   // fetch directo como respaldo.
   async function ciObtenerTurnos(){
-    if(typeof turnos!=='undefined' && turnos && Object.keys(turnos).length){
-      return turnos;
+    // "turnos" vive dentro del IIFE del agenda-script (no es una variable
+    // global de verdad), así que acá se lee a través de window.turnos, que
+    // ese módulo mantiene sincronizado en cada carga/actualización.
+    if(window.turnos && Object.keys(window.turnos).length){
+      return window.turnos;
     }
     try{ return (await sbGetAgendaConfig('turnos')) || {}; }
     catch(e){ console.warn('[Cierre] error cargando turnos', e); return {}; }
@@ -25031,7 +25078,9 @@ window.cargarProxConsultas = cargarProxConsultas;
             : ciMoneda((t.pago==='pagado'&&t.monto)?t.monto:((t.pago==='señado'&&t.sena)?t.sena:0));
           var medioCelda = esOsde(t) ? '—'
             : (t.pago==='pagado' ? medioTxt(t.saldo_medio, t.saldo_receptor) : (t.pago==='señado' ? medioTxt(t.sena_medio, t.sena_receptor) : '—'));
-          var asistTxt = t.asistencia==='ausente' ? '<span style="color:var(--red)">Ausente</span>' : (t.asistencia==='asistio' ? 'Asistió' : '—');
+          var asistTxt = t.asistencia==='ausente' ? '<span style="color:var(--red)">Ausente</span>'
+            : (t.asistencia==='atendido'||t.asistencia==='asistio') ? '<span style="color:#1D9E75">Atendido</span>'
+            : t.asistencia==='presente' ? '<span style="color:#B45309">Presente</span>' : '—';
           return '<tr>'
             +'<td style="padding:9px 14px;font-size:12.5px">'+t._hora+'</td>'
             +'<td style="padding:9px 14px;font-size:12.5px">'+(t.paciente||'')+'</td>'
