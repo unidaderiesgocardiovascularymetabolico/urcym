@@ -1316,7 +1316,12 @@
         <div class="user-name">Dr. Omar Bertani</div>
         <div class="user-role">Diabetes · Hipertensión</div>
       </button>
-      <button class="user-btn" id="btn-invitado" onclick="selectUser('invitado')" style="grid-column:1/-1">
+      <button class="user-btn" id="btn-secretaria" onclick="selectUser('secretaria')">
+        <div class="user-avatar" style="background:#7c3aed">SE</div>
+        <div class="user-name">Secretaría</div>
+        <div class="user-role">Gestión de agenda</div>
+      </button>
+      <button class="user-btn" id="btn-invitado" onclick="selectUser('invitado')">
         <div class="user-avatar" style="background:var(--text-soft)">👁</div>
         <div class="user-name">Invitado</div>
         <div class="user-role">Solo lectura</div>
@@ -1359,12 +1364,13 @@
   </div>
   <div class="nav-tabs">
     <div class="nav-tab active" onclick="showPage('dashboard')">Inicio</div>
-    <div class="nav-tab" onclick="showPage('pacientes')">Pacientes</div>
+    <div class="nav-tab" id="nav-tab-pacientes" onclick="showPage('pacientes')">Pacientes</div>
     <div class="nav-tab" id="nav-tab-agenda" onclick="showPage('agenda')">Agenda</div>
     <div class="nav-tab" id="nav-tab-finanzas" onclick="showPage('finanzas')">Finanzas</div>
     <div class="nav-tab" id="nav-tab-mis-pacientes" style="display:none" onclick="showPage('mis-pacientes')">👤 Mis Pacientes</div>
     <div class="nav-tab" id="nav-tab-gestion" style="display:none" onclick="showPage('gestion')">📊 Gestión</div>
     <div class="nav-tab" id="nav-tab-investigacion" style="display:none" onclick="showPage('investigacion')">🔬 Investigación</div>
+    <div class="nav-tab" id="nav-tab-cierre" style="display:none" onclick="showPage('cierre')">💰 Cierre</div>
   </div>
   <div class="content">
 
@@ -1674,12 +1680,45 @@
               </select>
             </div>
           </div>
+          <div class="ag-form-row-2" id="ag-sena-medio-row" style="display:none">
+            <div class="ag-form-row" style="margin-bottom:0"><label>Medio (seña)</label>
+              <select id="ag-f-sena-medio">
+                <option value="efectivo">💵 Efectivo</option>
+                <option value="transferencia">🏦 Transferencia</option>
+              </select>
+            </div>
+            <div class="ag-form-row" style="margin-bottom:0" id="ag-sena-receptor-wrap">
+              <label>Recibió la seña</label>
+              <select id="ag-f-sena-receptor">
+                <option value="consultorio">Consultorio</option>
+                <option value="profesional">Profesional</option>
+              </select>
+            </div>
+          </div>
           <div class="ag-form-row" id="ag-monto-row" style="display:none">
             <label style="display:flex;align-items:center;justify-content:space-between;">
               <span>Monto total ($)</span>
               <span id="ag-monto-hint" style="font-size:10px;color:#6b7280;font-weight:400;"></span>
             </label>
             <input type="number" id="ag-f-monto" placeholder="0" min="0" style="border:1.5px solid #1D9E75;">
+          </div>
+          <div class="ag-form-row-2" id="ag-saldo-medio-row" style="display:none">
+            <div class="ag-form-row" style="margin-bottom:0">
+              <label style="display:flex;align-items:center;justify-content:space-between;">
+                <span id="ag-saldo-medio-label">Medio (saldo)</span>
+              </label>
+              <select id="ag-f-saldo-medio">
+                <option value="efectivo">💵 Efectivo</option>
+                <option value="transferencia">🏦 Transferencia</option>
+              </select>
+            </div>
+            <div class="ag-form-row" style="margin-bottom:0" id="ag-saldo-receptor-wrap">
+              <label>Recibió el saldo</label>
+              <select id="ag-f-saldo-receptor">
+                <option value="consultorio">Consultorio</option>
+                <option value="profesional">Profesional</option>
+              </select>
+            </div>
           </div>
           <div class="ag-form-row"><label>Motivo de consulta <span class="ag-motivo-hint" id="ag-f-motivos-count">(hasta 3)</span></label>
             <div id="ag-f-motivos" style="display:flex;flex-wrap:wrap;gap:6px;">
@@ -1917,6 +1956,172 @@
       </div>
     </div>
     <!-- ── Página MIS PACIENTES (para profesionales no-admin) ── -->
+    <!-- ── Página CIERRE (solo Secretaría) ── -->
+    <div class="page" id="page-cierre" style="padding:28px;">
+      <style>
+        .cierre-toolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:16px}
+        .cierre-toolbar input[type=date]{padding:8px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;font-family:var(--font-main);background:white;outline:none}
+        .cierre-toolbar select{padding:8px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;font-family:var(--font-main);background:white;outline:none}
+        .cierre-tabs{display:inline-flex;background:var(--gray);border-radius:11px;padding:4px;margin-bottom:18px;gap:2px}
+        .cierre-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-bottom:22px}
+        .cierre-osde-row{display:flex;align-items:center;justify-content:space-between;gap:10px;background:white;border:1px solid var(--border);border-radius:12px;padding:12px 16px;margin-bottom:8px;flex-wrap:wrap}
+        .cierre-osde-info{font-size:12.5px;color:var(--text)}
+        .cierre-osde-sub{font-size:11px;color:var(--text-soft);margin-top:2px}
+        .cierre-badge-espera{display:inline-block;padding:2px 8px;border-radius:20px;font-size:10.5px;font-weight:700;background:#fef3c7;color:#92400e}
+        .cierre-badge-espera.larga{background:#fee2e2;color:#991b1b}
+        .cierre-liq{border-radius:16px;padding:18px 22px;margin-bottom:20px;display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap}
+        .cierre-liq.a-favor-prof{background:#f0fdf4;border:1.5px solid #86efac}
+        .cierre-liq.a-favor-consultorio{background:#eff6ff;border:1.5px solid #93c5fd}
+        .cierre-liq.sin-saldo{background:var(--gray);border:1.5px solid var(--border)}
+        .cierre-liq-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-soft);margin-bottom:4px}
+        .cierre-liq-val{font-family:var(--font-display);font-size:22px;font-weight:700}
+        .cierre-liq-sub{font-size:11.5px;color:var(--text-soft);margin-top:4px}
+        .cierre-section-title{font-size:12.5px;font-weight:700;color:var(--text-soft);text-transform:uppercase;letter-spacing:.05em;margin:6px 0 10px}
+      </style>
+      <div class="page-title">💰 Cierre diario</div>
+      <div class="page-subtitle">Cierre de caja por profesional y control de cobros OSDE pendientes</div>
+      <div class="cierre-toolbar">
+        <input type="date" id="cierre-fecha"/>
+        <select id="cierre-prof">
+          <option value="BG">Dra. Bárbara Guerrero</option>
+          <option value="OB">Dr. Omar Bertani</option>
+        </select>
+        <button class="fin-btn-nuevo" onclick="window.cierreCargarDia && cierreCargarDia()">Ver cierre</button>
+        <button class="fin-btn-nuevo teal" onclick="window.cierreAbrirConfig && cierreAbrirConfig()">⚙️ Configuración</button>
+      </div>
+      <div class="cierre-tabs">
+        <button class="fin-tab active" id="cierre-tab-dia" onclick="window.cierreShowTab && cierreShowTab('dia')">Cierre del día</button>
+        <button class="fin-tab" id="cierre-tab-porcobrar" onclick="window.cierreShowTab && cierreShowTab('porcobrar')">📋 Por cobrar (OSDE)</button>
+      </div>
+
+      <div id="cierre-panel-dia">
+        <div id="ci-vigencia-notice" style="display:none;background:#fef3c7;border:1.5px solid #fde047;border-radius:12px;padding:12px 16px;margin-bottom:16px;font-size:12.5px;color:#713f12;font-weight:600"></div>
+        <div class="cierre-grid" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr))">
+          <div class="fin-kpi"><div class="fin-kpi-label">Pacientes vistos</div><div class="fin-kpi-val" id="ci-kpi-pacientes">—</div><div class="fin-kpi-sub" id="ci-kpi-pacientes-sub"></div></div>
+          <div class="fin-kpi"><div class="fin-kpi-label">💵 Efectivo (consultorio)</div><div class="fin-kpi-val" id="ci-kpi-efectivo">—</div></div>
+          <div class="fin-kpi"><div class="fin-kpi-label">🏦 Transferencia (consultorio)</div><div class="fin-kpi-val" id="ci-kpi-transf-cons">—</div></div>
+          <div class="fin-kpi"><div class="fin-kpi-label">🏦 Transferencia (profesional)</div><div class="fin-kpi-val" id="ci-kpi-transf-prof">—</div></div>
+        </div>
+        <div class="cierre-grid" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr))">
+          <div class="fin-kpi"><div class="fin-kpi-label">Total cobrado hoy</div><div class="fin-kpi-val" id="ci-kpi-bruto">—</div><div class="fin-kpi-sub" id="ci-kpi-bruto-sub"></div></div>
+          <div class="fin-kpi"><div class="fin-kpi-label" id="ci-kpi-alq-label">Alquiler consultorio</div><div class="fin-kpi-val red" id="ci-kpi-alquiler">—</div></div>
+          <div class="fin-kpi"><div class="fin-kpi-label">A favor del profesional</div><div class="fin-kpi-val green" id="ci-kpi-neto">—</div><div class="fin-kpi-sub">Total cobrado − alquiler</div></div>
+        </div>
+
+        <div class="cierre-liq sin-saldo" id="ci-liquidacion">
+          <div>
+            <div class="cierre-liq-label">💰 Liquidación del día (efectivo/seña + saldo, sin contar OSDE)</div>
+            <div class="cierre-liq-val" id="ci-liquidacion-val">—</div>
+            <div class="cierre-liq-sub" id="ci-liquidacion-sub"></div>
+          </div>
+        </div>
+
+        <div class="cierre-section-title">OSDE (a cobrar más adelante)</div>
+        <div class="cierre-grid" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr));margin-bottom:14px">
+          <div class="fin-kpi" style="border-color:var(--border);background:#f0f6ff">
+            <div class="fin-kpi-label" style="color:var(--blue)">OSDE del día (turnos)</div>
+            <div class="fin-kpi-val blue" id="ci-kpi-osde-dia">—</div>
+            <div class="fin-kpi-sub" id="ci-kpi-osde-dia-sub">estimado · no es plata en mano todavía</div>
+          </div>
+          <div class="fin-kpi" style="border-color:#bbf7d0;background:#f0fdf4">
+            <div class="fin-kpi-label" style="color:#16a34a">OSDE cobrado hoy (bruto)</div>
+            <div class="fin-kpi-val" id="ci-kpi-osde-cobrado" style="color:#16a34a">—</div>
+            <div class="fin-kpi-sub" id="ci-kpi-osde-cobrado-sub"></div>
+          </div>
+        </div>
+        <div class="cierre-liq sin-saldo" id="ci-liquidacion-osde" style="display:none">
+          <div>
+            <div class="cierre-liq-label">💰 Liquidación de OSDE cobrado hoy</div>
+            <div class="cierre-liq-val" id="ci-liquidacion-osde-val">—</div>
+            <div class="cierre-liq-sub" id="ci-liquidacion-osde-sub"></div>
+          </div>
+        </div>
+
+        <div class="cierre-liq sin-saldo" id="ci-liquidacion-total" style="border-width:2px">
+          <div>
+            <div class="cierre-liq-label">✅ Liquidación TOTAL del día (efectivo/seña/saldo + OSDE cobrado hoy)</div>
+            <div class="cierre-liq-val" id="ci-liquidacion-total-val">—</div>
+          </div>
+        </div>
+
+        <div class="cierre-section-title">Detalle de turnos del día</div>
+        <div id="ci-tabla-turnos" style="background:white;border:1px solid var(--border);border-radius:14px;overflow:hidden">
+          <div class="fin-loading" style="padding:30px;text-align:center;color:var(--text-soft)">Elegí fecha y profesional, y tocá "Ver cierre".</div>
+        </div>
+      </div>
+
+      <div id="cierre-panel-porcobrar" style="display:none">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">
+          <span style="font-size:12.5px;color:var(--text-soft)">Turnos OSDE todavía no cobrados, ordenados por más antiguos primero.</span>
+          <select id="ci-porcobrar-filtro-prof" style="padding:7px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:12.5px;font-family:var(--font-main);background:white" onchange="window.cierrePorCobrarRender && cierrePorCobrarRender()">
+            <option value="">Todos los profesionales</option>
+            <option value="BG">Dra. Bárbara Guerrero</option>
+            <option value="OB">Dr. Omar Bertani</option>
+          </select>
+        </div>
+        <div id="ci-porcobrar-lista"><div class="fin-loading" style="padding:30px;text-align:center;color:var(--text-soft)">Cargando...</div></div>
+      </div>
+
+      <!-- Modal: marcar OSDE como cobrado -->
+      <div class="fin-modal-bg" id="ci-modal-cobrar">
+        <div class="fin-modal">
+          <div class="fin-modal-title">🏥 Marcar OSDE como cobrado</div>
+          <div id="ci-modal-cobrar-info" style="font-size:13px;color:var(--text-soft);margin-bottom:14px"></div>
+          <div class="form-group" style="margin-bottom:12px">
+            <label style="font-size:11.5px;font-weight:600;color:var(--text-soft);text-transform:uppercase;letter-spacing:.04em;display:block;margin-bottom:5px">Monto recibido ($)</label>
+            <input type="number" id="ci-cobrar-monto" style="width:100%;padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:14px;font-family:var(--font-main)"/>
+          </div>
+          <div class="form-group" style="margin-bottom:12px">
+            <label style="font-size:11.5px;font-weight:600;color:var(--text-soft);text-transform:uppercase;letter-spacing:.04em;display:block;margin-bottom:5px">Fecha de cobro</label>
+            <input type="date" id="ci-cobrar-fecha" style="width:100%;padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:14px;font-family:var(--font-main)"/>
+          </div>
+          <div class="form-group" style="margin-bottom:12px">
+            <label style="font-size:11.5px;font-weight:600;color:var(--text-soft);text-transform:uppercase;letter-spacing:.04em;display:block;margin-bottom:5px">Medio</label>
+            <select id="ci-cobrar-medio" style="width:100%;padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:14px;font-family:var(--font-main)">
+              <option value="transferencia">🏦 Transferencia</option>
+              <option value="efectivo">💵 Efectivo</option>
+            </select>
+          </div>
+          <div class="form-group" style="margin-bottom:18px" id="ci-cobrar-receptor-wrap">
+            <label style="font-size:11.5px;font-weight:600;color:var(--text-soft);text-transform:uppercase;letter-spacing:.04em;display:block;margin-bottom:5px">Recibió el pago</label>
+            <select id="ci-cobrar-receptor" style="width:100%;padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:14px;font-family:var(--font-main)">
+              <option value="consultorio">Consultorio</option>
+              <option value="profesional">Profesional</option>
+            </select>
+          </div>
+          <div style="display:flex;gap:10px;justify-content:flex-end">
+            <button class="fin-btn-nuevo" style="background:var(--gray);color:var(--text)" onclick="document.getElementById('ci-modal-cobrar').classList.remove('open')">Cancelar</button>
+            <button class="fin-btn-nuevo" onclick="window.cierreConfirmarCobro && cierreConfirmarCobro()">Confirmar cobro</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Modal: configuración (% alquiler / días estimados OSDE) -->
+      <div class="fin-modal-bg" id="ci-modal-config">
+        <div class="fin-modal">
+          <div class="fin-modal-title">⚙️ Configuración del cierre</div>
+          <div class="form-group" style="margin-bottom:12px">
+            <label style="font-size:11.5px;font-weight:600;color:var(--text-soft);text-transform:uppercase;letter-spacing:.04em;display:block;margin-bottom:5px">% de alquiler para el consultorio</label>
+            <input type="number" id="ci-cfg-pct" min="0" max="100" style="width:100%;padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:14px;font-family:var(--font-main)"/>
+            <div style="font-size:11px;color:var(--text-soft);margin-top:5px">Se aplica sobre la plata cobrada en efectivo/seña, y también sobre cada OSDE al momento de cobrarse.</div>
+          </div>
+          <div class="form-group" style="margin-bottom:12px">
+            <label style="font-size:11.5px;font-weight:600;color:var(--text-soft);text-transform:uppercase;letter-spacing:.04em;display:block;margin-bottom:5px">Días estimados de demora de OSDE</label>
+            <input type="number" id="ci-cfg-dias" min="0" style="width:100%;padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:14px;font-family:var(--font-main)"/>
+          </div>
+          <div class="form-group" style="margin-bottom:18px">
+            <label style="font-size:11.5px;font-weight:600;color:var(--text-soft);text-transform:uppercase;letter-spacing:.04em;display:block;margin-bottom:5px">El reparto de alquiler aplica desde</label>
+            <input type="date" id="ci-cfg-vigencia" style="width:100%;padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:14px;font-family:var(--font-main)"/>
+            <div style="font-size:11px;color:var(--text-soft);margin-top:5px">Antes de esta fecha no había alquiler de consultorio, así que el cierre de esos días no calcula liquidación.</div>
+          </div>
+          <div style="display:flex;gap:10px;justify-content:flex-end">
+            <button class="fin-btn-nuevo" style="background:var(--gray);color:var(--text)" onclick="document.getElementById('ci-modal-config').classList.remove('open')">Cancelar</button>
+            <button class="fin-btn-nuevo" onclick="window.cierreGuardarConfig && cierreGuardarConfig()">Guardar</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div class="page" id="page-mis-pacientes" style="padding:28px;">
       <div class="page-title">👤 Mis Pacientes del mes</div>
       <div class="page-subtitle" id="mp-subtitle">Turnos del mes · cargando...</div>
@@ -4938,6 +5143,11 @@ const users = {
     titulo:'Invitado', mp:'', admin:false, readonly:true,
     especialidades:[]
   },
+  secretaria: {
+    password:'secretaria', name:'Secretaría', role:'Gestión de agenda',
+    titulo:'Secretaría', mp:'', admin:false, readonly:false, secretaria:true,
+    especialidades:[]
+  },
 };
 
 let currentUser = null;
@@ -6561,11 +6771,31 @@ function doLogin() {
     var navAgenda = document.getElementById('nav-tab-agenda');
     var navGestion = document.getElementById('nav-tab-gestion');
     var navInvestigacion = document.getElementById('nav-tab-investigacion');
-    if(currentUser.admin) {
+    var navPacientes = document.getElementById('nav-tab-pacientes');
+    var navCierre = document.getElementById('nav-tab-cierre');
+    if(currentUser.secretaria) {
+      // Secretaría: acceso exclusivo a Agenda (y su propio Cierre diario).
+      // Sin historias clínicas, sin pacientes, sin Finanzas de los
+      // profesionales ni módulos de gestión/investigación.
+      if(navFinanzas) navFinanzas.style.display = 'none';
+      if(navMisPacientes) navMisPacientes.style.display = 'none';
+      if(navGestion) navGestion.style.display = 'none';
+      if(navInvestigacion) navInvestigacion.style.display = 'none';
+      if(navPacientes) navPacientes.style.display = 'none';
+      if(navCierre) navCierre.style.display = '';
+      if(navAgenda) navAgenda.textContent = 'Agenda';
+      // Ve la agenda de todos los profesionales, como un admin
+      if(typeof profFilter !== 'undefined') profFilter = [];
+      var pillsWrap = document.getElementById('ag-prof-pills');
+      if(pillsWrap) pillsWrap.style.display = '';
+      if(typeof syncPillsUI === 'function') syncPillsUI();
+    } else if(currentUser.admin) {
       if(navFinanzas) navFinanzas.style.display = '';
       if(navMisPacientes) navMisPacientes.style.display = 'none';
       if(navGestion) navGestion.style.display = '';
       if(navInvestigacion) navInvestigacion.style.display = '';
+      if(navPacientes) navPacientes.style.display = '';
+      if(navCierre) navCierre.style.display = 'none';
       if(navAgenda) navAgenda.textContent = 'Agenda';
       // Admin: ver todos los profesionales en la agenda
       if(typeof profFilter !== 'undefined') profFilter = [];
@@ -6577,6 +6807,8 @@ function doLogin() {
       if(navMisPacientes) navMisPacientes.style.display = currentUser.readonly ? 'none' : '';
       if(navGestion) navGestion.style.display = 'none';
       if(navInvestigacion) navInvestigacion.style.display = 'none';
+      if(navPacientes) navPacientes.style.display = '';
+      if(navCierre) navCierre.style.display = 'none';
       if(navAgenda) navAgenda.textContent = currentUser.readonly ? 'Agenda' : 'Mi Agenda';
       // No-admin: fijar filtro a su propio prof
       var profMap = {barbara:'BG', omar:'OB'};
@@ -6590,9 +6822,12 @@ function doLogin() {
     // Ocultar cambio de contraseña para invitado
     var btnCambiarPwd = document.getElementById('btn-cambiar-pwd');
     if(btnCambiarPwd) btnCambiarPwd.style.display = currentUser.readonly ? 'none' : '';
-    cargarPacientes();
+    // Secretaría no carga el listado de pacientes (sin acceso a historias clínicas)
+    if(!currentUser.secretaria) cargarPacientes();
     // Re-renderizar agenda con el filtro del usuario logueado
     if(typeof renderGrid === 'function') renderGrid();
+    // Secretaría entra directo a la Agenda
+    if(currentUser.secretaria && typeof showPage === 'function') showPage('agenda');
     // Modo solo lectura para invitado
     if(currentUser.readonly) {
       // Mostrar banner de solo lectura
@@ -7156,6 +7391,17 @@ async function showPage(page) {
   if(page === 'finanzas' && currentUser && !currentUser.admin) {
     page = 'mis-pacientes';
   }
+  // Control de acceso: Secretaría no tiene acceso a historias clínicas ni
+  // a los módulos clínicos/administrativos — solo a Agenda (e Inicio).
+  if(currentUser && currentUser.secretaria) {
+    var _paginasBloqueadasSecretaria = ['pacientes','historia','historia_clinica','evolucion','mis-pacientes','gestion','investigacion','finanzas'];
+    if(_paginasBloqueadasSecretaria.indexOf(page) !== -1) {
+      page = 'agenda';
+    }
+  } else if(currentUser && page === 'cierre') {
+    // "Cierre" es exclusivo de Secretaría
+    page = 'dashboard';
+  }
 
   // Cambiar de sección (Inicio/Pacientes/Agenda/Finanzas/etc.) NUNCA debe
   // interrumpir con un modal de "¿guardar?" — eso es lo que impedía moverse
@@ -7223,7 +7469,7 @@ async function showPage(page) {
     if(page !== 'evolucion') el.style.display = 'block';
   }
   const tabs = document.querySelectorAll('.nav-tab:not(.patient-nav-tab)');
-  const map = {dashboard:0,pacientes:1,agenda:2,finanzas:3,'mis-pacientes':3,gestion:4,investigacion:6};
+  const map = {dashboard:0,pacientes:1,agenda:2,finanzas:3,'mis-pacientes':3,gestion:4,investigacion:6,cierre:7};
   if(map[page]!==undefined && tabs[map[page]]) tabs[map[page]].classList.add('active');
   if(page === 'evolucion' && pacienteActual) marcarTabPacienteActiva(pacienteActual.dni);
   else marcarTabPacienteActiva(null);
@@ -7237,6 +7483,7 @@ async function showPage(page) {
   if(page==='mis-pacientes') setTimeout(function(){ mpCargar(); }, 100);
   if(page==='gestion') setTimeout(function(){ gpCargar(); }, 100);
   if(page==='investigacion') setTimeout(function(){ if(window.invInit) invInit(); }, 100);
+  if(page==='cierre') setTimeout(function(){ if(window.cierreInit) cierreInit(); }, 100);
   if(page==='historia_clinica') window.scrollTo(0,0);
 }
 
@@ -20099,17 +20346,30 @@ function mkEl(tag,cls,txt){var e=document.createElement(tag);e.className=cls;e.t
 // ── Auto-pago al tipear seña ───────────────────────────────────────────────
 (document.getElementById('ag-f-sena')||{addEventListener:function(){}}).addEventListener('input',function(){
   var pagoSel=document.getElementById('ag-f-pago');
-  if(this.value&&this.value.trim()!==''){
+  var haySena = this.value && this.value.trim()!=='';
+  if(haySena){
     if(pagoSel.value==='sin-seña')pagoSel.value='señado';
   } else {
     if(pagoSel.value==='señado')pagoSel.value='sin-seña';
   }
+  var senaMedioRow=document.getElementById('ag-sena-medio-row');
+  if(senaMedioRow) senaMedioRow.style.display = haySena ? '' : 'none';
+});
+(document.getElementById('ag-f-sena-medio')||{addEventListener:function(){}}).addEventListener('change',function(){
+  var wrap=document.getElementById('ag-sena-receptor-wrap');
+  if(wrap) wrap.style.display = this.value==='transferencia' ? '' : 'none';
+});
+(document.getElementById('ag-f-saldo-medio')||{addEventListener:function(){}}).addEventListener('change',function(){
+  var wrap=document.getElementById('ag-saldo-receptor-wrap');
+  if(wrap) wrap.style.display = this.value==='transferencia' ? '' : 'none';
 });
 // ── Mostrar/ocultar campo Monto y autocompletar al cambiar estado de pago ──
 (document.getElementById('ag-f-pago')||{addEventListener:function(){}}).addEventListener('change', function() {
   var montoRow = document.getElementById('ag-monto-row');
   var montoInp = document.getElementById('ag-f-monto');
   var hint = document.getElementById('ag-monto-hint');
+  var saldoMedioRow = document.getElementById('ag-saldo-medio-row');
+  var saldoLabel = document.getElementById('ag-saldo-medio-label');
   if (this.value === 'pagado') {
     montoRow.style.display = '';
     var prof = document.getElementById('ag-f-prof').value;
@@ -20117,8 +20377,8 @@ function mkEl(tag,cls,txt){var e=document.createElement(tag);e.className=cls;e.t
     if (arancel > 0 && (!montoInp.value || montoInp.value === '0')) {
       montoInp.value = arancel;
     }
+    var senaVal = parseFloat(document.getElementById('ag-f-sena').value) || 0;
     if (arancel > 0) {
-      var senaVal = parseFloat(document.getElementById('ag-f-sena').value) || 0;
       if (senaVal > 0) {
         hint.textContent = 'Arancel: $' + arancel.toLocaleString('es-AR') + ' · Seña: $' + senaVal.toLocaleString('es-AR');
       } else {
@@ -20127,8 +20387,16 @@ function mkEl(tag,cls,txt){var e=document.createElement(tag);e.className=cls;e.t
     } else {
       hint.textContent = '';
     }
+    if (saldoMedioRow) {
+      saldoMedioRow.style.display = '';
+      if (saldoLabel) {
+        var montoVal = parseFloat(montoInp.value) || 0;
+        saldoLabel.textContent = senaVal > 0 ? ('Medio (resto: $' + Math.max(montoVal - senaVal, 0).toLocaleString('es-AR') + ')') : 'Medio (pago total)';
+      }
+    }
   } else {
     montoRow.style.display = 'none';
+    if (saldoMedioRow) saldoMedioRow.style.display = 'none';
   }
 });
 
@@ -20304,18 +20572,38 @@ function openModal(ds,time,key,forcedProf,freeTime){
     agSetMotivosSel(turnoMotivosArr(t));
     document.getElementById('ag-f-osde').checked=t.osde?true:false;
     document.getElementById('ag-pago-row').style.display=t.osde?'none':'';
+    // Medio de pago de la seña (efectivo/transferencia + quién la recibió)
+    var senaMedioRowE=document.getElementById('ag-sena-medio-row');
+    var senaMedioSelE=document.getElementById('ag-f-sena-medio');
+    var senaReceptorSelE=document.getElementById('ag-f-sena-receptor');
+    var haySenaE = !t.osde && !!(t.sena_monto || t.sena);
+    senaMedioSelE.value = t.sena_medio || 'efectivo';
+    senaReceptorSelE.value = t.sena_receptor || 'consultorio';
+    senaMedioRowE.style.display = haySenaE ? '' : 'none';
+    document.getElementById('ag-sena-receptor-wrap').style.display = senaMedioSelE.value==='transferencia' ? '' : 'none';
     // Monto
     var montoRowE=document.getElementById('ag-monto-row');
     var montoInpE=document.getElementById('ag-f-monto');
+    var saldoMedioRowE=document.getElementById('ag-saldo-medio-row');
+    var saldoMedioSelE=document.getElementById('ag-f-saldo-medio');
+    var saldoReceptorSelE=document.getElementById('ag-f-saldo-receptor');
     if(t.pago==='pagado'&&!t.osde){
       montoRowE.style.display='';
       montoInpE.value=t.monto||'';
       var hintE=document.getElementById('ag-monto-hint');
       var arancelE=getArancel(t.prof||'BG');
       hintE.textContent=arancelE>0?'Arancel: $'+arancelE.toLocaleString('es-AR'):'';
+      saldoMedioSelE.value = t.saldo_medio || 'efectivo';
+      saldoReceptorSelE.value = t.saldo_receptor || 'consultorio';
+      saldoMedioRowE.style.display='';
+      var saldoLabelE = document.getElementById('ag-saldo-medio-label');
+      var saldoRestanteE = Number(t.monto||0) - Number(t.sena_monto||0);
+      saldoLabelE.textContent = (t.sena_monto>0) ? ('Medio (resto: $'+saldoRestanteE.toLocaleString('es-AR')+')') : 'Medio (pago total)';
+      document.getElementById('ag-saldo-receptor-wrap').style.display = saldoMedioSelE.value==='transferencia' ? '' : 'none';
     } else {
       montoRowE.style.display='none';
       montoInpE.value='';
+      saldoMedioRowE.style.display='none';
     }
   }else{
     document.getElementById('ag-f-paciente').value='';
@@ -20329,6 +20617,14 @@ function openModal(ds,time,key,forcedProf,freeTime){
     document.getElementById('ag-pago-row').style.display='';
     document.getElementById('ag-monto-row').style.display='none';
     document.getElementById('ag-f-monto').value='';
+    document.getElementById('ag-sena-medio-row').style.display='none';
+    document.getElementById('ag-f-sena-medio').value='efectivo';
+    document.getElementById('ag-f-sena-receptor').value='consultorio';
+    document.getElementById('ag-sena-receptor-wrap').style.display='none';
+    document.getElementById('ag-saldo-medio-row').style.display='none';
+    document.getElementById('ag-f-saldo-medio').value='efectivo';
+    document.getElementById('ag-f-saldo-receptor').value='consultorio';
+    document.getElementById('ag-saldo-receptor-wrap').style.display='none';
   }
   // Mostrar selector de profesional con valor correcto
   var profSel=document.getElementById('ag-f-prof');
@@ -20619,6 +20915,10 @@ function openReprog(key){
     if(!montoVal){var _ar=getArancel(profVal);if(_ar>0)montoVal=String(_ar);}
   }
   // Si pago es pagado, la seña queda absorbida en el monto total — no acumular
+  // en el campo visible "sena" (pero su monto/medio se preservan aparte, ver
+  // sena_monto/sena_medio más abajo, para poder distinguir efectivo/transferencia
+  // en el cierre diario aunque ya esté "Pagado").
+  var _senaMontoNumPreAbsorcion = parseFloat(senaVal)||0;
   if(pagoVal==='pagado') senaVal='';
   var _agPacDni = (document.getElementById('ag-f-paciente-dni')||{}).value||'';
   // Fecha en que efectivamente entró la plata (seña o pago total). Sirve para
@@ -20635,6 +20935,37 @@ function openReprog(key){
   } else {
     _cobroFecha = _dineroFinal ? _prevTurnoParaCobro.cobro_fecha : undefined;
   }
+
+  // ── Medio de pago (efectivo/transferencia) — seña y saldo/total por separado ──
+  var _hoyStr = (typeof fechaHoy==='function') ? fechaHoy() : _cobroFecha;
+  // Monto de la seña: preserva el que ya estaba guardado si ahora no hay uno
+  // nuevo tipeado (p.ej. turno ya "Pagado" reeditado, donde el input de seña
+  // se muestra vacío pero la seña original sigue existiendo para el cierre).
+  var _senaMontoNum = _senaMontoNumPreAbsorcion>0 ? _senaMontoNumPreAbsorcion : (Number(_prevTurnoParaCobro.sena_monto)||0);
+  var _senaMedioVal = (!osdeVal && _senaMontoNum>0) ? (document.getElementById('ag-f-sena-medio').value||'efectivo') : undefined;
+  var _senaReceptorVal = (_senaMedioVal==='transferencia') ? (document.getElementById('ag-f-sena-receptor').value||'consultorio') : undefined;
+  var _senaFechaCobro;
+  if(_senaMontoNum>0){
+    _senaFechaCobro = (Number(_prevTurnoParaCobro.sena_monto)||0)!==_senaMontoNum
+      ? _hoyStr
+      : (_prevTurnoParaCobro.sena_fecha_cobro || _prevTurnoParaCobro.cobro_fecha || _hoyStr);
+  } else {
+    _senaFechaCobro = undefined;
+  }
+  // Medio del saldo/total, solo aplica cuando el turno queda "Pagado"
+  var _saldoMedioVal, _saldoReceptorVal, _saldoFechaCobro;
+  if(pagoVal==='pagado' && !osdeVal){
+    _saldoMedioVal = document.getElementById('ag-f-saldo-medio').value || 'efectivo';
+    _saldoReceptorVal = (_saldoMedioVal==='transferencia') ? (document.getElementById('ag-f-saldo-receptor').value||'consultorio') : undefined;
+    var _montoPrevioNum = _prevTurnoParaCobro.pago==='pagado' ? (Number(_prevTurnoParaCobro.monto)||0) : 0;
+    var _montoNuevoNum = Number(montoVal)||0;
+    _saldoFechaCobro = (_montoNuevoNum!==_montoPrevioNum)
+      ? _hoyStr
+      : (_prevTurnoParaCobro.saldo_fecha_cobro || _prevTurnoParaCobro.cobro_fecha || _hoyStr);
+  } else {
+    _saldoMedioVal = undefined; _saldoReceptorVal = undefined; _saldoFechaCobro = undefined;
+  }
+
   turnos[newKey]={
     paciente:document.getElementById('ag-f-paciente').value.trim(),
     dni_paciente:_agPacDni||undefined,
@@ -20644,6 +20975,13 @@ function openReprog(key){
     pago:osdeVal?'osde':pagoVal,
     monto:_montoFinal,
     cobro_fecha:_cobroFecha,
+    sena_monto:_senaMontoNum>0?_senaMontoNum:undefined,
+    sena_medio:_senaMedioVal,
+    sena_receptor:_senaReceptorVal,
+    sena_fecha_cobro:_senaFechaCobro,
+    saldo_medio:_saldoMedioVal,
+    saldo_receptor:_saldoReceptorVal,
+    saldo_fecha_cobro:_saldoFechaCobro,
     notas:agGetMotivosSel(),
     asistencia:prevAsist,
     extra:isExtra?true:undefined,
@@ -24319,6 +24657,414 @@ window.cargarProxConsultas = cargarProxConsultas;
   };
 
   // Auto-init manejado desde showPage()
+
+})();
+</script>
+
+<script>
+/* ══════════════════════════════════════════════════════
+   MÓDULO CIERRE (Secretaría)
+   Reutiliza el mismo blob de turnos que Agenda/Finanzas
+   (urcym_agenda_config, key='turnos'). No agrega tablas
+   nuevas: solo suma a cada turno OSDE los campos opcionales
+   osde_cobrado / osde_cobro_monto / osde_cobro_fecha cuando
+   la secretaria marca el pago como recibido, y guarda la
+   configuración (% alquiler, días estimados OSDE) bajo la
+   key 'cierre_config'.
+══════════════════════════════════════════════════════ */
+(function(){
+  var PROF_FULL_CI = {BG:'Dra. Bárbara Guerrero', OB:'Dr. Omar Bertani'};
+  var ciConfig = {pct:20, osdeDias:45, vigenciaDesde:'2026-10-01'};
+  var ciConfigCargada = false;
+
+  function $c(id){ return document.getElementById(id); }
+  function ciMoneda(n){ return '$'+Number(n||0).toLocaleString('es-AR',{minimumFractionDigits:0,maximumFractionDigits:0}); }
+  function ciHoy(){ return (typeof fechaHoy==='function') ? fechaHoy() : new Date().toISOString().slice(0,10); }
+  function ciFmtFecha(iso){ if(!iso) return ''; var p=iso.split('-'); return p[2]+'/'+p[1]+'/'+p[0]; }
+  function ciDiasEntre(iso1, iso2){
+    var d1=new Date(iso1+'T00:00:00'), d2=new Date(iso2+'T00:00:00');
+    return Math.round((d2-d1)/86400000);
+  }
+
+  async function ciCargarConfig(){
+    if(ciConfigCargada) return ciConfig;
+    try{
+      var v = await sbGetAgendaConfig('cierre_config');
+      if(v && typeof v==='object'){
+        if(v.pct!=null) ciConfig.pct = Number(v.pct);
+        if(v.osdeDias!=null) ciConfig.osdeDias = Number(v.osdeDias);
+        if(v.vigenciaDesde) ciConfig.vigenciaDesde = v.vigenciaDesde;
+      }
+    }catch(e){ console.warn('[Cierre] error cargando config', e); }
+    ciConfigCargada = true;
+    return ciConfig;
+  }
+
+  window.cierreInit = async function(){
+    var fInp = $c('cierre-fecha');
+    if(fInp && !fInp.value) fInp.value = ciHoy();
+    await ciCargarConfig();
+    cierreShowTab('dia');
+    cierreCargarDia();
+    cierrePorCobrarRender();
+  };
+
+  window.cierreShowTab = function(tab){
+    var tabDia = $c('cierre-tab-dia'), tabPC = $c('cierre-tab-porcobrar');
+    var panDia = $c('cierre-panel-dia'), panPC = $c('cierre-panel-porcobrar');
+    if(tabDia) tabDia.classList.toggle('active', tab==='dia');
+    if(tabPC) tabPC.classList.toggle('active', tab==='porcobrar');
+    if(panDia) panDia.style.display = tab==='dia' ? '' : 'none';
+    if(panPC) panPC.style.display = tab==='porcobrar' ? '' : 'none';
+    if(tab==='porcobrar') cierrePorCobrarRender();
+  };
+
+  window.cierreAbrirConfig = async function(){
+    await ciCargarConfig();
+    $c('ci-cfg-pct').value = ciConfig.pct;
+    $c('ci-cfg-dias').value = ciConfig.osdeDias;
+    $c('ci-cfg-vigencia').value = ciConfig.vigenciaDesde || '2026-10-01';
+    $c('ci-modal-config').classList.add('open');
+  };
+
+  window.cierreGuardarConfig = async function(){
+    var pct = parseFloat($c('ci-cfg-pct').value);
+    var dias = parseInt($c('ci-cfg-dias').value, 10);
+    var vigencia = $c('ci-cfg-vigencia').value;
+    if(isNaN(pct) || pct<0 || pct>100){ alert('El % de alquiler tiene que estar entre 0 y 100.'); return; }
+    if(isNaN(dias) || dias<0){ alert('Los días estimados tienen que ser un número válido.'); return; }
+    if(!vigencia){ alert('Ingresá la fecha desde la que aplica el reparto de alquiler.'); return; }
+    ciConfig.pct = pct; ciConfig.osdeDias = dias; ciConfig.vigenciaDesde = vigencia;
+    var ok = await sbUpsertAgendaConfig('cierre_config', ciConfig);
+    if(!ok){ alert('No se pudo guardar la configuración. Probá de nuevo.'); return; }
+    $c('ci-modal-config').classList.remove('open');
+    cierreCargarDia();
+    cierrePorCobrarRender();
+  };
+
+  // ── Cierre del día ────────────────────────────────────────────────────
+  var esOsde = function(t){ return !!(t.osde===true || t.pago==='osde'); };
+
+  // Aporte de un turno NO-OSDE a la caja de una fecha objetivo dada,
+  // separado por medio (efectivo siempre queda en el consultorio;
+  // transferencia puede haberla recibido el consultorio o el profesional).
+  // Contempla que la seña y el saldo pueden haberse cobrado en fechas y
+  // medios distintos (p.ej. seña por transferencia al reservar, resto en
+  // efectivo el día de la consulta).
+  function ciContribTurno(t, keyFecha, fechaObjetivo){
+    var out = {efectivo:0, tConsultorio:0, tProfesional:0};
+    var senaMonto = Number(t.sena_monto || (t.pago==='señado' ? t.sena : 0)) || 0;
+    if(senaMonto>0){
+      var fSena = t.sena_fecha_cobro || t.cobro_fecha || keyFecha;
+      if(fSena===fechaObjetivo){
+        var medioSena = t.sena_medio || 'efectivo';
+        if(medioSena==='efectivo') out.efectivo += senaMonto;
+        else if(t.sena_receptor==='profesional') out.tProfesional += senaMonto;
+        else out.tConsultorio += senaMonto;
+      }
+    }
+    if(t.pago==='pagado'){
+      var totalMonto = Number(t.monto)||0;
+      var saldoMonto = Math.max(totalMonto - senaMonto, 0);
+      if(saldoMonto>0){
+        var fSaldo = t.saldo_fecha_cobro || t.cobro_fecha || keyFecha;
+        if(fSaldo===fechaObjetivo){
+          var medioSaldo = t.saldo_medio || 'efectivo';
+          if(medioSaldo==='efectivo') out.efectivo += saldoMonto;
+          else if(t.saldo_receptor==='profesional') out.tProfesional += saldoMonto;
+          else out.tConsultorio += saldoMonto;
+        }
+      }
+    }
+    return out;
+  }
+
+  function ciPintarLiquidacion(elId, valId, subId, officeHeld, alquiler, profShare, opts){
+    opts = opts || {};
+    var el = $c(elId), valEl = $c(valId), subEl = subId ? $c(subId) : null;
+    var settlement = officeHeld - alquiler; // == profShare - profHeld
+    var redondeado = Math.round(settlement);
+    el.classList.remove('a-favor-prof','a-favor-consultorio','sin-saldo');
+    if(redondeado > 0){
+      el.classList.add('a-favor-prof');
+      valEl.textContent = '🟢 Consultorio le debe a '+(opts.profLabel||'profesional')+': '+ciMoneda(redondeado);
+    } else if(redondeado < 0){
+      el.classList.add('a-favor-consultorio');
+      valEl.textContent = '🔵 '+(opts.profLabel||'Profesional')+' le debe al consultorio: '+ciMoneda(Math.abs(redondeado));
+    } else {
+      el.classList.add('sin-saldo');
+      valEl.textContent = 'Sin saldo pendiente';
+    }
+    if(subEl) subEl.textContent = 'Le corresponde al profesional '+ciMoneda(profShare)+' de lo cobrado, ya descontado el alquiler.';
+    return settlement;
+  }
+
+  window.cierreCargarDia = async function(){
+    var fecha = ($c('cierre-fecha')||{}).value || ciHoy();
+    var prof = ($c('cierre-prof')||{}).value || 'BG';
+    await ciCargarConfig();
+
+    var vigenciaOk = fecha >= (ciConfig.vigenciaDesde || '2026-10-01');
+    var noticeEl = $c('ci-vigencia-notice');
+    if(noticeEl){
+      if(!vigenciaOk){
+        noticeEl.style.display = '';
+        noticeEl.textContent = '⚠️ El reparto de alquiler entre consultorio y profesional aplica desde el '+ciFmtFecha(ciConfig.vigenciaDesde)+'. Para el '+ciFmtFecha(fecha)+' se muestran los turnos del día, pero no se calcula alquiler ni liquidación.';
+      } else {
+        noticeEl.style.display = 'none';
+      }
+    }
+    ['ci-liquidacion','ci-liquidacion-osde','ci-liquidacion-total'].forEach(function(id){
+      var box = $c(id);
+      if(box) box.style.display = vigenciaOk ? (id==='ci-liquidacion-osde' ? box.style.display : '') : 'none';
+    });
+
+    var tabla = $c('ci-tabla-turnos');
+    if(tabla) tabla.innerHTML = '<div class="fin-loading" style="padding:30px;text-align:center;color:var(--text-soft)">Cargando...</div>';
+
+    var turnosData = {};
+    try{ turnosData = (await sbGetAgendaConfig('turnos')) || {}; }catch(e){ console.warn('[Cierre] error cargando turnos', e); }
+
+    // Turnos AGENDADOS ese día (para "pacientes vistos" y el detalle) —
+    // independiente de cuándo se cobró cada cosa.
+    var delDia = [];
+    Object.keys(turnosData).forEach(function(key){
+      var parts = key.split('_');
+      if(parts.length<3) return;
+      var f = parts[0];
+      var t = turnosData[key];
+      if(f!==fecha) return;
+      if(!t || !t.paciente) return;
+      if(t.prof!==prof) return;
+      delDia.push(Object.assign({_key:key, _hora:parts[1]}, t));
+    });
+    delDia.sort(function(a,b){ return a._hora.localeCompare(b._hora); });
+
+    var vistos = delDia.filter(function(t){ return t.asistencia!=='ausente'; });
+    var ausentes = delDia.length - vistos.length;
+    var osdeDia = delDia.filter(esOsde);
+    var noOsdeDelDia = delDia.filter(function(t){ return !esOsde(t); });
+
+    // Plata que efectivamente ENTRÓ hoy (seña y/o saldo cobrados en esta
+    // fecha), recorriendo TODOS los turnos — no solo los agendados hoy,
+    // porque puede cobrarse hoy la seña o el saldo de un turno de otro día.
+    var flujo = {efectivo:0, tConsultorio:0, tProfesional:0};
+    Object.keys(turnosData).forEach(function(key){
+      var parts = key.split('_'); if(parts.length<3) return;
+      var t = turnosData[key];
+      if(!t || !t.paciente) return;
+      if(t.prof!==prof) return;
+      if(esOsde(t)) return;
+      var c = ciContribTurno(t, parts[0], fecha);
+      flujo.efectivo += c.efectivo; flujo.tConsultorio += c.tConsultorio; flujo.tProfesional += c.tProfesional;
+    });
+    var totalDia = flujo.efectivo + flujo.tConsultorio + flujo.tProfesional;
+    var alquiler = Math.round(totalDia * ciConfig.pct / 100);
+    var profShare = totalDia - alquiler;
+    var officeHeld = flujo.efectivo + flujo.tConsultorio;
+
+    // OSDE cobrado con fecha de cobro = hoy
+    var osdeCobradoHoy = [];
+    Object.keys(turnosData).forEach(function(key){
+      var t = turnosData[key];
+      if(!t) return;
+      if(!esOsde(t)) return;
+      if(!t.osde_cobrado) return;
+      if(t.osde_cobro_fecha!==fecha) return;
+      if(t.prof!==prof) return;
+      osdeCobradoHoy.push(t);
+    });
+    var flujoOsde = {efectivo:0, tConsultorio:0, tProfesional:0};
+    osdeCobradoHoy.forEach(function(t){
+      var m = Number(t.osde_cobro_monto)||0;
+      var medio = t.osde_cobro_medio || 'transferencia';
+      if(medio==='efectivo') flujoOsde.efectivo += m;
+      else if(t.osde_cobro_receptor==='profesional') flujoOsde.tProfesional += m;
+      else flujoOsde.tConsultorio += m;
+    });
+    var brutoOsdeCobrado = flujoOsde.efectivo + flujoOsde.tConsultorio + flujoOsde.tProfesional;
+    var alquilerOsdeCobrado = Math.round(brutoOsdeCobrado * ciConfig.pct / 100);
+    var profShareOsde = brutoOsdeCobrado - alquilerOsdeCobrado;
+    var officeHeldOsde = flujoOsde.efectivo + flujoOsde.tConsultorio;
+
+    var profLabel = PROF_FULL_CI[prof] || 'profesional';
+
+    if($c('ci-kpi-pacientes')) $c('ci-kpi-pacientes').textContent = vistos.length;
+    if($c('ci-kpi-pacientes-sub')) $c('ci-kpi-pacientes-sub').textContent = ausentes>0 ? (ausentes+' ausente'+(ausentes===1?'':'s')) : (delDia.length+' turno'+(delDia.length===1?'':'s')+' del día');
+    if($c('ci-kpi-efectivo')) $c('ci-kpi-efectivo').textContent = ciMoneda(flujo.efectivo);
+    if($c('ci-kpi-transf-cons')) $c('ci-kpi-transf-cons').textContent = ciMoneda(flujo.tConsultorio);
+    if($c('ci-kpi-transf-prof')) $c('ci-kpi-transf-prof').textContent = ciMoneda(flujo.tProfesional);
+    if($c('ci-kpi-bruto')) $c('ci-kpi-bruto').textContent = ciMoneda(totalDia);
+    if($c('ci-kpi-bruto-sub')) $c('ci-kpi-bruto-sub').textContent = noOsdeDelDia.length+' turno'+(noOsdeDelDia.length===1?'':'s')+' particular/pagado del día (puede incluir cobros de otros días)';
+    if($c('ci-kpi-alq-label')) $c('ci-kpi-alq-label').textContent = 'Alquiler consultorio ('+ciConfig.pct+'%)';
+    if($c('ci-kpi-alquiler')) $c('ci-kpi-alquiler').textContent = vigenciaOk ? ('− '+ciMoneda(alquiler)) : '—';
+    if($c('ci-kpi-neto')) $c('ci-kpi-neto').textContent = vigenciaOk ? ciMoneda(profShare) : '—';
+    if($c('ci-kpi-osde-dia')) $c('ci-kpi-osde-dia').textContent = osdeDia.length;
+    if($c('ci-kpi-osde-dia-sub')) $c('ci-kpi-osde-dia-sub').textContent = osdeDia.length===1 ? 'turno OSDE del día' : 'turnos OSDE del día';
+    if($c('ci-kpi-osde-cobrado')) $c('ci-kpi-osde-cobrado').textContent = ciMoneda(brutoOsdeCobrado);
+    if($c('ci-kpi-osde-cobrado-sub')) $c('ci-kpi-osde-cobrado-sub').textContent = osdeCobradoHoy.length>0
+      ? ('💵 '+ciMoneda(flujoOsde.efectivo)+' · 🏦 consult. '+ciMoneda(flujoOsde.tConsultorio)+' · 🏦 prof. '+ciMoneda(flujoOsde.tProfesional))
+      : 'sin cobros de OSDE marcados hoy';
+
+    var osdeLiqBox = $c('ci-liquidacion-osde');
+    if(vigenciaOk){
+      ciPintarLiquidacion('ci-liquidacion','ci-liquidacion-val','ci-liquidacion-sub', officeHeld, alquiler, profShare, {profLabel:profLabel});
+
+      if(osdeCobradoHoy.length>0){
+        osdeLiqBox.style.display='';
+        ciPintarLiquidacion('ci-liquidacion-osde','ci-liquidacion-osde-val',null, officeHeldOsde, alquilerOsdeCobrado, profShareOsde, {profLabel:profLabel});
+      } else {
+        osdeLiqBox.style.display='none';
+      }
+
+      var settlementTotal = (officeHeld - alquiler) + (officeHeldOsde - alquilerOsdeCobrado);
+      var totalBox = $c('ci-liquidacion-total');
+      var totalVal = $c('ci-liquidacion-total-val');
+      var redondeadoTotal = Math.round(settlementTotal);
+      totalBox.classList.remove('a-favor-prof','a-favor-consultorio','sin-saldo');
+      if(redondeadoTotal>0){ totalBox.classList.add('a-favor-prof'); totalVal.textContent='🟢 Consultorio le debe a '+profLabel+': '+ciMoneda(redondeadoTotal); }
+      else if(redondeadoTotal<0){ totalBox.classList.add('a-favor-consultorio'); totalVal.textContent='🔵 '+profLabel+' le debe al consultorio: '+ciMoneda(Math.abs(redondeadoTotal)); }
+      else { totalBox.classList.add('sin-saldo'); totalVal.textContent='Sin saldo pendiente'; }
+    } else {
+      osdeLiqBox.style.display='none';
+    }
+
+    if(tabla){
+      if(!delDia.length){
+        tabla.innerHTML = '<div style="padding:30px;text-align:center;color:var(--text-soft);font-size:13px">Sin turnos para '+PROF_FULL_CI[prof]+' el '+ciFmtFecha(fecha)+'.</div>';
+      } else {
+        var medioTxt = function(medio, receptor){
+          if(!medio) return '—';
+          if(medio==='efectivo') return '💵 Efectivo';
+          return '🏦 Transf. ('+(receptor==='profesional'?'profesional':'consultorio')+')';
+        };
+        var filas = delDia.map(function(t){
+          var pagoLbl = esOsde(t) ? '🏥 OSDE' : ({pagado:'✅ Pagado', 'señado':'🔶 Señado', 'sin-seña':'⬜ Sin seña'}[t.pago]||t.pago||'—');
+          var montoTxt = esOsde(t) ? '<span style="color:var(--blue)">a cobrar</span>'
+            : ciMoneda((t.pago==='pagado'&&t.monto)?t.monto:((t.pago==='señado'&&t.sena)?t.sena:0));
+          var medioCelda = esOsde(t) ? '—'
+            : (t.pago==='pagado' ? medioTxt(t.saldo_medio, t.saldo_receptor) : (t.pago==='señado' ? medioTxt(t.sena_medio, t.sena_receptor) : '—'));
+          var asistTxt = t.asistencia==='ausente' ? '<span style="color:var(--red)">Ausente</span>' : (t.asistencia==='asistio' ? 'Asistió' : '—');
+          return '<tr>'
+            +'<td style="padding:9px 14px;font-size:12.5px">'+t._hora+'</td>'
+            +'<td style="padding:9px 14px;font-size:12.5px">'+(t.paciente||'')+'</td>'
+            +'<td style="padding:9px 14px;font-size:12.5px">'+pagoLbl+'</td>'
+            +'<td style="padding:9px 14px;font-size:12.5px;text-align:right">'+montoTxt+'</td>'
+            +'<td style="padding:9px 14px;font-size:12.5px">'+medioCelda+'</td>'
+            +'<td style="padding:9px 14px;font-size:12.5px">'+asistTxt+'</td>'
+            +'</tr>';
+        }).join('');
+        tabla.innerHTML = '<table style="width:100%;border-collapse:collapse">'
+          +'<thead><tr style="background:var(--gray);text-align:left">'
+          +'<th style="padding:9px 14px;font-size:10.5px;text-transform:uppercase;color:var(--text-soft)">Hora</th>'
+          +'<th style="padding:9px 14px;font-size:10.5px;text-transform:uppercase;color:var(--text-soft)">Paciente</th>'
+          +'<th style="padding:9px 14px;font-size:10.5px;text-transform:uppercase;color:var(--text-soft)">Pago</th>'
+          +'<th style="padding:9px 14px;font-size:10.5px;text-transform:uppercase;color:var(--text-soft);text-align:right">Monto</th>'
+          +'<th style="padding:9px 14px;font-size:10.5px;text-transform:uppercase;color:var(--text-soft)">Medio</th>'
+          +'<th style="padding:9px 14px;font-size:10.5px;text-transform:uppercase;color:var(--text-soft)">Asistencia</th>'
+          +'</tr></thead><tbody>'+filas+'</tbody></table>';
+      }
+    }
+  };
+
+  // ── Por cobrar (OSDE pendientes) ─────────────────────────────────────
+  window.cierrePorCobrarRender = async function(){
+    var cont = $c('ci-porcobrar-lista');
+    if(!cont) return;
+    cont.innerHTML = '<div class="fin-loading" style="padding:30px;text-align:center;color:var(--text-soft)">Cargando...</div>';
+    await ciCargarConfig();
+    var filtroProf = ($c('ci-porcobrar-filtro-prof')||{}).value || '';
+
+    var turnosData = {};
+    try{ turnosData = (await sbGetAgendaConfig('turnos')) || {}; }catch(e){ console.warn('[Cierre] error cargando turnos', e); }
+
+    var pendientes = [];
+    Object.keys(turnosData).forEach(function(key){
+      var parts = key.split('_'); if(parts.length<3) return;
+      var t = turnosData[key];
+      if(!t || !t.paciente) return;
+      if(!(t.osde===true || t.pago==='osde')) return;
+      if(t.osde_cobrado) return;
+      if(filtroProf && t.prof!==filtroProf) return;
+      pendientes.push(Object.assign({_key:key, _fecha:parts[0], _hora:parts[1]}, t));
+    });
+    pendientes.sort(function(a,b){ return a._fecha.localeCompare(b._fecha) || a._hora.localeCompare(b._hora); });
+
+    if(!pendientes.length){
+      cont.innerHTML = '<div style="padding:30px;text-align:center;color:var(--text-soft);font-size:13px">No hay OSDE pendientes de cobro.</div>';
+      return;
+    }
+
+    var hoy = ciHoy();
+    cont.innerHTML = pendientes.map(function(t){
+      var fechaEstimada = new Date(t._fecha+'T00:00:00');
+      fechaEstimada.setDate(fechaEstimada.getDate() + ciConfig.osdeDias);
+      var fechaEstStr = fechaEstimada.toISOString().slice(0,10);
+      var diasEsperando = ciDiasEntre(t._fecha, hoy);
+      var badgeCls = diasEsperando > ciConfig.osdeDias ? 'larga' : '';
+      return '<div class="cierre-osde-row">'
+        +'<div>'
+          +'<div class="cierre-osde-info"><b>'+(t.paciente||'')+'</b> · '+(PROF_FULL_CI[t.prof]||t.prof||'')+'</div>'
+          +'<div class="cierre-osde-sub">Turno '+ciFmtFecha(t._fecha)+' '+t._hora+' · estimado de cobro '+ciFmtFecha(fechaEstStr)+' <span class="cierre-badge-espera '+badgeCls+'">'+diasEsperando+' días esperando</span></div>'
+        +'</div>'
+        +'<button class="fin-btn-nuevo" onclick="window.cierreAbrirModalCobro && cierreAbrirModalCobro(\''+t._key+'\')">💰 Marcar cobrado</button>'
+        +'</div>';
+    }).join('');
+  };
+
+  var _ciTurnoKeyEnCurso = null;
+  window.cierreAbrirModalCobro = async function(turnoKey){
+    _ciTurnoKeyEnCurso = turnoKey;
+    var turnosData = {};
+    try{ turnosData = (await sbGetAgendaConfig('turnos')) || {}; }catch(e){}
+    var t = turnosData[turnoKey];
+    if(!t){ alert('No se encontró el turno (puede que ya se haya modificado). Actualizá la lista.'); cierrePorCobrarRender(); return; }
+    var parts = turnoKey.split('_');
+    $c('ci-modal-cobrar-info').textContent = (t.paciente||'')+' · '+(PROF_FULL_CI[t.prof]||t.prof||'')+' · turno del '+ciFmtFecha(parts[0]);
+    $c('ci-cobrar-monto').value = t.monto || '';
+    $c('ci-cobrar-fecha').value = ciHoy();
+    $c('ci-cobrar-medio').value = 'transferencia';
+    $c('ci-cobrar-receptor').value = 'consultorio';
+    $c('ci-cobrar-receptor-wrap').style.display = '';
+    $c('ci-modal-cobrar').classList.add('open');
+  };
+  (document.getElementById('ci-cobrar-medio')||{addEventListener:function(){}}).addEventListener('change', function(){
+    var wrap = $c('ci-cobrar-receptor-wrap');
+    if(wrap) wrap.style.display = this.value==='transferencia' ? '' : 'none';
+  });
+
+  window.cierreConfirmarCobro = async function(){
+    if(!_ciTurnoKeyEnCurso) return;
+    var monto = parseFloat($c('ci-cobrar-monto').value);
+    var fecha = $c('ci-cobrar-fecha').value;
+    var medio = $c('ci-cobrar-medio').value || 'transferencia';
+    var receptor = medio==='transferencia' ? ($c('ci-cobrar-receptor').value || 'consultorio') : undefined;
+    if(isNaN(monto) || monto<=0){ alert('Ingresá un monto válido.'); return; }
+    if(!fecha){ alert('Ingresá la fecha de cobro.'); return; }
+
+    // Fetch-merge-write: siempre se relee el blob completo antes de escribir,
+    // para no pisar turnos nuevos que haya cargado otra persona mientras
+    // el modal estaba abierto.
+    var turnosData = {};
+    try{ turnosData = (await sbGetAgendaConfig('turnos')) || {}; }catch(e){}
+    var t = turnosData[_ciTurnoKeyEnCurso];
+    if(!t){ alert('El turno ya no existe. Actualizá la lista.'); $c('ci-modal-cobrar').classList.remove('open'); cierrePorCobrarRender(); return; }
+
+    t.osde_cobrado = true;
+    t.osde_cobro_monto = monto;
+    t.osde_cobro_fecha = fecha;
+    t.osde_cobro_medio = medio;
+    t.osde_cobro_receptor = receptor;
+    turnosData[_ciTurnoKeyEnCurso] = t;
+
+    var ok = await sbUpsertAgendaConfig('turnos', turnosData);
+    if(!ok){ alert('No se pudo guardar el cobro. Probá de nuevo.'); return; }
+
+    $c('ci-modal-cobrar').classList.remove('open');
+    _ciTurnoKeyEnCurso = null;
+    cierrePorCobrarRender();
+    cierreCargarDia();
+  };
 
 })();
 </script>
