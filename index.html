@@ -2064,6 +2064,7 @@
         </div>
 
         <div class="cierre-section-title">📋 Detalle de turnos del día</div>
+        <div style="font-size:11.5px;color:var(--text-soft);margin:-8px 0 10px">El cierre de este día suma la plata de todos los turnos agendados acá (seña + resto), sin importar en qué fecha se haya cobrado cada parte. La columna "Cobrado" es solo informativa, para revisar si falta cargar algo.</div>
         <div id="ci-tabla-turnos" style="background:white;border:1px solid var(--border);border-radius:14px;overflow:hidden">
           <div class="fin-loading" style="padding:30px;text-align:center;color:var(--text-soft)">Elegí fecha y profesional, y tocá "Ver cierre".</div>
         </div>
@@ -24895,35 +24896,28 @@ window.cargarProxConsultas = cargarProxConsultas;
   // ── Cierre del día ────────────────────────────────────────────────────
   var esOsde = function(t){ return !!(t.osde===true || t.pago==='osde'); };
 
-  // Aporte de un turno NO-OSDE a la caja de una fecha objetivo dada,
-  // separado por medio (efectivo siempre queda en el consultorio;
-  // transferencia puede haberla recibido el consultorio o el profesional).
-  // Contempla que la seña y el saldo pueden haberse cobrado en fechas y
-  // medios distintos (p.ej. seña por transferencia al reservar, resto en
-  // efectivo el día de la consulta).
-  function ciContribTurno(t, keyFecha, fechaObjetivo){
+  // Aporte de un turno NO-OSDE al cierre de SU PROPIO día — el cierre de
+  // una fecha es de los turnos agendados ese día, sin importar cuándo
+  // entró la plata en la práctica (la seña muchas veces se cobra antes).
+  // Separa por medio: efectivo siempre queda en el consultorio;
+  // transferencia puede haberla recibido el consultorio o el profesional.
+  function ciContribTurno(t){
     var out = {efectivo:0, tConsultorio:0, tProfesional:0};
     var senaMonto = Number(t.sena_monto || (t.pago==='señado' ? t.sena : 0)) || 0;
     if(senaMonto>0){
-      var fSena = t.sena_fecha_cobro || t.cobro_fecha || keyFecha;
-      if(fSena===fechaObjetivo){
-        var medioSena = t.sena_medio || 'efectivo';
-        if(medioSena==='efectivo') out.efectivo += senaMonto;
-        else if(t.sena_receptor==='profesional') out.tProfesional += senaMonto;
-        else out.tConsultorio += senaMonto;
-      }
+      var medioSena = t.sena_medio || 'efectivo';
+      if(medioSena==='efectivo') out.efectivo += senaMonto;
+      else if(t.sena_receptor==='profesional') out.tProfesional += senaMonto;
+      else out.tConsultorio += senaMonto;
     }
     if(t.pago==='pagado'){
       var totalMonto = Number(t.monto)||0;
       var saldoMonto = Math.max(totalMonto - senaMonto, 0);
       if(saldoMonto>0){
-        var fSaldo = t.saldo_fecha_cobro || t.cobro_fecha || keyFecha;
-        if(fSaldo===fechaObjetivo){
-          var medioSaldo = t.saldo_medio || 'efectivo';
-          if(medioSaldo==='efectivo') out.efectivo += saldoMonto;
-          else if(t.saldo_receptor==='profesional') out.tProfesional += saldoMonto;
-          else out.tConsultorio += saldoMonto;
-        }
+        var medioSaldo = t.saldo_medio || 'efectivo';
+        if(medioSaldo==='efectivo') out.efectivo += saldoMonto;
+        else if(t.saldo_receptor==='profesional') out.tProfesional += saldoMonto;
+        else out.tConsultorio += saldoMonto;
       }
     }
     return out;
@@ -24995,18 +24989,13 @@ window.cargarProxConsultas = cargarProxConsultas;
     var ausentes = delDia.length - vistos.length;
     var noOsdeDelDia = delDia.filter(function(t){ return !esOsde(t); });
 
-    // Plata que efectivamente ENTRÓ hoy (seña y/o saldo cobrados en esta
-    // fecha), recorriendo TODOS los turnos particulares — no solo los
-    // agendados hoy, porque puede cobrarse hoy la seña o el saldo de un
-    // turno de otro día. El OSDE queda afuera de este cálculo.
+    // Plata de los turnos particulares agendados este día (sin importar
+    // cuándo se haya cobrado en la práctica la seña o el saldo — el
+    // cierre de una fecha es por los turnos de esa fecha). El OSDE queda
+    // afuera de este cálculo, se liquida aparte por período.
     var flujo = {efectivo:0, tConsultorio:0, tProfesional:0};
-    Object.keys(turnosData).forEach(function(key){
-      var parts = key.split('_'); if(parts.length<3) return;
-      var t = turnosData[key];
-      if(!t || !t.paciente) return;
-      if(t.prof!==prof) return;
-      if(esOsde(t)) return;
-      var c = ciContribTurno(t, parts[0], fecha);
+    noOsdeDelDia.forEach(function(t){
+      var c = ciContribTurno(t);
       flujo.efectivo += c.efectivo; flujo.tConsultorio += c.tConsultorio; flujo.tProfesional += c.tProfesional;
     });
     var totalDia = flujo.efectivo + flujo.tConsultorio + flujo.tProfesional;
@@ -25054,7 +25043,7 @@ window.cargarProxConsultas = cargarProxConsultas;
     if($c('ci-kpi-transf-cons')) $c('ci-kpi-transf-cons').textContent = ciMoneda(flujo.tConsultorio);
     if($c('ci-kpi-transf-prof')) $c('ci-kpi-transf-prof').textContent = ciMoneda(flujo.tProfesional);
     if($c('ci-kpi-bruto')) $c('ci-kpi-bruto').textContent = ciMoneda(totalDia);
-    if($c('ci-kpi-bruto-sub')) $c('ci-kpi-bruto-sub').textContent = noOsdeDelDia.length+' turno'+(noOsdeDelDia.length===1?'':'s')+' particular/pagado del día (puede incluir cobros de otros días)';
+    if($c('ci-kpi-bruto-sub')) $c('ci-kpi-bruto-sub').textContent = noOsdeDelDia.length+' turno'+(noOsdeDelDia.length===1?'':'s')+' particular'+(noOsdeDelDia.length===1?'':'es')+' de este día';
     if($c('ci-kpi-alq-label')) $c('ci-kpi-alq-label').textContent = '🏢 Alquiler consultorio ('+ciConfig.pct+'%)';
     if($c('ci-kpi-alquiler')) $c('ci-kpi-alquiler').textContent = vigenciaOk ? ('− '+ciMoneda(alquiler)) : '—';
     if($c('ci-kpi-neto')) $c('ci-kpi-neto').textContent = vigenciaOk ? ciMoneda(profShare) : '—';
@@ -25081,12 +25070,22 @@ window.cargarProxConsultas = cargarProxConsultas;
           var asistTxt = t.asistencia==='ausente' ? '<span style="color:var(--red)">Ausente</span>'
             : (t.asistencia==='atendido'||t.asistencia==='asistio') ? '<span style="color:#1D9E75">Atendido</span>'
             : t.asistencia==='presente' ? '<span style="color:#B45309">Presente</span>' : '—';
+          // Detalle informativo de cuándo se cobró la seña y/o el resto —
+          // el cierre de este día ya suma la plata del turno completo sin
+          // importar esto, es solo para poder revisar si falta algo.
+          var senaFCobro = (!esOsde(t) && (t.sena_monto>0 || t.pago==='señado')) ? (t.sena_fecha_cobro||t.cobro_fecha) : null;
+          var saldoFCobro = (!esOsde(t) && t.pago==='pagado') ? (t.saldo_fecha_cobro||t.cobro_fecha) : null;
+          var partesCobro = [];
+          if(senaFCobro) partesCobro.push('Seña '+(senaFCobro===fecha?'hoy':ciFmtFecha(senaFCobro)));
+          if(saldoFCobro) partesCobro.push('Resto '+(saldoFCobro===fecha?'hoy':ciFmtFecha(saldoFCobro)));
+          var cobroCelda = partesCobro.length ? '<span style="color:var(--text-soft)">'+partesCobro.join(' · ')+'</span>' : '—';
           return '<tr>'
             +'<td style="padding:9px 14px;font-size:12.5px">'+t._hora+'</td>'
             +'<td style="padding:9px 14px;font-size:12.5px">'+(t.paciente||'')+'</td>'
             +'<td style="padding:9px 14px;font-size:12.5px">'+pagoLbl+'</td>'
             +'<td style="padding:9px 14px;font-size:12.5px;text-align:right">'+montoTxt+'</td>'
             +'<td style="padding:9px 14px;font-size:12.5px">'+medioCelda+'</td>'
+            +'<td style="padding:9px 14px;font-size:12.5px">'+cobroCelda+'</td>'
             +'<td style="padding:9px 14px;font-size:12.5px">'+asistTxt+'</td>'
             +'</tr>';
         }).join('');
@@ -25097,6 +25096,7 @@ window.cargarProxConsultas = cargarProxConsultas;
           +'<th style="padding:9px 14px;font-size:10.5px;text-transform:uppercase;color:var(--text-soft)">Pago</th>'
           +'<th style="padding:9px 14px;font-size:10.5px;text-transform:uppercase;color:var(--text-soft);text-align:right">Monto</th>'
           +'<th style="padding:9px 14px;font-size:10.5px;text-transform:uppercase;color:var(--text-soft)">Medio</th>'
+          +'<th style="padding:9px 14px;font-size:10.5px;text-transform:uppercase;color:var(--text-soft)">Cobrado</th>'
           +'<th style="padding:9px 14px;font-size:10.5px;text-transform:uppercase;color:var(--text-soft)">Asistencia</th>'
           +'</tr></thead><tbody>'+filas+'</tbody></table>';
       }
