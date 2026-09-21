@@ -24905,14 +24905,28 @@ window.cargarProxConsultas = cargarProxConsultas;
     return settlement;
   }
 
+  // Fuente de los turnos: se usa el mismo objeto en memoria que ya carga
+  // y mantiene al día el módulo de Agenda (var global "turnos"), en vez de
+  // hacer una consulta aparte a Supabase — así el Cierre siempre ve
+  // exactamente los mismos turnos que se ven en la Agenda, sin depender de
+  // otra consulta que podía llegar vacía. Si por algún motivo esa variable
+  // todavía no está cargada (recién abierta la página), se hace un
+  // fetch directo como respaldo.
+  async function ciObtenerTurnos(){
+    if(typeof turnos!=='undefined' && turnos && Object.keys(turnos).length){
+      return turnos;
+    }
+    try{ return (await sbGetAgendaConfig('turnos')) || {}; }
+    catch(e){ console.warn('[Cierre] error cargando turnos', e); return {}; }
+  }
+
   // Cálculo compartido entre la pantalla del cierre del día y el PDF, para
   // que ambos muestren siempre exactamente lo mismo.
   async function ciComputeDia(fecha, prof){
     await ciCargarConfig();
     var vigenciaOk = fecha >= (ciConfig.vigenciaDesde || '2026-10-01');
 
-    var turnosData = {};
-    try{ turnosData = (await sbGetAgendaConfig('turnos')) || {}; }catch(e){ console.warn('[Cierre] error cargando turnos', e); }
+    var turnosData = await ciObtenerTurnos();
 
     // Turnos AGENDADOS ese día (para "pacientes vistos" y el detalle) —
     // independiente de cuándo se cobró cada cosa. Incluye OSDE (se ve en el
@@ -25199,8 +25213,7 @@ window.cargarProxConsultas = cargarProxConsultas;
   }
 
   async function ciAgruparOsdePorPeriodo(filtroProf){
-    var turnosData = {};
-    try{ turnosData = (await sbGetAgendaConfig('turnos')) || {}; }catch(e){ console.warn('[Cierre] error cargando turnos', e); }
+    var turnosData = await ciObtenerTurnos();
     var periodos = {}; // periodKey -> {prof, inicio, fin, pagoEstimado, turnos:[]}
     Object.keys(turnosData).forEach(function(key){
       var parts = key.split('_'); if(parts.length<3) return;
