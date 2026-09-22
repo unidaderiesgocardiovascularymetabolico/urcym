@@ -19757,20 +19757,24 @@ function openCtxMenu(e,key){
     pago?'#1D9E75':'#374151',
     function(){
       if(!pago){
-        // Marcar como pagado: arancel como monto, limpiar seña
-        turnos[key].pago='pagado';
-        if(!turnos[key].monto){var ar=getArancel(turnos[key].prof, key.split('_')[0]);if(ar>0)turnos[key].monto=ar;}
-        // Si tenía seña, ya está incluida en el monto del arancel — no acumular
-        turnos[key].sena='';
-        var _hoyPagoRapido=new Date();
-        turnos[key].cobro_fecha=_hoyPagoRapido.getFullYear()+'-'+String(_hoyPagoRapido.getMonth()+1).padStart(2,'0')+'-'+String(_hoyPagoRapido.getDate()).padStart(2,'0');
+        // Marcar como pagado: abrir el turno para elegir cómo se cobró
+        // (efectivo, transferencia, o ambos) — no se guarda solo, hace falta
+        // confirmar el medio para que se refleje bien en el cierre.
+        openModal(null,null,key);
+        setTimeout(function(){
+          var pagoSel=document.getElementById('ag-f-pago');
+          if(pagoSel && pagoSel.value!=='pagado'){
+            pagoSel.value='pagado';
+            if(typeof Event==='function') pagoSel.dispatchEvent(new Event('change'));
+          }
+        },60);
       } else {
         // Desmarcar: volver a sin-seña y limpiar monto
         turnos[key].pago='sin-seña';
         turnos[key].monto=undefined;
         turnos[key].cobro_fecha=undefined;
+        saveLocal();renderGrid();
       }
-      saveLocal();renderGrid();
     }
   ));
   menu.appendChild(mkItem(
@@ -20006,15 +20010,18 @@ function renderGrid(){
     function heightOf(fromStr,toStr){return Math.max(4,(t2m(toStr)-t2m(fromStr))*PX_PER_MIN);}
 
     // NL blocks — se renderizan después del layout unificado para respetar columnas
+    // (Secretaría: solo ve los turnos, no los bloques "Otros"/no laborables armados)
     var pendingNlBlocks=[];
     var nlRendered={};
-    visProfs.forEach(function(p){
-      nlBlocks.filter(function(b){return b.prof===p&&isBlockActiveOnDate(b,ds);}).forEach(function(b){
-        var bk=b.from+b.to+p;
-        if(nlRendered[bk])return;nlRendered[bk]=true;
-        pendingNlBlocks.push({b:b,p:p});
+    if(!_esSecretariaLogueada()){
+      visProfs.forEach(function(p){
+        nlBlocks.filter(function(b){return b.prof===p&&isBlockActiveOnDate(b,ds);}).forEach(function(b){
+          var bk=b.from+b.to+p;
+          if(nlRendered[bk])return;nlRendered[bk]=true;
+          pendingNlBlocks.push({b:b,p:p});
+        });
       });
-    });
+    }
 
     // ── Render blocked slots ──────────────────────────────────────────────────
     Object.keys(blockedSlots).forEach(function(bk){
