@@ -1492,6 +1492,7 @@
             <button class="ag-pill" data-prof="MA" style="--pc:#22C55E">MAPA</button>
           </div>
           <button class="ag-btn-wapp" id="ag-btn-wapp" title="Plantillas WhatsApp">💬 Plantillas</button>
+          <button class="ag-btn-recetas" id="ag-btn-recetas" onclick="window.rsAbrir && rsAbrir()" title="Recetas solicitadas">💊 Recetas <span class="rs-count">0</span></button>
           <button class="ag-btn-nl ag-solo-prof" id="ag-btn-nl">&#128274; Otros</button>
           <button class="ag-btn-disp ag-solo-prof" id="ag-btn-disp">&#128197; Disponibilidad</button>
           <button class="ag-btn-inst ag-solo-prof" id="ag-btn-inst">&#127970; Institucional</button>
@@ -2072,6 +2073,11 @@
         <div style="font-size:11.5px;color:var(--text-soft);margin:-8px 0 10px">El cierre de este día suma la plata de todos los turnos agendados acá (seña + resto), sin importar en qué fecha se haya cobrado cada parte. La columna "Cobrado" es solo informativa, para revisar si falta cargar algo.</div>
         <div id="ci-tabla-turnos" style="background:white;border:1px solid var(--border);border-radius:14px;overflow:hidden">
           <div class="fin-loading" style="padding:30px;text-align:center;color:var(--text-soft)">Elegí fecha y profesional, y tocá "Ver cierre".</div>
+        </div>
+
+        <div class="cierre-section-title" style="margin-top:18px">💊 Recetas hechas del día</div>
+        <div id="ci-tabla-recetas" style="background:white;border:1px solid var(--border);border-radius:14px;overflow:hidden">
+          <div style="padding:18px;text-align:center;color:var(--text-soft);font-size:13px">—</div>
         </div>
       </div>
 
@@ -6878,6 +6884,8 @@ function doLogin() {
     // Re-renderizar agenda con el filtro del usuario logueado
     if(typeof window.agRefreshAfterLogin === 'function') window.agRefreshAfterLogin();
     else if(typeof renderGrid === 'function') renderGrid();
+    // Recetas solicitadas: pintar el botón (naranja si hay pendientes)
+    if(typeof window.rsRefrescar === 'function') window.rsRefrescar();
     // Secretaría entra directo a la Agenda
     if(currentUser.secretaria && typeof showPage === 'function') showPage('agenda');
     // Modo solo lectura para invitado
@@ -20524,6 +20532,38 @@ function makeTurnoEl(t,key,hPx){
 function moveTT(e){var tt=document.getElementById('ag-tooltip');var x=e.clientX+14,y=e.clientY+14;if(x+250>window.innerWidth)x=e.clientX-254;if(y+200>window.innerHeight)y=e.clientY-210;tt.style.left=x+'px';tt.style.top=y+'px';}
 function mkEl(tag,cls,txt){var e=document.createElement(tag);e.className=cls;e.textContent=txt;return e;}
 
+// ── Seña sugerida: 50% del arancel vigente del profesional ─────────────────
+// Se propone al entrar al campo Seña vacío o al elegir "Con seña" en Pago
+// (no se precarga sola en todos los turnos, para no marcarlos como señados).
+function agSenaSugerida(){
+  var osdeChk=document.getElementById('ag-f-osde');
+  if(osdeChk&&osdeChk.checked)return 0;
+  var prof=(document.getElementById('ag-f-prof')||{}).value;
+  var arancel=(typeof getArancel==='function')?getArancel(prof,pendingDate):0;
+  return arancel>0?Math.round(arancel/2):0;
+}
+function agActualizarPlaceholderSena(){
+  var inp=document.getElementById('ag-f-sena'); if(!inp)return;
+  var sug=agSenaSugerida();
+  inp.placeholder=sug>0?('50%: $'+sug.toLocaleString('es-AR')):'';
+}
+function agAplicarSenaSugerida(){
+  var inp=document.getElementById('ag-f-sena'); if(!inp||inp.value.trim()!=='')return;
+  var sug=agSenaSugerida(); if(!sug)return;
+  inp.value=sug;
+  inp.dispatchEvent(new Event('input'));
+}
+(document.getElementById('ag-f-sena')||{addEventListener:function(){}}).addEventListener('focus',function(){
+  if(this.value.trim()!=='')return;
+  agAplicarSenaSugerida();
+  var self=this; setTimeout(function(){ try{self.select();}catch(e){} },0);
+});
+(document.getElementById('ag-f-pago')||{addEventListener:function(){}}).addEventListener('change',function(){
+  if(this.value==='señado') agAplicarSenaSugerida();
+});
+(document.getElementById('ag-f-prof')||{addEventListener:function(){}}).addEventListener('change',agActualizarPlaceholderSena);
+(document.getElementById('ag-f-osde')||{addEventListener:function(){}}).addEventListener('change',agActualizarPlaceholderSena);
+
 // ── Auto-pago al tipear seña ───────────────────────────────────────────────
 (document.getElementById('ag-f-sena')||{addEventListener:function(){}}).addEventListener('input',function(){
   var pagoSel=document.getElementById('ag-f-pago');
@@ -20812,6 +20852,7 @@ function openModal(ds,time,key,forcedProf,freeTime){
   if(profSel) profSel.value=prof;
   var profRow=document.getElementById('ag-f-prof-row');
   if(profRow) profRow.style.display='';
+  agActualizarPlaceholderSena();
   document.getElementById('ag-modal-bg').style.display='flex';
   setTimeout(function(){document.getElementById('ag-f-paciente').focus();},50);
 }
@@ -21620,6 +21661,11 @@ async function sbGetAgendaConfig(key){
   }catch(e){console.warn('[URCyM] sbGetAgendaConfig error',e);}
   return null;
 }
+// Exponer para los módulos que viven fuera de este bloque (Cierre, Recetas
+// solicitadas). Antes no estaban expuestas y el Cierre fallaba al guardar su
+// configuración o al marcar cobrado un período OSDE.
+window.sbGetAgendaConfig=sbGetAgendaConfig;
+window.sbUpsertAgendaConfig=sbUpsertAgendaConfig;
 async function sbSaveTurnos(){
   // siempre guardar localStorage primero (inmediato)
   try{localStorage.setItem(LS_T,JSON.stringify(turnos));}catch(e){}
@@ -24948,6 +24994,325 @@ window.cargarProxConsultas = cargarProxConsultas;
 })();
 </script>
 
+<!-- ══ SOLICITUDES DE RECETAS (Secretaría carga · profesionales tildan hechas · van al Cierre) ══ -->
+<style>
+#agenda-app .ag-btn-recetas{background:none;border:1px solid #7c5cbf;border-radius:6px;padding:5px 10px;font-size:12px;color:#6344a8;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;gap:5px;}
+#agenda-app .ag-btn-recetas:hover{background:#f3eeff;}
+#agenda-app .ag-btn-recetas .rs-count{display:none;min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:#fff;color:#b45309;font-size:11px;font-weight:800;line-height:18px;text-align:center;}
+#agenda-app .ag-btn-recetas.rs-pend{background:#f59e0b;border-color:#d97706;color:#fff;font-weight:700;animation:rsPulse 2s ease-in-out infinite;}
+#agenda-app .ag-btn-recetas.rs-pend:hover{background:#d97706;}
+#agenda-app .ag-btn-recetas.rs-pend .rs-count{display:inline-block;}
+@keyframes rsPulse{0%,100%{box-shadow:0 0 0 0 rgba(245,158,11,.55);}50%{box-shadow:0 0 0 5px rgba(245,158,11,0);}}
+.rs-bg{position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:9000;display:flex;align-items:center;justify-content:center;padding:16px;}
+.rs-modal{background:#fff;border-radius:14px;width:880px;max-width:100%;max-height:90vh;display:flex;flex-direction:column;overflow:hidden;font-family:inherit;box-shadow:0 20px 50px rgba(0,0,0,.25);}
+.rs-head{display:flex;align-items:center;gap:10px;padding:16px 20px 12px;border-bottom:1px solid #f1f5f9;}
+.rs-head h3{margin:0;font-size:16px;font-weight:700;color:#111827;}
+.rs-head .rs-sub{font-size:11.5px;color:#9ca3af;margin-top:2px;}
+.rs-close{margin-left:auto;background:none;border:none;font-size:18px;color:#94a3b8;cursor:pointer;width:32px;height:32px;border-radius:50%;}
+.rs-close:hover{background:#f1f5f9;}
+.rs-form{padding:12px 20px;background:#faf8ff;border-bottom:1px solid #eee7fb;display:grid;grid-template-columns:120px 1.3fr 1.6fr 110px 110px;gap:8px;align-items:end;}
+.rs-form .rs-f{display:flex;flex-direction:column;gap:3px;min-width:0;}
+.rs-form label,.rs-lbl{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#7c6aa8;}
+.rs-form input,.rs-form select,.rs-item input,.rs-item select{border:1px solid #ddd6fe;border-radius:7px;padding:6px 8px;font-size:12.5px;font-family:inherit;background:#fff;color:#1f2937;width:100%;box-sizing:border-box;}
+.rs-form input:focus,.rs-form select:focus,.rs-item input:focus,.rs-item select:focus{outline:none;border-color:#7c5cbf;}
+.rs-form .rs-row2{grid-column:1/-1;display:flex;gap:8px;align-items:end;flex-wrap:wrap;}
+.rs-add{background:#7c5cbf;color:#fff;border:none;border-radius:8px;padding:8px 16px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;margin-left:auto;}
+.rs-add:hover{background:#6344a8;}
+.rs-add:disabled{opacity:.6;cursor:default;}
+.rs-bar{display:flex;align-items:center;gap:6px;padding:10px 20px;border-bottom:1px solid #f1f5f9;flex-wrap:wrap;}
+.rs-tab,.rs-chip{border:1px solid #e5e7eb;background:#fff;border-radius:16px;padding:5px 12px;font-size:12px;cursor:pointer;font-family:inherit;color:#4b5563;}
+.rs-tab.active{background:#7c5cbf;border-color:#7c5cbf;color:#fff;font-weight:700;}
+.rs-tab.pend.active{background:#f59e0b;border-color:#f59e0b;}
+.rs-chip.active{background:#1f2937;border-color:#1f2937;color:#fff;}
+.rs-sep{width:1px;height:20px;background:#e5e7eb;margin:0 4px;}
+.rs-list{overflow-y:auto;padding:10px 20px 16px;flex:1;}
+.rs-empty{text-align:center;color:#94a3b8;font-size:13px;padding:28px 0;}
+.rs-item{display:grid;grid-template-columns:30px 1fr 92px 104px 150px 28px;gap:8px;align-items:center;border:1px solid #e5e7eb;border-radius:10px;padding:8px 10px;margin-bottom:6px;background:#fff;}
+.rs-item.pendiente{border-left:4px solid #f59e0b;background:#fffbeb;}
+.rs-item.hecha{border-left:4px solid #10b981;}
+.rs-check{width:20px;height:20px;accent-color:#10b981;cursor:pointer;}
+.rs-pac{font-size:13px;font-weight:700;color:#111827;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.rs-pide{font-size:12px;color:#374151;margin-top:1px;word-break:break-word;}
+.rs-meta{font-size:10.5px;color:#9ca3af;margin-top:2px;}
+.rs-badge{display:inline-block;font-size:10px;font-weight:700;border-radius:10px;padding:1px 7px;margin-right:4px;}
+.rs-badge.BG{background:#ede9fe;color:#5b21b6;}
+.rs-badge.OB{background:#dbeafe;color:#1e40af;}
+.rs-badge.osde{background:#e0f2fe;color:#0369a1;}
+.rs-badge.part{background:#f3eeff;color:#6344a8;}
+.rs-del{background:none;border:none;color:#cbd5e1;font-size:15px;cursor:pointer;border-radius:6px;height:28px;}
+.rs-del:hover{color:#dc2626;background:#fef2f2;}
+.rs-medio{display:flex;flex-direction:column;gap:3px;}
+@media (max-width:760px){
+  .rs-form{grid-template-columns:1fr 1fr;}
+  .rs-item{grid-template-columns:30px 1fr 28px;}
+  .rs-item .rs-c-tipo,.rs-item .rs-c-monto,.rs-item .rs-c-medio{grid-column:2/3;}
+}
+</style>
+<div id="rs-bg" class="rs-bg" style="display:none">
+  <div class="rs-modal" role="dialog" aria-modal="true">
+    <div class="rs-head">
+      <span style="font-size:22px">💊</span>
+      <div>
+        <h3>Recetas solicitadas</h3>
+        <div class="rs-sub">Se cargan como solicitadas; al hacerlas se tildan ✓ y pasan al Cierre del día.</div>
+      </div>
+      <button class="rs-close" onclick="rsCerrar()" title="Cerrar">✕</button>
+    </div>
+    <div class="rs-form">
+      <div class="rs-f"><label>Profesional</label>
+        <select id="rs-f-prof"><option value="BG">Guerrero</option><option value="OB">Bertani</option></select></div>
+      <div class="rs-f"><label>Paciente</label>
+        <input id="rs-f-pac" list="rs-pac-list" placeholder="Apellido, Nombre" autocomplete="off"><datalist id="rs-pac-list"></datalist></div>
+      <div class="rs-f"><label>Qué pide</label>
+        <input id="rs-f-pide" placeholder="Ej: losartán 50 mg x 2 cajas"></div>
+      <div class="rs-f"><label>Tipo</label>
+        <select id="rs-f-tipo"><option value="particular">Particular</option><option value="osde">OSDE</option></select></div>
+      <div class="rs-f"><label>Valor $</label>
+        <input id="rs-f-monto" type="number" min="0" step="100" placeholder="0"></div>
+      <div class="rs-row2">
+        <div class="rs-f" id="rs-f-medio-wrap" style="width:150px"><label>Cobro</label>
+          <select id="rs-f-medio"><option value="efectivo">💵 Efectivo</option><option value="transferencia">🏦 Transferencia</option></select></div>
+        <div class="rs-f" id="rs-f-receptor-wrap" style="width:170px;display:none"><label>La recibió</label>
+          <select id="rs-f-receptor"><option value="consultorio">Consultorio</option><option value="profesional">Profesional</option></select></div>
+        <button class="rs-add" id="rs-btn-add" onclick="rsAgregar()">+ Agregar solicitud</button>
+      </div>
+    </div>
+    <div class="rs-bar">
+      <button class="rs-tab pend active" id="rs-tab-pend" onclick="rsSetVista('pend')">⏳ Pendientes <b id="rs-n-pend">0</b></button>
+      <button class="rs-tab" id="rs-tab-hechas" onclick="rsSetVista('hechas')">✓ Hechas</button>
+      <span class="rs-sep"></span>
+      <button class="rs-chip active" data-rsprof="" onclick="rsSetProf('')">Todas</button>
+      <button class="rs-chip" data-rsprof="BG" onclick="rsSetProf('BG')">Guerrero</button>
+      <button class="rs-chip" data-rsprof="OB" onclick="rsSetProf('OB')">Bertani</button>
+    </div>
+    <div class="rs-list" id="rs-list"><div class="rs-empty">Cargando…</div></div>
+  </div>
+</div>
+
+<script>
+/* ══════════════════════════════════════════════════════
+   SOLICITUDES DE RECETAS
+   Sin tablas nuevas: la lista vive en urcym_agenda_config,
+   key 'recetas_solicitudes' (array JSON), igual que turnos.
+   Cada escritura relee la lista y aplica solo el cambio
+   (fetch-merge-write) para no pisar lo que cargó otra persona.
+   Item: {id, prof, paciente, pide, tipo:'particular'|'osde',
+          monto, medio, receptor, estado:'solicitada'|'hecha',
+          creada, creada_hora, creada_por, hecha_fecha, hecha_por,
+          rec_id (fila espejo en urcym_recetas, para Finanzas)}
+   Al marcarla hecha se registra también en urcym_recetas (la
+   tabla que ya usa Finanzas), y se borra si se destilda.
+   El Cierre del día suma las hechas ese día (ver ciComputeDia);
+   las OSDE van a "Por cobrar" en su período.
+══════════════════════════════════════════════════════ */
+(function(){
+  var KEY='recetas_solicitudes';
+  var lista=[];
+  var tarifas={particular:0, osde:0};
+  var vista='pend', filtroProf='';
+  var PROF_LBL_RS={BG:'Guerrero', OB:'Bertani'};
+
+  function $r(id){ return document.getElementById(id); }
+  function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }
+  function hoy(){ var d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+  function hora(){ var d=new Date(); return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'); }
+  function fmt(iso){ if(!iso) return ''; var p=iso.split('-'); return p[2]+'/'+p[1]; }
+  function quien(){ var u=window._cu; return u ? (u.secretaria?'Secretaría':(u.titulo||u.name||'')) : ''; }
+  function nuevoId(){ return 'r'+Date.now().toString(36)+Math.random().toString(36).slice(2,6); }
+
+  async function leer(){
+    var v=null;
+    try{ v=await sbGetAgendaConfig(KEY); }catch(e){}
+    return Array.isArray(v)?v:[];
+  }
+  async function cargarTarifas(){
+    try{ var t=await sbGetAgendaConfig('recetas_tarifas'); if(t&&typeof t==='object') tarifas=t; }catch(e){}
+  }
+  // Relee, aplica el cambio y guarda. fn recibe el array fresco.
+  async function mutar(fn){
+    var arr=await leer();
+    var res=fn(arr);
+    if(res===false) return false;
+    var ok=await sbUpsertAgendaConfig(KEY, arr);
+    if(ok){ lista=arr; pintarBoton(); render(); }
+    else alert('No se pudo guardar. Revisá la conexión y probá de nuevo.');
+    return ok;
+  }
+
+  // ── Espejo en urcym_recetas (lo que usa Finanzas) ──
+  async function espejoCrear(r){
+    try{
+      var q=await window.sb.from('urcym_recetas').insert({fecha:r.hecha_fecha, tipo:r.tipo==='osde'?'osde':'particular', monto:Number(r.monto)||0, hora:hora()}).select('id').single();
+      return (q&&q.data)?q.data.id:null;
+    }catch(e){ console.warn('[Recetas] espejo crear', e); return null; }
+  }
+  async function espejoBorrar(id){
+    if(!id) return;
+    try{ await window.sb.from('urcym_recetas').delete().eq('id', id); }catch(e){ console.warn('[Recetas] espejo borrar', e); }
+  }
+  async function espejoActualizar(r){
+    if(!r.rec_id) return;
+    try{ await window.sb.from('urcym_recetas').update({tipo:r.tipo==='osde'?'osde':'particular', monto:Number(r.monto)||0}).eq('id', r.rec_id); }catch(e){ console.warn('[Recetas] espejo actualizar', e); }
+  }
+
+  // ── Botón de la barra: cambia de color si hay pendientes ──
+  function pintarBoton(){
+    var n=lista.filter(function(r){return r.estado!=='hecha';}).length;
+    var b=$r('ag-btn-recetas'); if(b){
+      b.classList.toggle('rs-pend', n>0);
+      b.title = n>0 ? (n+' receta'+(n===1?'':'s')+' pendiente'+(n===1?'':'s')+' de hacer') : 'Recetas solicitadas';
+      var c=b.querySelector('.rs-count'); if(c) c.textContent=n;
+    }
+    var np=$r('rs-n-pend'); if(np) np.textContent=n;
+  }
+  window.rsRefrescar = async function(){
+    if(!window._cu) return;
+    lista=await leer(); pintarBoton();
+    if($r('rs-bg') && $r('rs-bg').style.display!=='none') render();
+  };
+
+  // ── Modal ──
+  window.rsAbrir = async function(){
+    $r('rs-bg').style.display='flex';
+    $r('rs-list').innerHTML='<div class="rs-empty">Cargando…</div>';
+    // Profesional por defecto: el propio si es un profesional logueado
+    var su=window._su; if(su==='barbara') $r('rs-f-prof').value='BG'; else if(su==='omar') $r('rs-f-prof').value='OB';
+    // Autocompletar pacientes
+    try{
+      var dl=$r('rs-pac-list');
+      if(dl && typeof pacientesData!=='undefined' && pacientesData.length && !dl.children.length){
+        dl.innerHTML=pacientesData.map(function(p){ return '<option value="'+esc((p.apellido||'')+', '+(p.nombre||''))+'">'; }).join('');
+      }
+    }catch(e){}
+    await cargarTarifas();
+    if(!$r('rs-f-monto').value) setMontoTarifa();
+    lista=await leer(); pintarBoton(); render();
+    setTimeout(function(){ $r('rs-f-pac').focus(); },50);
+  };
+  window.rsCerrar = function(){ $r('rs-bg').style.display='none'; };
+  (document.getElementById('rs-bg')||{addEventListener:function(){}}).addEventListener('click',function(e){ if(e.target===this) rsCerrar(); });
+
+  function setMontoTarifa(){
+    var t=$r('rs-f-tipo').value;
+    var v=Number(t==='osde'?tarifas.osde:tarifas.particular)||0;
+    $r('rs-f-monto').value = v>0 ? v : '';
+    $r('rs-f-medio-wrap').style.display = t==='osde' ? 'none' : '';
+    $r('rs-f-receptor-wrap').style.display = (t!=='osde' && $r('rs-f-medio').value==='transferencia') ? '' : 'none';
+  }
+  (document.getElementById('rs-f-tipo')||{addEventListener:function(){}}).addEventListener('change', setMontoTarifa);
+  (document.getElementById('rs-f-medio')||{addEventListener:function(){}}).addEventListener('change', function(){
+    $r('rs-f-receptor-wrap').style.display = this.value==='transferencia' ? '' : 'none';
+  });
+  (document.getElementById('rs-f-pide')||{addEventListener:function(){}}).addEventListener('keydown', function(e){ if(e.key==='Enter') rsAgregar(); });
+
+  window.rsSetVista = function(v){ vista=v; $r('rs-tab-pend').classList.toggle('active',v==='pend'); $r('rs-tab-hechas').classList.toggle('active',v==='hechas'); render(); };
+  window.rsSetProf = function(p){ filtroProf=p; document.querySelectorAll('.rs-chip').forEach(function(b){ b.classList.toggle('active', b.getAttribute('data-rsprof')===p); }); render(); };
+
+  window.rsAgregar = async function(){
+    var pac=$r('rs-f-pac').value.trim(), pide=$r('rs-f-pide').value.trim();
+    if(!pac){ alert('Cargá el paciente.'); $r('rs-f-pac').focus(); return; }
+    if(!pide){ alert('Cargá qué pide.'); $r('rs-f-pide').focus(); return; }
+    var tipo=$r('rs-f-tipo').value;
+    var medio = tipo==='osde' ? undefined : ($r('rs-f-medio').value||'efectivo');
+    var item={
+      id:nuevoId(), prof:$r('rs-f-prof').value, paciente:pac, pide:pide, tipo:tipo,
+      monto:parseFloat($r('rs-f-monto').value)||0,
+      medio:medio, receptor: medio==='transferencia' ? ($r('rs-f-receptor').value||'consultorio') : undefined,
+      estado:'solicitada', creada:hoy(), creada_hora:hora(), creada_por:quien()
+    };
+    var btn=$r('rs-btn-add'); btn.disabled=true; btn.textContent='Guardando…';
+    var ok=await mutar(function(arr){ arr.push(item); });
+    btn.disabled=false; btn.textContent='+ Agregar solicitud';
+    if(ok){ $r('rs-f-pac').value=''; $r('rs-f-pide').value=''; $r('rs-f-medio').value='efectivo'; setMontoTarifa(); rsSetVista('pend'); $r('rs-f-pac').focus(); }
+  };
+
+  window.rsToggleHecha = async function(id, marcar){
+    var cur=lista.find(function(r){return r.id===id;}); if(!cur) return;
+    var recIdViejo=cur.rec_id, recIdNuevo=null;
+    if(marcar){
+      var tmp=Object.assign({}, cur, {hecha_fecha:hoy()});
+      recIdNuevo=await espejoCrear(tmp);
+    }
+    await mutar(function(arr){
+      var r=arr.find(function(x){return x.id===id;}); if(!r) return false;
+      if(marcar){ r.estado='hecha'; r.hecha_fecha=hoy(); r.hecha_por=quien(); r.rec_id=recIdNuevo||undefined; }
+      else { r.estado='solicitada'; delete r.hecha_fecha; delete r.hecha_por; delete r.rec_id; }
+    });
+    if(!marcar) espejoBorrar(recIdViejo);
+  };
+
+  window.rsEditar = async function(id, campo, valor){
+    var nuevo=null;
+    await mutar(function(arr){
+      var r=arr.find(function(x){return x.id===id;}); if(!r) return false;
+      if(campo==='monto') r.monto=parseFloat(valor)||0;
+      else if(campo==='tipo'){ r.tipo=valor; if(valor==='osde'){ delete r.medio; delete r.receptor; } else if(!r.medio) r.medio='efectivo'; }
+      else if(campo==='medio'){ r.medio=valor; if(valor==='transferencia'){ if(!r.receptor) r.receptor='consultorio'; } else delete r.receptor; }
+      else if(campo==='receptor') r.receptor=valor;
+      nuevo=Object.assign({}, r);
+    });
+    if(nuevo && nuevo.estado==='hecha' && (campo==='monto'||campo==='tipo')) espejoActualizar(nuevo);
+  };
+
+  window.rsBorrar = async function(id){
+    var cur=lista.find(function(r){return r.id===id;}); if(!cur) return;
+    if(!confirm('¿Borrar la solicitud de '+cur.paciente+'?')) return;
+    await mutar(function(arr){ var i=arr.findIndex(function(x){return x.id===id;}); if(i<0) return false; arr.splice(i,1); });
+    if(cur.rec_id) espejoBorrar(cur.rec_id);
+  };
+
+  function render(){
+    var cont=$r('rs-list'); if(!cont) return;
+    var items=lista.filter(function(r){
+      if(filtroProf && r.prof!==filtroProf) return false;
+      return vista==='pend' ? r.estado!=='hecha' : r.estado==='hecha';
+    });
+    if(vista==='pend') items.sort(function(a,b){ return (a.creada+a.creada_hora).localeCompare(b.creada+b.creada_hora); });
+    else { items.sort(function(a,b){ return (b.hecha_fecha||'').localeCompare(a.hecha_fecha||''); }); items=items.slice(0,150); }
+    if(!items.length){
+      cont.innerHTML='<div class="rs-empty">'+(vista==='pend'?'No hay recetas pendientes 🎉':'Todavía no hay recetas hechas.')+'</div>';
+      return;
+    }
+    cont.innerHTML=items.map(function(r){
+      var hecha=r.estado==='hecha';
+      var id=esc(r.id);
+      var meta = 'Pedida '+fmt(r.creada)+(r.creada_hora?' '+esc(r.creada_hora):'')+(r.creada_por?' · '+esc(r.creada_por):'')
+        + (hecha ? ' · <b style="color:#059669">Hecha '+fmt(r.hecha_fecha)+(r.hecha_por?' ('+esc(r.hecha_por)+')':'')+'</b>' : '');
+      var medioHtml = r.tipo==='osde'
+        ? '<span style="font-size:11px;color:#0369a1">A cobrar a OSDE</span>'
+        : '<div class="rs-medio"><select onchange="rsEditar(\''+id+'\',\'medio\',this.value)">'
+            +'<option value="efectivo"'+(r.medio!=='transferencia'?' selected':'')+'>💵 Efectivo</option>'
+            +'<option value="transferencia"'+(r.medio==='transferencia'?' selected':'')+'>🏦 Transf.</option></select>'
+          +(r.medio==='transferencia'
+            ? '<select onchange="rsEditar(\''+id+'\',\'receptor\',this.value)">'
+              +'<option value="consultorio"'+(r.receptor!=='profesional'?' selected':'')+'>→ Consultorio</option>'
+              +'<option value="profesional"'+(r.receptor==='profesional'?' selected':'')+'>→ Profesional</option></select>'
+            : '')
+          +'</div>';
+      return '<div class="rs-item '+(hecha?'hecha':'pendiente')+'">'
+        +'<input type="checkbox" class="rs-check" title="'+(hecha?'Desmarcar (vuelve a pendiente)':'Marcar como hecha')+'" '+(hecha?'checked':'')+' onchange="rsToggleHecha(\''+id+'\',this.checked)">'
+        +'<div style="min-width:0">'
+          +'<div class="rs-pac"><span class="rs-badge '+esc(r.prof)+'">'+esc(PROF_LBL_RS[r.prof]||r.prof)+'</span>'+esc(r.paciente)+'</div>'
+          +'<div class="rs-pide">'+esc(r.pide)+'</div>'
+          +'<div class="rs-meta">'+meta+'</div>'
+        +'</div>'
+        +'<div class="rs-c-tipo"><select onchange="rsEditar(\''+id+'\',\'tipo\',this.value)">'
+          +'<option value="particular"'+(r.tipo!=='osde'?' selected':'')+'>Particular</option>'
+          +'<option value="osde"'+(r.tipo==='osde'?' selected':'')+'>OSDE</option></select></div>'
+        +'<div class="rs-c-monto"><input type="number" min="0" step="100" value="'+(Number(r.monto)||'')+'" placeholder="$" title="Valor de la receta" onchange="rsEditar(\''+id+'\',\'monto\',this.value)"></div>'
+        +'<div class="rs-c-medio">'+medioHtml+'</div>'
+        +'<button class="rs-del" title="Borrar" onclick="rsBorrar(\''+id+'\')">✕</button>'
+        +'</div>';
+    }).join('');
+  }
+
+  // Refresco periódico del botón (para que la secretaría / los profesionales
+  // vean el cambio de color sin recargar).
+  setInterval(function(){ if(window._cu && !document.hidden) window.rsRefrescar(); }, 60000);
+  document.addEventListener('visibilitychange', function(){ if(!document.hidden && window._cu) window.rsRefrescar(); });
+})();
+</script>
+
 <script>
 /* ══════════════════════════════════════════════════════
    MÓDULO CIERRE (Secretaría)
@@ -25147,6 +25512,14 @@ window.cargarProxConsultas = cargarProxConsultas;
     catch(e){ console.warn('[Cierre] error cargando turnos', e); return {}; }
   }
 
+  // Recetas marcadas como hechas (lista 'recetas_solicitudes').
+  async function ciRecetasHechas(filtro){
+    var arr = [];
+    try{ arr = (await sbGetAgendaConfig('recetas_solicitudes')) || []; }catch(e){ console.warn('[Cierre] error cargando recetas', e); }
+    if(!Array.isArray(arr)) return [];
+    return arr.filter(function(r){ return r && r.estado==='hecha' && r.hecha_fecha && (!filtro || filtro(r)); });
+  }
+
   // Cálculo compartido entre la pantalla del cierre del día y el PDF, para
   // que ambos muestren siempre exactamente lo mismo.
   async function ciComputeDia(fecha, prof){
@@ -25184,6 +25557,18 @@ window.cargarProxConsultas = cargarProxConsultas;
       var c = ciContribTurno(t);
       flujo.efectivo += c.efectivo; flujo.tConsultorio += c.tConsultorio; flujo.tProfesional += c.tProfesional;
     });
+    // Recetas (circuito "Recetas solicitadas"): entran al cierre del día en
+    // que se marcaron hechas. Las particulares suman al total (y pagan el
+    // mismo % de alquiler que las consultas); las OSDE van a "Por cobrar".
+    var recetasDia = await ciRecetasHechas(function(r){ return r.hecha_fecha===fecha && r.prof===prof; });
+    var recPartDia = recetasDia.filter(function(r){ return r.tipo!=='osde'; });
+    var recTotal = 0;
+    recPartDia.forEach(function(r){
+      var m = Number(r.monto)||0; recTotal += m;
+      if((r.medio||'efectivo')==='efectivo') flujo.efectivo += m;
+      else if(r.receptor==='profesional') flujo.tProfesional += m;
+      else flujo.tConsultorio += m;
+    });
     var totalDia = flujo.efectivo + flujo.tConsultorio + flujo.tProfesional;
     var alquiler = Math.round(totalDia * ciConfig.pct / 100);
     var profShare = totalDia - alquiler;
@@ -25195,7 +25580,8 @@ window.cargarProxConsultas = cargarProxConsultas;
       fecha:fecha, prof:prof, profLabel:PROF_FULL_CI[prof]||'profesional', vigenciaOk:vigenciaOk,
       delDia:delDia, vistos:vistos, ausentes:ausentes, noOsdeDelDia:noOsdeDelDia,
       flujo:flujo, totalDia:totalDia, alquiler:alquiler, profShare:profShare,
-      officeHeld:officeHeld, profHeld:profHeld, settlement:settlement
+      officeHeld:officeHeld, profHeld:profHeld, settlement:settlement,
+      recetasDia:recetasDia, recPartDia:recPartDia, recTotal:recTotal
     };
   }
 
@@ -25229,7 +25615,27 @@ window.cargarProxConsultas = cargarProxConsultas;
     if($c('ci-kpi-transf-cons')) $c('ci-kpi-transf-cons').textContent = ciMoneda(flujo.tConsultorio);
     if($c('ci-kpi-transf-prof')) $c('ci-kpi-transf-prof').textContent = ciMoneda(flujo.tProfesional);
     if($c('ci-kpi-bruto')) $c('ci-kpi-bruto').textContent = ciMoneda(totalDia);
-    if($c('ci-kpi-bruto-sub')) $c('ci-kpi-bruto-sub').textContent = noOsdeDelDia.length+' turno'+(noOsdeDelDia.length===1?'':'s')+' particular'+(noOsdeDelDia.length===1?'':'es')+' de este día';
+    if($c('ci-kpi-bruto-sub')) $c('ci-kpi-bruto-sub').textContent = noOsdeDelDia.length+' turno'+(noOsdeDelDia.length===1?'':'s')+' particular'+(noOsdeDelDia.length===1?'':'es')
+      + (r.recPartDia.length ? ' + '+r.recPartDia.length+' receta'+(r.recPartDia.length===1?'':'s')+' ('+ciMoneda(r.recTotal)+')' : '')+' de este día';
+    var tablaRec = $c('ci-tabla-recetas');
+    if(tablaRec){
+      if(!r.recetasDia.length){
+        tablaRec.innerHTML = '<div style="padding:18px;text-align:center;color:var(--text-soft);font-size:13px">Sin recetas hechas este día.</div>';
+      } else {
+        var esc2 = function(v){ return String(v==null?'':v).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); };
+        var mTxt = function(x){ if(x.tipo==='osde') return '—'; return (x.medio==='transferencia') ? '🏦 Transf. ('+(x.receptor==='profesional'?'profesional':'consultorio')+')' : '💵 Efectivo'; };
+        var th = function(t,al){ return '<th style="padding:9px 14px;font-size:10.5px;text-transform:uppercase;color:var(--text-soft)'+(al?';text-align:right':'')+'">'+t+'</th>'; };
+        var td = function(t,al){ return '<td style="padding:9px 14px;font-size:12.5px'+(al?';text-align:right':'')+'">'+t+'</td>'; };
+        tablaRec.innerHTML = '<table style="width:100%;border-collapse:collapse"><thead><tr style="background:var(--gray);text-align:left">'
+          +th('Paciente')+th('Pedido')+th('Tipo')+th('Valor',1)+th('Medio')
+          +'</tr></thead><tbody>'
+          + r.recetasDia.map(function(x){
+              return '<tr>'+td(esc2(x.paciente))+td(esc2(x.pide))+td(x.tipo==='osde'?'🏥 OSDE':'💊 Particular')
+                +td(x.tipo==='osde'?'<span style="color:var(--blue)">a cobrar</span>':ciMoneda(x.monto),1)+td(mTxt(x))+'</tr>';
+            }).join('')
+          +'</tbody></table>';
+      }
+    }
     if($c('ci-kpi-alq-label')) $c('ci-kpi-alq-label').textContent = '🏢 Alquiler consultorio ('+ciConfig.pct+'%)';
     if($c('ci-kpi-alquiler')) $c('ci-kpi-alquiler').textContent = vigenciaOk ? ('− '+ciMoneda(alquiler)) : '—';
     if($c('ci-kpi-neto')) $c('ci-kpi-neto').textContent = vigenciaOk ? ciMoneda(profShare) : '—';
@@ -25400,6 +25806,7 @@ window.cargarProxConsultas = cargarProxConsultas;
         y += 6;
       }
       fila('Total cobrado hoy (particular)', ciMoneda(r.totalDia));
+      if(r.recPartDia && r.recPartDia.length) fila('   incluye '+r.recPartDia.length+' receta'+(r.recPartDia.length===1?'':'s'), ciMoneda(r.recTotal), {color:SUAVE});
       fila('Alquiler consultorio ('+ciConfig.pct+'%)', '− '+ciMoneda(r.alquiler), {color:ROJO});
       fila('A favor del profesional', ciMoneda(r.profShare), {bold:true, color:VERDE});
       y += 3;
@@ -25462,7 +25869,25 @@ window.cargarProxConsultas = cargarProxConsultas;
       if(!periodos[pKey]) periodos[pKey] = {prof:t.prof, inicio:per.inicio, fin:per.fin, pagoEstimado:per.pagoEstimado, turnos:[]};
       periodos[pKey].turnos.push(Object.assign({_key:key, _fecha:fecha, _hora:parts[1]}, t));
     });
+    // Recetas OSDE hechas: al período de la fecha en que se hicieron
+    var recOsde = await ciRecetasHechas(function(r){ return r.tipo==='osde' && (!filtroProf || r.prof===filtroProf); });
+    recOsde.forEach(function(r){
+      var per = ciPeriodoDe(r.hecha_fecha);
+      var pKey = r.prof+'|'+per.inicio;
+      if(!periodos[pKey]) periodos[pKey] = {prof:r.prof, inicio:per.inicio, fin:per.fin, pagoEstimado:per.pagoEstimado, turnos:[]};
+      if(!periodos[pKey].recetas) periodos[pKey].recetas = [];
+      periodos[pKey].recetas.push(r);
+    });
     return periodos;
+  }
+  // Estimado de un período OSDE: consultas × tarifa + valor de cada receta
+  function ciEstimadoPeriodo(p){
+    var rec = (p.recetas||[]).reduce(function(a,r){ return a + (Number(r.monto)||Number(ciOsdeTarifas.receta)||0); }, 0);
+    return p.turnos.length*(ciOsdeTarifas.consulta||0) + rec;
+  }
+  function ciCantidadTxt(p){
+    var n=p.turnos.length, nr=(p.recetas||[]).length;
+    return n+' turno'+(n===1?'':'s')+(nr?' + '+nr+' receta'+(nr===1?'':'s'):'');
   }
 
   window.cierrePorCobrarRender = async function(){
@@ -25496,14 +25921,15 @@ window.cargarProxConsultas = cargarProxConsultas;
     var hoy = ciHoy();
     cont.innerHTML = mostrar.map(function(p){
       var cantidad = p.turnos.length;
-      var estimado = cantidad * (ciOsdeTarifas.consulta||0);
+      var estimado = ciEstimadoPeriodo(p);
+      var cantTxt = ciCantidadTxt(p);
       var profLabel = PROF_FULL_CI[p.prof] || p.prof || '';
       if(p._cobrado){
         var e = p._estado;
         var medioTxt = e.medio==='efectivo' ? '💵 Efectivo' : ('🏦 Transf. ('+(e.receptor==='profesional'?'profesional':'consultorio')+')');
         return '<div class="cierre-osde-row" style="opacity:.75">'
           +'<div>'
-            +'<div class="cierre-osde-info"><b>'+ciFmtFecha(p.inicio)+' – '+ciFmtFecha(p.fin)+'</b> · '+profLabel+' · '+cantidad+' turno'+(cantidad===1?'':'s')+'</div>'
+            +'<div class="cierre-osde-info"><b>'+ciFmtFecha(p.inicio)+' – '+ciFmtFecha(p.fin)+'</b> · '+profLabel+' · '+cantTxt+'</div>'
             +'<div class="cierre-osde-sub">✅ Cobrado el '+ciFmtFecha(e.fecha)+' · '+ciMoneda(e.monto)+' · '+medioTxt+'</div>'
           +'</div>'
           +'</div>';
@@ -25511,7 +25937,7 @@ window.cargarProxConsultas = cargarProxConsultas;
       var vencido = hoy > p.pagoEstimado;
       return '<div class="cierre-osde-row">'
         +'<div>'
-          +'<div class="cierre-osde-info"><b>'+ciFmtFecha(p.inicio)+' – '+ciFmtFecha(p.fin)+'</b> · '+profLabel+' · '+cantidad+' turno'+(cantidad===1?'':'s')+' · estimado '+ciMoneda(estimado)+'</div>'
+          +'<div class="cierre-osde-info"><b>'+ciFmtFecha(p.inicio)+' – '+ciFmtFecha(p.fin)+'</b> · '+profLabel+' · '+cantTxt+' · estimado '+ciMoneda(estimado)+'</div>'
           +'<div class="cierre-osde-sub">Pago estimado '+ciFmtFecha(p.pagoEstimado)+' <span class="cierre-badge-espera '+(vencido?'larga':'')+'">'+(vencido?'vencido':'pendiente')+'</span></div>'
         +'</div>'
         +'<button class="fin-btn-nuevo" onclick="window.cierreAbrirModalCobro && cierreAbrirModalCobro(\''+p._key+'\')">💰 Marcar cobrado</button>'
@@ -25545,9 +25971,8 @@ window.cargarProxConsultas = cargarProxConsultas;
     var periodos = await ciAgruparOsdePorPeriodo(prof);
     var p = periodos[periodKey];
     if(!p){ alert('No se encontró el período (puede que ya no haya turnos OSDE ahí). Actualizá la lista.'); cierrePorCobrarRender(); return; }
-    var cantidad = p.turnos.length;
-    var estimado = cantidad * (ciOsdeTarifas.consulta||0);
-    $c('ci-modal-cobrar-info').textContent = (PROF_FULL_CI[p.prof]||p.prof||'')+' · período '+ciFmtFecha(p.inicio)+' – '+ciFmtFecha(p.fin)+' · '+cantidad+' turno'+(cantidad===1?'':'s')+' OSDE';
+    var estimado = ciEstimadoPeriodo(p);
+    $c('ci-modal-cobrar-info').textContent = (PROF_FULL_CI[p.prof]||p.prof||'')+' · período '+ciFmtFecha(p.inicio)+' – '+ciFmtFecha(p.fin)+' · '+ciCantidadTxt(p)+' OSDE';
     $c('ci-cobrar-monto').value = estimado || '';
     $c('ci-cobrar-fecha').value = ciHoy();
     $c('ci-cobrar-medio').value = 'transferencia';
@@ -25586,7 +26011,7 @@ window.cargarProxConsultas = cargarProxConsultas;
     var cobrados = await ciCargarPeriodosOsde();
     cobrados[_ciPeriodoEnCurso] = {
       cobrado:true, prof:p.prof, inicio:p.inicio, fin:p.fin,
-      cantidadTurnos:p.turnos.length, monto:monto, fecha:fecha,
+      cantidadTurnos:p.turnos.length, cantidadRecetas:(p.recetas||[]).length, monto:monto, fecha:fecha,
       medio:medio, receptor:receptor
     };
 
