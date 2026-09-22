@@ -19757,17 +19757,11 @@ function openCtxMenu(e,key){
     pago?'#1D9E75':'#374151',
     function(){
       if(!pago){
-        // Marcar como pagado: abrir el turno para elegir cómo se cobró
-        // (efectivo, transferencia, o ambos) — no se guarda solo, hace falta
-        // confirmar el medio para que se refleje bien en el cierre.
-        openModal(null,null,key);
-        setTimeout(function(){
-          var pagoSel=document.getElementById('ag-f-pago');
-          if(pagoSel && pagoSel.value!=='pagado'){
-            pagoSel.value='pagado';
-            if(typeof Event==='function') pagoSel.dispatchEvent(new Event('change'));
-          }
-        },60);
+        // Marcar como pagado: un popup chiquito al toque para elegir cómo
+        // se cobró, sin abrir el turno entero. Se abre en el siguiente tick
+        // porque este mismo click cierra el menú actual (closeCtxMenu) justo
+        // después de correr este handler, y si no se pisarían uno al otro.
+        setTimeout(function(){ openPagoTotalPopup(key,x,y); },0);
       } else {
         // Desmarcar: volver a sin-seña y limpiar monto
         turnos[key].pago='sin-seña';
@@ -19811,6 +19805,109 @@ function openCtxMenu(e,key){
   var r=menu.getBoundingClientRect();
   if(r.right>window.innerWidth)menu.style.left=(x-r.width)+'px';
   if(r.bottom>window.innerHeight)menu.style.top=(y-r.height)+'px';
+}
+
+// ── Popup chiquito para marcar "Pagó total" eligiendo el medio, sin abrir
+//    el turno entero. Reutiliza ctxMenu/closeCtxMenu para el cierre por
+//    click afuera.
+function openPagoTotalPopup(key,x,y){
+  var t=turnos[key]; if(!t) return;
+  var monto=Number(t.monto)||0;
+  if(!monto){ var ar=getArancel(t.prof,key.split('_')[0]); if(ar>0) monto=ar; }
+  var popup=document.createElement('div');
+  popup.id='ag-pagototal-menu';
+  popup.style.cssText='position:fixed;z-index:20000;background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:8px;min-width:235px;box-shadow:0 4px 16px rgba(0,0,0,.14);font-family:inherit;font-size:13px;';
+
+  function guardar(medio,receptor,ef,tr){
+    turnos[key].pago='pagado';
+    turnos[key].monto=monto;
+    turnos[key].sena='';
+    turnos[key].saldo_medio=medio;
+    turnos[key].saldo_receptor=(medio==='efectivo')?undefined:receptor;
+    turnos[key].saldo_efectivo=(medio==='mixto'&&ef>0)?ef:undefined;
+    turnos[key].saldo_transferencia=(medio==='mixto'&&tr>0)?tr:undefined;
+    var _h=new Date();
+    var _hoyStr=_h.getFullYear()+'-'+String(_h.getMonth()+1).padStart(2,'0')+'-'+String(_h.getDate()).padStart(2,'0');
+    turnos[key].cobro_fecha=_hoyStr;
+    turnos[key].saldo_fecha_cobro=_hoyStr;
+    saveLocal();renderGrid();
+    closeCtxMenu();
+  }
+
+  function mkOpt(label,color,handler){
+    var b=document.createElement('div');
+    b.style.cssText='padding:7px 10px;cursor:pointer;color:'+color+';border-radius:6px;font-weight:600;';
+    b.textContent=label;
+    b.addEventListener('mouseenter',function(){b.style.background='#f3f4f6';});
+    b.addEventListener('mouseleave',function(){b.style.background='';});
+    b.addEventListener('click',function(ev){ev.stopPropagation();handler();});
+    return b;
+  }
+
+  function renderMain(){
+    popup.innerHTML='';
+    var title=document.createElement('div');
+    title.style.cssText='font-weight:700;color:#111827;margin:2px 8px 8px;font-size:12.5px;';
+    title.textContent='¿Cómo se cobró? $'+monto.toLocaleString('es-AR');
+    popup.appendChild(title);
+    popup.appendChild(mkOpt('💵 Efectivo','#1D9E75',function(){guardar('efectivo');}));
+    popup.appendChild(mkOpt('🏦 Transferencia → Consultorio','#185FA5',function(){guardar('transferencia','consultorio');}));
+    popup.appendChild(mkOpt('🏦 Transferencia → Profesional','#185FA5',function(){guardar('transferencia','profesional');}));
+    var sep=document.createElement('div'); sep.style.cssText='height:1px;background:#e5e7eb;margin:5px 4px;';
+    popup.appendChild(sep);
+    popup.appendChild(mkOpt('➗ Dividido (efectivo + transferencia)','#7c5cbf',renderSplit));
+  }
+
+  function renderSplit(){
+    popup.innerHTML='';
+    var title=document.createElement('div');
+    title.style.cssText='font-weight:700;color:#111827;margin:2px 4px 8px;font-size:12.5px;';
+    title.textContent='Repartir $'+monto.toLocaleString('es-AR');
+    popup.appendChild(title);
+    var wrap=document.createElement('div');
+    wrap.style.cssText='padding:0 4px;';
+    wrap.innerHTML=
+      '<div style="display:flex;gap:6px;margin-bottom:8px;">'
+        +'<div style="flex:1"><label style="display:block;font-size:10px;color:#64748b;margin-bottom:2px;">💵 Efectivo</label>'
+        +'<input id="_ptp_ef" type="number" min="0" style="width:100%;border:1.5px solid #e2e8f0;border-radius:6px;padding:5px 6px;font-size:12px;" value="'+monto+'"></div>'
+        +'<div style="flex:1"><label style="display:block;font-size:10px;color:#64748b;margin-bottom:2px;">🏦 Transferencia</label>'
+        +'<input id="_ptp_tr" type="number" min="0" style="width:100%;border:1.5px solid #e2e8f0;border-radius:6px;padding:5px 6px;font-size:12px;" value="0"></div>'
+      +'</div>'
+      +'<div style="margin-bottom:8px;"><label style="display:block;font-size:10px;color:#64748b;margin-bottom:2px;">La transferencia la recibió</label>'
+      +'<select id="_ptp_rec" style="width:100%;border:1.5px solid #e2e8f0;border-radius:6px;padding:5px 6px;font-size:12px;">'
+        +'<option value="consultorio">Consultorio</option><option value="profesional">Profesional</option>'
+      +'</select></div>';
+    popup.appendChild(wrap);
+    var btnRow=document.createElement('div');
+    btnRow.style.cssText='display:flex;gap:6px;justify-content:flex-end;padding:0 4px;';
+    var btnAtras=document.createElement('button');
+    btnAtras.type='button'; btnAtras.textContent='Atrás';
+    btnAtras.style.cssText='background:none;border:1px solid #d1d5db;border-radius:6px;padding:5px 10px;font-size:12px;cursor:pointer;color:#374151;font-family:inherit;';
+    btnAtras.addEventListener('click',function(ev){ev.stopPropagation();renderMain();});
+    var btnOk=document.createElement('button');
+    btnOk.type='button'; btnOk.textContent='Confirmar';
+    btnOk.style.cssText='background:#185FA5;color:#fff;border:none;border-radius:6px;padding:5px 12px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;';
+    btnOk.addEventListener('click',function(ev){
+      ev.stopPropagation();
+      var ef=parseFloat(document.getElementById('_ptp_ef').value)||0;
+      var tr=parseFloat(document.getElementById('_ptp_tr').value)||0;
+      var rec=document.getElementById('_ptp_rec').value||'consultorio';
+      if(Math.round((monto-ef-tr)*100)/100!==0){
+        if(!confirm('Efectivo ($'+ef.toLocaleString('es-AR')+') + Transferencia ($'+tr.toLocaleString('es-AR')+') no suman el total ($'+monto.toLocaleString('es-AR')+'). ¿Guardar igual?')) return;
+      }
+      guardar('mixto',rec,ef,tr);
+    });
+    btnRow.appendChild(btnAtras); btnRow.appendChild(btnOk);
+    popup.appendChild(btnRow);
+  }
+
+  renderMain();
+  popup.style.left=x+'px';popup.style.top=y+'px';
+  document.body.appendChild(popup);
+  ctxMenu=popup; // reutiliza el cierre por click afuera del menú contextual
+  var rp=popup.getBoundingClientRect();
+  if(rp.right>window.innerWidth)popup.style.left=(x-rp.width)+'px';
+  if(rp.bottom>window.innerHeight)popup.style.top=(y-rp.height)+'px';
 }
 
 // ── Utilidades ─────────────────────────────────────────────────────────────
