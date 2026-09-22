@@ -20532,9 +20532,11 @@ function makeTurnoEl(t,key,hPx){
 function moveTT(e){var tt=document.getElementById('ag-tooltip');var x=e.clientX+14,y=e.clientY+14;if(x+250>window.innerWidth)x=e.clientX-254;if(y+200>window.innerHeight)y=e.clientY-210;tt.style.left=x+'px';tt.style.top=y+'px';}
 function mkEl(tag,cls,txt){var e=document.createElement(tag);e.className=cls;e.textContent=txt;return e;}
 
-// ── Seña sugerida: 50% del arancel vigente del profesional ─────────────────
-// Se propone al entrar al campo Seña vacío o al elegir "Con seña" en Pago
-// (no se precarga sola en todos los turnos, para no marcarlos como señados).
+// ── Seña por defecto: 50% del arancel vigente del profesional ──────────────
+// Al agendar un turno NUEVO, la seña ya viene cargada con el 50% de la
+// consulta y el pago en "Con seña", para agilizar. Si se cambia el
+// profesional o se tilda OSDE, se recalcula mientras la seña siga siendo la
+// automática (si alguien la editó a mano, no se toca).
 function agSenaSugerida(){
   var osdeChk=document.getElementById('ag-f-osde');
   if(osdeChk&&osdeChk.checked)return 0;
@@ -20542,27 +20544,37 @@ function agSenaSugerida(){
   var arancel=(typeof getArancel==='function')?getArancel(prof,pendingDate):0;
   return arancel>0?Math.round(arancel/2):0;
 }
-function agActualizarPlaceholderSena(){
-  var inp=document.getElementById('ag-f-sena'); if(!inp)return;
+function agSenaPorDefecto(){
+  var inp=document.getElementById('ag-f-sena'), pagoSel=document.getElementById('ag-f-pago');
+  if(!inp||!pagoSel)return;
   var sug=agSenaSugerida();
-  inp.placeholder=sug>0?('50%: $'+sug.toLocaleString('es-AR')):'';
-}
-function agAplicarSenaSugerida(){
-  var inp=document.getElementById('ag-f-sena'); if(!inp||inp.value.trim()!=='')return;
-  var sug=agSenaSugerida(); if(!sug)return;
-  inp.value=sug;
+  inp.placeholder='0';
+  if(sug>0){
+    inp.value=sug;
+    pagoSel.value='señado';
+  } else {
+    inp.value='';
+    if(pagoSel.value==='señado')pagoSel.value='sin-seña';
+  }
+  inp.dataset.auto='1';
   inp.dispatchEvent(new Event('input'));
+  inp.dataset.auto='1';
 }
-(document.getElementById('ag-f-sena')||{addEventListener:function(){}}).addEventListener('focus',function(){
-  if(this.value.trim()!=='')return;
-  agAplicarSenaSugerida();
-  var self=this; setTimeout(function(){ try{self.select();}catch(e){} },0);
+(document.getElementById('ag-f-sena')||{addEventListener:function(){}}).addEventListener('input',function(e){
+  // Si la escribe la persona (evento real), deja de ser automática
+  if(e.isTrusted) this.dataset.auto='';
 });
+function agRecalcSenaSiAuto(){
+  var inp=document.getElementById('ag-f-sena');
+  if(inp&&inp.dataset.auto==='1') agSenaPorDefecto();
+}
+(document.getElementById('ag-f-prof')||{addEventListener:function(){}}).addEventListener('change',agRecalcSenaSiAuto);
+(document.getElementById('ag-f-osde')||{addEventListener:function(){}}).addEventListener('change',agRecalcSenaSiAuto);
 (document.getElementById('ag-f-pago')||{addEventListener:function(){}}).addEventListener('change',function(){
-  if(this.value==='señado') agAplicarSenaSugerida();
+  // Si vuelven a elegir "Con seña" con el campo vacío, se completa el 50%
+  var inp=document.getElementById('ag-f-sena');
+  if(this.value==='señado'&&inp&&inp.value.trim()===''){ var sug=agSenaSugerida(); if(sug){ inp.value=sug; inp.dispatchEvent(new Event('input')); } }
 });
-(document.getElementById('ag-f-prof')||{addEventListener:function(){}}).addEventListener('change',agActualizarPlaceholderSena);
-(document.getElementById('ag-f-osde')||{addEventListener:function(){}}).addEventListener('change',agActualizarPlaceholderSena);
 
 // ── Auto-pago al tipear seña ───────────────────────────────────────────────
 (document.getElementById('ag-f-sena')||{addEventListener:function(){}}).addEventListener('input',function(){
@@ -20852,7 +20864,9 @@ function openModal(ds,time,key,forcedProf,freeTime){
   if(profSel) profSel.value=prof;
   var profRow=document.getElementById('ag-f-prof-row');
   if(profRow) profRow.style.display='';
-  agActualizarPlaceholderSena();
+  var _senaInp=document.getElementById('ag-f-sena');
+  if(_senaInp){ _senaInp.dataset.auto=''; _senaInp.placeholder='0'; }
+  if(!(key&&turnos[key])) agSenaPorDefecto(); // turno nuevo: seña 50% + "Con seña"
   document.getElementById('ag-modal-bg').style.display='flex';
   setTimeout(function(){document.getElementById('ag-f-paciente').focus();},50);
 }
