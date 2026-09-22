@@ -1499,7 +1499,7 @@
         <div class="ag-legend">
           <div class="ag-legend-item"><div class="ag-legend-bar" style="background:#7F77DD"></div>Guerrero</div>
           <div class="ag-legend-item"><div class="ag-legend-bar" style="background:#378ADD"></div>Bertani</div>
-          <div class="ag-legend-item"><div class="ag-legend-bar" style="background:#22C55E"></div>MAPA</div>
+          <div class="ag-legend-item" id="ag-legend-mapa"><div class="ag-legend-bar" style="background:#22C55E"></div>MAPA</div>
           <div class="ag-legend-sep"></div>
           <div class="ag-legend-item"><div class="ag-legend-bar" style="background:#7B6EA6"></div>No laborable Guerrero</div>
           <div class="ag-legend-item"><div class="ag-legend-bar" style="background:#2B4E8C"></div>No laborable Bertani</div>
@@ -1711,18 +1711,31 @@
             </label>
             <input type="number" id="ag-f-monto" placeholder="0" min="0" style="border:1.5px solid #1D9E75;">
           </div>
-          <div class="ag-form-row-2" id="ag-saldo-medio-row" style="display:none">
-            <div class="ag-form-row" style="margin-bottom:0">
-              <label style="display:flex;align-items:center;justify-content:space-between;">
-                <span id="ag-saldo-medio-label">Medio (saldo)</span>
+          <div class="ag-form-row" id="ag-saldo-medio-row" style="display:none">
+            <label style="display:flex;align-items:center;justify-content:space-between;">
+              <span id="ag-saldo-medio-label">¿Cómo se cobró?</span>
+            </label>
+            <div style="display:flex;gap:16px;margin:2px 0 8px;">
+              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;font-weight:600;color:#374151;">
+                <input type="checkbox" id="ag-f-saldo-efectivo-chk" style="width:15px;height:15px;accent-color:#1D9E75;cursor:pointer;">💵 Efectivo
               </label>
-              <select id="ag-f-saldo-medio">
-                <option value="efectivo">💵 Efectivo</option>
-                <option value="transferencia">🏦 Transferencia</option>
-              </select>
+              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;font-weight:600;color:#374151;">
+                <input type="checkbox" id="ag-f-saldo-transferencia-chk" style="width:15px;height:15px;accent-color:#185FA5;cursor:pointer;">🏦 Transferencia
+              </label>
             </div>
+            <div class="ag-form-row-2" id="ag-saldo-split-row" style="display:none;margin-bottom:8px;">
+              <div class="ag-form-row" style="margin-bottom:0">
+                <label>Monto efectivo ($)</label>
+                <input type="number" id="ag-f-saldo-efectivo-monto" placeholder="0" min="0">
+              </div>
+              <div class="ag-form-row" style="margin-bottom:0">
+                <label>Monto transferencia ($)</label>
+                <input type="number" id="ag-f-saldo-transferencia-monto" placeholder="0" min="0">
+              </div>
+            </div>
+            <div style="font-size:10.5px;color:#9ca3af;margin:-4px 0 8px" id="ag-saldo-split-hint"></div>
             <div class="ag-form-row" style="margin-bottom:0" id="ag-saldo-receptor-wrap">
-              <label>Recibió el saldo</label>
+              <label>La transferencia la recibió</label>
               <select id="ag-f-saldo-receptor">
                 <option value="consultorio">Consultorio</option>
                 <option value="profesional">Profesional</option>
@@ -6830,6 +6843,16 @@ function doLogin() {
       if(typeof agClampMonday==='function' && typeof currentMonday!=='undefined'){
         currentMonday = agClampMonday(currentMonday);
       }
+      // Secretaría: sin acceso a Aranceles, Otros bloques, Disponibilidad ni MAPA
+      ['ag-btn-aranceles','ag-btn-nl','ag-btn-disp'].forEach(function(id){
+        var elB=document.getElementById(id); if(elB) elB.style.display='none';
+      });
+      var mapaPill=document.querySelector('#ag-prof-pills [data-prof="MA"]');
+      if(mapaPill) mapaPill.style.display='none';
+      var mapaLeg=document.getElementById('ag-legend-mapa');
+      if(mapaLeg) mapaLeg.style.display='none';
+      var mapaOpt=document.querySelector('#ag-f-prof option[value="MA"]');
+      if(mapaOpt) mapaOpt.remove();
     } else if(currentUser.admin) {
       if(navFinanzas) navFinanzas.style.display = '';
       if(navMisPacientes) navMisPacientes.style.display = 'none';
@@ -19557,6 +19580,20 @@ function agClampMonday(fecha){
 var currentMonday=getMonday(new Date());
 if(_esSecretariaLogueada()) currentMonday = agClampMonday(currentMonday);
 var editKey=null, pendingDate=null, pendingTime=null;
+var senaAutoDefault=true; // true mientras la seña no fue tocada a mano por el usuario
+function aplicarSenaAutoDefault(prof, fecha){
+  if(!senaAutoDefault) return;
+  var senaInp=document.getElementById('ag-f-sena');
+  var pagoSel=document.getElementById('ag-f-pago');
+  if(!senaInp||!pagoSel) return;
+  var ar = (typeof getArancel==='function') ? getArancel(prof, fecha) : 0;
+  var val = ar>0 ? Math.round(ar*0.5) : 0;
+  senaInp.value = val>0 ? val : '';
+  if(val>0){ if(pagoSel.value==='sin-seña') pagoSel.value='señado'; }
+  else { if(pagoSel.value==='señado') pagoSel.value='sin-seña'; }
+  var senaMedioRow=document.getElementById('ag-sena-medio-row');
+  if(senaMedioRow) senaMedioRow.style.display = val>0 ? '' : 'none';
+}
 var todayStr=kd(new Date());
 
 // ── Slots ofrecidos ────────────────────────────────────────────────────────
@@ -20438,6 +20475,7 @@ function mkEl(tag,cls,txt){var e=document.createElement(tag);e.className=cls;e.t
 
 // ── Auto-pago al tipear seña ───────────────────────────────────────────────
 (document.getElementById('ag-f-sena')||{addEventListener:function(){}}).addEventListener('input',function(){
+  senaAutoDefault=false; // el usuario tocó la seña: no volver a autocompletarla
   var pagoSel=document.getElementById('ag-f-pago');
   var haySena = this.value && this.value.trim()!=='';
   if(haySena){
@@ -20451,11 +20489,100 @@ function mkEl(tag,cls,txt){var e=document.createElement(tag);e.className=cls;e.t
 (document.getElementById('ag-f-sena-medio')||{addEventListener:function(){}}).addEventListener('change',function(){
   var wrap=document.getElementById('ag-sena-receptor-wrap');
   if(wrap) wrap.style.display = this.value==='transferencia' ? '' : 'none';
+  if(this.value==='transferencia'){
+    // Por defecto, una transferencia de seña se asume recibida por el profesional (se puede cambiar)
+    var recSel=document.getElementById('ag-f-sena-receptor');
+    if(recSel) recSel.value='profesional';
+  }
 });
-(document.getElementById('ag-f-saldo-medio')||{addEventListener:function(){}}).addEventListener('change',function(){
-  var wrap=document.getElementById('ag-saldo-receptor-wrap');
-  if(wrap) wrap.style.display = this.value==='transferencia' ? '' : 'none';
+
+// ── Cómo se cobró el saldo/pago total: efectivo y/o transferencia ──────────
+function _agSaldoElems(){
+  return {
+    efChk: document.getElementById('ag-f-saldo-efectivo-chk'),
+    trChk: document.getElementById('ag-f-saldo-transferencia-chk'),
+    splitRow: document.getElementById('ag-saldo-split-row'),
+    efMonto: document.getElementById('ag-f-saldo-efectivo-monto'),
+    trMonto: document.getElementById('ag-f-saldo-transferencia-monto'),
+    receptorWrap: document.getElementById('ag-saldo-receptor-wrap'),
+    receptorSel: document.getElementById('ag-f-saldo-receptor'),
+    hint: document.getElementById('ag-saldo-split-hint')
+  };
+}
+function _agRestoActual(){
+  var montoVal=parseFloat(document.getElementById('ag-f-monto').value)||0;
+  var senaVal=parseFloat(document.getElementById('ag-f-sena').value)||0;
+  if(senaVal<=0 && editKey && turnos[editKey] && turnos[editKey].sena_monto){
+    senaVal=Number(turnos[editKey].sena_monto)||0;
+  }
+  var r=montoVal-senaVal;
+  return r>0 ? r : montoVal;
+}
+function _agUpdateSaldoSplitUI(resto){
+  var el=_agSaldoElems();
+  if(!el.efChk||!el.trChk) return;
+  var efOn=el.efChk.checked, trOn=el.trChk.checked;
+  var both=efOn&&trOn;
+  el.splitRow.style.display = both ? '' : 'none';
+  el.receptorWrap.style.display = trOn ? '' : 'none';
+  if(!both){
+    el.hint.textContent='';
+  } else {
+    if(!el.efMonto.value && !el.trMonto.value && resto>0) el.efMonto.value=resto;
+    var ef=parseFloat(el.efMonto.value)||0, tr=parseFloat(el.trMonto.value)||0;
+    var falta=Math.round((resto-ef-tr)*100)/100;
+    el.hint.textContent = falta===0 ? ('Total asignado: $'+resto.toLocaleString('es-AR')) : ('Faltan asignar $'+falta.toLocaleString('es-AR')+' de $'+resto.toLocaleString('es-AR'));
+    el.hint.style.color = falta===0 ? '#9ca3af' : '#e25247';
+  }
+}
+function _agResetSaldoSplitUI(){
+  var el=_agSaldoElems();
+  if(!el.efChk) return;
+  el.efChk.checked=true; el.trChk.checked=false;
+  el.efMonto.value=''; el.trMonto.value='';
+  el.receptorSel.value='consultorio';
+  el.splitRow.style.display='none';
+  el.receptorWrap.style.display='none';
+  el.hint.textContent='';
+}
+function _agCargarSaldoSplit(t, resto){
+  var el=_agSaldoElems();
+  if(!el.efChk) return;
+  if(t.saldo_medio==='mixto'){
+    el.efChk.checked=true; el.trChk.checked=true;
+    el.efMonto.value=t.saldo_efectivo||'';
+    el.trMonto.value=t.saldo_transferencia||'';
+  } else if(t.saldo_medio==='transferencia'){
+    el.efChk.checked=false; el.trChk.checked=true;
+    el.efMonto.value=''; el.trMonto.value='';
+  } else {
+    el.efChk.checked=true; el.trChk.checked=false;
+    el.efMonto.value=''; el.trMonto.value='';
+  }
+  el.receptorSel.value=t.saldo_receptor||'consultorio';
+  _agUpdateSaldoSplitUI(resto);
+}
+(document.getElementById('ag-f-saldo-efectivo-chk')||{addEventListener:function(){}}).addEventListener('change',function(){
+  if(!this.checked){ document.getElementById('ag-f-saldo-efectivo-monto').value=''; }
+  _agUpdateSaldoSplitUI(_agRestoActual());
 });
+(document.getElementById('ag-f-saldo-transferencia-chk')||{addEventListener:function(){}}).addEventListener('change',function(){
+  if(!this.checked){ document.getElementById('ag-f-saldo-transferencia-monto').value=''; }
+  _agUpdateSaldoSplitUI(_agRestoActual());
+});
+(document.getElementById('ag-f-saldo-efectivo-monto')||{addEventListener:function(){}}).addEventListener('input',function(){ _agUpdateSaldoSplitUI(_agRestoActual()); });
+(document.getElementById('ag-f-saldo-transferencia-monto')||{addEventListener:function(){}}).addEventListener('input',function(){ _agUpdateSaldoSplitUI(_agRestoActual()); });
+(document.getElementById('ag-f-monto')||{addEventListener:function(){}}).addEventListener('input',function(){
+  var pagoSel=document.getElementById('ag-f-pago');
+  var saldoLabel=document.getElementById('ag-saldo-medio-label');
+  if(pagoSel && pagoSel.value==='pagado'){
+    var resto=_agRestoActual();
+    var senaVal=parseFloat(document.getElementById('ag-f-sena').value)||0;
+    if(saldoLabel) saldoLabel.textContent = senaVal>0 ? ('¿Cómo se cobró? (resto: $'+resto.toLocaleString('es-AR')+')') : '¿Cómo se cobró? (pago total)';
+    _agUpdateSaldoSplitUI(resto);
+  }
+});
+
 // ── Mostrar/ocultar campo Monto y autocompletar al cambiar estado de pago ──
 (document.getElementById('ag-f-pago')||{addEventListener:function(){}}).addEventListener('change', function() {
   var montoRow = document.getElementById('ag-monto-row');
@@ -20484,8 +20611,9 @@ function mkEl(tag,cls,txt){var e=document.createElement(tag);e.className=cls;e.t
       saldoMedioRow.style.display = '';
       if (saldoLabel) {
         var montoVal = parseFloat(montoInp.value) || 0;
-        saldoLabel.textContent = senaVal > 0 ? ('Medio (resto: $' + Math.max(montoVal - senaVal, 0).toLocaleString('es-AR') + ')') : 'Medio (pago total)';
+        saldoLabel.textContent = senaVal > 0 ? ('¿Cómo se cobró? (resto: $' + Math.max(montoVal - senaVal, 0).toLocaleString('es-AR') + ')') : '¿Cómo se cobró? (pago total)';
       }
+      _agUpdateSaldoSplitUI(_agRestoActual());
     }
   } else {
     montoRow.style.display = 'none';
@@ -20646,6 +20774,7 @@ function openModal(ds,time,key,forcedProf,freeTime){
   document.getElementById('ag-f-date').onchange=function(){
     var currentProf=document.getElementById('ag-f-prof').value||prof;
     buildTimeOptions(currentProf,this.value,null);
+    aplicarSenaAutoDefault(currentProf,this.value);
   };
   // FIX: cuando cambia el prof, reconstruir fechas Y horarios
   document.getElementById('ag-f-prof').onchange=function(){
@@ -20653,8 +20782,10 @@ function openModal(ds,time,key,forcedProf,freeTime){
     var currentDate=document.getElementById('ag-f-date').value||pendingDate;
     buildDateOptions(newProf,currentDate);
     buildTimeOptions(newProf,currentDate,null);
+    aplicarSenaAutoDefault(newProf,currentDate);
   };
   if(key&&turnos[key]){
+    senaAutoDefault=false; // editando un turno existente: nunca pisar la seña ya guardada
     var t=turnos[key];
     document.getElementById('ag-f-paciente').value=t.paciente||'';
     var _dniH=document.getElementById('ag-f-paciente-dni');if(_dniH)_dniH.value=t.dni_paciente||'';
@@ -20678,46 +20809,40 @@ function openModal(ds,time,key,forcedProf,freeTime){
     var montoRowE=document.getElementById('ag-monto-row');
     var montoInpE=document.getElementById('ag-f-monto');
     var saldoMedioRowE=document.getElementById('ag-saldo-medio-row');
-    var saldoMedioSelE=document.getElementById('ag-f-saldo-medio');
-    var saldoReceptorSelE=document.getElementById('ag-f-saldo-receptor');
     if(t.pago==='pagado'&&!t.osde){
       montoRowE.style.display='';
       montoInpE.value=t.monto||'';
       var hintE=document.getElementById('ag-monto-hint');
       var arancelE=getArancel(t.prof||'BG', pendingDate);
       hintE.textContent=arancelE>0?'Arancel: $'+arancelE.toLocaleString('es-AR'):'';
-      saldoMedioSelE.value = t.saldo_medio || 'efectivo';
-      saldoReceptorSelE.value = t.saldo_receptor || 'consultorio';
       saldoMedioRowE.style.display='';
       var saldoLabelE = document.getElementById('ag-saldo-medio-label');
       var saldoRestanteE = Number(t.monto||0) - Number(t.sena_monto||0);
-      saldoLabelE.textContent = (t.sena_monto>0) ? ('Medio (resto: $'+saldoRestanteE.toLocaleString('es-AR')+')') : 'Medio (pago total)';
-      document.getElementById('ag-saldo-receptor-wrap').style.display = saldoMedioSelE.value==='transferencia' ? '' : 'none';
+      saldoLabelE.textContent = (t.sena_monto>0) ? ('¿Cómo se cobró? (resto: $'+saldoRestanteE.toLocaleString('es-AR')+')') : '¿Cómo se cobró? (pago total)';
+      _agCargarSaldoSplit(t, saldoRestanteE>0?saldoRestanteE:Number(t.monto||0));
     } else {
       montoRowE.style.display='none';
       montoInpE.value='';
       saldoMedioRowE.style.display='none';
     }
   }else{
+    senaAutoDefault=true; // turno nuevo: la seña se autocompleta según el arancel
     document.getElementById('ag-f-paciente').value='';
     var _dniHN=document.getElementById('ag-f-paciente-dni');if(_dniHN)_dniHN.value='';
     document.getElementById('ag-f-prof').value=prof;
     document.getElementById('ag-f-estado').value='';
-    document.getElementById('ag-f-sena').value='';
     document.getElementById('ag-f-pago').value='sin-seña';
     agSetMotivosSel([]);
     document.getElementById('ag-f-osde').checked=false;
     document.getElementById('ag-pago-row').style.display='';
     document.getElementById('ag-monto-row').style.display='none';
     document.getElementById('ag-f-monto').value='';
-    document.getElementById('ag-sena-medio-row').style.display='none';
     document.getElementById('ag-f-sena-medio').value='efectivo';
     document.getElementById('ag-f-sena-receptor').value='consultorio';
     document.getElementById('ag-sena-receptor-wrap').style.display='none';
     document.getElementById('ag-saldo-medio-row').style.display='none';
-    document.getElementById('ag-f-saldo-medio').value='efectivo';
-    document.getElementById('ag-f-saldo-receptor').value='consultorio';
-    document.getElementById('ag-saldo-receptor-wrap').style.display='none';
+    _agResetSaldoSplitUI();
+    aplicarSenaAutoDefault(prof,pendingDate);
   }
   // Mostrar selector de profesional con valor correcto
   var profSel=document.getElementById('ag-f-prof');
@@ -21045,11 +21170,38 @@ function openReprog(key){
   } else {
     _senaFechaCobro = undefined;
   }
-  // Medio del saldo/total, solo aplica cuando el turno queda "Pagado"
-  var _saldoMedioVal, _saldoReceptorVal, _saldoFechaCobro;
+  // Medio del saldo/total, solo aplica cuando el turno queda "Pagado".
+  // Puede ser efectivo, transferencia, o una combinación de ambos ("mixto"),
+  // porque un mismo pago a veces se cobra una parte en efectivo y otra por
+  // transferencia — eso se tiene que poder distinguir para el cierre.
+  var _saldoMedioVal, _saldoReceptorVal, _saldoFechaCobro, _saldoEfectivoNum, _saldoTransferenciaNum;
   if(pagoVal==='pagado' && !osdeVal){
-    _saldoMedioVal = document.getElementById('ag-f-saldo-medio').value || 'efectivo';
-    _saldoReceptorVal = (_saldoMedioVal==='transferencia') ? (document.getElementById('ag-f-saldo-receptor').value||'consultorio') : undefined;
+    var _efChk=document.getElementById('ag-f-saldo-efectivo-chk');
+    var _trChk=document.getElementById('ag-f-saldo-transferencia-chk');
+    var _efOn = _efChk ? _efChk.checked : true;
+    var _trOn = _trChk ? _trChk.checked : false;
+    if(!_efOn && !_trOn){
+      alert('Marcá cómo se cobró el pago: efectivo, transferencia, o ambos.');
+      return;
+    }
+    if(_efOn && _trOn){
+      _saldoMedioVal='mixto';
+      _saldoEfectivoNum = parseFloat(document.getElementById('ag-f-saldo-efectivo-monto').value)||0;
+      _saldoTransferenciaNum = parseFloat(document.getElementById('ag-f-saldo-transferencia-monto').value)||0;
+      var _restoEsperado = _agRestoActual();
+      if(Math.round((_restoEsperado-_saldoEfectivoNum-_saldoTransferenciaNum)*100)/100 !== 0){
+        if(!confirm('El efectivo ($'+_saldoEfectivoNum.toLocaleString('es-AR')+') y la transferencia ($'+_saldoTransferenciaNum.toLocaleString('es-AR')+') no suman el total ($'+_restoEsperado.toLocaleString('es-AR')+'). ¿Guardar igual?')) return;
+      }
+      _saldoReceptorVal = document.getElementById('ag-f-saldo-receptor').value||'consultorio';
+    } else if(_trOn){
+      _saldoMedioVal='transferencia';
+      _saldoReceptorVal = document.getElementById('ag-f-saldo-receptor').value||'consultorio';
+      _saldoEfectivoNum=undefined; _saldoTransferenciaNum=undefined;
+    } else {
+      _saldoMedioVal='efectivo';
+      _saldoReceptorVal=undefined;
+      _saldoEfectivoNum=undefined; _saldoTransferenciaNum=undefined;
+    }
     var _montoPrevioNum = _prevTurnoParaCobro.pago==='pagado' ? (Number(_prevTurnoParaCobro.monto)||0) : 0;
     var _montoNuevoNum = Number(montoVal)||0;
     _saldoFechaCobro = (_montoNuevoNum!==_montoPrevioNum)
@@ -21057,6 +21209,7 @@ function openReprog(key){
       : (_prevTurnoParaCobro.saldo_fecha_cobro || _prevTurnoParaCobro.cobro_fecha || _hoyStr);
   } else {
     _saldoMedioVal = undefined; _saldoReceptorVal = undefined; _saldoFechaCobro = undefined;
+    _saldoEfectivoNum = undefined; _saldoTransferenciaNum = undefined;
   }
 
   turnos[newKey]={
@@ -21074,6 +21227,8 @@ function openReprog(key){
     sena_fecha_cobro:_senaFechaCobro,
     saldo_medio:_saldoMedioVal,
     saldo_receptor:_saldoReceptorVal,
+    saldo_efectivo:_saldoEfectivoNum>0?_saldoEfectivoNum:undefined,
+    saldo_transferencia:_saldoTransferenciaNum>0?_saldoTransferenciaNum:undefined,
     saldo_fecha_cobro:_saldoFechaCobro,
     notas:agGetMotivosSel(),
     asistencia:prevAsist,
@@ -21478,6 +21633,10 @@ renderGrid=function(){
   var _pm2={barbara:'BG',omar:'OB'};
   if(typeof currentUser!=='undefined'&&currentUser&&currentUser.admin===false&&typeof selectedUser!=='undefined'&&selectedUser&&_pm2[selectedUser]){
     profFilter=[_pm2[selectedUser]];
+  }
+  // Secretaría: nunca mostrar MAPA (ni sus turnos/bloques), pase lo que pase con los pills
+  if(typeof currentUser!=='undefined'&&currentUser&&currentUser.secretaria){
+    profFilter = profFilter.length===0 ? ['BG','OB'] : profFilter.filter(function(p){return p!=='MA';});
   }
   _origRenderGrid();
 };
@@ -25014,7 +25173,16 @@ window.cargarProxConsultas = cargarProxConsultas;
       var saldoMonto = Math.max(totalMonto - senaMonto, 0);
       if(saldoMonto>0){
         var medioSaldo = t.saldo_medio || 'efectivo';
-        if(medioSaldo==='efectivo') out.efectivo += saldoMonto;
+        if(medioSaldo==='mixto'){
+          // Pago dividido entre efectivo y transferencia
+          var mixEf = Number(t.saldo_efectivo)||0;
+          var mixTr = Number(t.saldo_transferencia)||0;
+          out.efectivo += mixEf;
+          if(mixTr>0){
+            if(t.saldo_receptor==='profesional') out.tProfesional += mixTr;
+            else out.tConsultorio += mixTr;
+          }
+        } else if(medioSaldo==='efectivo') out.efectivo += saldoMonto;
         else if(t.saldo_receptor==='profesional') out.tProfesional += saldoMonto;
         else out.tConsultorio += saldoMonto;
       }
@@ -25155,9 +25323,13 @@ window.cargarProxConsultas = cargarProxConsultas;
       if(!delDia.length){
         tabla.innerHTML = '<div style="padding:30px;text-align:center;color:var(--text-soft);font-size:13px">Sin turnos para '+PROF_FULL_CI[prof]+' el '+ciFmtFecha(fecha)+'.</div>';
       } else {
-        var medioTxt = function(medio, receptor){
+        var medioTxt = function(medio, receptor, t2){
           if(!medio) return '—';
           if(medio==='efectivo') return '💵 Efectivo';
+          if(medio==='mixto'){
+            var mEf=Number(t2&&t2.saldo_efectivo)||0, mTr=Number(t2&&t2.saldo_transferencia)||0;
+            return '💵 $'+mEf.toLocaleString('es-AR')+' + 🏦 $'+mTr.toLocaleString('es-AR')+' ('+(receptor==='profesional'?'profesional':'consultorio')+')';
+          }
           return '🏦 Transf. ('+(receptor==='profesional'?'profesional':'consultorio')+')';
         };
         var filas = delDia.map(function(t){
@@ -25165,7 +25337,7 @@ window.cargarProxConsultas = cargarProxConsultas;
           var montoTxt = esOsde(t) ? '<span style="color:var(--blue)">a cobrar</span>'
             : ciMoneda((t.pago==='pagado'&&t.monto)?t.monto:((t.pago==='señado'&&t.sena)?t.sena:0));
           var medioCelda = esOsde(t) ? '—'
-            : (t.pago==='pagado' ? medioTxt(t.saldo_medio, t.saldo_receptor) : (t.pago==='señado' ? medioTxt(t.sena_medio, t.sena_receptor) : '—'));
+            : (t.pago==='pagado' ? medioTxt(t.saldo_medio, t.saldo_receptor, t) : (t.pago==='señado' ? medioTxt(t.sena_medio, t.sena_receptor, t) : '—'));
           var asistTxt = t.asistencia==='ausente' ? '<span style="color:var(--red)">Ausente</span>'
             : (t.asistencia==='atendido'||t.asistencia==='asistio') ? '<span style="color:#1D9E75">Atendido</span>'
             : t.asistencia==='presente' ? '<span style="color:#B45309">Presente</span>' : '—';
