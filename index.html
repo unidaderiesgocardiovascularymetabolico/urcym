@@ -694,6 +694,8 @@
 #agenda-app .ag-btn-disp{background:none;border:1px solid #185FA5;border-radius:6px;padding:5px 10px;font-size:12px;color:#185FA5;}
 #agenda-app .ag-btn-disp:hover{background:#E6F1FB;}
 #agenda-app .ag-grid-wrap{overflow-x:auto;width:100%;}
+/* Más espacio vertical para la grilla: el título se repite con la pestaña */
+#page-agenda > .page-title, #page-agenda > .page-subtitle{display:none;}
 /* ── Vista de tiempo continuo ── */
 #agenda-app .ag-cal{display:grid;grid-template-columns:52px repeat(6,minmax(0,1fr));border:1px solid #e5e7eb;border-radius:10px;overflow:hidden;background:#fff;width:100%;}
 #agenda-app .ag-cal-head-blank{background:#f9fafb;border-bottom:1px solid #e5e7eb;}
@@ -7524,6 +7526,7 @@ async function showPage(page) {
   else marcarTabPacienteActiva(null);
   if(page==='pacientes') cargarPacientes();
   if(page==='agenda') setTimeout(function(){ if(window.cargarProxConsultas) window.cargarProxConsultas(); }, 500);
+  if(page==='agenda' && typeof renderGrid==='function') setTimeout(renderGrid, 0); // recalcula la escala con la página visible
   if(page==='finanzas') setTimeout(function(){
     console.log('[Finanzas] showPage finanzas llamado, finInit=', typeof window.finInit);
     if(window.finInit) window.finInit();
@@ -19867,6 +19870,16 @@ function nextSlotTime(time,prof){
   return m2t(t2m(time)+dur);
 }
 
+// Al cambiar el tamaño de la ventana, reajustar la escala de la agenda
+var _agResizeT=null;
+window.addEventListener('resize',function(){
+  clearTimeout(_agResizeT);
+  _agResizeT=setTimeout(function(){
+    var pg=document.getElementById('page-agenda');
+    if(pg && pg.classList.contains('active')) renderGrid();
+  },200);
+});
+
 function renderGrid(){
   // Secretaría: nunca mostrar semanas anteriores a su fecha de acceso.
   // Se hace acá porque el login no puede tocar currentMonday (vive en este scope).
@@ -19881,10 +19894,9 @@ function renderGrid(){
   wrap.id='ag-grid';
   document.getElementById('ag-week-label').textContent=weekLabel(currentMonday);
 
-  var PX_PER_MIN=2; // 2px por minuto → 60min = 120px (antes 1.2 = 72px, quedaba muy bajito)
-  var HOUR_START=8, HOUR_END=21; // visible range
-  var TOTAL_MIN=(HOUR_END-HOUR_START)*60;
-  var TOTAL_H=TOTAL_MIN*PX_PER_MIN;
+  // La escala y el rango horario se calculan más abajo (agCalcularEscala),
+  // una vez que se conocen los días y profesionales visibles.
+  var PX_PER_MIN, HOUR_START, HOUR_END, TOTAL_MIN, TOTAL_H;
 
   var days=[];for(var i=0;i<6;i++)days.push(addDays(currentMonday,i));
   // Calcular visProfs: forzar prof para no-admin
@@ -19903,6 +19915,46 @@ function renderGrid(){
     visProfs=ALL_PROFS.slice();
   }
   console.log('[URCyM agenda] visProfs final:', visProfs);
+
+  // ── Escala automática: que entre la mayor cantidad de horarios en pantalla ──
+  // 1) Rango horario = desde el primer hasta el último horario con
+  //    disponibilidad o turnos de la semana (no 8–21 fijo).
+  // 2) Alto por minuto = el que hace entrar ese rango en el alto de la
+  //    ventana, entre 1.2 px/min (mínimo, 72 px/h) y 2.4 px/min (máximo).
+  (function agCalcularEscala(){
+    var minM=null, maxM=null;
+    function incl(a,b){ if(minM===null||a<minM)minM=a; if(maxM===null||b>maxM)maxM=b; }
+    days.forEach(function(d){
+      var ds=kd(d);
+      dispBlocks.forEach(function(b){
+        if(visProfs.indexOf(b.prof)<0||!isBlockActiveOnDate(b,ds))return;
+        incl(t2m(getEffectiveFrom(b,ds)), t2m(getEffectiveTo(b,ds)));
+      });
+    });
+    var dsSemana=days.map(kd);
+    Object.keys(turnos).forEach(function(k){
+      var parts=k.split('_');
+      if(dsSemana.indexOf(parts[0])<0)return;
+      var t=turnos[k]; if(!t||visProfs.indexOf(t.prof)<0)return;
+      var m=t2m(parts[1]); incl(m, m+(PROF_45.indexOf(t.prof)>=0?45:30));
+    });
+    if(minM===null){ HOUR_START=8; HOUR_END=20; }
+    else {
+      HOUR_START=Math.max(7, Math.floor(minM/60));
+      HOUR_END=Math.min(22, Math.ceil(maxM/60));
+      if(HOUR_END-HOUR_START<4) HOUR_END=Math.min(22, HOUR_START+4);
+    }
+    TOTAL_MIN=(HOUR_END-HOUR_START)*60;
+    var disponible=null;
+    var gw=document.querySelector('#agenda-app .ag-grid-wrap');
+    if(gw && gw.offsetParent){
+      var topDoc=gw.getBoundingClientRect().top+window.scrollY;
+      disponible=window.innerHeight-topDoc-34-12; // 34 = fila de días
+    }
+    if(disponible===null||disponible<300) disponible=Math.max(300, window.innerHeight-260);
+    PX_PER_MIN=Math.max(1.2, Math.min(2.4, disponible/TOTAL_MIN));
+    TOTAL_H=TOTAL_MIN*PX_PER_MIN;
+  })();
 
 
   // Header row
@@ -19937,6 +19989,7 @@ function renderGrid(){
     var col=document.createElement('div');
     col.className='ag-day-col'+(ds===todayStr?' ag-today-col':'');
     col.style.height=TOTAL_H+'px';
+    col.style.overflow='hidden'; // bloques que empiezan/terminan fuera del rango visible
     col.style.cursor='crosshair';
 
     // Indicador de posición al hacer hover
