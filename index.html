@@ -19763,6 +19763,40 @@ function openCtxMenu(e,key){
       saveLocal();renderGrid();
     }
   ));
+  // Señó: si no tenía seña cargada, se carga el 50% del arancel vigente
+  var senado=t.pago==='señado';
+  if(!t.osde) menu.appendChild(mkItem(
+    (senado?'<span style="color:#B45309">✓</span> ':'<span style="opacity:.3">○</span> ')+'Señó',
+    senado?'#B45309':'#374151',
+    function(){
+      var tt=turnos[key];
+      var _h=new Date();
+      var hoyStr=_h.getFullYear()+'-'+String(_h.getMonth()+1).padStart(2,'0')+'-'+String(_h.getDate()).padStart(2,'0');
+      if(!senado){
+        var montoSena=Number(tt.sena_monto)||Number(tt.sena)||0;
+        if(!montoSena){
+          var ar=getArancel(tt.prof, key.split('_')[0]);
+          montoSena=ar>0?Math.round(ar/2):0;
+        }
+        tt.pago='señado';
+        tt.monto=undefined;
+        if(montoSena>0){
+          tt.sena=montoSena;
+          tt.sena_monto=montoSena;
+          if(!tt.sena_medio) tt.sena_medio='efectivo';
+          if(!tt.sena_fecha_cobro) tt.sena_fecha_cobro=hoyStr;
+          if(!tt.cobro_fecha) tt.cobro_fecha=hoyStr;
+        }
+      } else {
+        // Desmarcar: sin seña
+        tt.pago='sin-seña';
+        tt.sena='';
+        tt.sena_monto=undefined; tt.sena_medio=undefined; tt.sena_receptor=undefined; tt.sena_fecha_cobro=undefined;
+        tt.cobro_fecha=undefined;
+      }
+      saveLocal();renderGrid();
+    }
+  ));
   menu.appendChild(mkItem(
     (sinCargo?'<span style="color:#185FA5">✓</span> ':'<span style="opacity:.3">○</span> ')+'Sin cargo',
     sinCargo?'#185FA5':'#374151',
@@ -20077,14 +20111,14 @@ function renderGrid(){
       });
     });
 
-    // Secretaría: no ve los bloques no laborables ni los slots bloqueados a
-    // mano — solo espacios de turnos libres, turnos y bloqueos institucionales.
+    // Secretaría: no ve los bloques no laborables de cada profesional — sí ve
+    // espacios libres, turnos, bloqueos institucionales y los horarios que se
+    // bloquean a mano (🚫, los usa ella misma).
     // Donde hay un bloque simplemente no aparecen espacios.
     var _secSinBloques=_esSecretariaLogueada();
 
     // ── Render blocked slots ──────────────────────────────────────────────────
     Object.keys(blockedSlots).forEach(function(bk){
-      if(_secSinBloques)return;
       var parts=bk.split('_');
       if(parts[0]!==ds)return;
       var bTime=parts[1];
