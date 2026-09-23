@@ -2069,13 +2069,15 @@
           </div>
         </div>
 
+        <div id="ci-recetas-sin-cerrar" style="display:none;background:#fffbeb;border:1.5px solid #fcd34d;border-radius:14px;padding:12px 14px;margin-bottom:18px"></div>
+
         <div class="cierre-section-title">📋 Detalle de turnos del día</div>
         <div style="font-size:11.5px;color:var(--text-soft);margin:-8px 0 10px">El cierre de este día suma la plata de todos los turnos agendados acá (seña + resto), sin importar en qué fecha se haya cobrado cada parte. La columna "Cobrado" es solo informativa, para revisar si falta cargar algo.</div>
         <div id="ci-tabla-turnos" style="background:white;border:1px solid var(--border);border-radius:14px;overflow:hidden">
           <div class="fin-loading" style="padding:30px;text-align:center;color:var(--text-soft)">Elegí fecha y profesional, y tocá "Ver cierre".</div>
         </div>
 
-        <div class="cierre-section-title" style="margin-top:18px">💊 Recetas hechas del día</div>
+        <div class="cierre-section-title" style="margin-top:18px">💊 Recetas cargadas en este cierre</div>
         <div id="ci-tabla-recetas" style="background:white;border:1px solid var(--border);border-radius:14px;overflow:hidden">
           <div style="padding:18px;text-align:center;color:var(--text-soft);font-size:13px">—</div>
         </div>
@@ -19941,6 +19943,18 @@ function renderGrid(){
       });
     });
     var dsSemana=days.map(kd);
+    // Bloqueos institucionales (y no laborables, salvo para Secretaría que no
+    // los ve): también cuentan, para que un bloque de día completo (feriado,
+    // congreso) no quede cortado.
+    days.forEach(function(d){
+      var ds=kd(d);
+      instBlocks.forEach(function(b){
+        if(b.startDate===ds||isBlockActiveOnDate(b,ds)) incl(t2m(b.from), t2m(b.to));
+      });
+      if(!_esSecretariaLogueada()) nlBlocks.forEach(function(b){
+        if(visProfs.indexOf(b.prof)>=0&&isBlockActiveOnDate(b,ds)) incl(t2m(b.from), t2m(b.to));
+      });
+    });
     Object.keys(turnos).forEach(function(k){
       var parts=k.split('_');
       if(dsSemana.indexOf(parts[0])<0)return;
@@ -19951,7 +19965,9 @@ function renderGrid(){
     else {
       HOUR_START=Math.max(7, Math.floor(minM/60));
       HOUR_END=Math.min(22, Math.ceil(maxM/60));
-      if(HOUR_END-HOUR_START<4) HOUR_END=Math.min(22, HOUR_START+4);
+      // Mínimo 8 horas visibles, para que una semana con poco cargado no se
+      // vea como una grilla cortada
+      if(HOUR_END-HOUR_START<8){ HOUR_END=Math.min(22, HOUR_START+8); HOUR_START=Math.max(7, HOUR_END-8); }
     }
     TOTAL_MIN=(HOUR_END-HOUR_START)*60;
     var disponible=null;
@@ -20410,8 +20426,9 @@ function renderGrid(){
       });
     })(ds);
 
-    // ── Botón flotante de recetas ──────────────────────────────────
-    (function(ds2,col2){
+    // ── Botón flotante de recetas (solo profesionales; la Secretaría usa
+    //    el menú 💊 Recetas de la barra) ──────────────────────────────
+    if(!_esSecretariaLogueada()) (function(ds2,col2){
       var fab=document.createElement('button');
       fab.className='ag-recetas-fab';
       fab.dataset.ds=ds2;
@@ -25178,6 +25195,15 @@ window.cargarProxConsultas = cargarProxConsultas;
       var c=b.querySelector('.rs-count'); if(c) c.textContent=n;
     }
     var np=$r('rs-n-pend'); if(np) np.textContent=n;
+    // Pestaña "Cierre": marca si hay recetas hechas sin cargar en un cierre
+    var sinCerrar=lista.filter(function(r){return r.estado==='hecha' && r.tipo!=='osde' && !r.cierre_fecha;}).length;
+    var nav=document.getElementById('nav-tab-cierre');
+    if(nav){
+      var bd=nav.querySelector('.rs-cierre-badge');
+      if(!bd){ bd=document.createElement('span'); bd.className='rs-cierre-badge'; bd.style.cssText='display:none;margin-left:6px;background:#f59e0b;color:#fff;border-radius:9px;padding:0 6px;font-size:11px;font-weight:800;line-height:17px;'; nav.appendChild(bd); }
+      bd.textContent=sinCerrar; bd.title=sinCerrar+' receta'+(sinCerrar===1?'':'s')+' hecha'+(sinCerrar===1?'':'s')+' sin cerrar';
+      bd.style.display = sinCerrar>0 ? 'inline-block' : 'none';
+    }
   }
   window.rsRefrescar = async function(){
     if(!window._cu) return;
@@ -25250,7 +25276,7 @@ window.cargarProxConsultas = cargarProxConsultas;
     await mutar(function(arr){
       var r=arr.find(function(x){return x.id===id;}); if(!r) return false;
       if(marcar){ r.estado='hecha'; r.hecha_fecha=hoy(); r.hecha_por=quien(); r.rec_id=recIdNuevo||undefined; }
-      else { r.estado='solicitada'; delete r.hecha_fecha; delete r.hecha_por; delete r.rec_id; }
+      else { r.estado='solicitada'; delete r.hecha_fecha; delete r.hecha_por; delete r.rec_id; delete r.cierre_fecha; }
     });
     if(!marcar) espejoBorrar(recIdViejo);
   };
@@ -25291,7 +25317,9 @@ window.cargarProxConsultas = cargarProxConsultas;
       var hecha=r.estado==='hecha';
       var id=esc(r.id);
       var meta = 'Pedida '+fmt(r.creada)+(r.creada_hora?' '+esc(r.creada_hora):'')+(r.creada_por?' · '+esc(r.creada_por):'')
-        + (hecha ? ' · <b style="color:#059669">Hecha '+fmt(r.hecha_fecha)+(r.hecha_por?' ('+esc(r.hecha_por)+')':'')+'</b>' : '');
+        + (hecha ? ' · <b style="color:#059669">Hecha '+fmt(r.hecha_fecha)+(r.hecha_por?' ('+esc(r.hecha_por)+')':'')+'</b>'
+            + (r.tipo==='osde' ? ' · <span style="color:#0369a1">va a Por cobrar OSDE</span>'
+               : (r.cierre_fecha ? ' · <span style="color:#059669">cerrada el '+fmt(r.cierre_fecha)+'</span>' : ' · <b style="color:#b45309">sin cerrar</b>')) : '');
       var medioHtml = r.tipo==='osde'
         ? '<span style="font-size:11px;color:#0369a1">A cobrar a OSDE</span>'
         : '<div class="rs-medio"><select onchange="rsEditar(\''+id+'\',\'medio\',this.value)">'
@@ -25526,6 +25554,35 @@ window.cargarProxConsultas = cargarProxConsultas;
     catch(e){ console.warn('[Cierre] error cargando turnos', e); return {}; }
   }
 
+  // Cargar recetas hechas en el cierre de la fecha elegida (ids=null → todas
+  // las pendientes de cerrar del profesional elegido). Fetch-merge-write.
+  window.cierreAsignarRecetas = async function(ids){
+    var fecha = ($c('cierre-fecha')||{}).value || ciHoy();
+    var prof = ($c('cierre-prof')||{}).value || 'BG';
+    var arr = (await sbGetAgendaConfig('recetas_solicitudes')) || [];
+    var n=0;
+    arr.forEach(function(r){
+      if(!r || r.estado!=='hecha' || r.tipo==='osde' || r.cierre_fecha || r.prof!==prof) return;
+      if(ids && ids.indexOf(r.id)<0) return;
+      r.cierre_fecha = fecha; n++;
+    });
+    if(!n){ cierreCargarDia(); return; }
+    var ok = await sbUpsertAgendaConfig('recetas_solicitudes', arr);
+    if(!ok){ alert('No se pudo guardar. Probá de nuevo.'); return; }
+    if(window.rsRefrescar) window.rsRefrescar();
+    cierreCargarDia();
+  };
+  window.cierreQuitarReceta = async function(id){
+    var arr = (await sbGetAgendaConfig('recetas_solicitudes')) || [];
+    var r = arr.find(function(x){ return x && x.id===id; });
+    if(!r) return;
+    delete r.cierre_fecha;
+    var ok = await sbUpsertAgendaConfig('recetas_solicitudes', arr);
+    if(!ok){ alert('No se pudo guardar. Probá de nuevo.'); return; }
+    if(window.rsRefrescar) window.rsRefrescar();
+    cierreCargarDia();
+  };
+
   // Recetas marcadas como hechas (lista 'recetas_solicitudes').
   async function ciRecetasHechas(filtro){
     var arr = [];
@@ -25574,8 +25631,15 @@ window.cargarProxConsultas = cargarProxConsultas;
     // Recetas (circuito "Recetas solicitadas"): entran al cierre del día en
     // que se marcaron hechas. Las particulares suman al total (y pagan el
     // mismo % de alquiler que las consultas); las OSDE van a "Por cobrar".
-    var recetasDia = await ciRecetasHechas(function(r){ return r.hecha_fecha===fecha && r.prof===prof; });
-    var recPartDia = recetasDia.filter(function(r){ return r.tipo!=='osde'; });
+    // Particulares: entran al cierre del día al que se CARGARON (cierre_fecha),
+    // no necesariamente el día en que se hicieron. OSDE: se listan el día en
+    // que se hicieron (su cobro va a "Por cobrar").
+    var todasHechasProf = await ciRecetasHechas(function(r){ return r.prof===prof; });
+    var recPartDia = todasHechasProf.filter(function(r){ return r.tipo!=='osde' && r.cierre_fecha===fecha; });
+    var recOsdeDia = todasHechasProf.filter(function(r){ return r.tipo==='osde' && r.hecha_fecha===fecha; });
+    var recetasDia = recPartDia.concat(recOsdeDia);
+    var recSinCerrar = todasHechasProf.filter(function(r){ return r.tipo!=='osde' && !r.cierre_fecha; })
+      .sort(function(a,b){ return (a.hecha_fecha||'').localeCompare(b.hecha_fecha||''); });
     var recTotal = 0;
     recPartDia.forEach(function(r){
       var m = Number(r.monto)||0; recTotal += m;
@@ -25595,7 +25659,7 @@ window.cargarProxConsultas = cargarProxConsultas;
       delDia:delDia, vistos:vistos, ausentes:ausentes, noOsdeDelDia:noOsdeDelDia,
       flujo:flujo, totalDia:totalDia, alquiler:alquiler, profShare:profShare,
       officeHeld:officeHeld, profHeld:profHeld, settlement:settlement,
-      recetasDia:recetasDia, recPartDia:recPartDia, recTotal:recTotal
+      recetasDia:recetasDia, recPartDia:recPartDia, recTotal:recTotal, recSinCerrar:recSinCerrar
     };
   }
 
@@ -25631,21 +25695,47 @@ window.cargarProxConsultas = cargarProxConsultas;
     if($c('ci-kpi-bruto')) $c('ci-kpi-bruto').textContent = ciMoneda(totalDia);
     if($c('ci-kpi-bruto-sub')) $c('ci-kpi-bruto-sub').textContent = noOsdeDelDia.length+' turno'+(noOsdeDelDia.length===1?'':'s')+' particular'+(noOsdeDelDia.length===1?'':'es')
       + (r.recPartDia.length ? ' + '+r.recPartDia.length+' receta'+(r.recPartDia.length===1?'':'s')+' ('+ciMoneda(r.recTotal)+')' : '')+' de este día';
+    // Recetas hechas que todavía no se cargaron en ningún cierre
+    var avisoRec = $c('ci-recetas-sin-cerrar');
+    if(avisoRec){
+      var sc = r.recSinCerrar||[];
+      if(!sc.length){ avisoRec.style.display='none'; avisoRec.innerHTML=''; }
+      else {
+        var esc3 = function(v){ return String(v==null?'':v).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); };
+        var totSc = sc.reduce(function(a,x){ return a+(Number(x.monto)||0); },0);
+        avisoRec.style.display='';
+        avisoRec.innerHTML = '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px">'
+            +'<b style="color:#92400e">💊 '+sc.length+' receta'+(sc.length===1?'':'s')+' hecha'+(sc.length===1?'':'s')+' sin cerrar · '+ciMoneda(totSc)+'</b>'
+            +'<span style="font-size:12px;color:#a16207">Cargalas en el cierre del '+ciFmtFecha(fecha)+' (o elegí otra fecha arriba).</span>'
+            +'<button class="fin-btn-nuevo" style="margin-left:auto;background:#d97706" onclick="cierreAsignarRecetas(null)">Cargar todas en este cierre</button>'
+          +'</div>'
+          + sc.map(function(x){
+              var medio = x.medio==='transferencia' ? '🏦 Transf. ('+(x.receptor==='profesional'?'profesional':'consultorio')+')' : '💵 Efectivo';
+              return '<div style="display:flex;align-items:center;gap:10px;background:#fff;border:1px solid #fde68a;border-radius:10px;padding:7px 12px;margin-top:5px;font-size:12.5px;flex-wrap:wrap">'
+                +'<span style="color:#a16207;min-width:74px">Hecha '+ciFmtFecha(x.hecha_fecha).slice(0,5)+'</span>'
+                +'<b>'+esc3(x.paciente)+'</b><span style="color:var(--text-soft)">'+esc3(x.pide)+'</span>'
+                +'<span style="margin-left:auto">'+ciMoneda(x.monto)+' · '+medio+'</span>'
+                +'<button class="fin-btn-nuevo" style="padding:5px 10px;font-size:12px" onclick="cierreAsignarRecetas([\''+esc3(x.id)+'\'])">Cargar acá</button>'
+                +'</div>';
+            }).join('');
+      }
+    }
     var tablaRec = $c('ci-tabla-recetas');
     if(tablaRec){
       if(!r.recetasDia.length){
-        tablaRec.innerHTML = '<div style="padding:18px;text-align:center;color:var(--text-soft);font-size:13px">Sin recetas hechas este día.</div>';
+        tablaRec.innerHTML = '<div style="padding:18px;text-align:center;color:var(--text-soft);font-size:13px">No hay recetas cargadas en este cierre.</div>';
       } else {
         var esc2 = function(v){ return String(v==null?'':v).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); };
         var mTxt = function(x){ if(x.tipo==='osde') return '—'; return (x.medio==='transferencia') ? '🏦 Transf. ('+(x.receptor==='profesional'?'profesional':'consultorio')+')' : '💵 Efectivo'; };
         var th = function(t,al){ return '<th style="padding:9px 14px;font-size:10.5px;text-transform:uppercase;color:var(--text-soft)'+(al?';text-align:right':'')+'">'+t+'</th>'; };
         var td = function(t,al){ return '<td style="padding:9px 14px;font-size:12.5px'+(al?';text-align:right':'')+'">'+t+'</td>'; };
         tablaRec.innerHTML = '<table style="width:100%;border-collapse:collapse"><thead><tr style="background:var(--gray);text-align:left">'
-          +th('Paciente')+th('Pedido')+th('Tipo')+th('Valor',1)+th('Medio')
+          +th('Paciente')+th('Pedido')+th('Tipo')+th('Valor',1)+th('Medio')+th('')
           +'</tr></thead><tbody>'
           + r.recetasDia.map(function(x){
-              return '<tr>'+td(esc2(x.paciente))+td(esc2(x.pide))+td(x.tipo==='osde'?'🏥 OSDE':'💊 Particular')
-                +td(x.tipo==='osde'?'<span style="color:var(--blue)">a cobrar</span>':ciMoneda(x.monto),1)+td(mTxt(x))+'</tr>';
+              var quitar = x.tipo==='osde' ? '' : '<button title="Sacar de este cierre (vuelve a pendientes de cerrar)" style="background:none;border:1px solid var(--border);border-radius:6px;padding:3px 8px;font-size:11px;cursor:pointer;color:var(--text-soft)" onclick="cierreQuitarReceta(\''+esc2(x.id)+'\')">Quitar</button>';
+              return '<tr>'+td(esc2(x.paciente))+td(esc2(x.pide)+(x.hecha_fecha&&x.hecha_fecha!==fecha?' <span style="color:var(--text-soft);font-size:11px">(hecha '+ciFmtFecha(x.hecha_fecha).slice(0,5)+')</span>':''))+td(x.tipo==='osde'?'🏥 OSDE':'💊 Particular')
+                +td(x.tipo==='osde'?'<span style="color:var(--blue)">a cobrar</span>':ciMoneda(x.monto),1)+td(mTxt(x))+td(quitar)+'</tr>';
             }).join('')
           +'</tbody></table>';
       }
