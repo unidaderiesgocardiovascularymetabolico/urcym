@@ -21191,17 +21191,31 @@ function openReprog(key){
     return btn;
   }
 
+  // Horarios de un día según los bloques de disponibilidad que valen ESE día
+  // (cada bloque con su propia duración: 30, 45, etc.)
+  function slotsDelDia(ds){
+    var set={};
+    dispBlocks.forEach(function(b){
+      if(b.prof!==prof||!isBlockActiveOnDate(b,ds))return;
+      var d=b.dur||(PROF_45.indexOf(prof)>=0?45:30);
+      makeSlotsForDur(getEffectiveFrom(b,ds),getEffectiveTo(b,ds),d).forEach(function(s){set[s]=true;});
+    });
+    return Object.keys(set).sort().filter(function(tm){
+      if(getBlocksAt(nlBlocks,ds,tm,prof).length)return false;
+      if(blockedSlots[ds+'_'+tm+'_'+prof])return false;
+      return true;
+    });
+  }
+
   function buildWeekSection(weekBase,sectionLabel){
     var secItems=[];
+    var hoyStr=kd(new Date());
     for(var di=0;di<6;di++){
       var d=addDays(weekBase,di);
       var ds=kd(d);
-      if(ds<kd(new Date()))continue;
+      if(ds<hoyStr)continue;
       if(_esSecretariaLogueada() && ds<AGENDA_FECHA_MIN_SECRETARIA)continue;
-      var slotsDisp=slots.filter(function(tm){
-        return getBlocksAt(dispBlocks,ds,tm,prof).length>0&&
-               !getBlocksAt(nlBlocks,ds,tm,prof).length;
-      });
+      var slotsDisp=slotsDelDia(ds);
       if(!slotsDisp.length)continue;
       var dayDiv=document.createElement('div');
       dayDiv.className='ag-reprog-day';
@@ -21213,60 +21227,62 @@ function openReprog(key){
       var slotsWrap=document.createElement('div');
       slotsWrap.className='ag-reprog-slots';
       slotsDisp.forEach(function(tm){
-        slotsWrap.appendChild(buildSlotBtn(ds,tm,prof,key));
+        var btn=buildSlotBtn(ds,tm,prof,key);
+        // El horario actual del turno
+        if(key===ds+'_'+tm+'_'+prof||key===ds+'_'+tm){
+          btn.className='ag-reprog-slot ocupado'; btn.title='Horario actual de este turno';
+          btn.style.outline='2px solid #185FA5';
+          var nb=btn.cloneNode(true); btn=nb;
+        }
+        slotsWrap.appendChild(btn);
       });
       dayDiv.appendChild(slotsWrap);
       secItems.push(dayDiv);
     }
-    if(!secItems.length)return null;
     var wrap=document.createElement('div');
     var secHead=document.createElement('div');
-    secHead.style.cssText='font-size:11px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:#185FA5;background:#E6F1FB;padding:5px 10px;border-radius:6px;margin-bottom:8px;margin-top:4px;';
+    secHead.style.cssText='font-size:11px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:#185FA5;background:#E6F1FB;padding:5px 10px;border-radius:6px;margin-bottom:8px;margin-top:8px;';
     secHead.textContent=sectionLabel;
     wrap.appendChild(secHead);
+    if(!secItems.length){
+      var no=document.createElement('div');
+      no.style.cssText='font-size:12px;color:#9ca3af;padding:4px 10px 8px;font-style:italic;';
+      no.textContent='Sin disponibilidad esta semana';
+      wrap.appendChild(no);
+    }
     secItems.forEach(function(el){wrap.appendChild(el);});
     return wrap;
   }
 
-  // Siempre usar la semana actual (no la que se está viendo en pantalla)
-  var realMonday=getMonday(new Date());
-  var thisWeek=buildWeekSection(realMonday,'Esta semana');
-  var nextWeekBase=getMonday(addDays(new Date(),7));
-  var nextWeek=buildWeekSection(nextWeekBase,'Próxima semana');
-
-  if(thisWeek){
-    container.appendChild(thisWeek);
-  } else {
-    var noThisWk=document.createElement('div');
-    noThisWk.style.cssText='font-size:12px;color:#9ca3af;padding:8px 10px 4px;font-style:italic;';
-    noThisWk.textContent='Sin disponibilidad esta semana';
-    var lbl=document.createElement('div');
-    lbl.style.cssText='font-size:11px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:#185FA5;background:#E6F1FB;padding:5px 10px;border-radius:6px;margin-bottom:4px;';
-    lbl.textContent='Esta semana';
-    var wrap0=document.createElement('div');
-    wrap0.appendChild(lbl);
-    wrap0.appendChild(noThisWk);
-    container.appendChild(wrap0);
+  // Semana inicial: la del turno (o la primera permitida), nunca antes de hoy
+  var _hoyMon=getMonday(new Date());
+  var _minMon=_hoyMon;
+  if(_esSecretariaLogueada()){
+    var _secMon=getMonday(new Date(AGENDA_FECHA_MIN_SECRETARIA+'T00:00:00'));
+    if(_secMon>_minMon)_minMon=_secMon;
   }
+  var _turnoMon=getMonday(new Date(key.split('_')[0]+'T00:00:00'));
+  var baseMon=_turnoMon>_minMon?_turnoMon:_minMon;
 
-  if(nextWeek){
-    container.appendChild(nextWeek);
-  } else {
-    var noNextWk=document.createElement('div');
-    noNextWk.style.cssText='font-size:12px;color:#9ca3af;padding:8px 10px 4px;font-style:italic;';
-    noNextWk.textContent='Sin disponibilidad la próxima semana';
-    var lbl2=document.createElement('div');
-    lbl2.style.cssText='font-size:11px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:#185FA5;background:#E6F1FB;padding:5px 10px;border-radius:6px;margin-bottom:4px;margin-top:8px;';
-    lbl2.textContent='Próxima semana';
-    var wrap1=document.createElement('div');
-    wrap1.appendChild(lbl2);
-    wrap1.appendChild(noNextWk);
-    container.appendChild(wrap1);
+  function fmtSem(m){var e=addDays(m,5);return m.getDate()+'/'+(m.getMonth()+1)+' al '+e.getDate()+'/'+(e.getMonth()+1);}
+  function pintar(){
+    container.innerHTML='';
+    var nav=document.createElement('div');
+    nav.style.cssText='display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:4px;';
+    var bPrev=document.createElement('button'), bNext=document.createElement('button');
+    [bPrev,bNext].forEach(function(bt){bt.type='button';bt.style.cssText='border:1px solid #d1d5db;background:#fff;border-radius:8px;padding:5px 12px;font-size:12px;cursor:pointer;font-family:inherit;color:#374151;';});
+    bPrev.textContent='‹ Semanas anteriores'; bNext.textContent='Semanas siguientes ›';
+    var puedeAtras=addDays(baseMon,-7)>=_minMon;
+    bPrev.disabled=!puedeAtras; if(!puedeAtras)bPrev.style.opacity='.4';
+    bPrev.onclick=function(){ if(addDays(baseMon,-7)>=_minMon){ baseMon=addDays(baseMon,-14); if(baseMon<_minMon)baseMon=_minMon; pintar(); } };
+    bNext.onclick=function(){ baseMon=addDays(baseMon,14); pintar(); };
+    nav.appendChild(bPrev); nav.appendChild(bNext);
+    container.appendChild(nav);
+    container.appendChild(buildWeekSection(baseMon,'Semana del '+fmtSem(baseMon)));
+    var m2=addDays(baseMon,7);
+    container.appendChild(buildWeekSection(m2,'Semana del '+fmtSem(m2)));
   }
-
-  if(!container.children.length){
-    container.innerHTML='<p style="font-size:12px;color:#9ca3af;text-align:center;padding:1rem 0;">Sin disponibilidad en las próximas semanas.</p>';
-  }
+  pintar();
   document.getElementById('ag-reprog-bg').style.display='flex';
 }
 
