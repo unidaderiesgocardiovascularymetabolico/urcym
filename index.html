@@ -1713,10 +1713,11 @@
           </div>
           <div class="ag-form-row" id="ag-monto-row" style="display:none">
             <label style="display:flex;align-items:center;justify-content:space-between;">
-              <span>Monto total ($)</span>
+              <span>Total de la consulta ($)</span>
               <span id="ag-monto-hint" style="font-size:10px;color:#6b7280;font-weight:400;"></span>
             </label>
             <input type="number" id="ag-f-monto" placeholder="0" min="0" style="border:1.5px solid #1D9E75;">
+            <div id="ag-pago-resumen" style="display:none;margin-top:6px;padding:7px 10px;border-radius:8px;background:#ecfdf5;border:1px solid #a7f3d0;font-size:12.5px;color:#065f46;line-height:1.45"></div>
           </div>
           <div class="ag-form-row-2" id="ag-saldo-medio-row" style="display:none">
             <div class="ag-form-row" style="margin-bottom:0">
@@ -2049,7 +2050,7 @@
           <div class="cierre-kpi-group-title">👤 En manos del profesional ahora</div>
           <div class="cierre-grid" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr))">
             <div class="fin-kpi"><div class="fin-kpi-label">🏦 Transferencia</div><div class="fin-kpi-val" id="ci-kpi-transf-prof">—</div></div>
-            <div class="fin-kpi"><div class="fin-kpi-label">🏥 OSDE (a cobrar)</div><div class="fin-kpi-val" id="ci-kpi-osde">—</div><div class="fin-kpi-sub" id="ci-kpi-osde-sub"></div></div>
+            <div class="fin-kpi" id="ci-kpi-recpend-card" title="Recetas cobradas/hechas que todavía no se cargaron en ningún cierre"><div class="fin-kpi-label">💊 Recetas por cargar al cierre</div><div class="fin-kpi-val" id="ci-kpi-recpend">—</div><div class="fin-kpi-sub" id="ci-kpi-recpend-sub"></div></div>
           </div>
         </div>
 
@@ -19819,6 +19820,71 @@ document.addEventListener('click',function(e){
   if(ctxMenu&&!ctxMenu.contains(e.target))closeCtxMenu();
 });
 
+
+// ── "Pagó total": cartelito para indicar cómo pagó ──────────────────────────
+function agPopupMedioPago(key,x,y,modo){
+  var esSena = modo==='sena';
+  var old=document.getElementById('ag-medio-pop'); if(old) old.remove();
+  var t=turnos[key]; if(!t) return;
+  var ds=key.split('_')[0];
+  var total=Number(t.monto)||getArancel(t.prof,ds)||0;
+  var sena=Number(t.sena_monto)||Number(t.sena)||0;
+  if(esSena && !sena && total>0) sena=Math.round(total/2); // seña por defecto: 50% del arancel
+  var resto=Math.max(total-sena,0);
+  var f=function(n){return '$'+Math.round(n).toLocaleString('es-AR');};
+  var pop=document.createElement('div');
+  pop.id='ag-medio-pop';
+  pop.style.cssText='position:fixed;z-index:20001;background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:12px;width:250px;box-shadow:0 8px 24px rgba(0,0,0,.16);font-family:inherit;font-size:13px;';
+  pop.innerHTML='<div style="font-weight:700;color:#111827;margin-bottom:2px">'+(esSena?'¿Cómo dejó la seña?':'¿Cómo pagó?')+'</div>'
+    +(esSena?'<div style="font-size:12px;color:#6b7280;margin-bottom:10px">'+(sena>0?('Seña '+f(sena)+(total>0?' <span style="color:#9ca3af">(50% de '+f(total)+')</span>':'')):'')+'</div>':'')
+    +(esSena?'':'<div style="font-size:12px;color:#6b7280;margin-bottom:10px">'+(total>0?(sena>0?('Resto '+f(resto)+' <span style="color:#9ca3af">(seña '+f(sena)+' · total '+f(total)+')</span>'):('Total '+f(total))):(sena>0?('Ya dejó seña de '+f(sena)):''))+'</div>');
+  var ops=[
+    {m:'efectivo',r:undefined,l:'💵 Efectivo'},
+    {m:'transferencia',r:'consultorio',l:'🏦 Transferencia al consultorio'},
+    {m:'transferencia',r:'profesional',l:'🏦 Transferencia al profesional'}
+  ];
+  ops.forEach(function(o){
+    var b=document.createElement('button');
+    b.type='button'; b.textContent=o.l;
+    b.style.cssText='display:block;width:100%;text-align:left;margin-bottom:6px;padding:8px 10px;border:1px solid #e5e7eb;border-radius:8px;background:#f9fafb;cursor:pointer;font-family:inherit;font-size:13px;color:#1f2937;';
+    b.onmouseenter=function(){b.style.background='#ecfdf5';b.style.borderColor='#6ee7b7';};
+    b.onmouseleave=function(){b.style.background='#f9fafb';b.style.borderColor='#e5e7eb';};
+    b.onclick=function(ev){
+      ev.stopPropagation();
+      var tt=turnos[key]; if(!tt){pop.remove();return;}
+      var _h=new Date(), hoy=_h.getFullYear()+'-'+String(_h.getMonth()+1).padStart(2,'0')+'-'+String(_h.getDate()).padStart(2,'0');
+      if(esSena){
+        tt.pago='señado'; tt.monto=undefined;
+        tt.saldo_medio=undefined; tt.saldo_receptor=undefined; tt.saldo_fecha_cobro=undefined;
+        if(sena>0){ tt.sena=sena; tt.sena_monto=sena; }
+        tt.sena_medio=o.m; tt.sena_receptor=o.r; tt.sena_fecha_cobro=hoy;
+        tt.cobro_fecha=hoy;
+        pop.remove(); saveLocal(); renderGrid(); return;
+      }
+      if(sena>0 && !tt.sena_monto) tt.sena_monto=sena; // la seña se conserva para el cierre
+      tt.pago='pagado';
+      if(!tt.monto && total>0) tt.monto=total;
+      tt.sena='';
+      tt.saldo_medio=o.m; tt.saldo_receptor=o.r; tt.saldo_fecha_cobro=hoy;
+      tt.cobro_fecha=hoy;
+      pop.remove();
+      saveLocal();renderGrid();
+    };
+    pop.appendChild(b);
+  });
+  var c=document.createElement('button'); c.type='button'; c.textContent='Cancelar';
+  c.style.cssText='background:none;border:none;color:#9ca3af;font-size:12px;cursor:pointer;padding:2px 0;font-family:inherit;';
+  c.onclick=function(ev){ev.stopPropagation();pop.remove();};
+  pop.appendChild(c);
+  document.body.appendChild(pop);
+  var W=window.innerWidth,H=window.innerHeight,r=pop.getBoundingClientRect();
+  pop.style.left=Math.max(8,Math.min(x,W-r.width-8))+'px';
+  pop.style.top=Math.max(8,Math.min(y,H-r.height-8))+'px';
+  setTimeout(function(){
+    document.addEventListener('mousedown',function h(e){ if(!pop.contains(e.target)){pop.remove();document.removeEventListener('mousedown',h);} });
+  },0);
+}
+
 function openCtxMenu(e,key){
   e.preventDefault();e.stopPropagation();
   closeCtxMenu();
@@ -19855,18 +19921,20 @@ function openCtxMenu(e,key){
     pago?'#1D9E75':'#374151',
     function(){
       if(!pago){
-        // Marcar como pagado: arancel como monto, limpiar seña
-        turnos[key].pago='pagado';
-        if(!turnos[key].monto){var ar=getArancel(turnos[key].prof, key.split('_')[0]);if(ar>0)turnos[key].monto=ar;}
-        // Si tenía seña, ya está incluida en el monto del arancel — no acumular
-        turnos[key].sena='';
-        var _hoyPagoRapido=new Date();
-        turnos[key].cobro_fecha=_hoyPagoRapido.getFullYear()+'-'+String(_hoyPagoRapido.getMonth()+1).padStart(2,'0')+'-'+String(_hoyPagoRapido.getDate()).padStart(2,'0');
+        // Preguntar cómo pagó (efectivo / transferencia al consultorio o al profesional)
+        var _mr=menu.getBoundingClientRect();
+        agPopupMedioPago(key,_mr.left,_mr.top);
+        return;
       } else {
         // Desmarcar: volver a sin-seña y limpiar monto
-        turnos[key].pago='sin-seña';
-        turnos[key].monto=undefined;
-        turnos[key].cobro_fecha=undefined;
+        var _tt=turnos[key];
+        // Si tenía seña, vuelve a "Con seña"; si no, "Sin seña"
+        var _sm=Number(_tt.sena_monto)||0;
+        _tt.pago=_sm>0?'señado':'sin-seña';
+        if(_sm>0) _tt.sena=_sm;
+        _tt.monto=undefined;
+        _tt.saldo_medio=undefined; _tt.saldo_receptor=undefined; _tt.saldo_fecha_cobro=undefined;
+        _tt.cobro_fecha=_sm>0?(_tt.sena_fecha_cobro||undefined):undefined;
       }
       saveLocal();renderGrid();
     }
@@ -19881,6 +19949,9 @@ function openCtxMenu(e,key){
       var _h=new Date();
       var hoyStr=_h.getFullYear()+'-'+String(_h.getMonth()+1).padStart(2,'0')+'-'+String(_h.getDate()).padStart(2,'0');
       if(!senado){
+        var _mr2=menu.getBoundingClientRect();
+        agPopupMedioPago(key,_mr2.left,_mr2.top,'sena');
+        return;
         var montoSena=Number(tt.sena_monto)||Number(tt.sena)||0;
         if(!montoSena){
           var ar=getArancel(tt.prof, key.split('_')[0]);
@@ -20771,6 +20842,33 @@ function agRecalcSenaSiAuto(){
   var wrap=document.getElementById('ag-saldo-receptor-wrap');
   if(wrap) wrap.style.display = this.value==='transferencia' ? '' : 'none';
 });
+// ── Resumen de pago (Pagado): seña + resto = total, siempre al día ──
+function agActualizarResumenPago(){
+  var pagoSel=document.getElementById('ag-f-pago'), osde=document.getElementById('ag-f-osde');
+  var box=document.getElementById('ag-pago-resumen'), lbl=document.getElementById('ag-saldo-medio-label');
+  if(!pagoSel||!box)return;
+  if(pagoSel.value!=='pagado'||(osde&&osde.checked)){ box.style.display='none'; return; }
+  var total=parseFloat(document.getElementById('ag-f-monto').value)||0;
+  var sena=parseFloat(document.getElementById('ag-f-sena').value)||0;
+  var f=function(n){return '$'+Math.round(n).toLocaleString('es-AR');};
+  var resto=Math.max(total-sena,0);
+  box.style.display='';
+  if(sena>0){
+    box.innerHTML='Seña ya cobrada <b>'+f(sena)+'</b> + resto que paga hoy <b>'+f(resto)+'</b> = total <b>'+f(total)+'</b>'
+      +(sena>total&&total>0?'<br><span style="color:#b91c1c">⚠️ La seña es mayor que el total.</span>':'');
+    if(lbl) lbl.textContent='¿Cómo pagó el resto? ('+f(resto)+')';
+  } else {
+    box.innerHTML='Paga el total hoy: <b>'+f(total)+'</b>';
+    if(lbl) lbl.textContent='¿Cómo pagó? ('+f(total)+')';
+  }
+}
+['ag-f-monto','ag-f-sena'].forEach(function(id){
+  (document.getElementById(id)||{addEventListener:function(){}}).addEventListener('input',function(){ setTimeout(agActualizarResumenPago,0); });
+});
+['ag-f-pago','ag-f-osde','ag-f-prof'].forEach(function(id){
+  (document.getElementById(id)||{addEventListener:function(){}}).addEventListener('change',function(){ setTimeout(agActualizarResumenPago,0); });
+});
+
 // ── Mostrar/ocultar campo Monto y autocompletar al cambiar estado de pago ──
 (document.getElementById('ag-f-pago')||{addEventListener:function(){}}).addEventListener('change', function() {
   var montoRow = document.getElementById('ag-monto-row');
@@ -20975,7 +21073,7 @@ function openModal(ds,time,key,forcedProf,freeTime){
     var _dniH=document.getElementById('ag-f-paciente-dni');if(_dniH)_dniH.value=t.dni_paciente||'';
     document.getElementById('ag-f-prof').value=t.prof||'BG';
     document.getElementById('ag-f-estado').value=t.estado||'';
-    document.getElementById('ag-f-sena').value=t.pago==='pagado'?'':(t.sena||'');
+    document.getElementById('ag-f-sena').value=t.pago==='pagado'?(Number(t.sena_monto)||Number(t.sena)||''):(t.sena||'');
     document.getElementById('ag-f-pago').value=t.pago==='osde'?'sin-seña':(t.pago||'sin-seña');
     agSetMotivosSel(turnoMotivosArr(t));
     document.getElementById('ag-f-osde').checked=t.osde?true:false;
@@ -21007,6 +21105,7 @@ function openModal(ds,time,key,forcedProf,freeTime){
       var saldoLabelE = document.getElementById('ag-saldo-medio-label');
       var saldoRestanteE = Number(t.monto||0) - Number(t.sena_monto||0);
       saldoLabelE.textContent = (t.sena_monto>0) ? ('Medio (resto: $'+saldoRestanteE.toLocaleString('es-AR')+')') : 'Medio (pago total)';
+      setTimeout(agActualizarResumenPago,0);
       document.getElementById('ag-saldo-receptor-wrap').style.display = saldoMedioSelE.value==='transferencia' ? '' : 'none';
     } else {
       montoRowE.style.display='none';
@@ -21026,6 +21125,7 @@ function openModal(ds,time,key,forcedProf,freeTime){
     document.getElementById('ag-monto-row').style.display='none';
     document.getElementById('ag-f-monto').value='';
     document.getElementById('ag-sena-medio-row').style.display='none';
+    setTimeout(agActualizarResumenPago,0);
     document.getElementById('ag-f-sena-medio').value='efectivo';
     document.getElementById('ag-f-sena-receptor').value='consultorio';
     document.getElementById('ag-sena-receptor-wrap').style.display='none';
@@ -21353,7 +21453,9 @@ function openReprog(key){
   // Monto de la seña: preserva el que ya estaba guardado si ahora no hay uno
   // nuevo tipeado (p.ej. turno ya "Pagado" reeditado, donde el input de seña
   // se muestra vacío pero la seña original sigue existiendo para el cierre).
-  var _senaMontoNum = _senaMontoNumPreAbsorcion>0 ? _senaMontoNumPreAbsorcion : (Number(_prevTurnoParaCobro.sena_monto)||0);
+  // Ahora el campo Seña muestra siempre la seña real (también en turnos
+  // "Pagado"), así que lo que diga el campo es lo que vale: vacío = sin seña.
+  var _senaMontoNum = _senaMontoNumPreAbsorcion>0 ? _senaMontoNumPreAbsorcion : 0;
   var _senaMedioVal = (!osdeVal && _senaMontoNum>0) ? (document.getElementById('ag-f-sena-medio').value||'efectivo') : undefined;
   var _senaReceptorVal = (_senaMedioVal==='transferencia') ? (document.getElementById('ag-f-sena-receptor').value||'consultorio') : undefined;
   var _senaFechaCobro;
@@ -25564,7 +25666,7 @@ window.cargarProxConsultas = cargarProxConsultas;
         : '<label class="rs-pago '+(r.pagada?'ok':'falta')+'" title="'+(r.pagada?'Pagó — desmarcar lo saca del Cierre':'Tildar cuando el paciente pagó (pasa al Cierre)')+'">'
             +'<input type="checkbox" '+(r.pagada?'checked':'')+' onchange="rsTogglePagada(\''+id+'\',this.checked)">💲 Pagó</label>';
       var medioHtml = r.tipo==='osde'
-        ? '<span style="font-size:11px;color:#0369a1">A cobrar a OSDE</span>'
+        ? '<span style="font-size:11px;color:#0369a1">🏥 OSDE</span>'
         : '<div class="rs-medio"><select onchange="rsEditar(\''+id+'\',\'medio\',this.value)">'
             +'<option value="efectivo"'+(r.medio!=='transferencia'?' selected':'')+'>💵 Efectivo</option>'
             +'<option value="transferencia"'+(r.medio==='transferencia'?' selected':'')+'>🏦 Transf.</option></select>'
@@ -25962,8 +26064,19 @@ window.cargarProxConsultas = cargarProxConsultas;
     if($c('ci-kpi-efectivo')) $c('ci-kpi-efectivo').textContent = ciMoneda(flujo.efectivo);
     if($c('ci-kpi-transf-cons')) $c('ci-kpi-transf-cons').textContent = ciMoneda(flujo.tConsultorio);
     if($c('ci-kpi-transf-prof')) $c('ci-kpi-transf-prof').textContent = ciMoneda(flujo.tProfesional);
-    if($c('ci-kpi-osde')) $c('ci-kpi-osde').textContent = ciMoneda(flujo.osde);
-    if($c('ci-kpi-osde-sub')) $c('ci-kpi-osde-sub').textContent = r.osdeDelDia.length+' consulta'+(r.osdeDelDia.length===1?'':'s')+' × '+ciMoneda(r.tarifaOsde)+(r.recOsdeDia.length?' + '+r.recOsdeDia.length+' receta'+(r.recOsdeDia.length===1?'':'s'):'');
+    // Recetas pendientes de cargar al cierre (reemplaza la tarjeta "OSDE a cobrar":
+    // el OSDE se cierra en el día igual, aunque se cobre después)
+    (function(){
+      var sc=r.recSinCerrar||[], card=$c('ci-kpi-recpend-card'), v=$c('ci-kpi-recpend'), sub=$c('ci-kpi-recpend-sub');
+      var tot=sc.reduce(function(a,x){ return a+(Number(x.monto)||0); },0);
+      if(v) v.textContent = sc.length ? ciMoneda(tot) : '—';
+      if(sub) sub.innerHTML = sc.length
+        ? sc.length+' receta'+(sc.length===1?'':'s')+' cobrada'+(sc.length===1?'':'s')+' · <a href="#" style="color:#b45309" onclick="event.preventDefault();var a=document.getElementById(\'ci-recetas-sin-cerrar\');if(a)a.scrollIntoView({behavior:\'smooth\',block:\'center\'});">ver detalle</a>'
+          +'<div style="margin-top:8px"><button class="fin-btn-nuevo" style="background:#d97706;padding:6px 12px;font-size:12px" onclick="cierreAsignarRecetas(null)">💊 Liquidar en este cierre</button></div>'
+        : 'Nada pendiente';
+      if(card){ card.style.background = sc.length ? '#fffbeb' : ''; }
+    })();
+    if(false && $c('ci-kpi-osde-sub')) $c('ci-kpi-osde-sub').textContent = r.osdeDelDia.length+' consulta'+(r.osdeDelDia.length===1?'':'s')+' × '+ciMoneda(r.tarifaOsde)+(r.recOsdeDia.length?' + '+r.recOsdeDia.length+' receta'+(r.recOsdeDia.length===1?'':'s'):'');
     if($c('ci-kpi-bruto')) $c('ci-kpi-bruto').textContent = ciMoneda(totalDia);
     if($c('ci-kpi-bruto-sub')) $c('ci-kpi-bruto-sub').textContent = noOsdeDelDia.length+' particular'+(noOsdeDelDia.length===1?'':'es')+' ('+ciMoneda(r.consultasPart)+')'
       + ' + '+r.osdeDelDia.length+' OSDE ('+ciMoneda(r.consultasOsde)+')'
@@ -25999,7 +26112,7 @@ window.cargarProxConsultas = cargarProxConsultas;
         tablaRec.innerHTML = '<div style="padding:18px;text-align:center;color:var(--text-soft);font-size:13px">No hay recetas cargadas en este cierre.</div>';
       } else {
         var esc2 = function(v){ return String(v==null?'':v).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); };
-        var mTxt = function(x){ if(x.tipo==='osde') return '🏥 A cobrar OSDE'; return (x.medio==='transferencia') ? '🏦 Transf. ('+(x.receptor==='profesional'?'profesional':'consultorio')+')' : '💵 Efectivo'; };
+        var mTxt = function(x){ if(x.tipo==='osde') return '🏥 OSDE'; return (x.medio==='transferencia') ? '🏦 Transf. ('+(x.receptor==='profesional'?'profesional':'consultorio')+')' : '💵 Efectivo'; };
         var th = function(t,al){ return '<th style="padding:9px 14px;font-size:10.5px;text-transform:uppercase;color:var(--text-soft)'+(al?';text-align:right':'')+'">'+t+'</th>'; };
         var td = function(t,al){ return '<td style="padding:9px 14px;font-size:12.5px'+(al?';text-align:right':'')+'">'+t+'</td>'; };
         tablaRec.innerHTML = '<table style="width:100%;border-collapse:collapse"><thead><tr style="background:var(--gray);text-align:left">'
@@ -26037,7 +26150,7 @@ window.cargarProxConsultas = cargarProxConsultas;
           var tipoLbl = osde ? '<span style="color:#0369a1;font-weight:600">🏥 OSDE</span>' : '<span style="font-weight:600">👤 Particular</span>';
           var pagoLbl = osde ? '—' : ({pagado:'✅ Pagado', 'señado':'🔶 Señado', 'sin-seña':'⬜ Sin seña'}[t.pago]||t.pago||'—');
           var montoTxt = (osde && aus) ? '<span style="color:var(--text-soft)">$0 (ausente)</span>' : ciMoneda(t._montoCierre||0);
-          var medioCelda = osde ? '<span style="color:#0369a1">A cobrar OSDE</span>'
+          var medioCelda = osde ? '<span style="color:#0369a1">🏥 OSDE</span>'
             : (t.pago==='pagado' ? medioTxt(t.saldo_medio, t.saldo_receptor) : (t.pago==='señado' ? medioTxt(t.sena_medio, t.sena_receptor) : '—'));
           var asistTxt = aus ? '<span style="color:var(--red)">Ausente</span>'
             : (t.asistencia==='atendido'||t.asistencia==='asistio') ? '<span style="color:#1D9E75">Atendido</span>'
@@ -26170,7 +26283,7 @@ window.cargarProxConsultas = cargarProxConsultas;
       doc.setFont('helvetica','normal'); doc.setFontSize(9);
       doc.setTextColor(...OSCURO);
       doc.text('Transferencia: '+ciMoneda(r.flujo.tProfesional), x2+5, y+14.5);
-      doc.text('OSDE (a cobrar): '+ciMoneda(r.flujo.osde), x2+5, y+20.5);
+      doc.text('OSDE: '+ciMoneda(r.flujo.osde), x2+5, y+20.5);
       doc.setFont('helvetica','bold'); doc.setFontSize(11);
       doc.setTextColor(...TEAL_TXT);
       doc.text('Total: '+ciMoneda(r.profHeld), x2+5, y+27);
@@ -26279,7 +26392,7 @@ window.cargarProxConsultas = cargarProxConsultas;
       r.delDia.forEach(function(t, i){
         nuevaHojaSiHaceFalta(tituloPac);
         var osde = esOsde(t), aus = t.asistencia==='ausente';
-        var medio = osde ? 'A cobrar OSDE'
+        var medio = osde ? 'OSDE'
           : (t.pago==='pagado' ? medioPdf(t.saldo_medio||'efectivo', t.saldo_receptor) : (t.pago==='señado' ? medioPdf(t.sena_medio||'efectivo', t.sena_receptor) : 'Sin pago'));
         var monto = ciMoneda(t._montoCierre||0) + (aus ? ' (ausente)' : '');
         filaTabla(i+1, t._hora, t.paciente, osde?'OSDE':'Particular', medio, monto, aus);
@@ -26296,7 +26409,7 @@ window.cargarProxConsultas = cargarProxConsultas;
         encabezadoTabla(tituloRec);
         r.recetasDia.forEach(function(x, i){
           nuevaHojaSiHaceFalta(tituloRec);
-          var medio = x.tipo==='osde' ? 'A cobrar OSDE' : medioPdf(x.medio||'efectivo', x.receptor);
+          var medio = x.tipo==='osde' ? 'OSDE' : medioPdf(x.medio||'efectivo', x.receptor);
           filaTabla(i+1, x.hecha_fecha ? ciFmtFecha(x.hecha_fecha).slice(0,5) : '', x.paciente, x.tipo==='osde'?'OSDE':'Particular', medio, ciMoneda(x._montoCierre!=null?x._montoCierre:x.monto));
         });
         y += 4;
