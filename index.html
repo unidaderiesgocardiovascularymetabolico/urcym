@@ -7951,12 +7951,24 @@ function _pdfHeader(doc, u, PW, ML) {
 /* ─────────────────────────────────────────────────── */
 /*  BARRA DE PACIENTE                                  */
 /* ─────────────────────────────────────────────────── */
+/* Nombre del paciente para la barra del PDF: une espacios/saltos de línea
+   (p. ej. "Silva\ncarlos" cargado con Enter) en una sola línea y achica la
+   letra si hace falta para que no pise la fecha de la derecha. */
+function _pdfNombrePacienteLinea(doc, p, maxW) {
+  const limpiar = t => String(t || '').replace(/\s+/g, ' ').trim();
+  const ap = limpiar(p.apellido), nom = limpiar(p.nombre);
+  const nombre = ((ap ? ap.toUpperCase() + ', ' : '') + nom).trim();
+  let fs = 13;
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(fs);
+  while (maxW && fs > 8 && doc.getTextWidth(nombre) > maxW) { fs -= 0.5; doc.setFontSize(fs); }
+  return nombre;
+}
+
 function _pdfPatientBar(doc, p, fechaStr, PW, ML, MR, headerEndY) {
   // Posicionado justo debajo del header
   const bY = headerEndY || 30, bH = 13;
 
-  const nombre = ((p.apellido ? p.apellido.toUpperCase() + ', ' : '') + (p.nombre || '')).trim();
-  doc.setFont('helvetica', 'bold'); doc.setFontSize(13);
+  const nombre = _pdfNombrePacienteLinea(doc, p, PW - ML - MR - 8 - 30);
   doc.setTextColor(..._C.oscuro);
   doc.text(nombre, ML + 4, bY + 6.5);
 
@@ -8031,6 +8043,12 @@ function _alturaFirmaMM(firmaKey) {
 // Si en el futuro se agrega un cuarto lugar que dibuje texto largo en un PDF,
 // debe llamar a esta función — no copiar la cuenta "PH - footerHPie - 4" de nuevo.
 function _pdfMaxYTexto(PH, footerHPie) {
+  // Deja lugar para el aviso "( continúa en la página siguiente )", que va en
+  // _pdfContinuaY: el último renglón nunca puede quedar debajo de ese aviso.
+  return PH - footerHPie - 10;
+}
+// Y (baseline) del aviso "( continúa en la página siguiente )".
+function _pdfContinuaY(PH, footerHPie) {
   return PH - footerHPie - 4;
 }
 
@@ -8049,6 +8067,19 @@ function _dibujarSegmentosPDF(doc, segments, opts) {
   // (líneas en blanco) en uno solo. Si se pasa false, se respetan tal cual los
   // tipeó el usuario (incluidos los renglones en blanco entre párrafos).
   const collapseBlankLines = opts.collapseBlankLines !== false;
+  // dryRun: solo mide (no dibuja nada). Se usa para elegir el tamaño de letra
+  // y la ubicación de la firma antes de dibujar de verdad.
+  const dryRun = opts.dryRun === true;
+  // lineLog: si se pasa un array, se registra cada renglón dibujado
+  // { idx, page, y, xEnd } (page es relativo: 1 = hoja donde arrancó).
+  const lineLog = Array.isArray(opts.lineLog) ? opts.lineLog : null;
+  // breakBeforeIndex: fuerza salto de hoja antes de ese renglón (para que la
+  // firma no quede sola en una hoja: se lleva los últimos renglones con ella).
+  const breakBeforeIndex = (typeof opts.breakBeforeIndex === 'number') ? opts.breakBeforeIndex : -1;
+  // parrafoExtra: espacio adicional (fracción de lineH) después de cada Enter.
+  const parrafoExtra = opts.parrafoExtra || 0;
+  let pageNo = 1;
+  let lineasEnHoja = 0;
 
   let segs = segments;
   if (collapseBlankLines) {
@@ -8111,8 +8142,11 @@ function _dibujarSegmentosPDF(doc, segments, opts) {
   if (cur.length) lineas.push({ words: cur, forced: true });
 
   // Dibujar cada línea
-  lineas.forEach(function(linea){
-    if (curY > maxY) { curY = addPageFn(); }
+  lineas.forEach(function(linea, idx){
+    if (curY > maxY || (idx === breakBeforeIndex && lineasEnHoja > 0)) {
+      curY = addPageFn(); pageNo++; lineasEnHoja = 0;
+    }
+    lineasEnHoja++;
     if (!linea.words.length) { curY += lineH; return; }
     const widths = linea.words.map(widthOf);
     // Si hay texto agrandado (A+) en la línea, el renglón necesita más alto para no pisar el siguiente.
@@ -8133,6 +8167,8 @@ function _dibujarSegmentosPDF(doc, segments, opts) {
       posiciones.push({ x: x, w: widths[i] });
       x += widths[i] + gapW;
     });
+    if (lineLog) lineLog.push({ idx: idx, page: pageNo, y: curY, xEnd: x - gapW, fs: maxFS });
+    if (dryRun) { curY += efectivoLineH + (linea.forced ? parrafoExtra * lineH : 0); return; }
     // Agrupar palabras consecutivas marcadas con recuadro (▢) y dibujar un solo borde por grupo.
     let gi = 0;
     while (gi < linea.words.length) {
@@ -8164,9 +8200,100 @@ function _dibujarSegmentosPDF(doc, segments, opts) {
         doc.line(pos.x, curY + 0.7, pos.x + pos.w, curY + 0.7);
       }
     });
-    curY += efectivoLineH;
+    curY += efectivoLineH + (linea.forced ? parrafoExtra * lineH : 0);
   });
 
+  if (opts.stats) { opts.stats.pages = pageNo; opts.stats.totalLineas = lineas.length; }
+  return curY;
+}
+
+/* ─────────────────────────────────────────────────── */
+/*  CUERPO DE TEXTO + FIRMA (ajuste automático)        */
+/* ─────────────────────────────────────────────────── */
+// Busca dónde poner la firma abajo a la derecha de la última hoja SIN pisar
+// texto. Primero prueba tamaño completo; si no entra, la reduce un poco (nunca
+// menos del 80%). También puede ir al lado de renglones cortos (el hueco a la
+// derecha de un final de párrafo se aprovecha). Devuelve {FX,FY,FW,FH} o null.
+function _pdfUbicarFirma(firmaKey, lineasUltimaHoja, PW, PH, footerHPie) {
+  if (!firmaKey || firmaKey === 'ninguna') return null;
+  const ratios = { barbara: 558 / 547, omar: 1280 / 876 };
+  const ratio = ratios[firmaKey] || 1;
+  const FW0 = (firmaKey === 'barbara') ? 34 : 40;
+  const MRf = 8, bottom = PH - footerHPie - 2;
+  const escalas = [1, 0.93, 0.86, 0.8];
+  for (let i = 0; i < escalas.length; i++) {
+    const FW = FW0 * escalas[i], FH = FW * ratio;
+    const FX = PW - MRf - FW, FY = bottom - FH;
+    const choca = lineasUltimaHoja.some(function(l){
+      const alto = (l.fs || 9) * 0.3528;
+      const top = l.y - alto, bot = l.y + alto * 0.35;
+      return bot > FY && top < FY + FH && l.xEnd > FX - 3;
+    });
+    if (!choca) return { FX: FX, FY: FY, FW: FW, FH: FH };
+  }
+  return null;
+}
+
+function _pdfDibujarFirmaEn(doc, firmaKey, pos) {
+  const firmaB64 = (firmaKey === 'barbara') ? firmaBarbaraB64
+                 : (firmaKey === 'omar')    ? firmaOmarB64 : null;
+  if (!firmaB64 || !pos) return;
+  try { doc.addImage(firmaB64, 'JPEG', pos.FX, pos.FY, pos.FW, pos.FH, '', 'NONE', 0); } catch(e) {}
+}
+
+// Dibuja el texto y la firma eligiendo el tamaño de letra más grande (de la
+// lista cfg.tamanos) que NO agregue hojas de más, y ubica la firma integrada
+// abajo a la derecha. Si igual la firma necesita hoja nueva, se lleva los
+// últimos renglones para que no quede sola.
+// cfg: { ML, maxWidth, startY, PW, PH, footerHPie, firmaKey, tamanos,
+//        interlineado, addPageFn, startYNuevaPagina, defaultColor, justify,
+//        collapseBlankLines, parrafoExtra }
+// Devuelve el Y final. El pie de la última hoja lo dibuja quien llama.
+function _pdfCuerpoConFirma(doc, segments, cfg) {
+  const tamanos = cfg.tamanos || [9];
+  const inter = cfg.interlineado || 1.5;
+  const maxY = _pdfMaxYTexto(cfg.PH, cfg.footerHPie);
+  const firmaKey = cfg.firmaKey || 'ninguna';
+  const base = {
+    ML: cfg.ML, maxWidth: cfg.maxWidth, startY: cfg.startY, maxY: maxY,
+    defaultColor: cfg.defaultColor, justify: cfg.justify,
+    collapseBlankLines: cfg.collapseBlankLines, parrafoExtra: cfg.parrafoExtra || 0
+  };
+  function medir(fs) {
+    const log = [], stats = {};
+    _dibujarSegmentosPDF(doc, segments, Object.assign({}, base, {
+      fontSize: fs, lineH: fs * 0.3528 * inter, dryRun: true, lineLog: log, stats: stats,
+      addPageFn: function(){ return cfg.startYNuevaPagina; }
+    }));
+    const pages = stats.pages || 1;
+    const ult = log.filter(function(l){ return l.page === pages; });
+    const pos = (firmaKey === 'ninguna') ? {} : _pdfUbicarFirma(firmaKey, ult, cfg.PW, cfg.PH, cfg.footerHPie);
+    return { fs: fs, log: log, pages: pages, pos: pos, total: pages + (pos ? 0 : 1) };
+  }
+  const medidas = tamanos.map(medir);
+  const minTotal = Math.min.apply(null, medidas.map(function(m){ return m.total; }));
+  const elegida = medidas.find(function(m){ return m.total === minTotal; });
+
+  // Si la firma no entra en la última hoja: llevar los últimos renglones
+  // (hasta 3) a la hoja nueva junto con la firma.
+  let breakBeforeIndex = -1;
+  if (!elegida.pos) {
+    const ult = elegida.log.filter(function(l){ return l.page === elegida.pages; });
+    if (ult.length > 3) breakBeforeIndex = ult[ult.length - 3].idx;
+  }
+
+  const fs = elegida.fs;
+  const log = [], stats = {};
+  const curY = _dibujarSegmentosPDF(doc, segments, Object.assign({}, base, {
+    fontSize: fs, lineH: fs * 0.3528 * inter, lineLog: log, stats: stats,
+    addPageFn: cfg.addPageFn, breakBeforeIndex: breakBeforeIndex
+  }));
+  if (firmaKey !== 'ninguna') {
+    const pages = stats.pages || 1;
+    let pos = _pdfUbicarFirma(firmaKey, log.filter(function(l){ return l.page === pages; }), cfg.PW, cfg.PH, cfg.footerHPie);
+    if (!pos) { cfg.addPageFn(); pos = _pdfUbicarFirma(firmaKey, [], cfg.PW, cfg.PH, cfg.footerHPie); }
+    _pdfDibujarFirmaEn(doc, firmaKey, pos);
+  }
   return curY;
 }
 
@@ -8615,6 +8742,7 @@ function generarPDF(tipo) {
 
   // Zona disponible para contenido (hasta la firma, que ahora es más grande)
   const contentMaxY = PH - 90;
+  let _firmaYaDibujada = false;
   const contentH = contentMaxY - cY;
 
   if (tipo === 'receta') {
@@ -8654,14 +8782,13 @@ function generarPDF(tipo) {
       const segments = _parseRichTextSegments(elI, true);
       if (segments.length) {
         let curY = cY + 13;
-        const lineH = 5.6;
         // Casi toda la hoja disponible para el texto en cualquier página;
         // el espacio de la firma se reserva según su tamaño real (ver más abajo).
         const maxYMid = _pdfMaxYTexto(PH, footerHPie);
 
         function _addPageWithHeader() {
           // Indicador "continúa..." al pie de la página actual
-          const continY = usarOtro ? (PH - footerHPie - 7) : (PH - 56 - 2);
+          const continY = usarOtro ? _pdfContinuaY(PH, footerHPie) : (PH - 56 - 2);
           doc.setFont('helvetica', 'italic');
           doc.setFontSize(7);
           doc.setTextColor(140, 140, 155);
@@ -8670,27 +8797,21 @@ function generarPDF(tipo) {
           if (usarOtro) { _pdfFooterOtro(doc, u, PW, PH, direccionPie); } else { _pdfFooter(doc, PW, PH); }
           doc.addPage();
           const newHeaderEndY = usarOtro ? _pdfHeaderOtro(doc, u, PW, ML) : _pdfHeader(doc, u, PW, ML);
-          return newHeaderEndY + 8;
+          return newHeaderEndY + 4;
         }
 
-        curY = _dibujarSegmentosPDF(doc, segments, {
-          ML: ML + 4, maxWidth: W - 8, lineH, fontSize: 8, startY: curY, maxY: maxYMid,
-          addPageFn: _addPageWithHeader, defaultColor: _C.oscuro, collapseBlankLines: false
+        curY = _pdfCuerpoConFirma(doc, segments, {
+          ML: ML + 4, maxWidth: W - 8, startY: curY, PW, PH, footerHPie,
+          firmaKey, tamanos: [10, 9.5, 9, 8.5], interlineado: 1.45, parrafoExtra: 0.2,
+          addPageFn: _addPageWithHeader, startYNuevaPagina: 48,
+          defaultColor: _C.oscuro, collapseBlankLines: false
         });
-
-        // Solo pasa a una página nueva por la firma si el texto realmente
-        // termina invadiendo la zona donde se dibuja (mismo margen de 4mm
-        // que usa _pdfFirma). curY ya representa el renglón real final.
-        if (firmaKey !== 'ninguna') {
-          const alturaFirma = _alturaFirmaMM(firmaKey);
-          const zonaFirmaTop = PH - footerHPie - alturaFirma - 4;
-          if (curY > zonaFirmaTop) { curY = _addPageWithHeader(); }
-        }
+        _firmaYaDibujada = true;
       }
     }
   }
 
-  _pdfFirma(doc, u, PW, PH, ML, firmaKey, footerHPie);
+  if (!_firmaYaDibujada) _pdfFirma(doc, u, PW, PH, ML, firmaKey, footerHPie);
   if (usarOtro) { _pdfFooterOtro(doc, u, PW, PH, direccionPie); } else { _pdfFooter(doc, PW, PH); }
 
   const np = p ? [p.apellido, p.nombre].filter(Boolean).join('_').replace(/\s+/g, '_') || 'doc' : 'doc';
@@ -12161,55 +12282,41 @@ function _crearPDFIndicacionesEvol(txt, usarOtro) {
   const footerHPie = direccionPie ? 24 : 18;
 
   const _hdrY = _pdfHeaderOtro(doc, u, PW, ML);
-  _pdfPatientBar(doc, p, hoy, PW, ML, MR, _hdrY);
+  const _barEnd = _pdfPatientBar(doc, p, hoy, PW, ML, MR, _hdrY);
 
-  let curY = _hdrY + 18;
+  let curY = _barEnd + 1;
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(8);
+  doc.setFontSize(9);
   doc.setTextColor(..._C.oscuro);
-  doc.text('Indicaciones para el paciente:', ML, curY);
+  const _tituloInd = 'Indicaciones para el paciente';
+  doc.text(_tituloInd, ML, curY);
   doc.setLineWidth(0.2); doc.setDrawColor(..._C.gris);
-  doc.line(ML, curY + 2, ML + 62, curY + 2);
+  doc.line(ML, curY + 1.8, ML + doc.getTextWidth(_tituloInd) + 2, curY + 1.8);
   curY += 8;
-
-  const maxYMidEvol = _pdfMaxYTexto(PH, footerHPie);
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8);
-  doc.setTextColor(35, 35, 35);
-  const lineH = 5.6;
 
   function _addIndPage() {
     // Indicador continúa
     doc.setFont('helvetica', 'italic');
     doc.setFontSize(7);
     doc.setTextColor(140, 140, 155);
-    doc.text('( continúa en la página siguiente )', PW / 2, PH - footerHPie - 7, { align: 'center' });
+    doc.text('( continúa en la página siguiente )', PW / 2, _pdfContinuaY(PH, footerHPie), { align: 'center' });
     _pdfFooterOtro(doc, u, PW, PH, direccionPie);
     doc.addPage();
     const newHY = _pdfHeaderOtro(doc, u, PW, ML);
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(8);
-    doc.setTextColor(35, 35, 35);
-    return newHY + 8;
+    return newHY + 4;
   }
 
   const indElRich = document.getElementById('evol_indicaciones_editor');
   const segmentsInd = indElRich ? _parseRichTextSegments(indElRich) : [];
-  curY = _dibujarSegmentosPDF(doc, segmentsInd, {
-    ML, maxWidth: CW - 4, lineH, fontSize: 8, startY: curY, maxY: maxYMidEvol,
-    addPageFn: _addIndPage, defaultColor: [35, 35, 35]
+  // Letra más grande que entre sin agregar hojas de más (10 → 8.5 pt), con
+  // interlineado 1.45 y la firma integrada abajo a la derecha.
+  curY = _pdfCuerpoConFirma(doc, segmentsInd, {
+    ML, maxWidth: CW, startY: curY, PW, PH, footerHPie,
+    firmaKey: _firmaKeyEvol, tamanos: [10, 9.5, 9, 8.5], interlineado: 1.45,
+    parrafoExtra: 0.2, addPageFn: _addIndPage, startYNuevaPagina: 48,
+    defaultColor: [35, 35, 35]
   });
 
-  // La firma solo pasa a una hoja nueva si el texto realmente termina
-  // invadiendo el espacio donde se dibuja (mismo margen de 4mm que usa _pdfFirma).
-  // curY ya representa el renglón real donde terminó el texto.
-  if (_firmaKeyEvol !== 'ninguna') {
-    const alturaFirma = _alturaFirmaMM(_firmaKeyEvol);
-    const zonaFirmaTop = PH - footerHPie - alturaFirma - 4;
-    if (curY > zonaFirmaTop) { curY = _addIndPage(); }
-  }
-
-  _pdfFirma(doc, u, PW, PH, ML, _firmaKeyEvol, footerHPie);
   _pdfFooterOtro(doc, u, PW, PH, direccionPie);
 
   return { doc, filename, hoy };
@@ -27726,7 +27833,7 @@ function generarPDFDocLibre() {
     const { jsPDF } = window.jspdf;
     const u = users[selectedUser];
     const hoy = new Date().toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'});
-    const filename = tipo.replace(/\s+/g,'_') + '_' + p.apellido + '_' + p.nombre + '_' + hoy.replace(/\//g,'-') + '.pdf';
+    const filename = tipo.replace(/\s+/g,'_') + '_' + String(p.apellido||'').replace(/\s+/g,'_') + '_' + String(p.nombre||'').replace(/\s+/g,'_') + '_' + hoy.replace(/\//g,'-') + '.pdf';
 
     const doc = new jsPDF({ unit:'mm', format:'a4', orientation:'portrait' });
     const PW = 210, PH = 297, ML = 12, MR = 12, CW = PW - ML - MR;
@@ -27736,8 +27843,7 @@ function generarPDFDocLibre() {
     // Barra de paciente (con o sin fecha)
     const fechaMostrar = inclFecha ? hoy : '';
     const bY = headerEndY, bH = 13;
-    const nombre = ((p.apellido ? p.apellido.toUpperCase() + ', ' : '') + (p.nombre || '')).trim();
-    doc.setFont('helvetica', 'bold'); doc.setFontSize(13);
+    const nombre = _pdfNombrePacienteLinea(doc, p, CW - 8 - (fechaMostrar ? 30 : 0));
     doc.setTextColor(..._C.oscuro);
     doc.text(nombre, ML + 4, bY + 6.5);
     const fnacPdf = p.fecha_nacimiento || p.fnac || '';
@@ -27773,37 +27879,26 @@ function generarPDFDocLibre() {
     function _addDocLibrePage() {
       doc.setFont('helvetica', 'italic'); doc.setFontSize(7);
       doc.setTextColor(140, 140, 155);
-      doc.text('( continúa en la página siguiente )', PW / 2, PH - footerHPie - 7, { align: 'center' });
+      doc.text('( continúa en la página siguiente )', PW / 2, _pdfContinuaY(PH, footerHPie), { align: 'center' });
       _pdfFooterOtro(doc, u, PW, PH, direccionPie);
       doc.addPage();
       const nHY = _pdfHeaderOtro(doc, u, PW, ML);
-      doc.setFont('helvetica', 'normal'); doc.setFontSize(11);
-      doc.setTextColor(35, 35, 35);
-      return nHY + 8;
+      return nHY + 6;
     }
 
     const segmentsDoc = contenidoEl ? _parseRichTextSegments(contenidoEl, true) : [];
-    curY = _dibujarSegmentosPDF(doc, segmentsDoc, {
-      ML, maxWidth: CW, lineH, fontSize: 11, startY: curY, maxY: maxYMid,
-      addPageFn: _addDocLibrePage, defaultColor: [35, 35, 35],
-      justify: true, collapseBlankLines: false
-    });
 
     // Firma
     const _unameDoc = (u && (u.id || u.name || '')).toLowerCase();
     const _firmaKeyBase = (_unameDoc.includes('omar') || _unameDoc === 'ob') ? 'omar' : 'barbara';
     const firmaKey = inclFirma ? _firmaKeyBase : 'ninguna';
 
-    // Solo pasa a página nueva por la firma si el texto realmente invade esa
-    // zona (mismo margen de 4mm que usa _pdfFirma). curY ya representa el
-    // renglón real final.
-    if (firmaKey !== 'ninguna') {
-      const alturaFirma = _alturaFirmaMM(firmaKey);
-      const zonaFirmaTop = PH - footerHPie - alturaFirma - 4;
-      if (curY > zonaFirmaTop) { curY = _addDocLibrePage(); }
-    }
-
-    _pdfFirma(doc, u, PW, PH, ML, firmaKey, footerHPie);
+    curY = _pdfCuerpoConFirma(doc, segmentsDoc, {
+      ML, maxWidth: CW, startY: curY, PW, PH, footerHPie, firmaKey,
+      tamanos: [11, 10.5, 10], interlineado: 1.5,
+      addPageFn: _addDocLibrePage, startYNuevaPagina: 50,
+      defaultColor: [35, 35, 35], justify: true, collapseBlankLines: false
+    });
     _pdfFooterOtro(doc, u, PW, PH, direccionPie);
 
     doc.save(filename);
