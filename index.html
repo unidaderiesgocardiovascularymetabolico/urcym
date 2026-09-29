@@ -1175,6 +1175,8 @@
     .carga-est-chip{padding:5px 13px;border:1.5px solid var(--blue);border-radius:20px;background:white;font-size:12px;font-weight:600;cursor:pointer;font-family:var(--font-main);color:var(--blue-dark);transition:all .15s}
     .carga-est-chip:hover{background:var(--blue);color:white}
     .carga-est-chip.activa{background:var(--blue);color:white}
+    .carga-est-btn-del{flex:0 0 auto;padding:10px 16px;border:1.5px solid var(--red);border-radius:10px;background:var(--red-light);color:var(--red);font-size:13px;font-weight:600;cursor:pointer;font-family:var(--font-main)}
+    .carga-est-btn-del:hover{background:var(--red);color:white}
     .carga-est-grid{display:grid;grid-template-columns:1fr 1fr;gap:4px 16px}
     .carga-est-grid .form-group{margin-bottom:14px}
     .carga-est-grid .form-group.full{grid-column:1 / -1}
@@ -5038,6 +5040,7 @@
     </div>
 
     <div class="carga-est-footer">
+      <button type="button" class="carga-est-btn-del" id="carga_est_btn_eliminar" onclick="eliminarCargaEstudio()" style="display:none" title="Borrar los datos de este estudio en la fecha seleccionada">🗑️ Eliminar estudio</button>
       <button class="btn btn-secondary" style="flex:1;min-width:120px" onclick="cerrarCargaEstudio()">Cancelar</button>
       <button class="btn btn-teal" style="flex:1;min-width:140px" onclick="guardarCargaEstudio()">💾 Guardar</button>
     </div>
@@ -9276,8 +9279,12 @@ function generarTextoClinico(c, meds) {
     let txt = DX_NAMES[d];
     if(d==='acv'){try{const evs=_safeJ(c.dx_acv_eventos,[]);if(evs.length){txt+=' ('+evs.map(e=>e.tipo+(e.año?' '+e.año:'')).join(', ')+')'}}catch(e){}}
     if(d==='iam'){try{const evs=_safeJ(c.dx_iam_eventos,[]);if(evs.length){txt+=' ('+evs.map(e=>e.tipo+(e.año?' '+e.año:'')).join(', ')+')'}}catch(e){}}
-    if(d==='hta'&&c.dx_hta_fecha){const a=parseInt(c.dx_hta_fecha,10);if(!isNaN(a)){const años=new Date().getFullYear()-a;txt+=' (hace '+(años>0?años+' año'+(años!==1?'s':''):'este año')+')'}}
-    if(d==='obe'&&c.dx_obe_fecha){const a=parseInt(c.dx_obe_fecha,10);if(!isNaN(a)){txt+=' desde '+a;}}
+    if(['hta','obe','dbt2','dbt_otro'].includes(d) && c['dx_'+d+'_fecha']){
+      const _fn = (typeof pacienteActual!=='undefined' && pacienteActual && String(pacienteActual.dni)===String(c.dni_paciente||pacienteActual.dni)) ? pacienteActual.fecha_nacimiento : null;
+      const _t = _dxInicioTexto(c['dx_'+d+'_fecha'], _fn);
+      if(_t) txt += ' de '+_t;
+    }
+    if(d==='dbt_otro' && c.dx_dbt_otro_nota) txt += ' — '+c.dx_dbt_otro_nota;
     if(d==='menopausia'&&c.dx_menopausia_edad)txt+=' (edad diagnóstico: '+c.dx_menopausia_edad+' años)';
     return txt;
   });
@@ -9398,10 +9405,14 @@ function generarTextoCambiosClinicos(nuevo, anterior, medsNuevo, medsAnterior) {
   if(dxBajas.length) lines.push('Se retira diagnóstico de '+listaEsp(dxBajas)+'.');
 
   // Subcampos de diagnósticos ya activos (fecha/nota/eventos) — una oración por cada uno
-  ['hta','obe'].forEach(function(dx){
+  ['hta','obe','dbt2','dbt_otro'].forEach(function(dx){
     if(!nuevo['dx_'+dx]) return;
-    if(anterior['dx_'+dx] && cambio(nuevo['dx_'+dx+'_fecha'], anterior['dx_'+dx+'_fecha']) && txt(nuevo['dx_'+dx+'_fecha']))
-      lines.push('Se actualiza la fecha de diagnóstico de '+DX_ALL_NAMES[dx]+'.');
+    if(cambio(nuevo['dx_'+dx+'_fecha'], anterior['dx_'+dx+'_fecha']) && txt(nuevo['dx_'+dx+'_fecha'])) {
+      const _fn = (typeof pacienteActual!=='undefined' && pacienteActual) ? pacienteActual.fecha_nacimiento : null;
+      const _t = _dxInicioTexto(nuevo['dx_'+dx+'_fecha'], _fn);
+      if(_t) lines.push(DX_ALL_NAMES[dx]+' de '+_t+'.');
+      else if(anterior['dx_'+dx]) lines.push('Se actualiza la fecha de diagnóstico de '+DX_ALL_NAMES[dx]+'.');
+    }
     if(cambio(nuevo['dx_'+dx+'_nota'], anterior['dx_'+dx+'_nota']) && txt(nuevo['dx_'+dx+'_nota']))
       lines.push('Nota sobre '+DX_ALL_NAMES[dx]+': '+txt(nuevo['dx_'+dx+'_nota']));
   });
@@ -9546,6 +9557,9 @@ async function guardarClinica() {
     dx_hta_nota:document.getElementById('dx_hta_nota')?.value||null,
     dx_obe_fecha:document.getElementById('dx_obe_fecha')?.value||null,
     dx_obe_nota:document.getElementById('dx_obe_nota')?.value||null,
+    dx_dbt2_fecha:document.getElementById('dx_dbt2_fecha')?.value||null,
+    dx_dbt_otro_fecha:document.getElementById('dx_dbt_otro_fecha')?.value||null,
+    dx_dbt_otro_nota:document.getElementById('dx_dbt_otro_nota')?.value||null,
     dx_menopausia_edad:document.getElementById('dx_menopausia_edad')?.value||null,
     dx_menopausia_nota:document.getElementById('dx_menopausia_nota')?.value||null,
     alcohol:document.getElementById('hab_alcohol').value!=='no',
@@ -9610,8 +9624,13 @@ async function guardarClinica() {
       else await sb.from('medicacion').insert(medData);
       meds.push(medData);
     }
+    // Si mientras se guardaba (varias escrituras a la base) el usuario cambió de pestaña,
+    // NO hay que tocar nada de la pantalla actual (editor, snapshot, encabezado): son de
+    // OTRO paciente. Antes el texto clínico de este paciente se volcaba en la evolución
+    // del paciente nuevo y el snapshot global quedaba con los datos del anterior.
+    const _mismoPaciente = !!pacienteActual && String(pacienteActual.dni) === String(dni);
     try {
-      const texto = _clinicaAnterior
+      const texto = !_mismoPaciente ? '' : _clinicaAnterior
         ? generarTextoCambiosClinicos(clinicaData, _clinicaAnterior, meds, _medsAnterior)
         : generarTextoClinico(clinicaData, meds);
       if(texto) {
@@ -9636,9 +9655,11 @@ async function guardarClinica() {
         }
       }
     } catch(e) { console.warn('generarTextoClinico:', e); }
-    if (evolClinicaSnapshot?.clinica?.hab_actividad_json)    clinicaData.hab_actividad_json    = evolClinicaSnapshot.clinica.hab_actividad_json;
-    if (evolClinicaSnapshot?.clinica?.hab_alimentacion_json) clinicaData.hab_alimentacion_json = evolClinicaSnapshot.clinica.hab_alimentacion_json;
-    evolClinicaSnapshot = { clinica: clinicaData, medicacion: meds };
+    // Hábitos: tomarlos del snapshot de ESTE paciente (capturado antes de los await)
+    if (_clinicaAnterior?.hab_actividad_json)    clinicaData.hab_actividad_json    = _clinicaAnterior.hab_actividad_json;
+    if (_clinicaAnterior?.hab_alimentacion_json) clinicaData.hab_alimentacion_json = _clinicaAnterior.hab_alimentacion_json;
+    const _snapNuevo = { clinica: clinicaData, medicacion: meds };
+    if(_mismoPaciente) evolClinicaSnapshot = _snapNuevo;
     // Guardar snapshot para que el historial del relojito lo vea.
     // IMPORTANTE: si ya existe una evolución de HOY para este paciente (recién evolucionado,
     // o un guardado previo de este mismo modal), actualizamos esa fila en vez de insertar una
@@ -9653,7 +9674,7 @@ async function guardarClinica() {
         .limit(1);
       if(evolHoy && evolHoy.length) {
         await sb.from('evoluciones').update({
-          clinica_snapshot: JSON.stringify(evolClinicaSnapshot)
+          clinica_snapshot: JSON.stringify(_snapNuevo)
         }).eq('id', evolHoy[0].id);
       }
       // Si NO hay evolución de hoy, no creamos una fila nueva solo para el snapshot:
@@ -9662,9 +9683,11 @@ async function guardarClinica() {
       // quedaron guardados en paciente_clinica (arriba); el snapshot se adjuntará
       // a la evolución real cuando el profesional efectivamente evolucione.
     } catch(snapErr) { console.warn('[guardarClinica] snapshot insert:', snapErr); }
-    cerrarModal('modalClinica');
-    window.actualizarEncabezadoVariable(evolClinicaSnapshot);
-    try { switchPacMainTab('evol'); } catch(e) {}
+    if(_mismoPaciente) {
+      cerrarModal('modalClinica');
+      window.actualizarEncabezadoVariable(_snapNuevo);
+      try { switchPacMainTab('evol'); } catch(e) {}
+    }
   } catch(err) {
     console.error('[guardarClinica] ERROR:', err);
     alert('Error al guardar: ' + (err.message || String(err)));
@@ -9731,12 +9754,25 @@ async function cargarDatosClinica(dni) {
   {const otrosCont=document.getElementById('otros_med_filas');if(otrosCont)otrosCont.innerHTML='';}
   // ─────────────────────────────────────────────────────────────────────────────
 
+  // DBT2 / DBT otro: sus campos de año se crean dinámicamente y antes nunca se limpiaban,
+  // así que el año cargado en un paciente aparecía en el siguiente.
+  if(typeof window.asegurarUIClinica === 'function') window.asegurarUIClinica();
+  ['dbt2','dbt_otro'].forEach(dx=>{
+    const f=document.getElementById('dx_'+dx+'_fecha'); if(f) f.value='';
+    const n=document.getElementById('dx_'+dx+'_nota'); if(n) n.value='';
+    toggleDxExtra(dx); calcDxTiempo(dx);
+  });
   const { data } = await sb.from('paciente_clinica').select('*').eq('dni_paciente',dni).maybeSingle();
   // Guard contra condición de carrera: si mientras esperábamos esta consulta el
   // usuario ya cambió a otra pestaña de paciente, no hay que volcar estos datos
   // (son de OTRO paciente) ni en el formulario ni en evolClinicaSnapshot.
   if(pacienteActual && String(pacienteActual.dni) !== String(dni)) return;
-  if(!data){agregarFilaMed();return;}
+  if(!data){
+    // Paciente sin datos clínicos: si el snapshot global quedó de OTRO paciente, descartarlo
+    if(evolClinicaSnapshot && evolClinicaSnapshot.clinica && evolClinicaSnapshot.clinica.dni_paciente != null &&
+       String(evolClinicaSnapshot.clinica.dni_paciente) !== String(dni)) evolClinicaSnapshot = null;
+    agregarFilaMed(); return;
+  }
   // Actualizar evolClinicaSnapshot con los datos frescos de este paciente
   if(!evolClinicaSnapshot) evolClinicaSnapshot={clinica:{},medicacion:[]};
   evolClinicaSnapshot.clinica = data;
@@ -9745,7 +9781,7 @@ async function cargarDatosClinica(dni) {
   // GPAC
   ['g','p','a','c'].forEach(f=>{const el=document.getElementById('gpac_'+f);if(el&&data['gpac_'+f])el.value=data['gpac_'+f];});
   // Extra dx: HTA, OBE, Menopausia (con fecha/edad)
-  ['hta','obe','menopausia'].forEach(dx=>{
+  ['hta','obe','menopausia','dbt2','dbt_otro'].forEach(dx=>{
     toggleDxExtra(dx);
     const fecha=document.getElementById('dx_'+dx+'_fecha');if(fecha&&data['dx_'+dx+'_fecha'])fecha.value=data['dx_'+dx+'_fecha'];
     const nota=document.getElementById('dx_'+dx+'_nota');if(nota&&data['dx_'+dx+'_nota'])nota.value=data['dx_'+dx+'_nota'];
@@ -9869,11 +9905,61 @@ function guardarLpa(i, campo, val) {
   if(!labDatos.lpa[i]) labDatos.lpa[i] = {};
   labDatos.lpa[i][campo] = val;
   guardarDatosPac('lab_tabla_wrap');
+  volcarLpaAlEditor();
 }
 function borrarLpa(i) {
   if(!labDatos.lpa) return;
   labDatos.lpa.splice(i,1);
   renderLpa(); guardarDatosPac('lab_tabla_wrap');
+  volcarLpaAlEditor();
+}
+
+// ===== VOLCAR Lp(a) A LA EVOLUCIÓN =====
+// La Lp(a) se guarda aparte de la tabla de laboratorio (labDatos.lpa), así que no
+// entraba en el volcado general. Cada vez que se carga/modifica/borra un valor se
+// (re)escribe un único bloque en prosa en el editor de evolución. Umbral: <30 mg/dL
+// o <75 nmol/L (el mismo que usa la evaluación metabólica).
+function volcarLpaAlEditor() {
+  const editor = document.getElementById('evol_editor');
+  if(!editor || !pacienteActual) return;
+  const previo = editor.querySelector('.bloque-alterados[data-tipo="lpa"]');
+  const serie = (labDatos.lpa || []).filter(e => e && e.valor != null && String(e.valor).trim() !== '');
+  if(!serie.length) { if(previo) previo.remove(); return; }
+
+  const frases = serie.map(e => {
+    const u = e.unidad || 'mg/dL';
+    const corte = u === 'nmol/L' ? 75 : 30;
+    const num = parseFloat(String(e.valor).replace(',', '.'));
+    const elevada = !isNaN(num) && num >= corte;
+    const fechaTxt = e.fecha ? ' (' + e.fecha.split('-').reverse().join('/') + ')' : '';
+    const valorHtml = elevada
+      ? '<span style="color:var(--red);font-weight:700">' + escHtml(String(e.valor).trim()) + ' ' + escHtml(u) + '</span>'
+      : escHtml(String(e.valor).trim()) + ' ' + escHtml(u);
+    const estado = isNaN(num) ? '' : (elevada ? ', elevada' : ', dentro del rango de referencia');
+    return 'de ' + valorHtml + fechaTxt + estado;
+  });
+  const unidades = [...new Set(serie.map(e => e.unidad || 'mg/dL'))];
+  const refTxt = unidades.map(u => '<' + (u === 'nmol/L' ? '75' : '30') + ' ' + u).join(' / ');
+  const texto = 'Lp(a) ' + frases.join(', y ') + ' <span style="font-size:9pt;color:#888">(ref. ' + escHtml(refTxt) + ')</span>.';
+
+  const fechaUlt = serie[serie.length - 1].fecha || '';
+  const html = '<div class="bloque-alterados" data-tipo="lpa" data-fecha="' + fechaUlt + '" style="font-family:Arial,sans-serif;font-size:10pt;color:#333;border-left:3px solid var(--red);padding:6px 10px;margin-bottom:10px;line-height:1.8">' +
+    '<span style="color:#334155">' + texto + '</span></div>';
+  const tmp = document.createElement('div'); tmp.innerHTML = html;
+  const nuevo = tmp.firstChild;
+
+  if(previo) { previo.replaceWith(nuevo); }
+  else {
+    // Ubicarlo junto al laboratorio volcado; si no hay, después de los demás bloques / bloque clínico
+    const labs = editor.querySelectorAll('.bloque-alterados[data-tipo="lab"]');
+    const todos = editor.querySelectorAll('.bloque-alterados');
+    const ancla = labs.length ? labs[labs.length - 1]
+                : todos.length ? todos[todos.length - 1]
+                : editor.querySelector('.bloque-clinico');
+    if(ancla) ancla.after(nuevo);
+    else editor.insertBefore(nuevo, editor.firstChild);
+  }
+  _asegurarLineaLibreEvolSinFoco(editor);
 }
 
 function setActiveSidebarLeft(el) {
@@ -10195,6 +10281,62 @@ function _renderCargaEstCampos() {
     }
   }
   cont.innerHTML = html || '<p style="font-size:13px;color:var(--text-soft);grid-column:1/-1">Esta categoría no tiene campos editables.</p>';
+  // Botón "Eliminar estudio": solo si en esta fecha ya hay datos cargados de esta categoría
+  const btnDel = document.getElementById('carga_est_btn_eliminar');
+  if(btnDel) {
+    const fechasConDatos = _fechasConDatosCategoriaEst(_cargaEstStartFi, _cargaEstEndFi);
+    btnDel.style.display = fechasConDatos.includes(fecha) ? '' : 'none';
+  }
+}
+
+// ===== ELIMINAR UN ESTUDIO CARGADO =====
+// Borra los valores de UNA categoría (ej: "ECOCARDIO") en la fecha seleccionada.
+// Los demás estudios de esa misma fecha no se tocan. Si la columna queda
+// completamente vacía, se elimina. Si el estudio ya había sido volcado a la
+// evolución en curso, se actualiza/quita ese texto también.
+function eliminarCargaEstudio() {
+  if(!pacienteActual) return;
+  const fecha = document.getElementById('carga_est_fecha').value;
+  const ci = (estDatos.columnas || []).indexOf(fecha);
+  if(ci < 0) return;
+  const catLabel = document.getElementById('carga_est_titulo').textContent;
+  const fechaFmt = fecha.split('-').reverse().join('/');
+  if(!confirm('¿Eliminar ' + catLabel + ' del ' + fechaFmt + '? Se borrarán todos los valores de este estudio en esa fecha. Esta acción no se puede deshacer.')) return;
+
+  for(let fi = _cargaEstStartFi + 1; fi < _cargaEstEndFi; fi++) {
+    if(estDatos.filas[fi]) estDatos.filas[fi][ci] = '';
+  }
+  calcEstValues(estDatos, EST_FILAS);
+
+  // Si ya no queda ningún dato en esa fecha (ninguna categoría), quitar la columna
+  const colVacia = !(estDatos.filas || []).some(f => f && f[ci] && String(f[ci]).trim() !== '');
+  if(colVacia) {
+    estDatos.columnas.splice(ci, 1);
+    (estDatos.filas || []).forEach(f => { if(f) f.splice(ci, 1); });
+  }
+
+  // Actualizar el texto ya volcado en la evolución (si existía para esa fecha)
+  const editor = document.getElementById('evol_editor');
+  const bloquePrevio = editor && editor.querySelector('.bloque-alterados[data-tipo="est"][data-fecha="' + fecha + '"]');
+  if(bloquePrevio) {
+    bloquePrevio.remove();
+    if(!colVacia) volcarAlteradosAlEditor('est', ci);
+  }
+
+  renderTablaGenerica(estDatos, EST_FILAS, 'evest_wrap');
+  renderEstResumen();
+  sincronizarRO();
+  guardarDatosPac('est_tabla_wrap');
+
+  // Si quedan otras fechas de este estudio, quedarse en el modal en la más reciente; si no, cerrar
+  const restantes = _fechasConDatosCategoriaEst(_cargaEstStartFi, _cargaEstEndFi);
+  if(restantes.length) {
+    document.getElementById('carga_est_fecha').value = restantes[restantes.length - 1];
+    _renderCargaEstCampos();
+  } else {
+    cerrarCargaEstudio();
+  }
+  _toastDocLibre('🗑️ Estudio eliminado');
 }
 
 function guardarCargaEstudio() {
@@ -10351,7 +10493,96 @@ function _asegurarLineaLibreEvolSinFoco(editor) {
 function volcarTodosAlEditor() {
   // Vuelca lab, ant y est de todas las columnas al editor de evolución
   ['lab', 'ant', 'est'].forEach(tipo => volcarAlteradosAlEditor(tipo));
+  volcarLpaAlEditor();
   _asegurarLineaLibreEvol(document.getElementById('evol_editor'));
+}
+
+// ===== REDACCIÓN EN ORACIONES (ESTUDIOS → EVOLUCIÓN) =====
+// En lugar de volcar los estudios como lista (una línea por parámetro), arma un
+// párrafo por estudio en prosa. Ej:
+// "ECOCARDIO: SIV de 12 mm (ref. >11 mm) y FE de 45 % (ref. <50%), con valvulopatía
+//  y disfunción diastólica grado 1. Leve insuficiencia mitral."
+const _EST_LABEL_PROSA = {
+  'eco_Valv':'valvulopatía', 'eco_DD':'disfunción diastólica',
+  'ecg_RS':'ritmo sinusal', 'ecg_Eje':'eje', 'ecg_BAV':'bloqueo AV',
+  'ecg_BRD':'BRD', 'ecg_BRI':'BRI', 'ecg_ESV':'extrasístoles supraventriculares', 'ecg_EV':'extrasístoles ventriculares',
+  'dop_PlacaACID':'placa en carótida interna derecha', 'dop_PlacaACII':'placa en carótida interna izquierda',
+  'dop_PlacaFemD':'placa femoral derecha', 'dop_PlacaFemI':'placa femoral izquierda',
+  'ecoabd_Est':'esteatosis', 'ecoabd_Lit':'litiasis vesicular',
+  'mapa_Patron':'patrón', 'mapa_HTAn':'HTA nocturna', 'mapa_Tomas':'tomas válidas',
+  'ergo_Sint':'síntomas', 'ergo_ECG':'ECG', 'ergo_Arrit':'arritmias'
+};
+const _EST_NOMBRE_PROSA = {
+  'ECOCARDIO':'Ecocardiograma', 'ECG':'ECG', 'DOPPLER CAROTÍDEO':'Doppler carotídeo', 'MAPA':'MAPA',
+  'ECO ABDOMINAL':'Ecografía abdominal', 'ERGOMETRÍA':'Ergometría', 'FONDO DE OJO':'Fondo de ojo',
+  'TC ENCÉFALO':'TC de encéfalo', 'RNM ENCÉFALO':'RMN de encéfalo', 'SPECT CARDÍACO':'SPECT cardíaco',
+  'ECOSTRESS CARDÍACO':'Eco estrés cardíaco', 'SCORE CALCIO CORONARIO':'Score de calcio coronario',
+  'VOP':'VOP', 'CARDIOGRAFÍA':'Cardiografía', 'OTROS':'Otros'
+};
+
+function _unirConY(arr) {
+  if(arr.length <= 1) return arr.join('');
+  return arr.slice(0, -1).join(', ') + ' y ' + arr[arr.length - 1];
+}
+function _capitalizarPrimera(html) {
+  // Capitaliza la primera letra visible (saltando etiquetas HTML al inicio)
+  return html.replace(/^((?:<[^>]+>)*)(\S)/, (m, tags, ch) => tags + ch.toUpperCase());
+}
+function _cerrarOracion(t) {
+  t = (t || '').trim();
+  if(!t) return '';
+  return /[.!?…]$/.test(t) ? t : t + '.';
+}
+
+function _redactarEstudiosEnOraciones(items) {
+  // Agrupar por estudio respetando el orden de aparición
+  const grupos = [];
+  const idx = {};
+  items.forEach(it => {
+    const c = it.cat || 'OTROS';
+    if(!(c in idx)) { idx[c] = grupos.length; grupos.push({cat: c, items: []}); }
+    grupos[idx[c]].items.push(it);
+  });
+
+  const parrafos = grupos.map(g => {
+    const hallazgos = [];   // frases cortas que van en la oración principal
+    const textosLibres = []; // comentarios / notas: oraciones propias
+
+    g.items.forEach(it => {
+      const f = it.fila || {};
+      const labelBase = (_EST_LABEL_PROSA[it.key] || it.label.replace(/\s*\([^)]*\)\s*$/, '')).trim();
+      const val = String(it.val).trim();
+      const esComentario = /^(comentarios?|nota)$/i.test(it.label.trim());
+
+      if(it.tipo === 'alterado') {
+        const u = it.unidad ? (it.unidad === '%' ? '' : ' ') + escHtml(it.unidad) : '';
+        const ref = it.refTxt ? ' <span style="font-size:9pt;color:#888">(ref. ' + escHtml(it.refTxt) + ')</span>' : '';
+        hallazgos.push('<span style="color:var(--red);font-weight:700">' + escHtml(labelBase) + ' de ' + escHtml(val) + u + '</span>' + ref);
+        return;
+      }
+      if(esComentario) { textosLibres.push(escHtml(_cerrarOracion(val))); return; }
+
+      if(f.opciones) {
+        const v = val.toLowerCase();
+        const lbl = escHtml(labelBase);
+        if(v === 'sí' || v === 'si') { hallazgos.push('con ' + lbl); return; }
+        if(v === 'no') { hallazgos.push('sin ' + lbl); return; }
+        if(/^\d+$/.test(val)) { hallazgos.push(lbl + ' grado ' + escHtml(val)); return; }
+        hallazgos.push(lbl + ' ' + escHtml(val.toLowerCase()));
+        return;
+      }
+      // Campo de texto con etiqueta propia (esteatosis, patrón, síntomas…)
+      hallazgos.push(escHtml(labelBase) + ': ' + escHtml(val));
+    });
+
+    const nombre = _EST_NOMBRE_PROSA[g.cat] || g.cat;
+    let texto = '';
+    if(hallazgos.length) texto += _capitalizarPrimera(_unirConY(hallazgos)) + '.';
+    if(textosLibres.length) texto += (texto ? ' ' : '') + textosLibres.map(_capitalizarPrimera).join(' ');
+    return '<span style="color:#1a2535;font-weight:600">' + escHtml(nombre) + ':</span> <span style="color:#334155">' + texto + '</span>';
+  });
+
+  return parrafos.join('<br>');
 }
 
 // ===== VOLCAR ALTERADOS AL EDITOR =====
@@ -10375,8 +10606,10 @@ function volcarAlteradosAlEditor(tipo, columnaIdx) {
   columnasAProcesar.forEach(([fecha, ci]) => {
     // Recopilar ítems: alterados numéricos + notas con valor + extraFilas con valor
     const items = [];
+    let _catActual = '';
     todasFilas.forEach((f, fi) => {
-      if(f.cat || !f.key) return;
+      if(f.cat) { _catActual = f.label; return; }
+      if(!f.key) return;
       const val = (datos.filas[fi] || [])[ci];
       if(!val || val.toString().trim() === '') return;
       const storedU = datos.unidades && datos.unidades[f.key] ? datos.unidades[f.key] : (f.unidades && f.unidades[0]) || '';
@@ -10388,12 +10621,14 @@ function volcarAlteradosAlEditor(tipo, columnaIdx) {
       if(esAlterado) {
         items.push({
           label: f.label, val: val.toString(), unidad: storedU,
-          refTxt: f.refTxt || '', tipo: 'alterado'
+          refTxt: f.refTxt || '', tipo: 'alterado',
+          cat: f.key.startsWith('extra_') ? 'OTROS' : _catActual, key: f.key, fila: f
         });
       } else if(esNota) {
         items.push({
           label: f.label, val: val.toString(), unidad: '',
-          refTxt: '', tipo: 'nota'
+          refTxt: '', tipo: 'nota',
+          cat: f.key.startsWith('extra_') ? 'OTROS' : _catActual, key: f.key, fila: f
         });
       }
     });
@@ -10402,7 +10637,7 @@ function volcarAlteradosAlEditor(tipo, columnaIdx) {
 
     const fechaStr = fecha ? new Date(fecha + 'T12:00:00').toLocaleDateString('es-AR', {day:'2-digit',month:'2-digit',year:'numeric'}) : '';
 
-    const lineas_html = items.map(a => {
+    const lineas_html = tipo === 'est' ? _redactarEstudiosEnOraciones(items) : items.map(a => {
       if(a.tipo === 'alterado') {
         return '<span style="color:var(--red);font-weight:700">⚠️ '+a.label+': '+a.val+(a.unidad?' '+a.unidad:'')+'</span>' +
                (a.refTxt ? ' <span style="font-size:9pt;color:#888">(ref: '+a.refTxt+')</span>' : '');
@@ -10607,6 +10842,14 @@ async function abrirEvolucion(dni) {
   // Limpiar PREVENT solo si es un paciente distinto al que ya estaba abierto
   // Nota: se usa _dniAnterior (capturado antes de pisar pacienteActual) para comparar correctamente
   if(_dniAnterior !== String(p.dni)) {
+    // Pendientes de "Actualización clínica" (hábitos y cambios de tratamiento) son globales:
+    // antes solo se limpiaban si el paciente nuevo NO tenía borrador, así que al volver a una
+    // pestaña con borrador quedaban los del paciente anterior y se guardaban en este.
+    _habDatos = null;
+    updTtoItems = [];
+    if(typeof renderTtoUpd === 'function') renderTtoUpd();
+    { const _sa = document.getElementById('upd_tto_accion'); if(_sa) _sa.value = 'se agrega'; }
+    if(typeof actualizarModoPanelTto === 'function') actualizarModoPanelTto();
     ['prev_edad','prev_sexo','prev_tas','prev_ct','prev_hdl','prev_glu','prev_egfr'].forEach(id=>{
       const el=document.getElementById(id); if(el){el.value='';el.style.background='';el.style.borderColor='';}
     });
@@ -12653,16 +12896,54 @@ function toggleDxExtra(dx) {
   const box = document.getElementById('dx_extra_'+dx);
   if(box) box.style.display = checked ? 'block' : 'none';
 }
+// ===== INICIO DE UNA ENFERMEDAD: AÑO O EDAD =====
+// En los campos de inicio (HTA, Obesidad, DBT2, DBT otro) se puede poner el AÑO
+// (ej: 2012) o la EDAD del paciente en ese momento (ej: 45). Un valor ≥ 1900 se
+// toma como año; uno entre 1 y 120, como edad. Con la fecha de nacimiento se
+// calcula lo que falte y el tiempo de evolución.
+function _dxInicioInfo(val, fnac) {
+  const n = parseInt(String(val == null ? '' : val).trim(), 10);
+  if(isNaN(n) || n <= 0) return null;
+  const hoy = new Date();
+  let nac = null;
+  if(fnac) { const d = new Date(String(fnac).slice(0,10) + 'T12:00:00'); if(!isNaN(d)) nac = d; }
+  const edadHoy = nac ? (hoy.getFullYear() - nac.getFullYear() - ((hoy.getMonth() < nac.getMonth() || (hoy.getMonth() === nac.getMonth() && hoy.getDate() < nac.getDate())) ? 1 : 0)) : null;
+  if(n >= 1900 && n <= hoy.getFullYear() + 1) {
+    const anios = hoy.getFullYear() - n;
+    return { modo:'anio', anio:n, edadDx: nac ? n - nac.getFullYear() : null, anios: anios < 0 ? null : anios };
+  }
+  if(n <= 120) {
+    if(edadHoy != null && n > edadHoy) return { modo:'edad', edadDx:n, anio:null, anios:null, invalido:true };
+    return { modo:'edad', edadDx:n, anio: nac ? nac.getFullYear() + n : null, anios: edadHoy != null ? edadHoy - n : null };
+  }
+  return null;
+}
+function _txtAnios(n) { return n === 0 ? 'menos de 1 año' : n + ' año' + (n !== 1 ? 's' : ''); }
+// Texto para la evolución: "12 años de evolución (desde 2013, a los 43 años)"
+function _dxInicioTexto(val, fnac) {
+  const i = _dxInicioInfo(val, fnac);
+  if(!i || i.invalido) return '';
+  const det = [];
+  if(i.anio) det.push((i.modo === 'edad' ? 'desde ~' : 'desde ') + i.anio);
+  if(i.edadDx != null && i.edadDx >= 0) det.push('a los ' + i.edadDx + ' años');
+  const ev = i.anios != null ? _txtAnios(i.anios) + ' de evolución' : '';
+  if(ev) return ev + (det.length ? ' (' + det.join(', ') + ')' : '');
+  return det.join(', ');
+}
 function calcDxTiempo(dx) {
   const el = document.getElementById('dx_'+dx+'_fecha');
   const out = document.getElementById('dx_'+dx+'_tiempo');
   if(!el||!out) return;
   const f = el.value; if(!f){out.textContent='';return;}
-  const anio = parseInt(f, 10);
-  if(isNaN(anio)||anio<1900||anio>2100){out.textContent='';return;}
-  const ahora = new Date();
-  const años = ahora.getFullYear() - anio;
-  out.textContent = años > 0 ? 'Hace '+años+' año'+(años!==1?'s':'') : años === 0 ? 'Este año' : '';
+  const fnac = (typeof pacienteActual !== 'undefined' && pacienteActual) ? pacienteActual.fecha_nacimiento : null;
+  const i = _dxInicioInfo(f, fnac);
+  if(!i) { out.textContent=''; return; }
+  if(i.invalido) { out.textContent = '⚠️ Edad mayor a la actual'; return; }
+  const partes = [];
+  if(i.anios != null) partes.push(i.anios === 0 ? 'Este año' : 'Hace ' + _txtAnios(i.anios));
+  if(i.modo === 'edad' && i.anio) partes.push('~' + i.anio);
+  if(i.modo === 'anio' && i.edadDx != null && i.edadDx >= 0) partes.push('a los ' + i.edadDx + ' años');
+  out.textContent = partes.join(' · ');
 }
 function actualizarTabaquismo(){
   const val=document.getElementById('hab_tabaquismo').value;
@@ -19024,7 +19305,7 @@ function _obeGenerarHTMLInforme(opts) {
       <div id="dx_extra_hta" style="display:none;background:#f0f4fa;border-radius:10px;padding:10px 14px;margin-top:10px;font-size:12px">
         <div style="font-weight:600;color:var(--blue);margin-bottom:6px">HTA — detalles</div>
         <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
-          <label>Desde (año diagnóstico):<br><input type="number" id="dx_hta_fecha" min="1940" max="2030" placeholder="aaaa" style="margin-top:4px;padding:4px 8px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;width:90px" oninput="calcDxTiempo('hta')"></label>
+          <label>Inicio (año o edad):<br><input type="number" id="dx_hta_fecha" min="0" max="2100" placeholder="año o edad" title="Año (ej: 2012) o edad del paciente al diagnóstico (ej: 45)" style="margin-top:4px;padding:4px 8px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;width:90px" oninput="calcDxTiempo('hta')"></label>
           <span id="dx_hta_tiempo" style="color:var(--blue);font-weight:600"></span>
         </div>
         <div style="margin-top:8px"><label>Nota (se vuelca a HC):<br><textarea id="dx_hta_nota" rows="2" style="width:100%;margin-top:4px;padding:6px 8px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;resize:vertical"></textarea></label></div>
@@ -19033,7 +19314,7 @@ function _obeGenerarHTMLInforme(opts) {
       <div id="dx_extra_obe" style="display:none;background:#f0f4fa;border-radius:10px;padding:10px 14px;margin-top:10px;font-size:12px">
         <div style="font-weight:600;color:var(--blue);margin-bottom:6px">Obesidad — detalles</div>
         <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
-          <label>Año de inicio:<br><input type="number" id="dx_obe_fecha" min="1940" max="2030" placeholder="aaaa" style="margin-top:4px;padding:4px 8px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;width:90px" oninput="calcDxTiempo('obe')"></label>
+          <label>Inicio (año o edad):<br><input type="number" id="dx_obe_fecha" min="0" max="2100" placeholder="año o edad" title="Año (ej: 2012) o edad del paciente al inicio (ej: 45)" style="margin-top:4px;padding:4px 8px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;width:90px" oninput="calcDxTiempo('obe')"></label>
           <span id="dx_obe_tiempo" style="color:var(--blue);font-weight:600"></span>
         </div>
         <div style="margin-top:8px"><label>Nota (se vuelca a HC):<br><textarea id="dx_obe_nota" rows="2" style="width:100%;margin-top:4px;padding:6px 8px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;resize:vertical" onkeydown="event.stopPropagation()"></textarea></label></div>
@@ -23125,13 +23406,13 @@ loadLocal();  // async, carga en background y llama renderGrid al final
     if(dx2 && !document.getElementById('dx_extra_dbt2')){
       dx2.setAttribute('onchange', "toggleDxExtra('dbt2')");
       var lab=dx2.closest('label');
-      if(lab) lab.insertAdjacentHTML('afterend', '<div id="dx_extra_dbt2" class="dx-extra-mini"><label style="margin:0;font-size:11px;color:var(--text-soft);text-transform:uppercase">Año inicio DBT2</label><input type="number" id="dx_dbt2_fecha" min="1900" max="2100" placeholder="AAAA" oninput="calcDxTiempo(\'dbt2\')"><span id="dx_dbt2_tiempo" style="font-size:11px;color:var(--blue);font-weight:600"></span></div>');
+      if(lab) lab.insertAdjacentHTML('afterend', '<div id="dx_extra_dbt2" class="dx-extra-mini"><label style="margin:0;font-size:11px;color:var(--text-soft);text-transform:uppercase">Inicio DBT2 (año o edad)</label><input type="number" id="dx_dbt2_fecha" min="0" max="2100" placeholder="año o edad" title="Año (ej: 2012) o edad del paciente al diagnóstico (ej: 45)" oninput="calcDxTiempo(\'dbt2\')"><span id="dx_dbt2_tiempo" style="font-size:11px;color:var(--blue);font-weight:600"></span></div>');
     }
     var dxo=document.getElementById('dx_dbt_otro');
     if(dxo && !document.getElementById('dx_extra_dbt_otro')){
       dxo.setAttribute('onchange', "toggleDxExtra('dbt_otro')");
       var lab2=dxo.closest('label');
-      if(lab2) lab2.insertAdjacentHTML('afterend', '<div id="dx_extra_dbt_otro" class="dx-extra-mini"><label style="margin:0;font-size:11px;color:var(--text-soft);text-transform:uppercase">Año inicio DBT otro</label><input type="number" id="dx_dbt_otro_fecha" min="1900" max="2100" placeholder="AAAA" oninput="calcDxTiempo(\'dbt_otro\')"><span id="dx_dbt_otro_tiempo" style="font-size:11px;color:var(--blue);font-weight:600"></span><input type="text" id="dx_dbt_otro_nota" placeholder="Tipo / nota" style="width:160px"></div>');
+      if(lab2) lab2.insertAdjacentHTML('afterend', '<div id="dx_extra_dbt_otro" class="dx-extra-mini"><label style="margin:0;font-size:11px;color:var(--text-soft);text-transform:uppercase">Inicio DBT otro (año o edad)</label><input type="number" id="dx_dbt_otro_fecha" min="0" max="2100" placeholder="año o edad" title="Año (ej: 2012) o edad del paciente al diagnóstico (ej: 45)" oninput="calcDxTiempo(\'dbt_otro\')"><span id="dx_dbt_otro_tiempo" style="font-size:11px;color:var(--blue);font-weight:600"></span><input type="text" id="dx_dbt_otro_nota" placeholder="Tipo / nota" style="width:160px"></div>');
     }
     var med=document.getElementById('med_filas');
     if(med && !document.getElementById('otros_med_filas')){
@@ -23212,11 +23493,19 @@ loadLocal();  // async, carga en background y llama renderGrid al final
       Object.entries(DX).forEach(function (kv) {
         if (!c[kv[0]]) return;
         var extra = '';
-        if (kv[0] === 'dx_hta'     && c.dx_hta_fecha)      extra = ' (' + esc(c.dx_hta_fecha) + ')';
-        if (kv[0] === 'dx_obe'     && c.dx_obe_fecha)      extra = ' (' + esc(c.dx_obe_fecha) + ')';
-        if (kv[0] === 'dx_dbt2'    && c.dx_dbt2_fecha)     extra = ' (' + esc(c.dx_dbt2_fecha) + ')';
+        // Año de inicio (si se cargó la edad, se muestra el año calculado)
+        function inicioCorto(v) {
+          var fn = (typeof pacienteActual !== 'undefined' && pacienteActual) ? pacienteActual.fecha_nacimiento : null;
+          var i = (typeof _dxInicioInfo === 'function') ? _dxInicioInfo(v, fn) : null;
+          if (!i || i.invalido) return esc(v);
+          if (i.anio) return (i.modo === 'edad' ? '~' : '') + i.anio;
+          return 'a los ' + i.edadDx + 'a';
+        }
+        if (kv[0] === 'dx_hta'     && c.dx_hta_fecha)      extra = ' (' + inicioCorto(c.dx_hta_fecha) + ')';
+        if (kv[0] === 'dx_obe'     && c.dx_obe_fecha)      extra = ' (' + inicioCorto(c.dx_obe_fecha) + ')';
+        if (kv[0] === 'dx_dbt2'    && c.dx_dbt2_fecha)     extra = ' (' + inicioCorto(c.dx_dbt2_fecha) + ')';
         if (kv[0] === 'dx_dbt_otro') {
-          if (c.dx_dbt_otro_fecha) extra += ' (' + esc(c.dx_dbt_otro_fecha) + ')';
+          if (c.dx_dbt_otro_fecha) extra += ' (' + inicioCorto(c.dx_dbt_otro_fecha) + ')';
           if (c.dx_dbt_otro_nota)  extra += ' ' + esc(c.dx_dbt_otro_nota);
         }
         cardioHtml += '<span class="evh-tag">' + kv[1] + extra + '</span>';
@@ -23328,6 +23617,8 @@ loadLocal();  // async, carga en background y llama renderGrid al final
       var resM = await sb.from('medicacion').select('*').eq('dni_paciente', dni).eq('activo', true).order('grupo');
       var meds = resM.data || [];
       var snap = { clinica: c, medicacion: meds };
+      // Si mientras se consultaba la base se cambió de pestaña, no pintar el encabezado de otro paciente
+      if (typeof pacienteActual !== 'undefined' && pacienteActual && String(pacienteActual.dni) !== String(dni)) return;
       window.evolClinicaSnapshot = snap;
       actualizarEncabezadoVariable(snap);
     } catch (e) {
