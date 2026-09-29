@@ -914,7 +914,7 @@
 .ag-wapp-header{padding:16px 16px 12px;border-bottom:1px solid #e5e7eb;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;background:#fff;z-index:1;}
 .ag-wapp-title{font-family:'Outfit',sans-serif;font-size:15px;font-weight:700;color:#1a2a3a;}
 .ag-wapp-tabs{display:flex;gap:0;border-bottom:1px solid #e5e7eb;background:#f9fafb;position:sticky;top:57px;z-index:1;}
-.ag-wapp-tab{flex:1;padding:9px 8px;font-size:12px;font-weight:600;color:#6b7280;cursor:pointer;border-bottom:2px solid transparent;background:none;border-top:none;border-left:none;border-right:none;font-family:inherit;transition:all .15s;}
+.ag-wapp-tab{flex:1;white-space:nowrap;padding:9px 8px;font-size:12px;font-weight:600;color:#6b7280;cursor:pointer;border-bottom:2px solid transparent;background:none;border-top:none;border-left:none;border-right:none;font-family:inherit;transition:all .15s;}
 .ag-wapp-tab.active{color:#128C7E;border-bottom-color:#25D366;}
 .ag-wapp-body{padding:12px;flex:1;}
 .ag-wapp-section{margin-bottom:16px;}
@@ -22397,8 +22397,11 @@ async function loadLocal(){
 }
 // ===== PLANTILLAS WHATSAPP =====
 var LS_WAPP='urcym_wapp_templates';
-var PROF_LABELS={'BG':'Guerrero','OB':'Bertani'};
-var wappTemplates={general:[],BG:[],OB:[]};
+var PROF_LABELS={'BG':'Guerrero','OB':'Bertani','CB':'Costa Bucal'};
+// Secciones (pestañas) de plantillas además de "General". Para sumar otra sección,
+// agregar su clave acá y su nombre en PROF_LABELS.
+var WAPP_SECCIONES=['BG','OB','CB'];
+var wappTemplates={general:[],BG:[],OB:[],CB:[]};
 async function loadWapp(){
   try{
     var row=await sb.from('urcym_agenda_config').select('value').eq('key','wapp_templates').maybeSingle();
@@ -22413,7 +22416,7 @@ async function loadWapp(){
     try{var r2=localStorage.getItem(LS_WAPP);if(r2)wappTemplates=JSON.parse(r2);}catch(e2){}
   }
   if(!wappTemplates.general)wappTemplates.general=[];
-  ['BG','OB'].forEach(function(p){if(!wappTemplates[p])wappTemplates[p]=[];});
+  WAPP_SECCIONES.forEach(function(p){if(!wappTemplates[p])wappTemplates[p]=[];});
 }
 async function saveWapp(){
   try{
@@ -22435,7 +22438,7 @@ function renderWappPanel(){
   // TABS
   var tabs='<div class="ag-wapp-tabs">';
   tabs+='<button class="ag-wapp-tab'+(wappCurrentTab==='general'?' active':'')+'" data-tab="general">General</button>';
-  ['BG','OB'].forEach(function(p){
+  WAPP_SECCIONES.forEach(function(p){
     tabs+='<button class="ag-wapp-tab'+(wappCurrentTab===p?' active':'')+'" data-tab="'+p+'">'+PROF_LABELS[p]+'</button>';
   });
   tabs+='</div>';
@@ -22451,7 +22454,7 @@ function renderWappPanel(){
   var allForSearch=[];
   if(searchMode){
     var q=wappSearch.trim().toLowerCase();
-    ['general','BG','OB'].forEach(function(tab){
+    ['general'].concat(WAPP_SECCIONES).forEach(function(tab){
       (wappTemplates[tab]||[]).forEach(function(tpl,i){
         if(tpl.name.toLowerCase().indexOf(q)>=0||tpl.text.toLowerCase().indexOf(q)>=0){
           allForSearch.push({tpl:tpl,tab:tab,idx:i});
@@ -22498,7 +22501,7 @@ function renderWappPanel(){
 
   // FORMULARIO NUEVO
   var form='<div class="ag-wapp-form" id="ag-wapp-new-form">';
-  form+='<div style="font-size:11px;font-weight:700;color:#6b7280;margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em;">Nueva plantilla '+(wappCurrentTab==='general'?'general':'para '+PROF_LABELS[wappCurrentTab])+'</div>';
+  form+='<div style="font-size:11px;font-weight:700;color:#6b7280;margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em;">Nueva plantilla '+(wappCurrentTab==='general'?'general':(wappCurrentTab==='CB'?'de ':'para ')+PROF_LABELS[wappCurrentTab])+'</div>';
   form+='<textarea id="ag-wapp-txt" placeholder="Escribí el texto... (emojis incluidos ✅📅)"></textarea>';
   form+='<div class="ag-wapp-form-row">';
   form+='<input id="ag-wapp-name" type="text" placeholder="Nombre corto (ej: Confirmación turno)" />';
