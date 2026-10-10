@@ -1974,7 +1974,7 @@
       </div>
     </div>
     <!-- ── Página MIS PACIENTES (para profesionales no-admin) ── -->
-    <!-- ── Página CIERRE (solo Secretaría) ── -->
+    <!-- ── Página CIERRE (Secretaría y profesionales; Invitado no) ── -->
     <div class="page" id="page-cierre" style="padding:28px;">
       <style>
         .cierre-toolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:16px}
@@ -2061,7 +2061,7 @@
           <div class="cierre-grid" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr))">
             <div class="fin-kpi"><div class="fin-kpi-label">Total del día</div><div class="fin-kpi-val" id="ci-kpi-bruto">—</div><div class="fin-kpi-sub" id="ci-kpi-bruto-sub"></div></div>
             <div class="fin-kpi"><div class="fin-kpi-label" id="ci-kpi-alq-label">🏢 Alquiler consultorio</div><div class="fin-kpi-val red" id="ci-kpi-alquiler">—</div></div>
-            <div class="fin-kpi"><div class="fin-kpi-label">👤 A favor del profesional</div><div class="fin-kpi-val green" id="ci-kpi-neto">—</div><div class="fin-kpi-sub">Total del día − alquiler</div></div>
+            <div class="fin-kpi"><div class="fin-kpi-label">👤 A favor del profesional</div><div class="fin-kpi-val green" id="ci-kpi-neto">—</div><div class="fin-kpi-sub">Total del día − alquiler</div><div class="fin-kpi-sub" id="ci-kpi-neto-fin" style="display:none;margin-top:6px;padding-top:6px;border-top:1px dashed var(--border)"></div></div>
           </div>
         </div>
 
@@ -2168,6 +2168,11 @@
             <label style="font-size:11.5px;font-weight:600;color:var(--text-soft);text-transform:uppercase;letter-spacing:.04em;display:block;margin-bottom:5px">El reparto de alquiler aplica desde</label>
             <input type="date" id="ci-cfg-vigencia" style="width:100%;padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:14px;font-family:var(--font-main)"/>
             <div style="font-size:11px;color:var(--text-soft);margin-top:5px">Antes de esta fecha no había alquiler de consultorio, así que el cierre de esos días no calcula liquidación.</div>
+          </div>
+          <div class="form-group" style="margin-bottom:18px">
+            <label style="font-size:11.5px;font-weight:600;color:var(--text-soft);text-transform:uppercase;letter-spacing:.04em;display:block;margin-bottom:5px">El cierre suma a Finanzas desde</label>
+            <input type="date" id="ci-cfg-findesde" style="width:100%;padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:14px;font-family:var(--font-main)"/>
+            <div style="font-size:11px;color:var(--text-soft);margin-top:5px">Desde esta fecha, lo que le queda a cada profesional en cada cierre (sin OSDE, ya descontado el alquiler) entra en Finanzas como "Costa Bucal Guerrero" / "Costa Bucal Bertani", y esas consultas y recetas dejan de sumar aparte.</div>
           </div>
           <div style="display:flex;gap:10px;justify-content:flex-end">
             <button class="fin-btn-nuevo" style="background:var(--gray);color:var(--text)" onclick="document.getElementById('ci-modal-config').classList.remove('open')">Cancelar</button>
@@ -6833,7 +6838,7 @@ function doLogin() {
     var _agApp = document.getElementById('agenda-app');
     if(_agApp) _agApp.classList.toggle('ag-modo-secretaria', !!currentUser.secretaria);
     if(currentUser.secretaria) {
-      // Secretaría: acceso exclusivo a Agenda (y su propio Cierre diario).
+      // Secretaría: acceso exclusivo a Agenda (y al Cierre diario, que también ven los profesionales).
       // Sin historias clínicas, sin pacientes, sin Finanzas de los
       // profesionales ni módulos de gestión/investigación.
       if(navFinanzas) navFinanzas.style.display = 'none';
@@ -6858,7 +6863,7 @@ function doLogin() {
       if(navGestion) navGestion.style.display = '';
       if(navInvestigacion) navInvestigacion.style.display = '';
       if(navPacientes) navPacientes.style.display = '';
-      if(navCierre) navCierre.style.display = 'none';
+      if(navCierre) navCierre.style.display = '';
       if(navAgenda) navAgenda.textContent = 'Agenda';
       // Admin: ver todos los profesionales en la agenda
       if(typeof profFilter !== 'undefined') profFilter = [];
@@ -6871,7 +6876,8 @@ function doLogin() {
       if(navGestion) navGestion.style.display = 'none';
       if(navInvestigacion) navInvestigacion.style.display = 'none';
       if(navPacientes) navPacientes.style.display = '';
-      if(navCierre) navCierre.style.display = 'none';
+      // Cierre: lo ven Secretaría y los profesionales; Invitado no.
+      if(navCierre) navCierre.style.display = currentUser.readonly ? 'none' : '';
       if(navAgenda) navAgenda.textContent = currentUser.readonly ? 'Agenda' : 'Mi Agenda';
       // No-admin: fijar filtro a su propio prof
       var profMap = {barbara:'BG', omar:'OB'};
@@ -7466,8 +7472,9 @@ async function showPage(page) {
     if(_paginasBloqueadasSecretaria.indexOf(page) !== -1) {
       page = 'agenda';
     }
-  } else if(currentUser && page === 'cierre') {
-    // "Cierre" es exclusivo de Secretaría
+  }
+  // "Cierre" lo ven Secretaría y los profesionales; Invitado no.
+  if(currentUser && currentUser.readonly && page === 'cierre') {
     page = 'dashboard';
   }
 
@@ -24364,7 +24371,19 @@ window.cargarProxConsultas = cargarProxConsultas;
   var finMesActual = '';
   var PROF_FULL_FIN = {BG:'Guerrero',OB:'Bertani',MA:'MAPA'};
   var CAT_GAS_LBL = {luz:'Luz',internet:'Internet',expensas:'Expensas',limpieza:'Limpieza',papeleria:'Papelería',mantenimiento:'Mantenimiento',extraordinario:'Extraordinarios'};
-  var CAT_ING_LBL = {urcym:'Evaluaciones cardiometabólicas',sapiens_bar:'SAPIENS Bar',sapiens_omar:'SAPIENS Omar',ceq:'CEQ',cem:'CEM',salita:'Salita',otro:'Otros',manual:'Manual',receta_particular:'Receta particular',receta_osde:'Receta OSDE',osde:'OSDE'};
+  // Ingreso automático desde el Cierre diario (ver cierreFinanzasRango)
+  var CB_KEY = {BG:'costa_bucal_guerrero', OB:'costa_bucal_bertani'};
+  var CB_LBL = {BG:'Costa Bucal Guerrero', OB:'Costa Bucal Bertani'};
+  // Neto de los cierres en un rango. null si el módulo Cierre no está o falla
+  // (en ese caso Finanzas sigue contando consultas y recetas como antes).
+  async function finCierres(desde, hasta, turnosData){
+    if(!window.cierreFinanzasRango) return null;
+    try{ return await window.cierreFinanzasRango(desde, hasta, turnosData); }
+    catch(e){ console.warn('[Finanzas] no se pudo leer el cierre', e); return null; }
+  }
+  // ¿Este turno (no OSDE) ya entra a Finanzas por el cierre de su día?
+  function finEnCierre(cf, fecha, t){ return !!(cf && fecha >= cf.corte && cf.profs[t.prof]); }
+  var CAT_ING_LBL = {costa_bucal_guerrero:'Costa Bucal Guerrero',costa_bucal_bertani:'Costa Bucal Bertani',urcym:'Evaluaciones cardiometabólicas',sapiens_bar:'SAPIENS Bar',sapiens_omar:'SAPIENS Omar',ceq:'CEQ',cem:'CEM',salita:'Salita',otro:'Otros',manual:'Manual',receta_particular:'Receta particular',receta_osde:'Receta OSDE',osde:'OSDE'};
 
   function $id(id){ return document.getElementById(id); }
   function moneda(n){ return '$'+Number(n||0).toLocaleString('es-AR',{minimumFractionDigits:0,maximumFractionDigits:0}); }
@@ -24458,6 +24477,14 @@ window.cargarProxConsultas = cargarProxConsultas;
       var persRows = resultados[4];
       // resultados[5]: finCargarTarifasOsde ya dejó finOsdeTarifas actualizado como efecto secundario
 
+      // Cierres de Costa Bucal: desde la fecha de corte, lo que pasa por el
+      // cierre entra como "Costa Bucal <profesional>" (neto, sin OSDE) y esas
+      // consultas/recetas dejan de sumar aparte para no contarse dos veces.
+      var cf = await finCierres(desde, hasta, turnosData);
+      var cbDias = [];
+      if(cf) Object.keys(cf.profs).forEach(function(p){ cbDias = cbDias.concat(cf.profs[p].dias); });
+      var totalCB = cf ? cf.total : 0;
+
       var turnosList = [];
       var turnosOsdeList = [];
       Object.keys(turnosData).forEach(function(key){
@@ -24479,7 +24506,8 @@ window.cargarProxConsultas = cargarProxConsultas;
             pago:    t.pago||'sin-seña', origen:'urcym',
             ausente: t.asistencia==='ausente',
             notas:   turnoMotivosTxt(t),
-            video:   !!t.video
+            video:   !!t.video,
+            enCierre: finEnCierre(cf, fecha, t)
           });
         }
       });
@@ -24487,6 +24515,7 @@ window.cargarProxConsultas = cargarProxConsultas;
       // Recetas — separadas: particulares (plata ya entrada) vs OSDE (a cobrar)
       var recAllList = (recRows.data||[]).map(function(r){
         return {fecha:r.fecha, hora:r.hora||'', monto:Number(r.monto||0), tipo:r.tipo,
+          enCierre: !!(cf && r.tipo==='particular' && cf.recIds[r.id]),
           origen: r.tipo==='particular'?'receta_particular':'receta_osde',
           descripcion: r.tipo==='particular'?'Receta particular':'Receta OSDE', prof:''};
       });
@@ -24520,11 +24549,15 @@ window.cargarProxConsultas = cargarProxConsultas;
 
       // KPIs — pagado + señas cobradas
       var totalConsultas = turnosList.reduce(function(a,t){
+        if(t.enCierre) return a; // ya entra por el cierre (Costa Bucal)
         return a + t.monto + t.sena; // monto=0 si no pagado, sena=0 si no señado
       }, 0);
-      var totalRecetas   = recList.reduce(function(a,r){return a+r.monto;},0); // solo particulares — recOsdeList es "a cobrar"
+      // Recetas particulares: todas las cobradas (para la tarjeta y la caja)…
+      var totalRecetasAll = recList.reduce(function(a,r){return a+r.monto;},0); // recOsdeList es "a cobrar"
+      // …y las que suman aparte a ingresos (las cargadas en un cierre van por Costa Bucal)
+      var totalRecetas   = recList.reduce(function(a,r){return r.enCierre ? a : a+r.monto;},0);
       var totalIngManual = ingList.reduce(function(a,i){return a+i.monto;},0);
-      var totalIng       = totalConsultas + totalRecetas + totalIngManual;
+      var totalIng       = totalConsultas + totalRecetas + totalIngManual + totalCB;
       var totalGas       = gasList.reduce(function(a,g){return a+Number(g.monto||0);},0);
       var balance        = totalIng - totalGas;
 
@@ -24559,24 +24592,24 @@ window.cargarProxConsultas = cargarProxConsultas;
       });
       var totalTurnosCobradosMes = turnosCobradosMes.reduce(function(a,x){return a+x.monto;},0);
       var totalTurnosOtroMes = turnosCobradosMes.filter(function(x){return !x.mismoMes;}).reduce(function(a,x){return a+x.monto;},0);
-      var totalDineroRealMes = totalTurnosCobradosMes + totalRecetas + totalIngManual;
+      var totalDineroRealMes = totalTurnosCobradosMes + totalRecetasAll + totalIngManual;
 
       var kpiIng=$id('fin-kpi-ing'); if(kpiIng) kpiIng.textContent=moneda(totalIng);
       var kpiGas=$id('fin-kpi-gas'); if(kpiGas) kpiGas.textContent=moneda(totalGas);
       var kpiNet=$id('fin-kpi-net');
       if(kpiNet){ kpiNet.textContent=moneda(balance); kpiNet.className='fin-kpi-val '+(balance>=0?'green':'red'); }
-      var kpiRec=$id('fin-kpi-rec'); if(kpiRec) kpiRec.textContent=moneda(totalRecetas);
+      var kpiRec=$id('fin-kpi-rec'); if(kpiRec) kpiRec.textContent=moneda(totalRecetasAll);
       var kpiOsde=$id('fin-kpi-osde'); if(kpiOsde) kpiOsde.textContent=moneda(totalOsde);
       var kpiOsdeSub=$id('fin-kpi-osde-sub');
       if(kpiOsdeSub) kpiOsdeSub.textContent='Consultas '+moneda(osdeConsultasVal)+' ('+countOsdeConsultas+') · Recetas '+moneda(osdeRecetasVal)+' ('+countOsdeRecetas+')';
       var kpiReal=$id('fin-kpi-real'); if(kpiReal) kpiReal.textContent=moneda(totalDineroRealMes);
       var kpiRealSub=$id('fin-kpi-real-sub');
       if(kpiRealSub){
-        var _realSubTxt='Consultas '+moneda(totalTurnosCobradosMes)+' · Recetas '+moneda(totalRecetas)+' · Manual '+moneda(totalIngManual);
+        var _realSubTxt='Consultas '+moneda(totalTurnosCobradosMes)+' · Recetas '+moneda(totalRecetasAll)+' · Manual '+moneda(totalIngManual);
         if(totalTurnosOtroMes>0) _realSubTxt+=' · '+moneda(totalTurnosOtroMes)+' de turnos de otro mes';
         kpiRealSub.textContent=_realSubTxt;
       }
-      var kpiIngSub=$id('fin-kpi-ing-sub'); if(kpiIngSub) kpiIngSub.textContent='Consultas '+moneda(totalConsultas)+' · Recetas '+moneda(totalRecetas)+' · Manual '+moneda(totalIngManual);
+      var kpiIngSub=$id('fin-kpi-ing-sub'); if(kpiIngSub) kpiIngSub.textContent='Consultas '+moneda(totalConsultas)+' · Recetas '+moneda(totalRecetas)+' · Manual '+moneda(totalIngManual)+(cf && hasta>=cf.corte ? ' · Costa Bucal '+moneda(totalCB) : '');
       var kpiGasSub=$id('fin-kpi-gas-sub'); if(kpiGasSub) kpiGasSub.textContent=gasList.length+' registros';
       var kpiRecSub=$id('fin-kpi-rec-sub'); if(kpiRecSub) kpiRecSub.textContent=recList.length+' recetas';
       // Cachear para banner personal (usa tabla urcym_personal)
@@ -24591,10 +24624,14 @@ window.cargarProxConsultas = cargarProxConsultas;
       // Resumen ingresos por origen — pagado + señas
       var origenes = {};
       turnosList.forEach(function(t){
+        if(t.enCierre) return;
         var v = t.monto + t.sena;
         if(v > 0) origenes['urcym'] = (origenes['urcym']||0) + v;
       });
-      recList.forEach(function(r){ origenes[r.origen]=(origenes[r.origen]||0)+r.monto; });
+      recList.forEach(function(r){ if(r.enCierre) return; origenes[r.origen]=(origenes[r.origen]||0)+r.monto; });
+      if(cf) Object.keys(cf.profs).forEach(function(p){
+        if(CB_KEY[p]) origenes[CB_KEY[p]] = (origenes[CB_KEY[p]]||0) + cf.profs[p].total;
+      });
       ingList.forEach(function(i){ origenes[i.categoria]=(origenes[i.categoria]||0)+i.monto; });
       // OSDE no suma a ingresos reales — es estimado a cobrar
 
@@ -24603,6 +24640,8 @@ window.cargarProxConsultas = cargarProxConsultas;
         // Orden y labels con íconos
         var ING_ORDER = [
           {k:'urcym',       icon:'🩺', label:'URCyM',              sub:'Consultas cobradas'},
+          {k:'costa_bucal_guerrero', icon:'🏢', label:'Costa Bucal Guerrero', sub:'cierres · ya descontado el alquiler'},
+          {k:'costa_bucal_bertani',  icon:'🏢', label:'Costa Bucal Bertani',  sub:'cierres · ya descontado el alquiler'},
           {k:'sapiens_bar', icon:'🏢', label:'SAPIENS Bar',         sub:''},
           {k:'sapiens_omar',icon:'🏢', label:'SAPIENS Omar',        sub:''},
           {k:'ceq',         icon:'🏛️', label:'CEQ',                 sub:''},
@@ -24694,7 +24733,23 @@ window.cargarProxConsultas = cargarProxConsultas;
       var gruposEl = $id('fin-detalle-grupos');
       if(gruposEl){
         // Armar grupos
+        var _tagCB = '<span title="Ya suma a Finanzas dentro del cierre de ese día (Costa Bucal)" style="font-size:10px;color:#6d28d9;background:#f5f3ff;border-radius:8px;padding:1px 7px;margin-left:6px;white-space:nowrap">en cierre</span>';
         var grupos = [
+          {
+            id:'costabucal', icon:'🏢', titulo:'Costa Bucal — cierres (neto de alquiler, sin OSDE)',
+            items: cbDias.slice().sort(function(a,b){ return a.fecha===b.fecha ? (a.prof>b.prof?1:-1) : (a.fecha>b.fecha?-1:1); }),
+            renderFila: function(d){
+              return '<tr><td>'+finFmtFecha(d.fecha)+'</td>'
+                +'<td style="font-weight:600">'+(CB_LBL[d.prof]||d.prof)+'</td>'
+                +'<td style="font-size:12px;color:var(--text-soft);">'+d.consultas+'</td>'
+                +'<td style="font-size:12px;color:var(--text-soft);">'+d.recetas+'</td>'
+                +'<td>'+moneda(d.base)+'</td>'
+                +'<td class="fin-monto-neg">−'+moneda(d.alquiler)+'</td>'
+                +'<td class="fin-monto-pos">'+moneda(d.neto)+'</td></tr>';
+            },
+            totalFn: function(items){ return items.reduce(function(a,d){return a+d.neto;},0); },
+            cols: ['Fecha','Ingreso','Consultas','Recetas','Cobrado','Alquiler ('+(cf?cf.pct:0)+'%)','Neto']
+          },
           {
             id:'turnos', icon:'🩺', titulo:'Turnos',
             items: turnosList.sort(function(a,b){return a.fecha>b.fecha?-1:1;}),
@@ -24705,6 +24760,7 @@ window.cargarProxConsultas = cargarProxConsultas;
               if(r.pago==='pagado' && r.monto>0) montoStr = '<span class="fin-monto-pos">'+moneda(r.monto)+'</span>';
               else if(r.sena>0) montoStr = '<span class="fin-monto-pos">'+moneda(r.sena)+'</span><span style="font-size:10px;color:#b45309;margin-left:4px;">(seña)</span>';
               else montoStr = '<span style="color:var(--text-soft);font-size:12px;">—</span>';
+              if(r.enCierre && (r.monto>0 || r.sena>0)) montoStr += _tagCB;
               return '<tr><td>'+finFmtFecha(r.fecha)+'</td>'
                 +'<td style="font-size:12px;color:var(--text-soft);">'+r.hora+'</td>'
                 +'<td style="font-weight:600">'+r.paciente+'</td>'
@@ -24713,7 +24769,7 @@ window.cargarProxConsultas = cargarProxConsultas;
                 +'<td>'+montoStr+'</td>'
                 +'<td></td></tr>';
             },
-            totalFn: function(items){ return items.reduce(function(a,t){return a+t.monto+t.sena;},0); },
+            totalFn: function(items){ return items.reduce(function(a,t){return t.enCierre ? a : a+t.monto+t.sena;},0); },
             cols: ['Fecha','Hora','Paciente','Prof.','Estado','Monto','']
           },
           {
@@ -24751,9 +24807,9 @@ window.cargarProxConsultas = cargarProxConsultas;
                 : '<span class="fin-badge receta-o">OSDE</span>';
               return '<tr><td>'+finFmtFecha(r.fecha)+'</td><td colspan="2">'+tipoBadge+'</td>'
                 +'<td></td><td><span class="fin-pago-badge pagado">✅ Cobrada</span></td>'
-                +'<td class="fin-monto-pos">'+moneda(r.monto)+'</td><td></td></tr>';
+                +'<td class="fin-monto-pos">'+moneda(r.monto)+(r.enCierre?_tagCB:'')+'</td><td></td></tr>';
             },
-            totalFn: function(items){ return items.reduce(function(a,r){return a+r.monto;},0); },
+            totalFn: function(items){ return items.reduce(function(a,r){return r.enCierre ? a : a+r.monto;},0); },
             cols: ['Fecha','Tipo','','','','Monto','']
           },
           {
@@ -24852,19 +24908,25 @@ window.cargarProxConsultas = cargarProxConsultas;
       var lastDay=new Date(parseInt(lp[0]),parseInt(lp[1]),0).getDate();
       var hasta=lastMes+'-'+(lastDay<10?'0':'')+lastDay;
       var resultados=await Promise.all([
-        sb.from('urcym_recetas').select('fecha,monto').gte('fecha',desde).lte('fecha',hasta),
+        sb.from('urcym_recetas').select('id,fecha,monto').gte('fecha',desde).lte('fecha',hasta),
         sb.from('urcym_ingresos').select('fecha,monto').gte('fecha',desde).lte('fecha',hasta),
         finGetTurnosData(), // mismo JSON cacheado que ya bajó finCargarDatos — no se vuelve a pedir
         sb.from('urcym_gastos').select('fecha,monto').gte('fecha',desde).lte('fecha',hasta)
       ]);
       var recR=resultados[0], ingR=resultados[1], td=resultados[2]||{}, gasR=resultados[3];
-      (recR.data||[]).forEach(function(r){ var ym=r.fecha.substring(0,7); if(dataMap[ym]) dataMap[ym].ing+=Number(r.monto||0); });
+      // Mismo criterio que el resumen: lo que pasa por el cierre suma como Costa Bucal (neto)
+      var cfG = await finCierres(desde, hasta, td);
+      if(cfG) Object.keys(cfG.profs).forEach(function(p){
+        cfG.profs[p].dias.forEach(function(d){ var ym=d.fecha.substring(0,7); if(dataMap[ym]) dataMap[ym].ing+=d.neto; });
+      });
+      (recR.data||[]).forEach(function(r){ if(cfG && cfG.recIds[r.id]) return; var ym=r.fecha.substring(0,7); if(dataMap[ym]) dataMap[ym].ing+=Number(r.monto||0); });
       (ingR.data||[]).forEach(function(r){ var ym=r.fecha.substring(0,7); if(dataMap[ym]) dataMap[ym].ing+=Number(r.monto||0); });
       Object.keys(td).forEach(function(key){
         var parts=key.split('_'); if(parts.length<3) return;
         var fecha=parts[0]; var ym=fecha.substring(0,7);
         if(!dataMap[ym]) return;
         var t=td[key];
+        if(finEnCierre(cfG, fecha, t)) return;
         if(t.pago==='pagado'&&t.monto&&Number(t.monto)>0) dataMap[ym].ing+=Number(t.monto);
         else if(t.pago==='señado'&&t.sena&&Number(t.sena)>0) dataMap[ym].ing+=Number(t.sena);
       });
@@ -25647,25 +25709,33 @@ window.cargarProxConsultas = cargarProxConsultas;
         var cfgR=await sb.from('urcym_agenda_config').select('value').eq('key','turnos').maybeSingle();
         if(cfgR.data&&cfgR.data.value) turnosData=JSON.parse(cfgR.data.value);
       }catch(e){}
-      var totalConsultas=0,totalRec=0,totalIngM=0,totalGas=0;
+      var totalConsultas=0,totalRec=0,totalIngM=0,totalGas=0,totalCB=0;
       var rows=[];
+      var cfP = await finCierres(r.desde, r.hasta, turnosData);
+      if(cfP) Object.keys(cfP.profs).forEach(function(p){
+        cfP.profs[p].dias.forEach(function(d){
+          totalCB+=d.neto;
+          rows.push({fecha:d.fecha,tipo:CB_LBL[p]||('Costa Bucal '+p),desc:'Cierre del día · cobrado '+moneda(d.base)+' − alquiler '+moneda(d.alquiler),monto:d.neto,sign:1});
+        });
+      });
       Object.keys(turnosData).forEach(function(key){
         var parts=key.split('_'); if(parts.length<3) return;
         var fecha=parts[0]; if(fecha<r.desde||fecha>r.hasta) return;
         var t=turnosData[key];
+        if(finEnCierre(cfP, fecha, t)) return;
         if(t.pago==='pagado'&&t.monto&&Number(t.monto)>0){
           totalConsultas+=Number(t.monto);
           rows.push({fecha:fecha,tipo:'Consulta',desc:(t.paciente||'')+(t.prof?' / '+(PROF_FULL_FIN[t.prof]||t.prof):''),monto:Number(t.monto),sign:1});
         }
       });
       var recR=await sb.from('urcym_recetas').select('*').gte('fecha',r.desde).lte('fecha',r.hasta);
-      (recR.data||[]).forEach(function(rec){totalRec+=Number(rec.monto||0);rows.push({fecha:rec.fecha,tipo:rec.tipo==='particular'?'Receta particular':'Receta OSDE',desc:'',monto:Number(rec.monto||0),sign:1});});
+      (recR.data||[]).forEach(function(rec){if(cfP&&cfP.recIds[rec.id])return;totalRec+=Number(rec.monto||0);rows.push({fecha:rec.fecha,tipo:rec.tipo==='particular'?'Receta particular':'Receta OSDE',desc:'',monto:Number(rec.monto||0),sign:1});});
       var ingR=await sb.from('urcym_ingresos').select('*').gte('fecha',r.desde).lte('fecha',r.hasta).order('fecha');
       (ingR.data||[]).forEach(function(i){totalIngM+=Number(i.monto||0);rows.push({fecha:i.fecha,tipo:CAT_ING_LBL[i.categoria]||i.categoria,desc:i.descripcion||'',monto:Number(i.monto||0),sign:1});});
       var gasR=await sb.from('urcym_gastos').select('*').gte('fecha',r.desde).lte('fecha',r.hasta).order('fecha');
       (gasR.data||[]).forEach(function(g){totalGas+=Number(g.monto||0);rows.push({fecha:g.fecha,tipo:CAT_GAS_LBL[g.categoria]||g.categoria,desc:g.descripcion||'',monto:Number(g.monto||0),sign:-1});});
       rows.sort(function(a,b){return a.fecha>b.fecha?1:-1;});
-      var totalIng=totalConsultas+totalRec+totalIngM;
+      var totalIng=totalConsultas+totalRec+totalIngM+totalCB;
       var balance=totalIng-totalGas;
       win.document.write('<!DOCTYPE html><html lang="es-AR"><head><meta charset="UTF-8"><title>Finanzas '+mesLabel(finMesActual)+'</title>'
         +'<style>body{font-family:Arial,sans-serif;margin:32px;color:#1a2535;font-size:13px}'
@@ -26127,7 +26197,8 @@ window.cargarProxConsultas = cargarProxConsultas;
 
 <script>
 /* ══════════════════════════════════════════════════════
-   MÓDULO CIERRE (Secretaría)
+   MÓDULO CIERRE (Secretaría y profesionales;
+   Invitado no tiene acceso)
    Reutiliza el mismo blob de turnos que Agenda/Finanzas
    (urcym_agenda_config, key='turnos'). No agrega tablas
    nuevas: guarda su config (% alquiler, vigencia, día de
@@ -26143,7 +26214,7 @@ window.cargarProxConsultas = cargarProxConsultas;
 ══════════════════════════════════════════════════════ */
 (function(){
   var PROF_FULL_CI = {BG:'Dra. Bárbara Guerrero', OB:'Dr. Omar Bertani'};
-  var ciConfig = {pct:20, vigenciaDesde:'2026-10-01', osdeCorteDia:15, osdeMesesPago:1};
+  var ciConfig = {pct:20, vigenciaDesde:'2026-10-01', osdeCorteDia:15, osdeMesesPago:1, finDesde:'2026-10-20'};
   var ciOsdeTarifas = {consulta:25600, receta:0};
   var ciConfigCargada = false;
 
@@ -26171,6 +26242,7 @@ window.cargarProxConsultas = cargarProxConsultas;
         if(v.vigenciaDesde) ciConfig.vigenciaDesde = v.vigenciaDesde;
         if(v.osdeCorteDia!=null) ciConfig.osdeCorteDia = Number(v.osdeCorteDia);
         if(v.osdeMesesPago!=null) ciConfig.osdeMesesPago = Number(v.osdeMesesPago);
+        if(v.finDesde) ciConfig.finDesde = v.finDesde;
       }
     }catch(e){ console.warn('[Cierre] error cargando config', e); }
     try{
@@ -26202,8 +26274,25 @@ window.cargarProxConsultas = cargarProxConsultas;
     return {inicio:inicioStr, fin:finStr, pagoEstimado:ciAddMeses(finStr, ciConfig.osdeMesesPago||1)};
   }
 
+  // Invitado no tiene acceso al Cierre: por las dudas, tampoco puede guardar.
+  function ciBloqueadoPorLectura(){
+    if(!(window._cu && window._cu.readonly)) return false;
+    alert('La sesión Invitado no tiene acceso al cierre.');
+    return true;
+  }
+  var ciProfPreseleccionadoPara = null;
+
   window.cierreInit = async function(){
+    if(window._cu && window._cu.readonly) return;
     await ciCargarConfig();
+    // Cada profesional arranca viendo su propio cierre (una vez por sesión;
+    // después puede cambiar el selector libremente).
+    var pSel = $c('cierre-prof');
+    if(pSel && ciProfPreseleccionadoPara !== window._su){
+      var miProf = {barbara:'BG', omar:'OB'}[window._su];
+      if(miProf) pSel.value = miProf;
+      ciProfPreseleccionadoPara = window._su;
+    }
     var fInp = $c('cierre-fecha');
     if(fInp && !fInp.value){
       var hoy = ciHoy();
@@ -26224,16 +26313,19 @@ window.cargarProxConsultas = cargarProxConsultas;
   };
 
   window.cierreAbrirConfig = async function(){
+    if(ciBloqueadoPorLectura()) return;
     await ciCargarConfig();
     $c('ci-cfg-pct').value = ciConfig.pct;
     $c('ci-cfg-osde-tarifa').value = ciOsdeTarifas.consulta;
     $c('ci-cfg-osde-corte').value = ciConfig.osdeCorteDia;
     $c('ci-cfg-osde-meses').value = ciConfig.osdeMesesPago;
     $c('ci-cfg-vigencia').value = ciConfig.vigenciaDesde || '2026-10-01';
+    if($c('ci-cfg-findesde')) $c('ci-cfg-findesde').value = ciConfig.finDesde || '2026-10-20';
     $c('ci-modal-config').classList.add('open');
   };
 
   window.cierreGuardarConfig = async function(){
+    if(ciBloqueadoPorLectura()) return;
     var pct = parseFloat($c('ci-cfg-pct').value);
     var tarifa = parseFloat($c('ci-cfg-osde-tarifa').value);
     var corte = parseInt($c('ci-cfg-osde-corte').value, 10);
@@ -26244,6 +26336,8 @@ window.cargarProxConsultas = cargarProxConsultas;
     if(isNaN(corte) || corte<1 || corte>28){ alert('El día de corte tiene que estar entre 1 y 28.'); return; }
     if(isNaN(meses) || meses<0){ alert('Los meses hasta el pago tienen que ser un número válido.'); return; }
     if(!vigencia){ alert('Ingresá la fecha desde la que aplica el reparto de alquiler.'); return; }
+    var finDesde = ($c('ci-cfg-findesde')||{}).value || ciConfig.finDesde || '2026-10-20';
+    ciConfig.finDesde = finDesde;
     ciConfig.pct = pct; ciConfig.vigenciaDesde = vigencia; ciConfig.osdeCorteDia = corte; ciConfig.osdeMesesPago = meses;
     ciOsdeTarifas.consulta = tarifa;
     var ok1 = await sbUpsertAgendaConfig('cierre_config', ciConfig);
@@ -26304,6 +26398,21 @@ window.cargarProxConsultas = cargarProxConsultas;
     return settlement;
   }
 
+  // ── Lo que el cierre le pasa a Finanzas ───────────────────────────────
+  // Desde ciFinCorte(), lo que le queda a cada profesional en cada cierre
+  // entra en Finanzas como ingreso "Costa Bucal Guerrero" / "Costa Bucal
+  // Bertani". Va SIN OSDE (OSDE sigue en Finanzas como "a cobrar"): es lo
+  // particular del día —consultas + recetas particulares cargadas en ese
+  // cierre— menos el % de alquiler sobre esa misma base.
+  function ciFinCorte(){
+    var a = ciConfig.finDesde || '2026-10-20', b = ciConfig.vigenciaDesde || '2026-10-01';
+    return a > b ? a : b; // nunca antes de que rija el alquiler
+  }
+  function ciNetoSinOsde(base){
+    var alq = Math.round(base * ciConfig.pct / 100);
+    return {base:base, alquiler:alq, neto:base - alq};
+  }
+
   // Fuente de los turnos: se usa el mismo objeto en memoria que ya carga
   // y mantiene al día el módulo de Agenda (var global "turnos"), en vez de
   // hacer una consulta aparte a Supabase — así el Cierre siempre ve
@@ -26325,6 +26434,7 @@ window.cargarProxConsultas = cargarProxConsultas;
   // Cargar recetas hechas en el cierre de la fecha elegida (ids=null → todas
   // las pendientes de cerrar del profesional elegido). Fetch-merge-write.
   window.cierreAsignarRecetas = async function(ids){
+    if(ciBloqueadoPorLectura()) return;
     var fecha = ($c('cierre-fecha')||{}).value || ciHoy();
     var prof = ($c('cierre-prof')||{}).value || 'BG';
     var arr = (await sbGetAgendaConfig('recetas_solicitudes')) || [];
@@ -26341,6 +26451,7 @@ window.cargarProxConsultas = cargarProxConsultas;
     cierreCargarDia();
   };
   window.cierreQuitarReceta = async function(id){
+    if(ciBloqueadoPorLectura()) return;
     var arr = (await sbGetAgendaConfig('recetas_solicitudes')) || [];
     var r = arr.find(function(x){ return x && x.id===id; });
     if(!r) return;
@@ -26449,7 +26560,14 @@ window.cargarProxConsultas = cargarProxConsultas;
     var profHeld = flujo.tProfesional + flujo.osde;
     var settlement = officeHeld - alquiler; // >0: consultorio le debe al prof. <0: prof. le debe al consultorio.
 
+    // Parte de este cierre que se vuelca a Finanzas (sin OSDE). Misma cuenta
+    // que usa cierreFinanzasRango(), para que los dos números coincidan.
+    var finanzas = ciNetoSinOsde(flujo.efectivo + flujo.tConsultorio + flujo.tProfesional);
+    finanzas.corte = ciFinCorte();
+    finanzas.aplica = fecha >= finanzas.corte;
+
     return {
+      finanzas:finanzas,
       fecha:fecha, prof:prof, profLabel:PROF_FULL_CI[prof]||'profesional', vigenciaOk:vigenciaOk,
       delDia:delDia, vistos:vistos, ausentes:ausentes, noOsdeDelDia:noOsdeDelDia, osdeDelDia:osdeDelDia,
       tarifaOsde:tarifaOsde, consultasPart:consultasPart, consultasOsde:consultasOsde,
@@ -26458,6 +26576,51 @@ window.cargarProxConsultas = cargarProxConsultas;
       recetasDia:recetasDia, recPartDia:recPartDia, recOsdeDia:recOsdeDia, recTotal:recTotal, recSinCerrar:recSinCerrar
     };
   }
+
+  // Para Finanzas: neto (sin OSDE, ya descontado el alquiler) de cada cierre
+  // entre dos fechas, por profesional. Devuelve además recIds: las filas de
+  // urcym_recetas que son espejo de una receta ya cargada en un cierre, para
+  // que Finanzas no las cuente otra vez como "Receta particular".
+  window.cierreFinanzasRango = async function(desde, hasta, turnosData){
+    await ciCargarConfig();
+    var corte = ciFinCorte();
+    var out = {corte:corte, pct:ciConfig.pct, profs:{}, total:0, recIds:{}};
+    Object.keys(PROF_FULL_CI).forEach(function(p){ out.profs[p] = {total:0, dias:[]}; });
+    var recetas = await ciRecetasHechas(function(r){
+      return r.tipo!=='osde' && r.cierre_fecha && r.cierre_fecha>=corte && !!PROF_FULL_CI[r.prof];
+    });
+    recetas.forEach(function(r){ if(r.rec_id!=null) out.recIds[r.rec_id] = true; });
+    var d0 = desde < corte ? corte : desde;
+    if(d0 > hasta) return out;
+    if(!turnosData) turnosData = await ciObtenerTurnos();
+    var dias = {};
+    function acc(fecha, prof){
+      var k = fecha+'|'+prof;
+      return dias[k] || (dias[k] = {fecha:fecha, prof:prof, base:0, consultas:0, recetas:0});
+    }
+    Object.keys(turnosData).forEach(function(key){
+      var parts = key.split('_'); if(parts.length<3) return;
+      var f = parts[0]; if(f<d0 || f>hasta) return;
+      var t = turnosData[key];
+      if(!t || !t.paciente || !PROF_FULL_CI[t.prof] || esOsde(t)) return;
+      var c = ciContribTurno(t), m = c.efectivo + c.tConsultorio + c.tProfesional;
+      if(m<=0) return;
+      var a = acc(f, t.prof); a.base += m; a.consultas++;
+    });
+    recetas.forEach(function(r){
+      if(r.cierre_fecha<d0 || r.cierre_fecha>hasta) return;
+      var m = Number(r.monto)||0; if(m<=0) return;
+      var a = acc(r.cierre_fecha, r.prof); a.base += m; a.recetas++;
+    });
+    Object.keys(dias).sort().forEach(function(k){
+      var d = dias[k], n = ciNetoSinOsde(d.base);
+      d.alquiler = n.alquiler; d.neto = n.neto;
+      out.profs[d.prof].dias.push(d);
+      out.profs[d.prof].total += n.neto;
+      out.total += n.neto;
+    });
+    return out;
+  };
 
   window.cierreCargarDia = async function(){
     var fecha = ($c('cierre-fecha')||{}).value || ciHoy();
@@ -26553,6 +26716,13 @@ window.cargarProxConsultas = cargarProxConsultas;
     if($c('ci-kpi-alq-label')) $c('ci-kpi-alq-label').textContent = '🏢 Alquiler consultorio ('+ciConfig.pct+'%)';
     if($c('ci-kpi-alquiler')) $c('ci-kpi-alquiler').textContent = vigenciaOk ? ('− '+ciMoneda(alquiler)) : '—';
     if($c('ci-kpi-neto')) $c('ci-kpi-neto').textContent = vigenciaOk ? ciMoneda(profShare) : '—';
+    var finSub = $c('ci-kpi-neto-fin');
+    if(finSub){
+      finSub.style.display = vigenciaOk ? '' : 'none';
+      finSub.innerHTML = r.finanzas.aplica
+        ? '📈 Suma a Finanzas: <b>'+ciMoneda(r.finanzas.neto)+'</b> (sin OSDE)'
+        : 'Suma a Finanzas recién desde el '+ciFmtFecha(r.finanzas.corte);
+    }
 
     if(vigenciaOk){
       ciPintarLiquidacion('ci-liquidacion','ci-liquidacion-val','ci-liquidacion-sub', officeHeld, alquiler, profShare, {profLabel:profLabel});
@@ -26993,6 +27163,7 @@ window.cargarProxConsultas = cargarProxConsultas;
   });
 
   window.cierreConfirmarCobro = async function(){
+    if(ciBloqueadoPorLectura()) return;
     if(!_ciPeriodoEnCurso) return;
     var monto = parseFloat($c('ci-cobrar-monto').value);
     var fecha = $c('ci-cobrar-fecha').value;
