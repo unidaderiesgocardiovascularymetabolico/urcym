@@ -20103,18 +20103,71 @@ var LS_BLOCKED='urcym_ag_blocked';
 var blockedSlots={};
 var offeredSlots={};  // { "2026-06-01_09:00_BG": true, ... }
 function loadOffered(){try{var s=localStorage.getItem(LS_OFFERED);if(s)offeredSlots=JSON.parse(s);}catch(e){}}
+// ── Guardado fusionado (evita que una compu pise lo que cargó otra) ────────
+// Antes cada guardado subía el objeto COMPLETO (todos los turnos) tal como lo
+// tenía esa pantalla. Si la Secretaría tenía la agenda abierta y hacía
+// cualquier cambio antes de que su pantalla se actualizara (cada 60 s), subía
+// su copia vieja y BORRABA de la nube los turnos que había cargado otra
+// persona desde otra compu (p.ej. una videollamada cargada por la doctora).
+// Ahora, antes de subir, se trae lo que hay en la nube y solo se le aplican
+// los cambios hechos en ESTA pantalla (altas, ediciones y bajas) respecto de
+// la última versión conocida (_agBase). Lo que cargaron otros se conserva.
+var _agBase={};        // clave de config → última versión conocida de la nube
+var _agColas={};       // clave → cadena de guardados (uno por vez)
+var _agGuardando={};   // clave → cantidad de guardados en curso
+function _agSetBase(key,obj){ try{ _agBase[key]=JSON.parse(JSON.stringify(obj||{})); }catch(e){ _agBase[key]={}; } }
+function _agJ(v){ return v===undefined?'__undef__':JSON.stringify(v); }
+async function _agFusionarYSubir(key,getObj){
+  var snapLocal=JSON.parse(JSON.stringify(getObj()||{}));
+  var r=await sb.from('urcym_agenda_config').select('value').eq('key',key).maybeSingle();
+  if(r&&r.error) throw r.error;
+  var remoto=(r&&r.data&&r.data.value)?JSON.parse(r.data.value):{};
+  var base=_agBase[key]||{};
+  var merged=Object.assign({},remoto);
+  // Altas/ediciones hechas acá
+  Object.keys(snapLocal).forEach(function(k){
+    if(_agJ(snapLocal[k])!==_agJ(base[k])) merged[k]=snapLocal[k];
+  });
+  // Bajas hechas acá (estaba en la última versión conocida y acá ya no)
+  Object.keys(base).forEach(function(k){
+    if(!(k in snapLocal)) delete merged[k];
+  });
+  var res=await sb.from('urcym_agenda_config').upsert({key:key,value:JSON.stringify(merged)},{onConflict:'key'});
+  if(res&&res.error) throw res.error;
+  _agSetBase(key,merged);
+  // Incorporar a esta pantalla lo que cargaron otros, sin pisar lo que se
+  // haya tocado acá mientras se guardaba (eso sale en el próximo guardado).
+  var actual=getObj(); var hubo=false;
+  var claves={}; Object.keys(merged).forEach(function(k){claves[k]=1;}); Object.keys(snapLocal).forEach(function(k){claves[k]=1;});
+  Object.keys(claves).forEach(function(k){
+    if(_agJ(actual[k])!==_agJ(snapLocal[k])) return;
+    if(!(k in merged)){ if(k in actual){ delete actual[k]; hubo=true; } }
+    else if(_agJ(actual[k])!==_agJ(merged[k])){ actual[k]=merged[k]; hubo=true; }
+  });
+  return hubo;
+}
+function _agGuardarFusionado(key,getObj){
+  _agGuardando[key]=(_agGuardando[key]||0)+1;
+  var prev=_agColas[key]||Promise.resolve();
+  var p=prev.then(function(){ return _agFusionarYSubir(key,getObj); });
+  _agColas[key]=p.catch(function(){});
+  return p.then(function(v){ _agGuardando[key]--; return v; },
+                function(e){ _agGuardando[key]--; throw e; });
+}
 function saveOffered(){
   try{localStorage.setItem(LS_OFFERED,JSON.stringify(offeredSlots));}catch(e){}
-  try{
-    sb.from('urcym_agenda_config').upsert({key:'offered_slots',value:JSON.stringify(offeredSlots)},{onConflict:'key'}).then(function(res){if(res&&res.error)console.warn('[URCyM] saveOffered error',res.error);});
-  }catch(e){console.warn('[URCyM] saveOffered error',e);}
+  _agGuardarFusionado('offered_slots',function(){return offeredSlots;}).then(function(hubo){
+    try{localStorage.setItem(LS_OFFERED,JSON.stringify(offeredSlots));}catch(e){}
+    if(hubo) renderGrid();
+  }).catch(function(e){console.warn('[URCyM] saveOffered error',e);});
 }
 function loadBlocked(){try{var s=localStorage.getItem(LS_BLOCKED);if(s){var bs=JSON.parse(s);Object.keys(bs).forEach(function(k){if(bs[k]===true)bs[k]={label:''};});blockedSlots=bs;}}catch(e){}}
 function saveBlocked(){
   try{localStorage.setItem(LS_BLOCKED,JSON.stringify(blockedSlots));}catch(e){}
-  try{
-    sb.from('urcym_agenda_config').upsert({key:'blocked_slots',value:JSON.stringify(blockedSlots)},{onConflict:'key'}).then(function(res){if(res&&res.error)console.warn('[URCyM] saveBlocked error',res.error);});
-  }catch(e){console.warn('[URCyM] saveBlocked error',e);}
+  _agGuardarFusionado('blocked_slots',function(){return blockedSlots;}).then(function(hubo){
+    try{localStorage.setItem(LS_BLOCKED,JSON.stringify(blockedSlots));}catch(e){}
+    if(hubo) renderGrid();
+  }).catch(function(e){console.warn('[URCyM] saveBlocked error',e);});
 }
 loadOffered();
 
@@ -20194,11 +20247,8 @@ function openOfferedPopup(e,ds,tm,prof){
     ev.stopPropagation();
     var key=ds+'_'+tm+'_'+prof;
     delete offeredSlots[key];
-    // Guardar en localStorage de forma síncrona y en Supabase
-    try{localStorage.setItem(LS_OFFERED,JSON.stringify(offeredSlots));}catch(e){}
-    try{
-      sb.from('urcym_agenda_config').upsert({key:'offered_slots',value:JSON.stringify(offeredSlots)},{onConflict:'key'}).then(function(res){if(res&&res.error)console.warn('[URCyM] saveOffered error',res.error);});
-    }catch(e){console.warn('[URCyM] saveOffered error',e);}
+    // Guardar en localStorage de forma síncrona y en Supabase (fusionado)
+    saveOffered();
     closeOfferedPopup();
     renderGrid();
   };
@@ -22379,10 +22429,12 @@ async function sbSaveTurnos(){
   // siempre guardar localStorage primero (inmediato)
   try{localStorage.setItem(LS_T,JSON.stringify(turnos));}catch(e){}
   try{
-    var res=await sb.from('urcym_agenda_config').upsert({key:'turnos',value:JSON.stringify(turnos)},{onConflict:'key'});
-    if(res&&res.error){console.warn('[URCyM] sbSaveTurnos error',res.error);_sbShowSaveError(true);return;}
+    var hubo=await _agGuardarFusionado('turnos',function(){return turnos;});
+    window.turnos=turnos;
+    try{localStorage.setItem(LS_T,JSON.stringify(turnos));}catch(e){}
     _sbShowSaveError(false);
     _sbShowSaveOk();
+    if(hubo) renderGrid(); // aparecieron turnos que cargó otra persona
   }catch(e){
     console.warn('[URCyM] sbSaveTurnos error',e);
     _sbShowSaveError(true);
@@ -22427,6 +22479,7 @@ async function agRecuperarLocalStorage(){
     if(res&&res.error){alert('Error al subir: '+res.error.message);return;}
     turnos=merged;
     window.turnos=turnos;
+    _agSetBase('turnos',merged);
     try{localStorage.setItem('urcym_ag_turnos',JSON.stringify(merged));}catch(e){}
     renderGrid();
     alert('Listo. Se fusionaron '+Object.keys(merged).length+' turnos en Supabase.');
@@ -22454,12 +22507,13 @@ async function loadLocal(){
     if(rows.data){
       rows.data.forEach(function(row){
         try{
-          if(row.key==='turnos')     turnosDB=JSON.parse(row.value);
+          if(row.key==='turnos')     {turnosDB=JSON.parse(row.value);_agSetBase('turnos',turnosDB);}
           if(row.key==='nl_blocks')  nlDB=JSON.parse(row.value);
           if(row.key==='disp_blocks')dispDB=JSON.parse(row.value);
           if(row.key==='inst_blocks')instDB=JSON.parse(row.value);
-          if(row.key==='offered_slots'){try{offeredSlots=JSON.parse(row.value);localStorage.setItem(LS_OFFERED,row.value);}catch(e){}}
+          if(row.key==='offered_slots'){try{offeredSlots=JSON.parse(row.value);_agSetBase('offered_slots',offeredSlots);localStorage.setItem(LS_OFFERED,row.value);}catch(e){}}
           if(row.key==='blocked_slots'){try{
+    _agSetBase('blocked_slots',JSON.parse(row.value));
     var bs=JSON.parse(row.value);
     // migrate old format (value===true) to {label:''}
     Object.keys(bs).forEach(function(k){if(bs[k]===true)bs[k]={label:''};});
@@ -22981,7 +23035,9 @@ loadLocal();  // async, carga en background y llama renderGrid al final
       rows.data.forEach(function(row){
         try{
           if(row.key==='turnos'){
+            if(_agGuardando.turnos>0) return; // hay un guardado en curso: lo trae él
             var nuevosTurnos = JSON.parse(row.value);
+            _agSetBase('turnos', nuevosTurnos);
             if(JSON.stringify(nuevosTurnos) !== JSON.stringify(turnos)){
               turnos = nuevosTurnos;
               window.turnos = turnos;
@@ -23001,10 +23057,12 @@ loadLocal();  // async, carga en background y llama renderGrid al final
             var i=JSON.parse(row.value);
             if(JSON.stringify(i)!==JSON.stringify(instBlocks)){instBlocks=i;try{localStorage.setItem(LS_INST,row.value);}catch(e){}changed=true;}
           }
-          if(row.key==='offered_slots'){try{offeredSlots=JSON.parse(row.value);localStorage.setItem(LS_OFFERED,row.value);}catch(e){}}
-          if(row.key==='blocked_slots'){try{
+          if(row.key==='offered_slots'){if(_agGuardando.offered_slots>0)return;try{var _of=JSON.parse(row.value);_agSetBase('offered_slots',_of);if(JSON.stringify(_of)!==JSON.stringify(offeredSlots)){offeredSlots=_of;changed=true;}localStorage.setItem(LS_OFFERED,row.value);}catch(e){}}
+          if(row.key==='blocked_slots'){if(_agGuardando.blocked_slots>0)return;try{
+            _agSetBase('blocked_slots',JSON.parse(row.value));
             var bs=JSON.parse(row.value);
             Object.keys(bs).forEach(function(k){if(bs[k]===true)bs[k]={label:''};});
+            if(JSON.stringify(bs)!==JSON.stringify(blockedSlots))changed=true;
             blockedSlots=bs;localStorage.setItem(LS_BLOCKED,row.value);
           }catch(e){}}
         }catch(e){}
