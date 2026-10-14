@@ -20645,6 +20645,7 @@ function renderGrid(){
       var parts=k.split('_');
       if(dsSemana.indexOf(parts[0])<0)return;
       var t=turnos[k]; if(!t||visProfs.indexOf(t.prof)<0)return;
+      if(t.video&&_esSecretariaLogueada())return; // Secretaría no ve videollamadas
       var m=t2m(parts[1]); incl(m, m+(PROF_45.indexOf(t.prof)>=0?45:30));
     });
     if(minM===null){ HOUR_START=8; HOUR_END=20; }
@@ -20887,6 +20888,8 @@ function renderGrid(){
       if(tDate!==ds)return;
       var t=turnos[k];
       if(visProfs.indexOf(t.prof)<0)return;
+      // Videollamadas: solo las ven los profesionales, no la Secretaría
+      if(t.video&&_secSinBloques)return;
       var startM=t2m(tTime);
       // Duración según el bloque de disponibilidad de ese día/horario
       // (extras/videollamadas fuera de bloque: duración estándar del prof)
@@ -24469,8 +24472,9 @@ window.cargarProxConsultas = cargarProxConsultas;
     catch(e){ console.warn('[Finanzas] no se pudo leer el cierre', e); return null; }
   }
   // ¿Este turno (no OSDE) ya entra a Finanzas por el cierre de su día?
-  function finEnCierre(cf, fecha, t){ return !!(cf && fecha >= cf.corte && cf.profs[t.prof]); }
-  var CAT_ING_LBL = {costa_bucal_guerrero:'Costa Bucal Guerrero',costa_bucal_bertani:'Costa Bucal Bertani',urcym:'Evaluaciones cardiometabólicas',sapiens_bar:'SAPIENS Bar',sapiens_omar:'SAPIENS Omar',ceq:'CEQ',cem:'CEM',salita:'Salita',otro:'Otros',manual:'Manual',receta_particular:'Receta particular',receta_osde:'Receta OSDE',osde:'OSDE'};
+  // Las videollamadas nunca van por el cierre: siempre suman acá como "Videollamadas".
+  function finEnCierre(cf, fecha, t){ return !!(cf && !t.video && fecha >= cf.corte && cf.profs[t.prof]); }
+  var CAT_ING_LBL = {costa_bucal_guerrero:'Costa Bucal Guerrero',costa_bucal_bertani:'Costa Bucal Bertani',urcym:'Evaluaciones cardiometabólicas',sapiens_bar:'SAPIENS Bar',sapiens_omar:'SAPIENS Omar',ceq:'CEQ',cem:'CEM',salita:'Salita',otro:'Otros',manual:'Manual',receta_particular:'Receta particular',receta_osde:'Receta OSDE',osde:'OSDE',videollamadas:'Videollamadas'};
 
   function $id(id){ return document.getElementById(id); }
   function moneda(n){ return '$'+Number(n||0).toLocaleString('es-AR',{minimumFractionDigits:0,maximumFractionDigits:0}); }
@@ -24713,7 +24717,8 @@ window.cargarProxConsultas = cargarProxConsultas;
       turnosList.forEach(function(t){
         if(t.enCierre) return;
         var v = t.monto + t.sena;
-        if(v > 0) origenes['urcym'] = (origenes['urcym']||0) + v;
+        var _orig = t.video ? 'videollamadas' : 'urcym';
+        if(v > 0) origenes[_orig] = (origenes[_orig]||0) + v;
       });
       recList.forEach(function(r){ if(r.enCierre) return; origenes[r.origen]=(origenes[r.origen]||0)+r.monto; });
       if(cf) Object.keys(cf.profs).forEach(function(p){
@@ -24727,6 +24732,7 @@ window.cargarProxConsultas = cargarProxConsultas;
         // Orden y labels con íconos
         var ING_ORDER = [
           {k:'urcym',       icon:'🩺', label:'URCyM',              sub:'Consultas cobradas'},
+          {k:'videollamadas', icon:'📹', label:'Videollamadas',      sub:'consultas cobradas · fuera del cierre'},
           {k:'costa_bucal_guerrero', icon:'🏢', label:'Costa Bucal Guerrero', sub:'cierres · ya descontado el alquiler'},
           {k:'costa_bucal_bertani',  icon:'🏢', label:'Costa Bucal Bertani',  sub:'cierres · ya descontado el alquiler'},
           {k:'sapiens_bar', icon:'🏢', label:'SAPIENS Bar',         sub:''},
@@ -24850,7 +24856,7 @@ window.cargarProxConsultas = cargarProxConsultas;
               if(r.enCierre && (r.monto>0 || r.sena>0)) montoStr += _tagCB;
               return '<tr><td>'+finFmtFecha(r.fecha)+'</td>'
                 +'<td style="font-size:12px;color:var(--text-soft);">'+r.hora+'</td>'
-                +'<td style="font-weight:600">'+r.paciente+'</td>'
+                +'<td style="font-weight:600">'+(r.video?'<span title="Videollamada">📹 </span>':'')+r.paciente+'</td>'
                 +'<td style="font-size:12px;color:var(--text-soft);">'+(PROF_FULL_FIN[r.prof]||r.prof||'')+'</td>'
                 +'<td><span class="fin-pago-badge '+pagoCls+'">'+pagoLbl+'</span></td>'
                 +'<td>'+montoStr+'</td>'
@@ -25812,7 +25818,7 @@ window.cargarProxConsultas = cargarProxConsultas;
         if(finEnCierre(cfP, fecha, t)) return;
         if(t.pago==='pagado'&&t.monto&&Number(t.monto)>0){
           totalConsultas+=Number(t.monto);
-          rows.push({fecha:fecha,tipo:'Consulta',desc:(t.paciente||'')+(t.prof?' / '+(PROF_FULL_FIN[t.prof]||t.prof):''),monto:Number(t.monto),sign:1});
+          rows.push({fecha:fecha,tipo:t.video?'Videollamada':'Consulta',desc:(t.paciente||'')+(t.prof?' / '+(PROF_FULL_FIN[t.prof]||t.prof):''),monto:Number(t.monto),sign:1});
         }
       });
       var recR=await sb.from('urcym_recetas').select('*').gte('fecha',r.desde).lte('fecha',r.hasta);
@@ -26507,14 +26513,21 @@ window.cargarProxConsultas = cargarProxConsultas;
   // otra consulta que podía llegar vacía. Si por algún motivo esa variable
   // todavía no está cargada (recién abierta la página), se hace un
   // fetch directo como respaldo.
+  // Las videollamadas no pasan por el cierre de Costa Bucal: van directo a
+  // Finanzas como "Videollamadas".
+  function ciSinVideo(obj){
+    var out={};
+    Object.keys(obj||{}).forEach(function(k){ var t=obj[k]; if(t && !t.video) out[k]=t; });
+    return out;
+  }
   async function ciObtenerTurnos(){
     // "turnos" vive dentro del IIFE del agenda-script (no es una variable
     // global de verdad), así que acá se lee a través de window.turnos, que
     // ese módulo mantiene sincronizado en cada carga/actualización.
     if(window.turnos && Object.keys(window.turnos).length){
-      return window.turnos;
+      return ciSinVideo(window.turnos);
     }
-    try{ return (await sbGetAgendaConfig('turnos')) || {}; }
+    try{ return ciSinVideo((await sbGetAgendaConfig('turnos')) || {}); }
     catch(e){ console.warn('[Cierre] error cargando turnos', e); return {}; }
   }
 
@@ -26679,7 +26692,7 @@ window.cargarProxConsultas = cargarProxConsultas;
     recetas.forEach(function(r){ if(r.rec_id!=null) out.recIds[r.rec_id] = true; });
     var d0 = desde < corte ? corte : desde;
     if(d0 > hasta) return out;
-    if(!turnosData) turnosData = await ciObtenerTurnos();
+    turnosData = turnosData ? ciSinVideo(turnosData) : await ciObtenerTurnos();
     var dias = {};
     function acc(fecha, prof){
       var k = fecha+'|'+prof;
