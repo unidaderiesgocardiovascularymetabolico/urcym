@@ -20951,15 +20951,17 @@ function renderGrid(){
     var uLayout=[];
     allItems.forEach(function(item,idx){
       var maxLane=itemLane[idx];
+      var mixProf=false; // se solapa con otro profesional
       allItems.forEach(function(other,oi){
         if(other.startM<item.endM&&other.endM>item.startM){
           if(itemLane[oi]>maxLane)maxLane=itemLane[oi];
+          if(other.prof!==item.prof)mixProf=true;
         }
       });
       uLayout.push({
         prof:item.prof,tm:item.tm,startM:item.startM,endM:item.endM,
         dur:item.endM-item.startM,tipo:item.tipo,key:item.key,turno:item.turno,video:item.video,
-        col:itemLane[idx],totalCols:maxLane+1
+        col:itemLane[idx],totalCols:maxLane+1,mixProf:mixProf
       });
     });
 
@@ -21014,8 +21016,13 @@ function renderGrid(){
       if(item.totalCols<=1){
         // Sin solapamiento: ocupa todo el ancho
         leftPct=0; wPct=100;
+      } else if(item.mixProf){
+        // Distintos profesionales en el mismo horario: lado a lado, para que
+        // ninguno tape al otro (p.ej. bloque de videollamada de uno y turnos del otro)
+        wPct=100/item.totalCols;
+        leftPct=item.col*wPct;
       } else {
-        // Con solapamiento: estilo GCal
+        // Con solapamiento del mismo profesional: estilo GCal
         leftPct=item.col*GCAL_STEP;
         wPct=GCAL_W;
         // Si es el último, llega hasta el borde derecho
