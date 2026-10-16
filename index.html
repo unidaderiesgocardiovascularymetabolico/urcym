@@ -828,6 +828,11 @@
 #agenda-app .ag-turno.cancelado{opacity:.55;text-decoration:line-through;}
 #agenda-app .ag-turno.ag-turno-extra{border:1.5px dashed #E59500 !important;box-shadow:inset 2px 0 0 #E59500;}
 #agenda-app .ag-turno.ag-turno-video{border:1.5px dashed #7B3FC4 !important;box-shadow:inset 2px 0 0 #7B3FC4;}
+#agenda-app .ag-turno.ag-turno-pend{opacity:.6;background-image:repeating-linear-gradient(45deg,rgba(123,63,196,.08) 0 6px,transparent 6px 12px);}
+.vid-btn{border:1px solid #c4b5fd;background:#fff;color:#7B3FC4;border-radius:7px;padding:3px 9px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;}
+.vid-btn:hover{background:#f5f3ff;}
+.vid-body label{text-transform:none;letter-spacing:0;}
+.vid-body fieldset label{font-weight:500;}
 /* Leyenda */
 #agenda-app .ag-legend{display:flex;gap:12px;margin-bottom:10px;flex-wrap:wrap;align-items:center;}
 #agenda-app .ag-legend-item{display:flex;align-items:center;gap:5px;font-size:11px;color:#6b7280;}
@@ -1504,6 +1509,7 @@
           <button class="ag-btn-disp ag-solo-prof" id="ag-btn-disp">&#128197; Disponibilidad</button>
           <button class="ag-btn-inst ag-solo-prof" id="ag-btn-inst">&#127970; Institucional</button>
           <button class="ag-btn-tasks" id="ag-btn-tasks" title="Tareas por profesional">&#9989; Tareas</button>
+          <button id="ag-btn-video-online" class="ag-solo-prof" onclick="window.vidAbrirPanel&&vidAbrirPanel()" style="background:none;border:1px solid #7B3FC4;border-radius:6px;padding:5px 10px;font-size:12px;color:#7B3FC4;cursor:pointer;font-family:inherit;" title="Turnos por videollamada que sacan los pacientes desde la web">🌐 Turnos online <span class="vid-count" style="display:none;background:#f59e0b;color:#fff;border-radius:999px;padding:0 6px;font-size:10.5px;font-weight:700;margin-left:2px;">0</span></button>
           <button id="ag-btn-buscar" class="ag-solo-prof" style="background:none;border:1px solid #185FA5;border-radius:6px;padding:5px 10px;font-size:12px;color:#185FA5;cursor:pointer;font-family:inherit;" title="Buscar turnos de un paciente">&#128269; Buscar paciente</button>
           <button id="ag-btn-aranceles" class="ag-solo-prof" style="background:none;border:1px solid #059669;border-radius:6px;padding:5px 10px;font-size:12px;color:#059669;cursor:pointer;font-family:inherit;" title="Configurar aranceles por consulta">💲 Aranceles</button>
           <button class="ag-solo-prof" onclick="agRecuperarLocalStorage()" style="background:none;border:1px solid #b45309;border-radius:6px;padding:5px 10px;font-size:12px;color:#b45309;cursor:pointer;font-family:inherit;" title="Si se perdieron turnos: fusiona el caché local con Supabase">🔁 Recuperar turnos</button>
@@ -20459,6 +20465,7 @@ function openCtxMenu(e,key){
   menu.appendChild(sep);
   menu.appendChild(mkItem('✎ &nbsp;Editar turno','#374151',function(){openModal(null,null,key);}));
   menu.appendChild(mkItem('📅 &nbsp;Reprogramar','#374151',function(){openReprog(key);}));
+  _vidItemsMenu(menu,key,mkItem);
 
   var x=e.clientX,y=e.clientY;
   menu.style.left=x+'px';menu.style.top=y+'px';
@@ -21181,7 +21188,7 @@ function makeTurnoEl(t,key,hPx){
   var asistCls=t.asistencia==='presente'?' asist-presente'
     :(t.asistencia==='atendido'||t.asistencia==='asistio')?' asist-atendido'
     :t.asistencia==='ausente'?' asist-ausente':'';
-  el.className='ag-turno '+pc+asistCls+(t.estado==='cancelado'?' cancelado':'')+(t.extra?' ag-turno-extra':'')+(t.video?' ag-turno-video':'');
+  el.className='ag-turno '+pc+asistCls+(t.estado==='cancelado'?' cancelado':'')+(t.extra?' ag-turno-extra':'')+(t.video?' ag-turno-video':'')+(t.reserva_pendiente?' ag-turno-pend':'');
   var dc=t.osde?'osde':(t.pago||'sin-seña');
 
   var nameColor='';
@@ -21197,7 +21204,7 @@ function makeTurnoEl(t,key,hPx){
   var motivoShort=turnoMotivosArr(t).join(', ');
 
   var estBadge=t.estado?'<span class="ag-badge">'+(EST_L[t.estado]||'')+'</span>':'';
-  var videoBadge=t.video?'<span style="font-size:10px;line-height:1;">📹</span>':'';
+  var videoBadge=t.video?'<span style="font-size:10px;line-height:1;" title="'+(t.reserva_pendiente?'Sacado online · esperando el pago de Mercado Pago':t.autogestion?'Videollamada sacada online':'Videollamada')+'">📹'+(t.reserva_pendiente?'⏳':t.autogestion?'🌐':'')+'</span>':'';
 
   // Nombre del paciente — si la altura es muy chica, usar solo apellido (primer fragmento)
   var paciente=t.paciente||'—';
@@ -21818,6 +21825,7 @@ function openReprog(key){
   var newKey=newDate+'_'+newTime+'_'+profVal;
   if(oldKey&&oldKey!==newKey&&turnos[newKey]){alert('Ya existe un turno para '+PROF_FULL[profVal]+' en ese horario.');return;}
   var prevAsist=(oldKey&&turnos[oldKey]&&turnos[oldKey].asistencia)||null;
+  var _prevTurnoSnap=(oldKey&&turnos[oldKey])?turnos[oldKey]:null; // antes de borrarlo si cambia de horario
   if(oldKey&&oldKey!==newKey){delete turnos[oldKey];}
   // Validar disponibilidad solo si NO es turno extra
   var ds=newDate;
@@ -21932,7 +21940,7 @@ function openReprog(key){
   var _agPacDni = (document.getElementById('ag-f-paciente-dni')||{}).value||'';
   // Fecha en que efectivamente entró la plata (seña o pago total). Sirve para
   // poder ver en Finanzas cuándo se cobró de verdad, aparte del mes del turno.
-  var _prevTurnoParaCobro = turnos[oldKey] || {};
+  var _prevTurnoParaCobro = turnos[oldKey] || _prevTurnoSnap || {};
   var _senaFinal = osdeVal?'':senaVal;
   var _montoFinal = (pagoVal==='pagado'&&montoVal) ? montoVal : undefined;
   var _dineroFinal = _senaFinal || _montoFinal || '';
@@ -21999,6 +22007,10 @@ function openReprog(key){
     video:isVideo3?true:undefined,
     osde:osdeVal?true:undefined
   };
+  // Turnos sacados online: conservar el vínculo con la reserva (Meet, comprobantes)
+  ['autogestion','reserva_id','meet_link','email','telefono','sena_via','saldo_via','reserva_pendiente'].forEach(function(f){
+    if(_prevTurnoParaCobro[f]!==undefined) turnos[newKey][f]=_prevTurnoParaCobro[f];
+  });
 
   editKey=null;
   // Guardar turno y verificar cascada y cierre de modal
@@ -22152,9 +22164,11 @@ document.addEventListener('change',function(e){
   var _pkey=editKey.split('_');
   var _dsDel=_pkey[0], _tmDel=_pkey[1], _profDel=_pkey[2]||_tDel.prof;
   var _nombreDel=_tDel.paciente||'este turno';
-  if(!confirm('¿Eliminar el turno de '+_nombreDel+'? Esta acción no se puede deshacer.'))return;
+  if(!confirm('¿Eliminar el turno de '+_nombreDel+'? Esta acción no se puede deshacer.'+(_tDel.autogestion&&_tDel.reserva_id?'\n\nEs un turno sacado online: se cancela también el Google Meet (al paciente le llega el aviso de Google Calendar). Si había seña, la devolución se coordina aparte.':'')))return;
+  var _vidResDel=_tDel.autogestion&&_tDel.reserva_id?_tDel.reserva_id:null;
   delete turnos[editKey];
   saveLocal();
+  if(_vidResDel)_vidCancelarReserva(_vidResDel);
   document.getElementById('ag-modal-bg').style.display='none';
   editKey=null;
   renderGrid();
@@ -22609,6 +22623,212 @@ async function loadLocal(){
 
   renderGrid();
 }
+// ===== VIDEOLLAMADAS · AUTOGESTIÓN (página pública turnos-video.html) =====
+// Los pacientes sacan turno solos en los bloques 📹 de Disponibilidad. La
+// función del servidor (Supabase → video-turnos) escribe el turno acá con
+// autogestion:true y reserva_id. Este bloque agrega:
+//   · botón "🌐 Turnos online" (config + link público + listado de reservas)
+//   · en el menú del turno: abrir Meet, ver comprobantes, marcar revisado
+//   · al borrar un turno de autogestión: cancela la reserva y el evento de Meet
+var VID_FN_URL='https://qdjzetylyojfjdottjrk.supabase.co/functions/v1/video-turnos';
+var VID_PUBLIC_URL='https://unidadderiesgocardiovascularymetabolico.github.io/turnos-video.html';
+var VID_PROFS={BG:'Dra. Bárbara Guerrero',OB:'Dr. Omar Bertani'};
+function _vidEsc(v){return String(v==null?'':v).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+function _vidPesos(n){return '$'+Math.round(Number(n)||0).toLocaleString('es-AR');}
+function _vidToast(msg,color){
+  var el=document.createElement('div');
+  el.style.cssText='position:fixed;bottom:16px;right:20px;background:'+(color||'#16a34a')+';color:#fff;font-size:12.5px;font-weight:600;padding:9px 16px;border-radius:10px;z-index:100001;box-shadow:0 4px 16px rgba(0,0,0,.2);max-width:360px;';
+  el.textContent=msg;document.body.appendChild(el);setTimeout(function(){el.remove();},3500);
+}
+async function _vidVerComprobante(path){
+  if(!path){alert('No hay comprobante adjunto (pagó por Mercado Pago o todavía no pagó).');return;}
+  var w=window.open('about:blank','_blank');
+  try{
+    var r=await sb.storage.from('comprobantes').createSignedUrl(path,600);
+    if(r.error)throw r.error;
+    if(w)w.location.href=r.data.signedUrl; else window.open(r.data.signedUrl,'_blank');
+  }catch(e){ if(w)w.close(); alert('No se pudo abrir el comprobante: '+(e.message||e)); }
+}
+async function _vidReserva(id){
+  var r=await sb.from('video_reservas').select('*').eq('id',id).maybeSingle();
+  if(r.error)throw r.error; return r.data;
+}
+// Items extra del menú contextual para turnos sacados online
+function _vidItemsMenu(menu,key,mkItem){
+  var t=turnos[key]; if(!t||!t.autogestion||!t.reserva_id)return;
+  var sep=document.createElement('div');sep.style.cssText='height:1px;background:#e5e7eb;margin:4px 0;';menu.appendChild(sep);
+  var hdr=document.createElement('div');
+  hdr.style.cssText='padding:4px 14px 2px;font-size:10.5px;color:#7B3FC4;font-weight:700;letter-spacing:.04em;text-transform:uppercase;';
+  hdr.textContent=t.reserva_pendiente?'🌐 Online · esperando pago MP':'🌐 Turno sacado online';
+  menu.appendChild(hdr);
+  if(t.meet_link) menu.appendChild(mkItem('🎥 &nbsp;Abrir Meet','#1d9e75',function(){window.open(t.meet_link,'_blank');}));
+  menu.appendChild(mkItem('📎 &nbsp;Comprobantes / detalle','#374151',function(){_vidDetalle(t.reserva_id);}));
+}
+async function _vidDetalle(id){
+  var r;
+  try{ r=await _vidReserva(id); }catch(e){ alert('No se pudo leer la reserva: '+(e.message||e)); return; }
+  if(!r){ alert('No se encontró la reserva.'); return; }
+  _vidModal('Turno online · '+_vidEsc(r.paciente), _vidHtmlReserva(r,true), function(box){ _vidEngancharReservas(box); });
+}
+var _VID_EST={pendiente_pago:['⏳ Esperando pago','#b45309','#fef3c7'],confirmada:['✓ Confirmada','#15803d','#dcfce7'],cancelada:['Cancelada','#b91c1c','#fee2e2'],vencida:['Vencida','#6b7280','#f3f4f6']};
+function _vidHtmlReserva(r,detalle){
+  var e=_VID_EST[r.estado]||[r.estado,'#374151','#f3f4f6'];
+  var f=r.fecha.split('-').reverse().join('/');
+  var met=function(m){return m==='mercadopago'?'Mercado Pago':m==='comprobante'?'Transferencia':'—';};
+  var pend=(r.sena_comprobante&&!r.comprobante_revisado)||(r.saldo_comprobante&&!r.comprobante_revisado);
+  var h='<div class="vid-res" data-id="'+r.id+'" style="border:1px solid #e5e7eb;border-radius:10px;padding:10px 12px;margin-bottom:8px;font-size:12.5px;">'
+    +'<div style="display:flex;justify-content:space-between;gap:8px;align-items:center;flex-wrap:wrap;">'
+    +'<b style="font-size:13.5px;">'+f+' '+_vidEsc(r.hora)+' · '+_vidEsc(r.paciente)+'</b>'
+    +'<span style="background:'+e[2]+';color:'+e[1]+';border-radius:999px;padding:2px 9px;font-weight:700;font-size:11px;">'+e[0]+'</span></div>'
+    +'<div style="color:#6b7280;margin-top:3px;">'+_vidEsc(VID_PROFS[r.prof]||r.prof)+' · DNI '+_vidEsc(r.dni)+(r.paciente_nuevo?' · <b style="color:#7B3FC4">paciente nuevo</b>':'')+' · '+_vidEsc(r.email)+(r.telefono?' · '+_vidEsc(r.telefono):'')+'</div>'
+    +(r.motivo?'<div style="margin-top:3px;">Motivo: '+_vidEsc(r.motivo)+'</div>':'')
+    +'<div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap;align-items:center;">'
+    +'<span>Seña '+_vidPesos(r.sena_monto)+' '+(r.sena_pagada_at?'<b style="color:#15803d">✓ '+met(r.sena_metodo)+'</b>':'<span style="color:#b45309">pendiente</span>')+'</span>'
+    +(r.sena_comprobante?'<button class="vid-btn" data-comp="'+_vidEsc(r.sena_comprobante)+'">📎 ver</button>':'')
+    +'<span style="margin-left:6px;">Saldo '+_vidPesos(r.saldo_monto)+' '+(r.saldo_pagado_at?'<b style="color:#15803d">✓ '+met(r.saldo_metodo)+'</b>':'<span style="color:#b45309">pendiente</span>')+'</span>'
+    +(r.saldo_comprobante?'<button class="vid-btn" data-comp="'+_vidEsc(r.saldo_comprobante)+'">📎 ver</button>':'')
+    +((r.sena_comprobante||r.saldo_comprobante)?'<label style="margin-left:auto;display:flex;align-items:center;gap:4px;cursor:pointer;'+(pend?'color:#b45309;font-weight:700;':'color:#6b7280;')+'"><input type="checkbox" class="vid-rev" '+(r.comprobante_revisado?'checked':'')+'> comprobantes revisados</label>':'')
+    +'</div>'
+    +(r.meet_link?'<div style="margin-top:5px;"><a href="'+_vidEsc(r.meet_link)+'" target="_blank" rel="noopener" style="color:#1d9e75;font-weight:700;">🎥 '+_vidEsc(r.meet_link)+'</a></div>':'');
+  if(detalle){
+    var log=(r.log||[]).slice(-8).map(function(l){var d=new Date(l.at);return '<div>'+d.toLocaleString('es-AR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})+' · '+_vidEsc(l.msg)+'</div>';}).join('');
+    if(log)h+='<div style="margin-top:8px;padding-top:6px;border-top:1px dashed #e5e7eb;color:#6b7280;font-size:11.5px;">'+log+'</div>';
+  }
+  return h+'</div>';
+}
+function _vidEngancharReservas(box){
+  box.querySelectorAll('[data-comp]').forEach(function(b){b.onclick=function(){_vidVerComprobante(b.getAttribute('data-comp'));};});
+  box.querySelectorAll('.vid-rev').forEach(function(c){c.onchange=async function(){
+    var id=c.closest('.vid-res').getAttribute('data-id');
+    var r=await sb.from('video_reservas').update({comprobante_revisado:c.checked}).eq('id',id);
+    if(r.error){alert('No se pudo guardar: '+r.error.message);c.checked=!c.checked;}
+    else{c.parentNode.style.color='#6b7280';c.parentNode.style.fontWeight='400';}
+  };});
+}
+function _vidModal(titulo,html,alAbrir){
+  var bg=document.createElement('div');
+  bg.style.cssText='position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:100000;display:flex;align-items:flex-start;justify-content:center;padding:4vh 12px;overflow:auto;';
+  bg.innerHTML='<div style="background:#fff;border-radius:14px;max-width:720px;width:100%;padding:18px 20px;box-shadow:0 20px 60px rgba(0,0,0,.25);font-family:inherit;">'
+    +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;"><b style="font-size:16px;">'+titulo+'</b><button type="button" class="vid-x" style="border:none;background:none;font-size:20px;cursor:pointer;color:#6b7280;">✕</button></div>'
+    +'<div class="vid-body">'+html+'</div></div>';
+  document.body.appendChild(bg);
+  var cerrar=function(){bg.remove();};
+  bg.querySelector('.vid-x').onclick=cerrar;
+  bg.addEventListener('mousedown',function(e){if(e.target===bg)cerrar();});
+  if(alAbrir)alAbrir(bg.querySelector('.vid-body'),cerrar);
+  return bg;
+}
+// ── Configuración + listado ──
+async function vidAbrirPanel(){
+  var cfg=(await sbGetAgendaConfig('video_config'))||{};
+  var c={activo:cfg.activo!==false,sena_pct:cfg.sena_pct!=null?cfg.sena_pct:50,anticipacion_horas:cfg.anticipacion_horas!=null?cfg.anticipacion_horas:12,
+    dias_adelante:cfg.dias_adelante!=null?cfg.dias_adelante:30,mp_vencimiento_min:cfg.mp_vencimiento_min!=null?cfg.mp_vencimiento_min:30,
+    meet_tras_saldo:!!cfg.meet_tras_saldo,mensaje:cfg.mensaje||'',profs:cfg.profs||{}};
+  var inp='width:100%;padding:7px 9px;border:1px solid #d1d5db;border-radius:7px;font:inherit;font-size:13px;box-sizing:border-box;';
+  var lbl='display:block;font-size:11px;color:#6b7280;margin:8px 0 3px;font-weight:600;';
+  var profHtml=Object.keys(VID_PROFS).map(function(p){
+    var x=c.profs[p]||{};
+    return '<fieldset style="border:1px solid #e5e7eb;border-radius:10px;padding:8px 12px 12px;margin:0 0 10px;">'
+      +'<legend style="font-weight:700;font-size:13px;padding:0 6px;">'+VID_PROFS[p]+'</legend>'
+      +'<label style="display:flex;gap:6px;align-items:center;font-size:13px;"><input type="checkbox" data-p="'+p+'" data-f="activo" '+(x.activo!==false?'checked':'')+'> Ofrecer turnos online</label>'
+      +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:0 10px;">'
+      +'<div><label style="'+lbl+'">Mail (recibe avisos e invitación Meet)</label><input style="'+inp+'" data-p="'+p+'" data-f="email" value="'+_vidEsc(x.email||'')+'"></div>'
+      +'<div><label style="'+lbl+'">Arancel videollamada (vacío = el de Aranceles)</label><input style="'+inp+'" type="number" data-p="'+p+'" data-f="arancel_video" value="'+_vidEsc(x.arancel_video||'')+'"></div>'
+      +'<div><label style="'+lbl+'">Alias</label><input style="'+inp+'" data-p="'+p+'" data-f="alias" value="'+_vidEsc(x.alias||'')+'"></div>'
+      +'<div><label style="'+lbl+'">CBU / CVU</label><input style="'+inp+'" data-p="'+p+'" data-f="cbu" value="'+_vidEsc(x.cbu||'')+'"></div>'
+      +'<div><label style="'+lbl+'">Titular</label><input style="'+inp+'" data-p="'+p+'" data-f="titular" value="'+_vidEsc(x.titular||'')+'"></div>'
+      +'<div><label style="'+lbl+'">Banco / billetera</label><input style="'+inp+'" data-p="'+p+'" data-f="banco" value="'+_vidEsc(x.banco||'')+'"></div>'
+      +'</div><div style="display:flex;gap:16px;margin-top:8px;font-size:13px;">'
+      +'<label style="display:flex;gap:6px;align-items:center;"><input type="checkbox" data-p="'+p+'" data-f="comprobante" '+(x.comprobante!==false?'checked':'')+'> Transferencia con comprobante</label>'
+      +'<label style="display:flex;gap:6px;align-items:center;"><input type="checkbox" data-p="'+p+'" data-f="mp" '+(x.mp!==false?'checked':'')+'> Mercado Pago</label></div>'
+      +'</fieldset>';
+  }).join('');
+  var html='<div style="display:flex;gap:6px;margin-bottom:12px;">'
+    +'<button type="button" class="vid-tab" data-t="res" style="flex:1;padding:8px;border-radius:8px;border:1px solid #7B3FC4;background:#7B3FC4;color:#fff;font-weight:700;cursor:pointer;">Reservas</button>'
+    +'<button type="button" class="vid-tab" data-t="cfg" style="flex:1;padding:8px;border-radius:8px;border:1px solid #7B3FC4;background:#fff;color:#7B3FC4;font-weight:700;cursor:pointer;">Configuración</button></div>'
+    +'<div class="vid-pane" data-t="res"><div style="display:flex;gap:8px;align-items:center;background:#f5f3ff;border-radius:10px;padding:8px 10px;margin-bottom:10px;font-size:12.5px;">'
+    +'<span style="flex:1;word-break:break-all;">Link para pacientes: <b>'+VID_PUBLIC_URL+'</b></span>'
+    +'<button type="button" class="vid-btn" id="vid-copiar">Copiar</button><a class="vid-btn" href="'+VID_PUBLIC_URL+'" target="_blank" rel="noopener" style="text-decoration:none;">Abrir</a></div>'
+    +'<div id="vid-lista" style="font-size:13px;color:#6b7280;">Cargando…</div></div>'
+    +'<div class="vid-pane" data-t="cfg" style="display:none;">'
+    +'<label style="display:flex;gap:6px;align-items:center;font-size:13.5px;font-weight:600;"><input type="checkbox" id="vid-activo" '+(c.activo?'checked':'')+'> Autogestión activa (si lo destildás, la página no ofrece turnos)</label>'
+    +'<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:0 10px;">'
+    +'<div><label style="'+lbl+'">Seña (%)</label><input style="'+inp+'" type="number" id="vid-sena" value="'+c.sena_pct+'"></div>'
+    +'<div><label style="'+lbl+'">Anticipación mínima (h)</label><input style="'+inp+'" type="number" id="vid-antic" value="'+c.anticipacion_horas+'"></div>'
+    +'<div><label style="'+lbl+'">Días hacia adelante</label><input style="'+inp+'" type="number" id="vid-dias" value="'+c.dias_adelante+'"></div>'
+    +'<div><label style="'+lbl+'">Min. para pagar con MP</label><input style="'+inp+'" type="number" id="vid-venc" value="'+c.mp_vencimiento_min+'"></div></div>'
+    +'<label style="display:flex;gap:6px;align-items:center;font-size:13px;margin-top:10px;"><input type="checkbox" id="vid-meet-saldo" '+(c.meet_tras_saldo?'checked':'')+'> Mandar el link de Meet recién cuando paga el saldo (si no, va con la confirmación)</label>'
+    +'<label style="'+lbl+'">Mensaje extra en el mail de confirmación (opcional)</label><textarea style="'+inp+'min-height:50px;" id="vid-msg">'+_vidEsc(c.mensaje)+'</textarea>'
+    +'<div style="margin-top:12px;">'+profHtml+'</div>'
+    +'<p style="font-size:11.5px;color:#6b7280;margin:0 0 10px;">Los horarios ofrecidos son los bloques marcados con 📹 en Disponibilidad. Mercado Pago solo aparece si está cargado el token de ese profesional en Supabase.</p>'
+    +'<button type="button" id="vid-guardar" style="padding:9px 18px;border-radius:8px;border:none;background:#7B3FC4;color:#fff;font-weight:700;cursor:pointer;">Guardar configuración</button></div>';
+  _vidModal('🌐 Turnos online por videollamada',html,function(box,cerrar){
+    box.querySelectorAll('.vid-tab').forEach(function(b){b.onclick=function(){
+      box.querySelectorAll('.vid-tab').forEach(function(x){var on=x===b;x.style.background=on?'#7B3FC4':'#fff';x.style.color=on?'#fff':'#7B3FC4';});
+      box.querySelectorAll('.vid-pane').forEach(function(p){p.style.display=p.dataset.t===b.dataset.t?'':'none';});
+    };});
+    box.querySelector('#vid-copiar').onclick=function(){try{navigator.clipboard.writeText(VID_PUBLIC_URL);this.textContent='¡Copiado!';}catch(e){prompt('Copiá el link:',VID_PUBLIC_URL);}};
+    box.querySelector('#vid-guardar').onclick=async function(){
+      var nuevo={activo:box.querySelector('#vid-activo').checked,
+        sena_pct:Number(box.querySelector('#vid-sena').value)||0,
+        anticipacion_horas:Number(box.querySelector('#vid-antic').value)||0,
+        dias_adelante:Number(box.querySelector('#vid-dias').value)||30,
+        mp_vencimiento_min:Math.max(15,Number(box.querySelector('#vid-venc').value)||30),
+        meet_tras_saldo:box.querySelector('#vid-meet-saldo').checked,
+        mensaje:box.querySelector('#vid-msg').value.trim(),profs:{}};
+      Object.keys(VID_PROFS).forEach(function(p){
+        var o={nombre:(c.profs[p]&&c.profs[p].nombre)||VID_PROFS[p]};
+        box.querySelectorAll('[data-p="'+p+'"]').forEach(function(i){
+          var f=i.dataset.f;
+          if(i.type==='checkbox')o[f]=i.checked;
+          else if(f==='arancel_video')o[f]=Number(i.value)||0;
+          else o[f]=i.value.trim();
+        });
+        nuevo.profs[p]=o;
+      });
+      var ok=await sbUpsertAgendaConfig('video_config',nuevo);
+      if(ok){_vidToast('✓ Configuración de turnos online guardada');cerrar();}
+    };
+    _vidCargarLista(box.querySelector('#vid-lista'));
+  });
+}
+async function _vidCargarLista(el){
+  var d=new Date();d.setDate(d.getDate()-7);
+  var desde=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+  var r=await sb.from('video_reservas').select('*').gte('fecha',desde).in('estado',['pendiente_pago','confirmada','cancelada']).order('fecha',{ascending:true}).order('hora',{ascending:true}).limit(200);
+  if(r.error){el.innerHTML='<span style="color:#b91c1c">No se pudo leer la tabla video_reservas: '+_vidEsc(r.error.message)+'. ¿Corriste el SQL de instalación?</span>';return;}
+  var rows=r.data||[];
+  if(!rows.length){el.textContent='Todavía no hay reservas online.';return;}
+  var sinRevisar=rows.filter(function(x){return (x.sena_comprobante||x.saldo_comprobante)&&!x.comprobante_revisado;}).length;
+  el.innerHTML=(sinRevisar?'<div style="background:#fef3c7;color:#92400e;border-radius:8px;padding:6px 10px;margin-bottom:8px;font-weight:600;">📎 '+sinRevisar+' con comprobantes sin revisar</div>':'')
+    +rows.map(function(x){return _vidHtmlReserva(x,false);}).join('');
+  _vidEngancharReservas(el);
+}
+// Avisar a la función que un turno online se borró de la agenda (cancela la
+// reserva y el evento de Google Calendar). Espera a que el guardado llegue a
+// la nube; la función verifica que el turno ya no esté antes de cancelar.
+function _vidCancelarReserva(id,intento){
+  intento=intento||0;
+  setTimeout(async function(){
+    try{
+      var r=await fetch(VID_FN_URL,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({accion:'cancelar',id:id})});
+      if(r.status===409&&intento<4) return _vidCancelarReserva(id,intento+1);
+      if(r.ok)_vidToast('Turno online cancelado · se avisó por Google Calendar','#7B3FC4');
+    }catch(e){ if(intento<4)_vidCancelarReserva(id,intento+1); }
+  },3000+intento*3000);
+}
+window.vidAbrirPanel=vidAbrirPanel;
+// Badge de comprobantes sin revisar en el botón (se refresca cada 2 min)
+async function _vidActualizarBadge(){
+  var b=document.getElementById('ag-btn-video-online');if(!b)return;
+  try{
+    var r=await sb.from('video_reservas').select('id',{count:'exact',head:true}).eq('comprobante_revisado',false).or('sena_comprobante.not.is.null,saldo_comprobante.not.is.null').neq('estado','vencida');
+    var n=r.count||0;var s=b.querySelector('.vid-count');
+    if(s){s.textContent=n;s.style.display=n?'inline-block':'none';}
+  }catch(e){}
+}
+setTimeout(_vidActualizarBadge,4000);setInterval(_vidActualizarBadge,120000);
+
 // ===== PLANTILLAS WHATSAPP =====
 var LS_WAPP='urcym_wapp_templates';
 var PROF_LABELS={'BG':'Guerrero','OB':'Bertani','CB':'Costa Bucal'};
