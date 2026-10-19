@@ -1509,7 +1509,7 @@
           <button class="ag-btn-disp ag-solo-prof" id="ag-btn-disp">&#128197; Disponibilidad</button>
           <button class="ag-btn-inst ag-solo-prof" id="ag-btn-inst">&#127970; Institucional</button>
           <button class="ag-btn-tasks" id="ag-btn-tasks" title="Tareas por profesional">&#9989; Tareas</button>
-          <button id="ag-btn-video-online" class="ag-solo-prof" onclick="window.vidAbrirPanel&&vidAbrirPanel()" style="background:none;border:1px solid #7B3FC4;border-radius:6px;padding:5px 10px;font-size:12px;color:#7B3FC4;cursor:pointer;font-family:inherit;" title="Turnos por videollamada que sacan los pacientes desde la web">🌐 Turnos online <span class="vid-count" style="display:none;background:#f59e0b;color:#fff;border-radius:999px;padding:0 6px;font-size:10.5px;font-weight:700;margin-left:2px;">0</span></button>
+          <button id="ag-btn-video-online" class="ag-solo-prof" onclick="window.vidAbrirPanel&&vidAbrirPanel(window._vidHayConsultas?'con':'')" style="background:none;border:1px solid #7B3FC4;border-radius:6px;padding:5px 10px;font-size:12px;color:#7B3FC4;cursor:pointer;font-family:inherit;" title="Videoconsultas, recetas y consultas que piden los pacientes desde la web">🌐 Online <span class="vid-count" style="display:none;background:#f59e0b;color:#fff;border-radius:999px;padding:0 6px;font-size:10.5px;font-weight:700;margin-left:2px;">0</span></button>
           <button id="ag-btn-buscar" class="ag-solo-prof" style="background:none;border:1px solid #185FA5;border-radius:6px;padding:5px 10px;font-size:12px;color:#185FA5;cursor:pointer;font-family:inherit;" title="Buscar turnos de un paciente">&#128269; Buscar paciente</button>
           <button id="ag-btn-aranceles" class="ag-solo-prof" style="background:none;border:1px solid #059669;border-radius:6px;padding:5px 10px;font-size:12px;color:#059669;cursor:pointer;font-family:inherit;" title="Configurar aranceles por consulta">💲 Aranceles</button>
           <button class="ag-solo-prof" onclick="agRecuperarLocalStorage()" style="background:none;border:1px solid #b45309;border-radius:6px;padding:5px 10px;font-size:12px;color:#b45309;cursor:pointer;font-family:inherit;" title="Si se perdieron turnos: fusiona el caché local con Supabase">🔁 Recuperar turnos</button>
@@ -22719,18 +22719,24 @@ function _vidModal(titulo,html,alAbrir){
   return bg;
 }
 // ── Configuración + listado ──
-async function vidAbrirPanel(){
+async function vidAbrirPanel(abrirEn){
   var cfg=(await sbGetAgendaConfig('video_config'))||{};
   var c={activo:cfg.activo!==false,sena_pct:cfg.sena_pct!=null?cfg.sena_pct:50,anticipacion_horas:cfg.anticipacion_horas!=null?cfg.anticipacion_horas:12,
     dias_adelante:cfg.dias_adelante!=null?cfg.dias_adelante:30,mp_vencimiento_min:cfg.mp_vencimiento_min!=null?cfg.mp_vencimiento_min:30,
-    meet_tras_saldo:!!cfg.meet_tras_saldo,mensaje:cfg.mensaje||'',profs:cfg.profs||{}};
+    meet_tras_saldo:!!cfg.meet_tras_saldo,mensaje:cfg.mensaje||'',profs:cfg.profs||{},
+    receta_precio:cfg.receta_precio!=null?cfg.receta_precio:10000,consulta_precio:cfg.consulta_precio!=null?cfg.consulta_precio:10000,
+    consulta_horas:cfg.consulta_horas!=null?cfg.consulta_horas:24};
   var inp='width:100%;padding:7px 9px;border:1px solid #d1d5db;border-radius:7px;font:inherit;font-size:13px;box-sizing:border-box;';
   var lbl='display:block;font-size:11px;color:#6b7280;margin:8px 0 3px;font-weight:600;';
   var profHtml=Object.keys(VID_PROFS).map(function(p){
     var x=c.profs[p]||{};
     return '<fieldset style="border:1px solid #e5e7eb;border-radius:10px;padding:8px 12px 12px;margin:0 0 10px;">'
       +'<legend style="font-weight:700;font-size:13px;padding:0 6px;">'+VID_PROFS[p]+'</legend>'
-      +'<label style="display:flex;gap:6px;align-items:center;font-size:13px;"><input type="checkbox" data-p="'+p+'" data-f="activo" '+(x.activo!==false?'checked':'')+'> Ofrecer turnos online</label>'
+      +'<div style="display:flex;gap:16px;flex-wrap:wrap;font-size:13px;">'
+      +'<label style="display:flex;gap:6px;align-items:center;font-weight:700;"><input type="checkbox" data-p="'+p+'" data-f="activo" '+(x.activo!==false?'checked':'')+'> Atiende online</label>'
+      +'<label style="display:flex;gap:6px;align-items:center;"><input type="checkbox" data-p="'+p+'" data-f="video" '+(x.video!==false?'checked':'')+'> 📹 Videoconsultas</label>'
+      +'<label style="display:flex;gap:6px;align-items:center;"><input type="checkbox" data-p="'+p+'" data-f="recetas" '+(x.recetas!==false?'checked':'')+'> 💊 Recetas</label>'
+      +'<label style="display:flex;gap:6px;align-items:center;"><input type="checkbox" data-p="'+p+'" data-f="consultas" '+(x.consultas!==false?'checked':'')+'> 💬 Consultas por mensaje</label></div>'
       +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:0 10px;">'
       +'<div><label style="'+lbl+'">Mail (recibe avisos e invitación Meet)</label><input style="'+inp+'" data-p="'+p+'" data-f="email" value="'+_vidEsc(x.email||'')+'"></div>'
       +'<div><label style="'+lbl+'">Arancel videollamada (vacío = el de Aranceles)</label><input style="'+inp+'" type="number" data-p="'+p+'" data-f="arancel_video" value="'+_vidEsc(x.arancel_video||'')+'"></div>'
@@ -22745,14 +22751,22 @@ async function vidAbrirPanel(){
       +'</fieldset>';
   }).join('');
   var html='<div style="display:flex;gap:6px;margin-bottom:12px;">'
-    +'<button type="button" class="vid-tab" data-t="res" style="flex:1;padding:8px;border-radius:8px;border:1px solid #7B3FC4;background:#7B3FC4;color:#fff;font-weight:700;cursor:pointer;">Reservas</button>'
+    +'<button type="button" class="vid-tab" data-t="res" style="flex:1;padding:8px;border-radius:8px;border:1px solid #7B3FC4;background:#7B3FC4;color:#fff;font-weight:700;cursor:pointer;">📹 Videoconsultas</button>'
+    +'<button type="button" class="vid-tab" data-t="con" style="flex:1;padding:8px;border-radius:8px;border:1px solid #7B3FC4;background:#fff;color:#7B3FC4;font-weight:700;cursor:pointer;">💬 Consultas <span id="vid-n-con"></span></button>'
     +'<button type="button" class="vid-tab" data-t="cfg" style="flex:1;padding:8px;border-radius:8px;border:1px solid #7B3FC4;background:#fff;color:#7B3FC4;font-weight:700;cursor:pointer;">Configuración</button></div>'
     +'<div class="vid-pane" data-t="res"><div style="display:flex;gap:8px;align-items:center;background:#f5f3ff;border-radius:10px;padding:8px 10px;margin-bottom:10px;font-size:12.5px;">'
     +'<span style="flex:1;word-break:break-all;">Link para pacientes: <b>'+VID_PUBLIC_URL+'</b></span>'
     +'<button type="button" class="vid-btn" id="vid-copiar">Copiar</button><a class="vid-btn" href="'+VID_PUBLIC_URL+'" target="_blank" rel="noopener" style="text-decoration:none;">Abrir</a></div>'
     +'<div id="vid-lista" style="font-size:13px;color:#6b7280;">Cargando…</div></div>'
+    +'<div class="vid-pane" data-t="con" style="display:none;"><div id="vid-consultas" style="font-size:13px;color:#6b7280;">Cargando…</div>'
+    +'<p style="font-size:11.5px;color:#6b7280;margin-top:8px;">Las recetas pedidas online están en <b>💊 Recetas</b>: al tildarlas hechas se adjunta el PDF y se le manda al paciente.</p></div>'
     +'<div class="vid-pane" data-t="cfg" style="display:none;">'
-    +'<label style="display:flex;gap:6px;align-items:center;font-size:13.5px;font-weight:600;"><input type="checkbox" id="vid-activo" '+(c.activo?'checked':'')+'> Autogestión activa (si lo destildás, la página no ofrece turnos)</label>'
+    +'<label style="display:flex;gap:6px;align-items:center;font-size:13.5px;font-weight:600;"><input type="checkbox" id="vid-activo" '+(c.activo?'checked':'')+'> Atención online activa (si lo destildás, la página no ofrece nada)</label>'
+    +'<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:0 10px;margin-top:4px;">'
+    +'<div><label style="'+lbl+'">💊 Valor receta online $</label><input style="'+inp+'" type="number" id="vid-p-rec" value="'+c.receta_precio+'"></div>'
+    +'<div><label style="'+lbl+'">💬 Valor consulta por mensaje $</label><input style="'+inp+'" type="number" id="vid-p-con" value="'+c.consulta_precio+'"></div>'
+    +'<div><label style="'+lbl+'">💬 Plazo para responder (h)</label><input style="'+inp+'" type="number" id="vid-p-hs" value="'+c.consulta_horas+'"></div></div>'
+    +'<div style="font-size:12px;font-weight:700;color:#7B3FC4;margin:14px 0 0;">📹 Videoconsultas</div>'
     +'<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:0 10px;">'
     +'<div><label style="'+lbl+'">Seña (%)</label><input style="'+inp+'" type="number" id="vid-sena" value="'+c.sena_pct+'"></div>'
     +'<div><label style="'+lbl+'">Anticipación mínima (h)</label><input style="'+inp+'" type="number" id="vid-antic" value="'+c.anticipacion_horas+'"></div>'
@@ -22763,7 +22777,7 @@ async function vidAbrirPanel(){
     +'<div style="margin-top:12px;">'+profHtml+'</div>'
     +'<p style="font-size:11.5px;color:#6b7280;margin:0 0 10px;">Los horarios ofrecidos son los bloques marcados con 📹 en Disponibilidad. Mercado Pago solo aparece si está cargado el token de ese profesional en Supabase.</p>'
     +'<button type="button" id="vid-guardar" style="padding:9px 18px;border-radius:8px;border:none;background:#7B3FC4;color:#fff;font-weight:700;cursor:pointer;">Guardar configuración</button></div>';
-  _vidModal('🌐 Turnos online por videollamada',html,function(box,cerrar){
+  _vidModal('🌐 Atención online',html,function(box,cerrar){
     box.querySelectorAll('.vid-tab').forEach(function(b){b.onclick=function(){
       box.querySelectorAll('.vid-tab').forEach(function(x){var on=x===b;x.style.background=on?'#7B3FC4':'#fff';x.style.color=on?'#fff':'#7B3FC4';});
       box.querySelectorAll('.vid-pane').forEach(function(p){p.style.display=p.dataset.t===b.dataset.t?'':'none';});
@@ -22776,7 +22790,10 @@ async function vidAbrirPanel(){
         dias_adelante:Number(box.querySelector('#vid-dias').value)||30,
         mp_vencimiento_min:Math.max(15,Number(box.querySelector('#vid-venc').value)||30),
         meet_tras_saldo:box.querySelector('#vid-meet-saldo').checked,
-        mensaje:box.querySelector('#vid-msg').value.trim(),profs:{}};
+        mensaje:box.querySelector('#vid-msg').value.trim(),profs:{},
+        receta_precio:Number(box.querySelector('#vid-p-rec').value)||0,
+        consulta_precio:Number(box.querySelector('#vid-p-con').value)||0,
+        consulta_horas:Math.max(1,Number(box.querySelector('#vid-p-hs').value)||24)};
       Object.keys(VID_PROFS).forEach(function(p){
         var o={nombre:(c.profs[p]&&c.profs[p].nombre)||VID_PROFS[p]};
         box.querySelectorAll('[data-p="'+p+'"]').forEach(function(i){
@@ -22790,9 +22807,11 @@ async function vidAbrirPanel(){
       var malMeet=Object.keys(nuevo.profs).filter(function(p){var m=nuevo.profs[p].meet_fijo;return m&&!/^https:\/\/meet\.google\.com\/[a-z0-9-]+/i.test(m);});
       if(malMeet.length){alert('El link fijo de Meet tiene que empezar con https://meet.google.com/');return;}
       var ok=await sbUpsertAgendaConfig('video_config',nuevo);
-      if(ok){_vidToast('✓ Configuración de turnos online guardada');cerrar();}
+      if(ok){_vidToast('✓ Configuración de atención online guardada');cerrar();}
     };
     _vidCargarLista(box.querySelector('#vid-lista'));
+    _vidCargarConsultas(box.querySelector('#vid-consultas'));
+    if(abrirEn){ var tb=box.querySelector('.vid-tab[data-t="'+abrirEn+'"]'); if(tb) tb.click(); }
   });
 }
 async function _vidCargarLista(el){
@@ -22807,6 +22826,132 @@ async function _vidCargarLista(el){
     +rows.map(function(x){return _vidHtmlReserva(x,false);}).join('');
   _vidEngancharReservas(el);
 }
+// ── Pedidos online: consultas por mensaje y recetas ──
+function _vidFechaHora(iso){ if(!iso) return ''; var d=new Date(iso); return d.toLocaleString('es-AR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}); }
+function _vidFaltan(iso){
+  var ms=Date.parse(iso)-Date.now(); if(isNaN(ms)) return '';
+  if(ms<=0) return '<b style="color:#b91c1c">⏰ venció hace '+Math.round(-ms/3600e3)+' h</b>';
+  var h=Math.floor(ms/3600e3), m=Math.floor((ms%3600e3)/60e3);
+  return '<b style="color:'+(h<4?'#b91c1c':'#b45309')+'">⏰ vence en '+(h?h+' h ':'')+m+' min</b>';
+}
+async function _vidStaff(campos, archivos){
+  var fd=new FormData();
+  Object.keys(campos).forEach(function(k){ fd.append(k, campos[k]); });
+  (archivos||[]).forEach(function(a){ fd.append(a[0], a[1]); });
+  var r=await fetch(VID_FN_URL,{method:'POST',body:fd});
+  var j=await r.json().catch(function(){return {};});
+  if(!r.ok) throw new Error(j.error||('Error '+r.status));
+  return j;
+}
+function _vidHtmlPedidoCab(p){
+  var met=p.pago_metodo==='mercadopago'?'Mercado Pago':'Transferencia';
+  return '<div style="display:flex;justify-content:space-between;gap:8px;align-items:center;flex-wrap:wrap;">'
+    +'<b style="font-size:13.5px;">'+_vidEsc(p.paciente)+' <span style="font-weight:400;color:#6b7280;">· DNI '+_vidEsc(p.dni)+'</span></b>'
+    +'<span class="rs-badge '+_vidEsc(p.prof)+'">'+_vidEsc(VID_PROFS[p.prof]||p.prof)+'</span></div>'
+    +'<div style="color:#6b7280;margin-top:2px;">'+_vidEsc(p.email)+(p.telefono?' · '+_vidEsc(p.telefono):'')+(p.paciente_nuevo?' · <b style="color:#7B3FC4">paciente nuevo</b>':'')
+    +' · pedido '+_vidFechaHora(p.created_at)+'</div>'
+    +'<div style="margin-top:4px;display:flex;gap:6px;align-items:center;flex-wrap:wrap;">'
+    +'<span>'+_vidPesos(p.monto)+' '+(p.pagado_at?'<b style="color:#15803d">✓ '+met+'</b>':'<span style="color:#b45309">sin pagar</span>')+'</span>'
+    +(p.pago_comprobante?'<button class="vid-btn" data-comp="'+_vidEsc(p.pago_comprobante)+'">📎 comprobante</button>'
+      +'<label style="display:flex;align-items:center;gap:4px;cursor:pointer;'+(p.comprobante_revisado?'color:#6b7280;':'color:#b45309;font-weight:700;')+'"><input type="checkbox" class="vid-prev" data-id="'+p.id+'" '+(p.comprobante_revisado?'checked':'')+'> revisado</label>':'')
+    +'</div>';
+}
+function _vidEngancharPedidos(box){
+  box.querySelectorAll('[data-comp]').forEach(function(b){b.onclick=function(){_vidVerComprobante(b.getAttribute('data-comp'));};});
+  box.querySelectorAll('.vid-prev').forEach(function(c){c.onchange=async function(){
+    var r=await sb.from('online_pedidos').update({comprobante_revisado:c.checked}).eq('id',c.dataset.id);
+    if(r.error){alert('No se pudo guardar: '+r.error.message);c.checked=!c.checked;}
+    else{c.parentNode.style.color='#6b7280';c.parentNode.style.fontWeight='400';_vidActualizarBadge();}
+  };});
+}
+async function _vidCargarConsultas(el){
+  if(!el) return;
+  var d=new Date();d.setDate(d.getDate()-30);
+  var r=await sb.from('online_pedidos').select('*').eq('tipo','consulta').in('estado',['pendiente','respondida','resuelta']).gte('created_at',d.toISOString()).order('created_at',{ascending:false}).limit(100);
+  if(r.error){el.innerHTML='<span style="color:#b91c1c">No se pudo leer online_pedidos: '+_vidEsc(r.error.message)+'. ¿Corriste el SQL 02?</span>';return;}
+  var rows=(r.data||[]).sort(function(a,b){
+    var pa=a.estado==='pendiente'?0:1, pb=b.estado==='pendiente'?0:1;
+    if(pa!==pb) return pa-pb;
+    return pa===0 ? String(a.vence_at).localeCompare(String(b.vence_at)) : String(b.created_at).localeCompare(String(a.created_at));
+  });
+  var nPend=rows.filter(function(x){return x.estado==='pendiente';}).length;
+  var badge=document.getElementById('vid-n-con'); if(badge) badge.textContent=nPend?'('+nPend+')':'';
+  if(!rows.length){el.textContent='Todavía no hay consultas por mensaje.';return;}
+  el.innerHTML=rows.map(function(p){
+    var pend=p.estado==='pendiente';
+    var hilo=(p.mensajes||[]).map(function(m){
+      var prof=m.de==='prof';
+      return '<div style="margin:8px 0;'+(prof?'margin-left:24px':'margin-right:24px')+'"><div style="font-size:11px;color:#6b7280;">'+(prof?'Respuesta':'Paciente')+' · '+_vidFechaHora(m.at)+'</div>'
+        +'<div style="background:'+(prof?'#eef6fd':'#f5f3ff')+';border-radius:10px;padding:8px 10px;white-space:pre-wrap;color:#1f2937;font-size:13px;">'+_vidEsc(m.texto)+'</div>'
+        +((m.adjuntos||[]).length?'<div style="margin-top:4px;display:flex;gap:6px;flex-wrap:wrap;">'+m.adjuntos.map(function(a){return '<button class="vid-btn" data-comp="'+_vidEsc(a.path)+'">📎 '+_vidEsc(a.nombre)+'</button>';}).join('')+'</div>':'')
+        +'</div>';
+    }).join('');
+    var est=pend?_vidFaltan(p.vence_at)+(p.repreguntas?' · <b>repregunta</b>':'')
+      :p.estado==='respondida'?'<span style="color:#15803d;font-weight:700;">✓ Respondida</span> · puede repreguntar una vez'
+      :'<span style="color:#6b7280;font-weight:700;">✓ Cerrada</span>';
+    return '<div class="vid-res" data-pid="'+p.id+'" style="border:1px solid '+(pend?'#f59e0b':'#e5e7eb')+';border-left-width:'+(pend?'4px':'1px')+';border-radius:10px;padding:10px 12px;margin-bottom:10px;font-size:12.5px;background:'+(pend?'#fffbeb':'#fff')+';">'
+      +_vidHtmlPedidoCab(p)
+      +'<div style="margin-top:6px;">'+est+'</div>'
+      +hilo
+      +(pend?'<textarea class="vid-resp" placeholder="Escribí la respuesta… (le llega por mail)" style="width:100%;min-height:90px;margin-top:6px;padding:8px 10px;border:1px solid #d1d5db;border-radius:8px;font:inherit;font-size:13px;box-sizing:border-box;"></textarea>'
+        +'<div style="display:flex;justify-content:flex-end;margin-top:6px;"><button type="button" class="vid-enviar" style="padding:8px 16px;border-radius:8px;border:none;background:#7B3FC4;color:#fff;font-weight:700;cursor:pointer;">Enviar respuesta</button></div>':'')
+      +'</div>';
+  }).join('');
+  _vidEngancharPedidos(el);
+  el.querySelectorAll('.vid-enviar').forEach(function(b){b.onclick=async function(){
+    var card=b.closest('.vid-res'), ta=card.querySelector('.vid-resp'), txt=ta.value.trim();
+    if(txt.length<2){ta.focus();return;}
+    if(!confirm('¿Enviar la respuesta? Le llega por mail al paciente.'))return;
+    b.disabled=true;b.textContent='Enviando…';
+    try{ await _vidStaff({accion:'staff_responder',id:card.dataset.pid,texto:txt}); _vidToast('✓ Respuesta enviada'); _vidCargarConsultas(el); _vidActualizarBadge(); }
+    catch(e){ alert(e.message); b.disabled=false; b.textContent='Enviar respuesta'; }
+  };});
+}
+// Detalle de un pedido de receta (desde 💊 Recetas)
+async function vidPedidoDetalle(id){
+  var r=await sb.from('online_pedidos').select('*').eq('id',id).maybeSingle();
+  if(r.error||!r.data){alert('No se encontró el pedido.');return;}
+  var p=r.data;
+  var html='<div class="vid-res" style="font-size:12.5px;">'+_vidHtmlPedidoCab(p)
+    +'<div style="margin-top:8px;">'+(p.items||[]).map(function(it){return '<div style="padding:3px 0;font-size:13.5px;">💊 <b>'+_vidEsc(it.farmaco)+'</b> '+_vidEsc(it.dosis)+(it.marca?' <span style="color:#6b7280">('+_vidEsc(it.marca)+')</span>':'')+(it.repetir?' 🔁':'')+'</div>';}).join('')+'</div>'
+    +'<div style="margin-top:6px;">Cobertura: <b>'+_vidEsc(p.obra_social||'—')+'</b>'+(p.afiliado?' · afiliado '+_vidEsc(p.afiliado):'')+(p.os_cambio?' <b style="color:#b45309">⚠️ cambió (actualizar en la HC)</b>':'')+'</div>'
+    +(p.nota?'<div style="margin-top:4px;">Nota: '+_vidEsc(p.nota)+'</div>':'')
+    +(p.receta_pdf?'<div style="margin-top:8px;"><button class="vid-btn" data-comp="'+_vidEsc(p.receta_pdf)+'">📄 Receta enviada '+_vidFechaHora(p.receta_enviada_at)+'</button></div>':'')
+    +'</div>';
+  _vidModal('💊 Receta online',html,function(box){_vidEngancharPedidos(box);});
+}
+// Al tildar hecha una receta online: adjuntar PDF y mandarla
+async function vidRecetaOnline(item, alTerminar){
+  var r=await sb.from('online_pedidos').select('*').eq('id',item.pedido_id).maybeSingle();
+  if(r.error||!r.data){alert('No se encontró el pedido online.');return;}
+  var p=r.data;
+  var html='<div style="font-size:13px;">'
+    +'<div><b>'+_vidEsc(p.paciente)+'</b> · DNI '+_vidEsc(p.dni)+' · '+_vidEsc(p.email)+'</div>'
+    +'<div style="margin:6px 0 10px;">'+(p.items||[]).map(function(it){return '<div>💊 <b>'+_vidEsc(it.farmaco)+'</b> '+_vidEsc(it.dosis)+(it.marca?' ('+_vidEsc(it.marca)+')':'')+'</div>';}).join('')
+    +'<div style="color:#6b7280;margin-top:4px;">Cobertura: '+_vidEsc(p.obra_social||'—')+(p.afiliado?' · '+_vidEsc(p.afiliado):'')+'</div></div>'
+    +'<label style="display:block;font-weight:700;margin-bottom:4px;">PDF de la receta</label>'
+    +'<input type="file" id="vid-rx-pdf" accept="application/pdf,image/*" multiple style="font:inherit;">'
+    +'<label style="display:block;font-weight:700;margin:10px 0 4px;">Mensaje para el paciente (opcional)</label>'
+    +'<textarea id="vid-rx-nota" style="width:100%;min-height:60px;padding:8px;border:1px solid #d1d5db;border-radius:8px;font:inherit;box-sizing:border-box;" placeholder="Ej.: Te dejo 2 recetas, una por cada caja."></textarea>'
+    +'<div id="vid-rx-err" style="color:#b91c1c;margin-top:6px;"></div>'
+    +'<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:10px;">'
+    +'<button type="button" id="vid-rx-sin" class="vid-btn">Marcar hecha sin mandar</button>'
+    +'<button type="button" id="vid-rx-ok" style="padding:8px 16px;border-radius:8px;border:none;background:#7B3FC4;color:#fff;font-weight:700;cursor:pointer;">Enviar receta al paciente</button></div></div>';
+  _vidModal('💊 Enviar receta online',html,function(box,cerrar){
+    box.querySelector('#vid-rx-sin').onclick=function(){ if(confirm('¿Marcarla hecha sin mandarle nada al paciente?')){ cerrar(); alTerminar(); } };
+    box.querySelector('#vid-rx-ok').onclick=async function(){
+      var files=box.querySelector('#vid-rx-pdf').files, err=box.querySelector('#vid-rx-err'); err.textContent='';
+      if(!files.length){ err.textContent='Adjuntá el PDF de la receta.'; return; }
+      var b=this; b.disabled=true; b.textContent='Enviando…';
+      try{
+        var arch=[]; for(var i=0;i<files.length;i++) arch.push(['pdf',files[i]]);
+        await _vidStaff({accion:'staff_receta',id:p.id,nota:box.querySelector('#vid-rx-nota').value}, arch);
+        _vidToast('✓ Receta enviada a '+p.email); cerrar(); alTerminar();
+      }catch(e){ err.textContent=e.message; b.disabled=false; b.textContent='Enviar receta al paciente'; }
+    };
+  });
+}
+window.vidPedidoDetalle=vidPedidoDetalle; window.vidRecetaOnline=vidRecetaOnline;
 // Avisar a la función que un turno online se borró de la agenda (cancela la
 // reserva y el evento de Google Calendar). Espera a que el guardado llegue a
 // la nube; la función verifica que el turno ya no esté antes de cancelar.
@@ -22826,7 +22971,11 @@ async function _vidActualizarBadge(){
   var b=document.getElementById('ag-btn-video-online');if(!b)return;
   try{
     var r=await sb.from('video_reservas').select('id',{count:'exact',head:true}).eq('comprobante_revisado',false).or('sena_comprobante.not.is.null,saldo_comprobante.not.is.null').neq('estado','vencida');
-    var n=r.count||0;var s=b.querySelector('.vid-count');
+    var r2=await sb.from('online_pedidos').select('id',{count:'exact',head:true}).eq('tipo','consulta').eq('estado','pendiente');
+    var r3=await sb.from('online_pedidos').select('id',{count:'exact',head:true}).eq('comprobante_revisado',false).not('pago_comprobante','is',null);
+    var nCon=r2.count||0; window._vidHayConsultas=nCon>0;
+    var n=(r.count||0)+nCon+(r3.count||0);var s=b.querySelector('.vid-count');
+    b.title=nCon?(nCon+' consulta'+(nCon>1?'s':'')+' por responder'):'Videoconsultas, recetas y consultas que piden los pacientes desde la web';
     if(s){s.textContent=n;s.style.display=n?'inline-block':'none';}
   }catch(e){}
 }
@@ -24704,7 +24853,7 @@ window.cargarProxConsultas = cargarProxConsultas;
   // ¿Este turno (no OSDE) ya entra a Finanzas por el cierre de su día?
   // Las videollamadas nunca van por el cierre: siempre suman acá como "Videollamadas".
   function finEnCierre(cf, fecha, t){ return !!(cf && !t.video && fecha >= cf.corte && cf.profs[t.prof]); }
-  var CAT_ING_LBL = {costa_bucal_guerrero:'Costa Bucal Guerrero',costa_bucal_bertani:'Costa Bucal Bertani',urcym:'Evaluaciones cardiometabólicas',sapiens_bar:'SAPIENS Bar',sapiens_omar:'SAPIENS Omar',ceq:'CEQ',cem:'CEM',salita:'Salita',otro:'Otros',manual:'Manual',receta_particular:'Receta particular',receta_osde:'Receta OSDE',osde:'OSDE',videollamadas:'Videollamadas'};
+  var CAT_ING_LBL = {costa_bucal_guerrero:'Costa Bucal Guerrero',costa_bucal_bertani:'Costa Bucal Bertani',urcym:'Evaluaciones cardiometabólicas',sapiens_bar:'SAPIENS Bar',sapiens_omar:'SAPIENS Omar',ceq:'CEQ',cem:'CEM',salita:'Salita',otro:'Otros',manual:'Manual',receta_particular:'Receta particular',receta_osde:'Receta OSDE',osde:'OSDE',videollamadas:'Videollamadas',online_receta:'Recetas online',online_consulta:'Consultas por mensaje'};
 
   function $id(id){ return document.getElementById(id); }
   function moneda(n){ return '$'+Number(n||0).toLocaleString('es-AR',{minimumFractionDigits:0,maximumFractionDigits:0}); }
@@ -24963,6 +25112,8 @@ window.cargarProxConsultas = cargarProxConsultas;
         var ING_ORDER = [
           {k:'urcym',       icon:'🩺', label:'URCyM',              sub:'Consultas cobradas'},
           {k:'videollamadas', icon:'📹', label:'Videollamadas',      sub:'consultas cobradas · fuera del cierre'},
+          {k:'online_receta', icon:'🌐', label:'Recetas online',     sub:'pedidas por la web · fuera del cierre'},
+          {k:'online_consulta', icon:'💬', label:'Consultas por mensaje', sub:'por la web · fuera del cierre'},
           {k:'costa_bucal_guerrero', icon:'🏢', label:'Costa Bucal Guerrero', sub:'cierres · ya descontado el alquiler'},
           {k:'costa_bucal_bertani',  icon:'🏢', label:'Costa Bucal Bertani',  sub:'cierres · ya descontado el alquiler'},
           {k:'sapiens_bar', icon:'🏢', label:'SAPIENS Bar',         sub:''},
@@ -26245,6 +26396,7 @@ window.cargarProxConsultas = cargarProxConsultas;
   // (Las particulares viejas que ya estaban en un cierre se respetan.)
   function cerrable(r){
     if(!r) return false;
+    if(r.origen==='online') return false; // pedidas y pagadas por la web: van a Finanzas, no al Cierre
     if(r.tipo==='osde') return r.estado==='hecha';
     return !!r.pagada || (r.estado==='hecha' && !!r.cierre_fecha);
   }
@@ -26405,6 +26557,12 @@ window.cargarProxConsultas = cargarProxConsultas;
   window.rsToggleHecha = async function(id, marcar){
     var cur=lista.find(function(r){return r.id===id;}); if(!cur) return;
     if(esSecre()){ alert('La receta la marca como hecha el profesional.'); render(); return; }
+    // Pedida online: al marcarla hecha se adjunta el PDF y se le manda al paciente
+    if(marcar && cur.origen==='online' && cur.pedido_id && !window._rsOnlineOk){
+      render();
+      if(window.vidRecetaOnline) window.vidRecetaOnline(cur, function(){ window._rsOnlineOk=true; rsToggleHecha(id, true).finally(function(){ window._rsOnlineOk=false; }); });
+      return;
+    }
     var esOsde=cur.tipo==='osde';
     var recIdViejo=cur.rec_id, recIdNuevo=null;
     // OSDE: entra al Cierre/Finanzas al hacerla (no la paga el paciente)
@@ -26478,11 +26636,16 @@ window.cargarProxConsultas = cargarProxConsultas;
         + (hecha ? ' · <b style="color:#059669">Hecha '+fmt(r.hecha_fecha)+(r.hecha_por?' ('+esc(r.hecha_por)+')':'')+'</b>' : '')
         + (r.pagada ? ' · <b style="color:#059669">Pagó '+fmt(r.pagada_fecha)+'</b>' : '')
         + (cerrable(r) ? (r.cierre_fecha ? ' · <span style="color:#059669">cerrada el '+fmt(r.cierre_fecha)+'</span>' : ' · <b style="color:#b45309">sin cerrar</b>') : '');
-      var pagoHtml = r.tipo==='osde'
+      var online = r.origen==='online';
+      var pagoHtml = online
+        ? '<span style="font-size:11px;font-weight:700;color:#059669" title="Pagó por la web ('+(r.pago_via==='mercadopago'?'Mercado Pago':'transferencia con comprobante')+')">💳 Pagó online</span>'
+        : r.tipo==='osde'
         ? '<span style="font-size:10.5px;color:#94a3b8">—</span>'
         : '<label class="rs-pago '+(r.pagada?'ok':'falta')+'" title="'+(r.pagada?'Pagó — desmarcar lo saca del Cierre':'Tildar cuando el paciente pagó (pasa al Cierre)')+'">'
             +'<input type="checkbox" '+(r.pagada?'checked':'')+' onchange="rsTogglePagada(\''+id+'\',this.checked)">💲 Pagó</label>';
-      var medioHtml = r.tipo==='osde'
+      var medioHtml = online
+        ? '<button type="button" class="vid-btn" onclick="window.vidPedidoDetalle&&vidPedidoDetalle(\''+esc(r.pedido_id)+'\')">🌐 Ver pedido</button>'
+        : r.tipo==='osde'
         ? '<span style="font-size:11px;color:#0369a1">🏥 OSDE</span>'
         : '<div class="rs-medio"><select onchange="rsEditar(\''+id+'\',\'medio\',this.value)">'
             +'<option value="efectivo"'+(r.medio!=='transferencia'?' selected':'')+'>💵 Efectivo</option>'
@@ -26501,10 +26664,12 @@ window.cargarProxConsultas = cargarProxConsultas;
           +'<div class="rs-meta">'+meta+'</div>'
         +'</div>'
         +'<div class="rs-c-pago">'+pagoHtml+'</div>'
-        +'<div class="rs-c-tipo"><select onchange="rsEditar(\''+id+'\',\'tipo\',this.value)">'
+        +(online
+          ? '<div class="rs-c-tipo"><span class="rs-badge part">🌐 Web</span></div><div class="rs-c-monto" style="font-size:12.5px;font-weight:700;color:#374151">'+fmt$(r.monto)+'</div>'
+          : '<div class="rs-c-tipo"><select onchange="rsEditar(\''+id+'\',\'tipo\',this.value)">'
           +'<option value="particular"'+(r.tipo!=='osde'?' selected':'')+'>Particular</option>'
           +'<option value="osde"'+(r.tipo==='osde'?' selected':'')+'>OSDE</option></select></div>'
-        +'<div class="rs-c-monto"><input type="number" min="0" step="100" value="'+(Number(r.monto)||'')+'" placeholder="$" title="Valor de la receta" onchange="rsEditar(\''+id+'\',\'monto\',this.value)"></div>'
+        +'<div class="rs-c-monto"><input type="number" min="0" step="100" value="'+(Number(r.monto)||'')+'" placeholder="$" title="Valor de la receta" onchange="rsEditar(\''+id+'\',\'monto\',this.value)"></div>')
         +'<div class="rs-c-medio">'+medioHtml+'</div>'
         +'<button class="rs-del" title="Borrar" onclick="rsBorrar(\''+id+'\')">✕</button>'
         +'</div>';
