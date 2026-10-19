@@ -2,17 +2,1072 @@
 <html lang="es-AR">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Atención online · URCyM</title>
+<meta name="description" content="Videoconsultas, recetas y consultas por mensaje con la Unidad de Riesgo Cardiovascular y Metabólico.">
+<meta name="theme-color" content="#3089ca">
 <meta name="robots" content="noindex">
-<script>
-  // Link corto para pacientes: /turnos → página de atención online (conserva ?s=, ?t=, ?p=)
-  location.replace('../turnos-video.html' + location.search + location.hash);
-</script>
-<noscript><meta http-equiv="refresh" content="0; url=../turnos-video.html"></noscript>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Amiko:wght@400;600;700&family=Encode+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --blue:#3089ca; --blue-dark:#1f6aab; --blue-light:#e8f3fc; --blue-glow:rgba(48,137,202,.18);
+  --teal:#4dbcbe; --teal-light:#e0f5f5; --red:#e25247; --red-light:#fdecea;
+  --amber:#b7791f; --amber-light:#fbf3e4; --green:#1d9e75; --green-light:#e3f5ee;
+  --text:#1a2535; --soft:#6b7a8d; --faint:#aab4bf; --line:rgba(48,137,202,.16);
+  --bg:#f0f4f9; --card:#fff; --chip:#f4f7fb;
+  --shadow:0 8px 32px rgba(48,137,202,.12);
+  --display:'Amiko',system-ui,sans-serif; --main:'Encode Sans',system-ui,sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:var(--bg);color:var(--text);font-family:var(--main);font-size:16px;line-height:1.45;-webkit-font-smoothing:antialiased}
+body{min-height:100vh;padding:0 0 48px}
+button,input,textarea{font:inherit;color:inherit}
+.wrap{max-width:560px;margin:0 auto;padding:0 16px}
+header{padding:28px 0 18px;text-align:center}
+.marca{font-family:var(--display);font-size:12px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--soft)}
+.marca small{display:block;font-size:10.5px;letter-spacing:.08em;color:var(--faint);margin-top:2px;font-weight:400}
+h1{font-family:var(--display);font-size:26px;font-weight:700;color:var(--blue-dark);margin-top:14px;letter-spacing:-.01em}
+.sub{color:var(--soft);font-size:14.5px;margin-top:4px}
+.card{background:var(--card);border-radius:20px;box-shadow:var(--shadow);border:1px solid var(--line);padding:22px 20px;margin-bottom:14px}
+.paso{display:flex;align-items:center;gap:10px;margin-bottom:14px}
+.paso .n{width:26px;height:26px;border-radius:50%;background:var(--blue);color:#fff;font-family:var(--display);font-weight:700;font-size:13px;display:flex;align-items:center;justify-content:center;flex:none}
+.paso h2{font-family:var(--display);font-size:16.5px;font-weight:700}
+.paso .ok{margin-left:auto;font-size:13px;color:var(--blue);background:none;border:none;cursor:pointer;font-weight:600}
+.card.cerrada{padding:14px 20px}
+.card.cerrada .paso{margin:0}
+.card.cerrada .paso .n{background:var(--teal)}
+.resumen{font-size:14px;color:var(--soft);margin-left:36px;margin-top:2px}
+.card.bloqueada{opacity:.5;pointer-events:none;padding:14px 20px}
+.card.bloqueada .paso{margin:0}
+.card.bloqueada .paso .n{background:var(--faint)}
+
+.profs{display:grid;gap:10px}
+.prof{display:flex;align-items:center;gap:14px;text-align:left;padding:14px;border-radius:14px;border:1.5px solid var(--line);background:var(--chip);cursor:pointer;transition:border-color .15s,background .15s}
+.prof:hover{border-color:var(--blue)}
+.prof.sel{border-color:var(--blue);background:var(--blue-light);box-shadow:0 0 0 3px var(--blue-glow)}
+.avatar{width:44px;height:44px;border-radius:50%;background:var(--blue);color:#fff;display:flex;align-items:center;justify-content:center;font-family:var(--display);font-weight:700;flex:none}
+.prof b{display:block;font-size:15.5px}
+.prof span{font-size:13px;color:var(--soft)}
+
+.dias{display:flex;gap:8px;overflow-x:auto;padding:2px 2px 10px;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch}
+.dia{flex:none;scroll-snap-align:start;min-width:72px;padding:10px 8px;border-radius:14px;border:1.5px solid var(--line);background:var(--chip);cursor:pointer;text-align:center}
+.dia .dn{font-size:11.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--soft)}
+.dia .dd{font-family:var(--display);font-size:21px;font-weight:700;line-height:1.2}
+.dia .dm{font-size:11.5px;color:var(--soft)}
+.dia.sel{background:var(--blue);border-color:var(--blue);color:#fff}
+.dia.sel .dn,.dia.sel .dm{color:rgba(255,255,255,.85)}
+.horas{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+.hora{padding:10px 16px;border-radius:12px;border:1.5px solid var(--line);background:#fff;cursor:pointer;font-weight:600;font-size:15px}
+.hora:hover{border-color:var(--blue)}
+.hora.sel{background:var(--blue);border-color:var(--blue);color:#fff}
+.vacio{font-size:14px;color:var(--soft);padding:10px 0}
+
+label{display:block;font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--soft);margin:14px 0 6px}
+label:first-child{margin-top:0}
+input[type=text],input[type=email],input[type=tel],input[type=date],textarea{width:100%;padding:12px 14px;border-radius:12px;border:1.5px solid var(--line);background:var(--chip);font-size:16px;outline:none;transition:border-color .15s,box-shadow .15s}
+input:focus,textarea:focus{border-color:var(--blue);background:#fff;box-shadow:0 0 0 3px var(--blue-glow)}
+textarea{resize:vertical;min-height:70px}
+.motivos{display:flex;flex-wrap:wrap;gap:8px}
+.motivo{display:inline-flex;align-items:center;gap:6px;margin:0;padding:9px 13px;border-radius:999px;border:1.5px solid var(--line);background:#fff;cursor:pointer;font-size:14px;font-weight:500;text-transform:none;letter-spacing:0;color:var(--text)}
+.motivo input{width:16px;height:16px;accent-color:var(--blue);margin:0}
+.motivo.sel{border-color:var(--blue);background:var(--blue-light);color:var(--blue-dark);font-weight:600}
+header{position:relative}
+.ayuda-btn{position:absolute;right:0;top:68px;width:38px;height:38px;border-radius:50%;border:1.5px solid var(--blue);background:#fff;color:var(--blue);font-family:var(--display);font-weight:700;font-size:19px;cursor:pointer;box-shadow:var(--shadow)}
+.ayuda-btn:hover{background:var(--blue-light)}
+.ayuda-bg{position:fixed;inset:0;background:rgba(26,37,53,.45);z-index:50;display:flex;align-items:flex-end;justify-content:center;padding:16px}
+@media (min-width:600px){.ayuda-bg{align-items:center}}
+.ayuda{background:#fff;border-radius:20px;max-width:520px;width:100%;max-height:85vh;overflow:auto;padding:22px 20px;box-shadow:0 20px 50px rgba(0,0,0,.25)}
+.ayuda h2{font-family:var(--display);font-size:19px;color:var(--blue-dark);margin-bottom:12px}
+.ayuda ol{padding-left:0;list-style:none;counter-reset:p}
+.ayuda li{counter-increment:p;position:relative;padding:0 0 12px 38px;font-size:15px}
+.ayuda li::before{content:counter(p);position:absolute;left:0;top:0;width:26px;height:26px;border-radius:50%;background:var(--blue);color:#fff;font-weight:700;font-size:13px;display:flex;align-items:center;justify-content:center}
+.ayuda .nota{margin-top:4px}
+.aviso-legal{border:1.5px solid #f2c48a;background:#fffaf2;border-radius:14px;padding:12px 14px;margin:16px 0 4px;font-size:13.5px;line-height:1.5}
+.aviso-tit{display:block;font-family:var(--display);font-size:14.5px;color:#8a4b0f;margin-bottom:6px}
+.aviso-legal ul{padding-left:18px;margin:0}
+.aviso-legal li{margin-bottom:6px}
+.aviso-legal li:first-child{color:#9b2c24}
+.aviso-ok{display:flex;gap:8px;align-items:center;margin:10px 0 0;padding-top:10px;border-top:1px solid #f2dcbc;font-size:14.5px;font-weight:700;text-transform:none;letter-spacing:0;color:var(--text);cursor:pointer}
+.aviso-ok input{width:20px;height:20px;accent-color:var(--blue);margin:0}
+.fila2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.fila2 label{margin-top:14px}
+.dni-row{display:flex;gap:8px}
+.dni-row input{flex:1}
+.hola{background:var(--teal-light);border-radius:14px;padding:12px 14px;font-size:14.5px;margin-top:12px}
+.hola b{font-size:15.5px}
+.link{background:none;border:none;color:var(--blue);font-weight:600;cursor:pointer;font-size:14px;padding:0;text-decoration:underline;text-underline-offset:2px}
+.nota{font-size:12.5px;color:var(--soft);margin-top:6px}
+
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:14px;border-radius:14px;border:none;background:var(--blue);color:#fff;font-family:var(--display);font-size:15.5px;font-weight:700;letter-spacing:.02em;cursor:pointer;box-shadow:0 4px 16px rgba(48,137,202,.28);transition:background .15s,transform .1s;margin-top:16px;text-decoration:none}
+.btn:hover{background:var(--blue-dark)}
+.btn:active{transform:translateY(1px)}
+.btn[disabled]{opacity:.55;cursor:default;box-shadow:none}
+.btn.sec{background:#fff;color:var(--blue);border:1.5px solid var(--blue);box-shadow:none}
+.btn.mp{background:#009ee3;box-shadow:0 4px 16px rgba(0,158,227,.28)}
+.btn.mp:hover{background:#0084c0}
+.btn.meet{background:var(--green);box-shadow:0 4px 16px rgba(29,158,117,.28)}
+.btn-chico{width:auto;padding:12px 16px;margin:0;font-size:14px}
+
+.montos{display:flex;justify-content:space-between;align-items:baseline;background:var(--blue-light);border-radius:14px;padding:12px 14px;margin-bottom:14px;gap:12px}
+.montos .grande{font-family:var(--display);font-size:24px;font-weight:700;color:var(--blue-dark)}
+.montos small{display:block;font-size:12.5px;color:var(--soft)}
+.tabs{display:grid;grid-template-columns:1fr 1fr;gap:6px;background:var(--chip);border-radius:14px;padding:4px;margin-bottom:14px}
+.tabs.uno{grid-template-columns:1fr}
+.tab{padding:10px 6px;border-radius:11px;border:none;background:none;cursor:pointer;font-weight:600;font-size:14px;color:var(--soft)}
+.tab.sel{background:#fff;color:var(--text);box-shadow:0 1px 6px rgba(26,37,53,.1)}
+.datos-tr{border:1.5px dashed var(--line);border-radius:14px;padding:4px 14px}
+.dt{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 0;border-bottom:1px solid var(--line)}
+.dt:last-child{border-bottom:none}
+.dt span{font-size:12px;color:var(--soft);text-transform:uppercase;letter-spacing:.05em}
+.dt b{display:block;font-size:15px;word-break:break-all;text-transform:none;letter-spacing:0;color:var(--text)}
+.copiar{flex:none;border:1px solid var(--line);background:#fff;border-radius:9px;padding:6px 10px;font-size:12.5px;font-weight:600;color:var(--blue);cursor:pointer}
+.archivo{text-transform:none;letter-spacing:0;font-weight:400;color:var(--text);font-size:14px;display:flex;align-items:center;gap:12px;border:1.5px dashed var(--blue);background:var(--blue-light);border-radius:14px;padding:14px;cursor:pointer;margin-top:14px}
+.archivo input{display:none}
+.archivo .ic{font-size:24px}
+.archivo b{display:block;font-size:14.5px;color:var(--blue-dark)}
+.archivo span{font-size:12.5px;color:var(--soft);word-break:break-all}
+.archivo.lleno{border-style:solid;background:var(--green-light);border-color:var(--green)}
+.archivo.lleno b{color:var(--green)}
+.prev{width:48px;height:48px;border-radius:8px;object-fit:cover;flex:none}
+
+.error{display:none;background:var(--red-light);color:#9b2c24;border-radius:12px;padding:10px 14px;font-size:14px;margin-top:12px}
+.error.on{display:block}
+.cargando{display:flex;align-items:center;gap:10px;color:var(--soft);font-size:14px;padding:8px 0}
+.spin{width:18px;height:18px;border:2.5px solid var(--blue-light);border-top-color:var(--blue);border-radius:50%;animation:g .8s linear infinite;flex:none}
+@keyframes g{to{transform:rotate(360deg)}}
+
+.estado{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:5px 12px;font-size:13px;font-weight:700}
+.estado.confirmada{background:var(--green-light);color:var(--green)}
+.estado.pendiente_pago{background:var(--amber-light);color:var(--amber)}
+.estado.vencida,.estado.cancelada{background:var(--red-light);color:var(--red)}
+.tabla{width:100%;border-collapse:collapse;margin:12px 0 4px}
+.tabla td{padding:7px 0;font-size:15px;border-bottom:1px solid var(--line);vertical-align:top}
+.tabla td:first-child{color:var(--soft);font-size:13.5px;width:38%;padding-right:10px}
+.tabla tr:last-child td{border-bottom:none}
+.tabla b{font-weight:700}
+.aviso{border-radius:14px;padding:12px 14px;font-size:14.5px;margin-top:12px}
+.aviso.amber{background:var(--amber-light)}
+.aviso.verde{background:var(--green-light)}
+.aviso.azul{background:var(--blue-light)}
+.big-ok{font-size:44px;line-height:1;text-align:center;margin:6px 0 10px}
+.centro{text-align:center}
+footer{text-align:center;font-size:12px;color:var(--faint);margin-top:22px}
+.oculto{display:none!important}
+@media (max-width:380px){ .fila2{grid-template-columns:1fr} h1{font-size:23px} }
+</style>
 </head>
-<body style="font-family:system-ui,sans-serif;text-align:center;padding:40px;color:#1a2535">
-  <p>Abriendo la atención online de URCyM…</p>
-  <p><a href="../turnos-video.html">Si no se abre, tocá acá</a></p>
+<body>
+<div class="wrap">
+  <header>
+    <button type="button" class="ayuda-btn" id="b-ayuda" aria-label="Ayuda: cómo funciona">?</button>
+    <div class="marca">URCyM<small>Unidad de Riesgo Cardiovascular y Metabólico</small></div>
+    <h1 id="titulo">Atención online</h1>
+    <p class="sub" id="subtitulo"></p>
+  </header>
+
+  <main id="app">
+    <div class="card"><div class="cargando"><div class="spin"></div>Cargando…</div></div>
+  </main>
+
+  <footer>Tus datos se usan solo para tu atención en URCyM.</footer>
+</div>
+
+<script>
+/* ═══════════════════ Configuración ═══════════════════ */
+var FN_URL = 'https://qdjzetylyojfjdottjrk.supabase.co/functions/v1/video-turnos';
+var SB_KEY = 'sb_publishable_qe6L1Uc7mRwsen7lzZlllw_DzOXonwL';
+
+/* ═══════════════════ Utilidades ═══════════════════ */
+var $ = function(s, r){ return (r||document).querySelector(s); };
+function h(s){ return String(s==null?'':s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+function pesos(n){ return '$' + Math.round(Number(n)||0).toLocaleString('es-AR'); }
+var DIAS_C = ['dom','lun','mar','mié','jue','vie','sáb'];
+var MESES_C = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+function partes(ds){ var p = ds.split('-').map(Number); var d = new Date(p[0], p[1]-1, p[2]); return { dow: DIAS_C[d.getDay()], dia: p[2], mes: MESES_C[p[1]-1] }; }
+function iniciales(nombre){ return nombre.replace(/^(Dra?\.?\s+)/i,'').split(/\s+/).filter(Boolean).slice(0,2).map(function(w){return w[0];}).join('').toUpperCase(); }
+
+async function api(body){
+  var r = await fetch(FN_URL, { method:'POST', headers:{ 'Content-Type':'application/json', apikey: SB_KEY }, body: JSON.stringify(body) });
+  var j = await r.json().catch(function(){ return {}; });
+  if(!r.ok) throw new Error(j.error || 'No pudimos conectarnos. Revisá tu internet y probá de nuevo.');
+  return j;
+}
+async function apiForm(fd){
+  var r = await fetch(FN_URL, { method:'POST', headers:{ apikey: SB_KEY }, body: fd });
+  var j = await r.json().catch(function(){ return {}; });
+  if(!r.ok) throw new Error(j.error || 'No pudimos conectarnos. Revisá tu internet y probá de nuevo.');
+  return j;
+}
+function mostrarError(el, e){ el.textContent = (e && e.message) || String(e); el.classList.add('on'); }
+function limpiarError(el){ el.textContent=''; el.classList.remove('on'); }
+
+/* Comprime fotos grandes antes de subirlas (los PDF van tal cual) */
+async function prepararArchivo(f){
+  if(!f || !/^image\/(jpeg|png|webp)$/.test(f.type) || f.size < 900*1024) return f;
+  try{
+    var bmp = await createImageBitmap(f);
+    var esc = Math.min(1, 1800 / Math.max(bmp.width, bmp.height));
+    var c = document.createElement('canvas'); c.width = Math.round(bmp.width*esc); c.height = Math.round(bmp.height*esc);
+    c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
+    var blob = await new Promise(function(res){ c.toBlob(res, 'image/jpeg', 0.82); });
+    if(!blob || blob.size >= f.size) return f;
+    return new File([blob], (f.name||'comprobante').replace(/\.\w+$/, '') + '.jpg', { type:'image/jpeg' });
+  }catch(e){ return f; }
+}
+function copiar(txt, btn){
+  var fin = function(){ var o = btn.textContent; btn.textContent = '¡Copiado!'; setTimeout(function(){ btn.textContent = o; }, 1400); };
+  if(navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(txt).then(fin, fin);
+  else { var t = document.createElement('textarea'); t.value = txt; document.body.appendChild(t); t.select(); try{ document.execCommand('copy'); }catch(e){} t.remove(); fin(); }
+}
+/* Bloque de datos de transferencia + selector de archivo (se usa para seña y saldo) */
+function htmlTransferencia(tr){
+  var filas = [];
+  if(tr.alias) filas.push(['Alias', tr.alias]);
+  if(tr.cbu) filas.push(['CBU / CVU', tr.cbu]);
+  if(tr.titular) filas.push(['Titular', tr.titular]);
+  if(tr.banco) filas.push(['Banco', tr.banco]);
+  if(!filas.length) return '<p class="nota">Pedí los datos para transferir respondiendo el mail de confirmación o por WhatsApp.</p>';
+  return '<div class="datos-tr">' + filas.map(function(f){
+    var copiable = f[0] === 'Alias' || f[0] === 'CBU / CVU';
+    return '<div class="dt"><div><span>'+h(f[0])+'</span><b>'+h(f[1])+'</b></div>' + (copiable ? '<button type="button" class="copiar" data-copiar="'+h(f[1])+'">Copiar</button>' : '') + '</div>';
+  }).join('') + '</div>';
+}
+function htmlArchivo(id){
+  return '<label class="archivo" id="'+id+'-box"><input type="file" id="'+id+'" accept="image/*,application/pdf">'
+    + '<div class="ic" id="'+id+'-ic">📎</div><div><b id="'+id+'-t">Adjuntá el comprobante</b><span id="'+id+'-s">Foto o captura de pantalla, o PDF</span></div></label>';
+}
+function engancharArchivo(id, alCambiar){
+  var inp = $('#'+id), box = $('#'+id+'-box');
+  inp.addEventListener('change', function(){
+    var f = inp.files && inp.files[0];
+    if(!f){ alCambiar(null); return; }
+    box.classList.add('lleno');
+    $('#'+id+'-t').textContent = 'Comprobante listo ✓';
+    $('#'+id+'-s').textContent = f.name + ' · tocá para cambiarlo';
+    var ic = $('#'+id+'-ic');
+    if(/^image\//.test(f.type) && window.URL){ ic.innerHTML = '<img class="prev" alt="" src="'+URL.createObjectURL(f)+'">'; }
+    else ic.textContent = '📄';
+    alCambiar(f);
+  });
+}
+document.addEventListener('click', function(e){
+  var b = e.target.closest('[data-copiar]'); if(b) copiar(b.getAttribute('data-copiar'), b);
+});
+
+/* ═══════════════════ Flujo de reserva ═══════════════════ */
+var S = { cfg:null, prof:null, dias:[], fecha:null, hora:null, pac:null, dniOk:null, otroMail:false, metodo:null, archivo:null, enviando:false };
+S.render = function(){ render(); };
+S.onDatos = function(d){
+  S.dniOk = d; S.metodo = S.prof.comprobante ? 'comprobante' : 'mercadopago'; S.archivo = null; render();
+  var ult = $('#seccion-sena'); if(ult && ult.scrollIntoView) ult.scrollIntoView({ behavior:'smooth', block:'start' });
+};
+
+function iniciarReserva(cfg){
+  AYUDA = 'video';
+  S.cfg = Object.assign({}, cfg, { profs: cfg.profs.filter(function(p){ return p.video; }) });
+  S.prof = null; S.fecha = S.hora = null; S.dniOk = null; S.motivos = []; S.acepto = false;
+  $('#titulo').textContent = 'Videoconsulta';
+  $('#subtitulo').textContent = 'Elegí día y horario, aboná la seña y listo.';
+  if(!S.cfg.activo || !S.cfg.profs.length){
+    $('#app').innerHTML = '<div class="card centro"><div class="big-ok">🗓️</div><p>En este momento no hay turnos por videollamada disponibles para sacar online.</p><p class="nota" style="margin-top:8px">Comunicate con el consultorio para coordinar.</p></div>';
+    return;
+  }
+  if(S.cfg.profs.length === 1) S.prof = S.cfg.profs[0];
+  render();
+  if(S.prof) cargarSlots();
+}
+
+function render(){
+  var paso = !S.prof ? 1 : !S.hora ? 2 : !S.dniOk ? 3 : 4;
+  var html = '';
+  // 1 · Profesional
+  if(S.cfg.profs.length > 1){
+    if(paso === 1){
+      html += '<section class="card"><div class="paso"><div class="n">1</div><h2>¿Con quién?</h2></div><div class="profs">'
+        + S.cfg.profs.map(function(p){
+          return '<button class="prof" data-prof="'+p.id+'"><div class="avatar">'+h(iniciales(p.nombre))+'</div><div><b>'+h(p.nombre)+'</b><span>Videoconsulta · '+pesos(p.arancel)+'</span></div></button>';
+        }).join('') + '</div></section>';
+    } else {
+      html += '<section class="card cerrada"><div class="paso"><div class="n">✓</div><h2>'+h(S.prof.nombre)+'</h2><button class="ok" data-volver="1">Cambiar</button></div></section>';
+    }
+  } else {
+    html += '<section class="card cerrada"><div class="paso"><div class="avatar" style="width:34px;height:34px;font-size:13px">'+h(iniciales(S.prof.nombre))+'</div><h2>'+h(S.prof.nombre)+'</h2></div></section>';
+  }
+  var nro = S.cfg.profs.length > 1 ? 1 : 0;
+  // 2 · Día y hora
+  if(paso < 2) html += cardBloqueada(nro+1, 'Día y horario');
+  else if(paso === 2) html += '<section class="card"><div class="paso"><div class="n">'+(nro+1)+'</div><h2>Elegí día y horario</h2></div><div id="slots"><div class="cargando"><div class="spin"></div>Buscando horarios libres…</div></div></section>';
+  else {
+    var pp = partes(S.fecha);
+    html += '<section class="card cerrada"><div class="paso"><div class="n">✓</div><h2>'+cap(S.diaEtiqueta)+' · '+h(S.hora)+' h</h2><button class="ok" data-volver="2">Cambiar</button></div></section>';
+  }
+  // 3 · Datos
+  if(paso < 3) html += cardBloqueada(nro+2, 'Tus datos');
+  else if(paso === 3) html += htmlDatos(nro+2);
+  else html += '<section class="card cerrada"><div class="paso"><div class="n">✓</div><h2>'+h(S.dniOk.resumen)+'</h2><button class="ok" data-volver="3">Cambiar</button></div></section>';
+  // 4 · Seña
+  if(paso < 4) html += cardBloqueada(nro+3, 'Seña');
+  else html += htmlSena(nro+3);
+  $('#app').innerHTML = barraVolver() + html;
+  enganchar(paso);
+}
+function cap(s){ return s ? s.charAt(0).toUpperCase() + s.slice(1) : ''; }
+function cardBloqueada(n, t){ return '<section class="card bloqueada"><div class="paso"><div class="n">'+n+'</div><h2>'+h(t)+'</h2></div></section>'; }
+
+function enganchar(paso){
+  document.querySelectorAll('[data-prof]').forEach(function(b){
+    b.onclick = function(){ S.prof = S.cfg.profs.find(function(p){ return p.id === b.dataset.prof; }); S.fecha = S.hora = null; render(); cargarSlots(); };
+  });
+  document.querySelectorAll('[data-volver]').forEach(function(b){
+    b.onclick = function(){
+      var v = +b.dataset.volver;
+      if(v === 1){ S.prof = null; S.fecha = S.hora = null; render(); }
+      if(v === 2){ S.hora = null; render(); cargarSlots(); }
+      if(v === 3){ S.dniOk = null; render(); }
+    };
+  });
+  if(paso === 3) engancharDatos();
+  if(paso === 4) engancharSena();
+}
+
+/* ── Paso 2: horarios ── */
+async function cargarSlots(){
+  var box = $('#slots'); if(!box) return;
+  try{
+    var r = await api({ accion:'slots', prof:S.prof.id });
+    S.dias = r.dias || [];
+  }catch(e){
+    box.innerHTML = '<div class="error on">'+h(e.message)+'</div><button class="btn sec" id="re-slots">Reintentar</button>';
+    $('#re-slots').onclick = function(){ render(); cargarSlots(); };
+    return;
+  }
+  if(!S.dias.length){
+    box.innerHTML = '<p class="vacio">Por ahora no quedan horarios libres para videollamada con '+h(S.prof.nombre)+'. Probá de nuevo en unos días o comunicate con el consultorio.</p>';
+    return;
+  }
+  if(!S.fecha || !S.dias.some(function(d){ return d.fecha === S.fecha; })) S.fecha = S.dias[0].fecha;
+  pintarSlots();
+}
+function pintarSlots(){
+  var box = $('#slots'); if(!box) return;
+  var dia = S.dias.find(function(d){ return d.fecha === S.fecha; });
+  box.innerHTML = '<div class="dias" role="listbox" aria-label="Días disponibles">' + S.dias.map(function(d){
+      var p = partes(d.fecha);
+      return '<button class="dia'+(d.fecha===S.fecha?' sel':'')+'" data-fecha="'+d.fecha+'" aria-selected="'+(d.fecha===S.fecha)+'"><div class="dn">'+p.dow+'</div><div class="dd">'+p.dia+'</div><div class="dm">'+p.mes+'</div></button>';
+    }).join('') + '</div>'
+    + '<div class="nota" style="margin-top:2px">'+h(cap(dia.etiqueta))+' · hora argentina</div>'
+    + '<div class="horas">' + dia.horas.map(function(t){ return '<button class="hora" data-hora="'+t+'">'+t+'</button>'; }).join('') + '</div>';
+  box.querySelectorAll('[data-fecha]').forEach(function(b){ b.onclick = function(){ S.fecha = b.dataset.fecha; pintarSlots(); }; });
+  box.querySelectorAll('[data-hora]').forEach(function(b){ b.onclick = function(){
+    S.hora = b.dataset.hora; S.diaEtiqueta = dia.etiqueta; render();
+    var dni = $('#f-dni'); if(dni) setTimeout(function(){ dni.focus(); }, 50);
+  }; });
+  var sel = box.querySelector('.dia.sel'); if(sel && sel.scrollIntoView) sel.scrollIntoView({ block:'nearest', inline:'nearest' });
+}
+
+/* ── Paso 3: datos ── */
+function htmlDatos(n, st, opt){
+  st = st || S; opt = opt || { motivo:true, mailNota:"Ahí te llega la confirmación y el link de la videollamada." };
+  var p = st.pac;
+  var x = '<section class="card"><div class="paso"><div class="n">'+n+'</div><h2>Tus datos</h2></div>'
+    + '<label for="f-dni">DNI <span style="text-transform:none;letter-spacing:0;font-weight:400">(solo números, sin puntos)</span></label><div class="dni-row"><input type="text" id="f-dni" inputmode="numeric" autocomplete="off" placeholder="Ej.: 30111222" value="'+h(p?p.dni:'')+'"><button class="btn btn-chico" id="b-dni">Seguir</button></div>';
+  if(p && p.existe){
+    x += '<div class="hola"><b>¡Hola, '+h(p.nombre)+'! 👋</b><br>Ya te tenemos registrada/o, no hace falta que completes tus datos.'
+      + (p.tiene_email && !st.otroMail ? '<br>Te mandamos la confirmación a <b>'+h(p.email_mask)+'</b> · <button class="link" id="b-otro">usar otro mail</button>' : '') + '</div>';
+    if(!p.tiene_email || st.otroMail) x += '<label for="f-email">Mail para la confirmación</label><input type="email" id="f-email" autocomplete="email" placeholder="tu@mail.com">';
+    if(opt.motivo) x += htmlMotivos(st);
+    x += '<div class="error" id="e-datos"></div><button class="btn" id="b-datos">Continuar</button>';
+  } else if(p && !p.existe){
+    x += '<p class="nota" style="margin-top:10px">Es tu primera consulta: completá estos datos una sola vez.</p>'
+      + '<div class="fila2"><div><label for="f-nombre">Nombre</label><input type="text" id="f-nombre" autocomplete="given-name"></div>'
+      + '<div><label for="f-apellido">Apellido</label><input type="text" id="f-apellido" autocomplete="family-name"></div></div>'
+      + '<div class="fila2"><div><label for="f-nac">Fecha de nacimiento</label><input type="date" id="f-nac" max="'+new Date().toISOString().slice(0,10)+'"></div>'
+      + '<div><label for="f-tel">Celular</label><input type="tel" id="f-tel" autocomplete="tel" placeholder="11 2345-6789"></div></div>'
+      + '<label for="f-email">Mail</label><input type="email" id="f-email" autocomplete="email" placeholder="tu@mail.com"><p class="nota">'+h(opt.mailNota)+'</p>'
+      + (opt.motivo ? htmlMotivos(st) : '')
+      + '<div class="error" id="e-datos"></div><button class="btn" id="b-datos">Continuar</button>';
+  } else {
+    x += '<div class="error" id="e-dni"></div>';
+  }
+  return x + '</section>';
+}
+function engancharDatos(st){
+  st = st || S;
+  var inp = $('#f-dni'), b = $('#b-dni');
+  var buscar = async function(){
+    var dni = inp.value.replace(/\D/g,'');
+    var e = $('#e-dni') || $('#e-datos');
+    if(dni.length < 6 || dni.length > 9){ if(e) mostrarError(e, 'Escribí tu DNI sin puntos (7 u 8 números).'); return; }
+    if(st.pac && st.pac.dni === dni) return;
+    b.disabled = true; b.innerHTML = '<div class="spin" style="border-top-color:#fff;border-color:rgba(255,255,255,.35)"></div>';
+    try{
+      var r = await api({ accion:'dni', dni:dni });
+      r.dni = dni; st.pac = r; st.otroMail = false; st.render();
+      var foco = $('#f-nombre') || $('#f-email') || $('#b-datos'); if(foco) foco.focus();
+    }catch(err){ b.disabled = false; b.textContent = 'Seguir'; if(e) mostrarError(e, err); }
+  };
+  b.onclick = buscar;
+  inp.addEventListener('keydown', function(ev){ if(ev.key === 'Enter') buscar(); });
+  inp.addEventListener('input', function(){
+    var limpio = inp.value.replace(/\D/g,'').slice(0, 9);
+    if(inp.value !== limpio){ inp.value = limpio; var ed = $('#e-dni') || $('#e-datos'); if(ed) mostrarError(ed, 'Escribí el DNI sin puntos ni espacios: ya los sacamos por vos 👍'); }
+    if(st.pac && inp.value.replace(/\D/g,'') !== st.pac.dni){ st.pac = null; var v = inp.value; st.render(); var i2 = $('#f-dni'); i2.value = v; i2.focus(); } });
+  var bo = $('#b-otro'); if(bo) bo.onclick = function(){ guardarMotivos(st); st.otroMail = true; st.render(); $('#f-email').focus(); };
+  document.querySelectorAll('[data-motivo]').forEach(function(c){ c.onchange = function(){
+    var marc = document.querySelectorAll('[data-motivo]:checked');
+    if(marc.length > 3){ c.checked = false; }
+    var n = document.querySelectorAll('[data-motivo]:checked').length;
+    document.querySelectorAll('[data-motivo]').forEach(function(o){ if(!o.checked){ o.disabled = n >= 3; o.parentNode.style.opacity = n >= 3 ? .45 : 1; } });
+    c.parentNode.classList.toggle('sel', c.checked);
+    guardarMotivos(st);
+  }; });
+  var bd = $('#b-datos');
+  if(bd) bd.onclick = function(){
+    var e = $('#e-datos'); limpiarError(e);
+    var p = st.pac, d = { dni:p.dni };
+    var mot = Array.prototype.map.call(document.querySelectorAll('[data-motivo]:checked'), function(c){ return c.value; });
+    if(mot.length) d.motivos = JSON.stringify(mot);
+    var mail = $('#f-email') ? $('#f-email').value.trim() : '';
+    var okMail = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+    if(p.existe){
+      if(($('#f-email')) && !okMail.test(mail)) return mostrarError(e, 'Revisá el mail.');
+      if(mail) d.email = mail;
+      d.resumen = p.nombre + ' · DNI ' + p.dni;
+    } else {
+      d.nombre = $('#f-nombre').value.trim(); d.apellido = $('#f-apellido').value.trim();
+      d.fecha_nac = $('#f-nac').value; d.telefono = $('#f-tel').value.trim(); d.email = mail;
+      if(!d.nombre || !d.apellido) return mostrarError(e, 'Completá nombre y apellido.');
+      if(d.telefono.replace(/\D/g,'').length < 8) return mostrarError(e, 'Completá un celular de contacto.');
+      if(!okMail.test(mail)) return mostrarError(e, 'Revisá el mail: ahí te mandamos la confirmación.');
+      d.resumen = d.nombre + ' ' + d.apellido + ' · DNI ' + p.dni;
+    }
+    st.onDatos(d);
+  };
+}
+
+function htmlMotivos(st){
+  var lista = (CFG && CFG.motivos) || [];
+  if(!lista.length) return '';
+  var sel = st.motivos || [];
+  return '<label style="margin-top:16px">Motivo de la consulta <span style="text-transform:none;letter-spacing:0;font-weight:400">(opcional · hasta 3)</span></label>'
+    + '<div class="motivos">' + lista.map(function(m){
+      var on = sel.indexOf(m) >= 0, lleno = sel.length >= 3 && !on;
+      return '<label class="motivo'+(on?' sel':'')+'"'+(lleno?' style="opacity:.45"':'')+'><input type="checkbox" data-motivo value="'+h(m)+'"'+(on?' checked':'')+(lleno?' disabled':'')+'>'+h(m)+'</label>';
+    }).join('') + '</div>';
+}
+function guardarMotivos(st){ st.motivos = Array.prototype.map.call(document.querySelectorAll('[data-motivo]:checked'), function(c){ return c.value; }); }
+
+/* ── Aclaraciones médico-legales (se aceptan antes de pagar) ── */
+var AVISO_VERSION = 'v2-2026-10';
+var URGENCIA = '<b>No es un servicio de urgencias.</b> Si tenés <b>dolor de pecho, falta de aire, mareos o desmayos</b>, no esperes: andá <b>inmediatamente a la guardia</b> más cercana o llamá al <b>107</b>.';
+// Texto definido por URCyM (el mismo para los tres servicios)
+function textosAviso(tipo){
+  return [
+    'Las videoconsultas son <b>turnos programados</b> para la atención de patologías cardiometabólicas. ' + URGENCIA,
+    'Pedir una receta, hacer una consulta por mensaje o solicitar que se complete una planilla o un apto es un <b>acto médico</b>: el profesional revisa tu historia clínica y tu tratamiento antes de emitir la indicación y asume la responsabilidad médico-legal. <b>Por eso tiene honorarios.</b>',
+    'Toda consulta queda registrada en tu <b>historia clínica</b>, con la misma confidencialidad y secreto profesional que una consulta presencial (Ley 26.529 de Derechos del Paciente y Ley 25.326 de Protección de Datos Personales).'
+  ];
+}
+function htmlAviso(tipo, st){
+  return '<div class="aviso-legal"><b class="aviso-tit">Antes de confirmar</b><ul>' + textosAviso(tipo).map(function(t){ return '<li>'+t+'</li>'; }).join('') + '</ul>'
+    + '<label class="aviso-ok"><input type="checkbox" id="f-acepto"'+(st.acepto?' checked':'')+'> Leí y acepto estas condiciones</label></div>';
+}
+function engancharAviso(st, alCambiar){
+  var c = $('#f-acepto'); if(!c) return;
+  c.onchange = function(){ st.acepto = c.checked; alCambiar(); };
+}
+
+/* ── Paso 4: seña ── */
+function htmlSena(n){
+  var P = S.prof;
+  var x = '<section class="card" id="seccion-sena"><div class="paso"><div class="n">'+n+'</div><h2>Seña para confirmar</h2></div>'
+    + '<div class="montos"><div><small>Seña ('+S.cfg.sena_pct+'%)</small><div class="grande">'+pesos(P.sena)+'</div></div>'
+    + '<div style="text-align:right"><small>Consulta '+pesos(P.arancel)+'</small><small>'+(P.saldo>0 ? 'El resto ('+pesos(P.saldo)+') antes de la consulta' : '')+'</small></div></div>';
+  var metodos = [];
+  if(P.comprobante) metodos.push(['comprobante','🏦 Transferencia']);
+  if(P.mp) metodos.push(['mercadopago','Mercado Pago']);
+  x += '<div class="tabs'+(metodos.length===1?' uno':'')+'">' + metodos.map(function(m){ return '<button class="tab'+(S.metodo===m[0]?' sel':'')+'" data-metodo="'+m[0]+'">'+m[1]+'</button>'; }).join('') + '</div>';
+  if(S.metodo === 'comprobante'){
+    x += '<p style="font-size:14.5px;margin-bottom:10px">Transferí <b>'+pesos(P.sena)+'</b> a:</p>' + htmlTransferencia(P.transferencia) + htmlArchivo('f-comp')
+      + htmlAviso('video', S) + '<div class="error" id="e-sena"></div><button class="btn" id="b-confirmar" disabled>Confirmar turno</button>'
+      + '<p class="nota centro">Al confirmar, el turno queda reservado y te llega un mail.</p>';
+  } else {
+    x += '<p style="font-size:14.5px">Vas a pagar <b>'+pesos(P.sena)+'</b> con Mercado Pago (tarjeta, dinero en cuenta, etc.). Cuando se acredite, el turno se confirma solo y te llega un mail.</p>'
+      + '<p class="nota">Tenés '+S.cfg.mp_vencimiento_min+' minutos para pagar; si no, el horario se libera.</p>'
+      + htmlAviso('video', S) + '<div class="error" id="e-sena"></div><button class="btn mp" id="b-confirmar">Pagar la seña con Mercado Pago</button>';
+  }
+  return x + '</section>';
+}
+function engancharSena(){
+  document.querySelectorAll('[data-metodo]').forEach(function(b){ b.onclick = function(){ S.metodo = b.dataset.metodo; S.archivo = null; render(); }; });
+  var bc = $('#b-confirmar');
+  var listo = function(){ bc.disabled = !S.acepto || (S.metodo === 'comprobante' && !S.archivo); };
+  if(S.metodo === 'comprobante') engancharArchivo('f-comp', function(f){ S.archivo = f; listo(); });
+  engancharAviso(S, listo); listo();
+  bc.onclick = enviarReserva;
+}
+async function enviarReserva(){
+  if(S.enviando) return;
+  var e = $('#e-sena'), bc = $('#b-confirmar'); limpiarError(e);
+  if(!S.acepto) return mostrarError(e, 'Tildá "Leí y acepto" para continuar.');
+  if(S.metodo === 'comprobante' && !S.archivo) return mostrarError(e, 'Adjuntá el comprobante de la transferencia.');
+  S.enviando = true; bc.disabled = true; var txt = bc.textContent;
+  bc.innerHTML = '<div class="spin" style="border-top-color:#fff;border-color:rgba(255,255,255,.35)"></div> ' + (S.metodo==='comprobante' ? 'Confirmando…' : 'Abriendo Mercado Pago…');
+  try{
+    var fd = new FormData();
+    fd.append('accion','reservar'); fd.append('prof', S.prof.id); fd.append('fecha', S.fecha); fd.append('hora', S.hora);
+    fd.append('metodo', S.metodo); fd.append('acepto', AVISO_VERSION);
+    Object.keys(S.dniOk).forEach(function(k){ if(k !== 'resumen' && S.dniOk[k]) fd.append(k, S.dniOk[k]); });
+    if(S.metodo === 'comprobante') fd.append('comprobante', await prepararArchivo(S.archivo));
+    var r = await apiForm(fd);
+    try{ localStorage.setItem('urcym_video_ultimo', r.token); }catch(_){}
+    if(r.pagar_url){ location.href = r.pagar_url; return; }
+    history.replaceState(null, '', '?t=' + encodeURIComponent(r.token));
+    verReserva(r.token, { recien:true });
+  }catch(err){
+    S.enviando = false; bc.disabled = false; bc.textContent = txt;
+    mostrarError(e, err);
+    if(/ocup/i.test(err.message)){ // horario tomado: volver a elegir
+      setTimeout(function(){ S.hora = null; S.enviando = false; render(); cargarSlots(); var sl = $('#slots'); if(sl) sl.scrollIntoView({behavior:'smooth'}); }, 2200);
+    }
+  }
+}
+
+/* ═══════════════════ Menú de servicios ═══════════════════ */
+var CFG = null;
+function serviciosDisponibles(){
+  if(!CFG || !CFG.activo) return [];
+  var l = [];
+  if(CFG.profs.some(function(p){ return p.video; })) l.push({ id:'video', icono:'📹', titulo:'Videoconsulta', sub:'Turno por Google Meet' });
+  if(CFG.profs.some(function(p){ return p.recetas; })) l.push({ id:'receta', icono:'💊', titulo:'Pedir una receta', sub:'Te llega por mail' });
+  if(CFG.profs.some(function(p){ return p.consultas; })) l.push({ id:'consulta', icono:'💬', titulo:'Consulta por mensaje', sub:'Respuesta dentro de las ' + CFG.consulta_horas + ' h' });
+  return l;
+}
+function barraVolver(){
+  return serviciosDisponibles().length > 1 ? '<button class="link" style="margin:0 0 12px 4px;text-decoration:none" onclick="irA(\'\')">← Otros servicios</button>' : '';
+}
+function irA(serv){
+  history.replaceState(null, '', serv ? '?s=' + serv : location.pathname);
+  window.scrollTo(0, 0);
+  if(serv === 'video') return iniciarReserva(CFG);
+  if(serv === 'receta' || serv === 'consulta') return iniciarPedido(serv);
+  mostrarMenu();
+}
+function mostrarMenu(){
+  AYUDA = 'menu';
+  var l = serviciosDisponibles();
+  $('#titulo').textContent = 'Atención online';
+  $('#subtitulo').textContent = '¿Qué necesitás?';
+  if(!l.length){
+    $('#app').innerHTML = '<div class="card centro"><div class="big-ok">🗓️</div><p>En este momento no hay servicios online disponibles.</p><p class="nota" style="margin-top:8px">Comunicate con el consultorio.</p></div>';
+    return;
+  }
+  if(l.length === 1) return irA(l[0].id);
+  $('#app').innerHTML = '<div class="profs">' + l.map(function(x){
+    return '<button class="prof card" style="margin:0" data-serv="'+x.id+'"><div class="avatar" style="font-size:22px;background:var(--blue-light)">'+x.icono+'</div><div><b>'+h(x.titulo)+'</b><span>'+h(x.sub)+'</span></div></button>';
+  }).join('') + '</div>';
+  document.querySelectorAll('[data-serv]').forEach(function(b){ b.onclick = function(){ irA(b.dataset.serv); }; });
+}
+
+/* ═══════════════════ Recetas y consultas por mensaje ═══════════════════ */
+var Q = {};
+var OS_COMUNES = ['OSDE','Swiss Medical','Galeno','Medifé','OMINT','Sancor Salud','Hospital Italiano','Hospital Alemán','IOMA','PAMI','OSECAC','Accord Salud','Particular / sin cobertura'];
+function iniciarPedido(tipo){
+  AYUDA = tipo;
+  var profs = CFG.profs.filter(function(p){ return tipo === 'receta' ? p.recetas : p.consultas; });
+  Q = { tipo:tipo, profs:profs, prof: profs.length === 1 ? profs[0] : null, pac:null, otroMail:false, datos:null,
+        items:[{ farmaco:'', dosis:'', frecuencia:'', marca:'' }], sesion:null, codigoEnviado:false, mis:null, osCambio:false,
+        texto:'', adjuntos:[], metodo:null, archivo:null, enviando:false, acepto:false };
+  Q.render = renderPedido;
+  Q.onDatos = function(d){ Q.datos = d; renderPedido(); var x = $('#seccion-detalle'); if(x && x.scrollIntoView) x.scrollIntoView({ behavior:'smooth', block:'start' }); };
+  $('#titulo').textContent = tipo === 'receta' ? 'Pedido de receta' : 'Consulta por mensaje';
+  $('#subtitulo').textContent = tipo === 'receta' ? 'Indicá qué necesitás, aboná y te llega por mail.' : 'Escribí tu consulta y te respondemos dentro de las ' + CFG.consulta_horas + ' h.';
+  if(!profs.length){ $('#app').innerHTML = barraVolver() + '<div class="card centro"><p>Este servicio no está disponible en este momento.</p></div>'; return; }
+  renderPedido();
+}
+function precioPedido(){ return Q.tipo === 'receta' ? CFG.receta_precio : CFG.consulta_precio; }
+function renderPedido(){
+  var paso = !Q.prof ? 1 : !Q.datos ? 2 : !Q.detalleOk ? 3 : 4;
+  var x = barraVolver();
+  if(Q.profs.length > 1){
+    if(paso === 1) x += '<section class="card"><div class="paso"><div class="n">1</div><h2>¿Con quién?</h2></div><div class="profs">'
+      + Q.profs.map(function(p){ return '<button class="prof" data-qprof="'+p.id+'"><div class="avatar">'+h(iniciales(p.nombre))+'</div><div><b>'+h(p.nombre)+'</b><span>'+pesos(precioPedido())+'</span></div></button>'; }).join('') + '</div></section>';
+    else x += '<section class="card cerrada"><div class="paso"><div class="n">✓</div><h2>'+h(Q.prof.nombre)+'</h2><button class="ok" data-qvolver="1">Cambiar</button></div></section>';
+  } else {
+    x += '<section class="card cerrada"><div class="paso"><div class="avatar" style="width:34px;height:34px;font-size:13px">'+h(iniciales(Q.prof.nombre))+'</div><h2>'+h(Q.prof.nombre)+'</h2></div></section>';
+  }
+  var n0 = Q.profs.length > 1 ? 1 : 0;
+  if(paso < 2) x += cardBloqueada(n0+1, 'Tus datos');
+  else if(paso === 2) x += htmlDatos(n0+1, Q, { motivo:false, mailNota:'Ahí te llega ' + (Q.tipo === 'receta' ? 'la receta.' : 'la respuesta.') });
+  else x += '<section class="card cerrada"><div class="paso"><div class="n">✓</div><h2>'+h(Q.datos.resumen)+'</h2><button class="ok" data-qvolver="2">Cambiar</button></div></section>';
+  var tit = Q.tipo === 'receta' ? 'Medicamentos' : 'Tu consulta';
+  if(paso < 3) x += cardBloqueada(n0+2, tit);
+  else if(paso === 3) x += Q.tipo === 'receta' ? htmlReceta(n0+2) : htmlConsulta(n0+2);
+  else x += '<section class="card cerrada"><div class="paso"><div class="n">✓</div><h2>'+h(Q.tipo === 'receta' ? Q.items.length + ' medicamento' + (Q.items.length>1?'s':'') : 'Consulta escrita')+'</h2><button class="ok" data-qvolver="3">Cambiar</button></div></section>';
+  if(paso < 4) x += cardBloqueada(n0+3, 'Pago');
+  else x += htmlPagoPedido(n0+3);
+  $('#app').innerHTML = x;
+  document.querySelectorAll('[data-qprof]').forEach(function(b){ b.onclick = function(){ Q.prof = Q.profs.find(function(p){ return p.id === b.dataset.qprof; }); renderPedido(); }; });
+  document.querySelectorAll('[data-qvolver]').forEach(function(b){ b.onclick = function(){
+    var v = +b.dataset.qvolver;
+    if(v === 1){ Q.prof = null; Q.detalleOk = false; }
+    if(v === 2){ Q.datos = null; Q.detalleOk = false; }
+    if(v === 3){ Q.detalleOk = false; }
+    renderPedido();
+  }; });
+  if(paso === 2) engancharDatos(Q);
+  if(paso === 3) (Q.tipo === 'receta' ? engancharReceta : engancharConsulta)();
+  if(paso === 4) engancharPagoPedido();
+}
+
+/* ── Receta ── */
+function htmlReceta(n){
+  var p = Q.pac || {};
+  var x = '<section class="card" id="seccion-detalle"><div class="paso"><div class="n">'+n+'</div><h2>¿Qué medicación necesitás?</h2></div>';
+  if(p.existe && p.tiene_email && !Q.datos.email){
+    if(Q.mis){
+      var opciones = Q.mis.medicacion.map(function(m){ return { farmaco:m.farmaco, dosis:m.dosis, frecuencia:frecDesdeHC(m.frecuencia), marca:'' }; });
+      Q.mis.previas.forEach(function(pv){ if(!opciones.some(function(o){ return o.farmaco.toLowerCase() === pv.farmaco.toLowerCase(); })) opciones.push(pv); });
+      x += '<div class="aviso azul" style="margin:0 0 12px"><b>Tildá lo que querés repetir</b>'
+        + (opciones.length ? opciones.map(function(o, i){
+            var ya = Q.items.some(function(it){ return it.repetir && it.farmaco === o.farmaco; });
+            return '<label style="display:flex;gap:10px;align-items:flex-start;text-transform:none;letter-spacing:0;font-weight:400;color:var(--text);font-size:15px;margin:10px 0 0;cursor:pointer"><input type="checkbox" data-rep="'+i+'"'+(ya?' checked':'')+' style="width:20px;height:20px;margin-top:2px;accent-color:var(--blue)"><span><b>'+h(o.farmaco)+'</b> '+h(o.dosis)+(o.frecuencia?' · '+h(o.frecuencia):'')+(o.marca?' <span class="nota">('+h(o.marca)+')</span>':'')+'</span></label>';
+          }).join('') : '<p class="nota" style="margin-top:6px">No encontramos medicación registrada. Escribila abajo.</p>')
+        + '</div>';
+      Q._opciones = opciones;
+    } else if(!Q.codigoEnviado){
+      x += '<div class="aviso azul" style="margin:0 0 12px">¿Querés <b>repetir</b> algo que ya tomás? Te mandamos un código a <b>'+h(p.email_mask)+'</b> para mostrarte tu medicación.'
+        + '<button class="btn sec" id="b-codigo" style="margin-top:10px">Enviarme el código</button><div class="error" id="e-cod"></div></div>';
+    } else {
+      x += '<div class="aviso azul" style="margin:0 0 12px">Escribí el código de 6 números que te llegó a <b>'+h(p.email_mask)+'</b>:'
+        + '<div class="dni-row" style="margin-top:8px"><input type="text" id="f-cod" inputmode="numeric" maxlength="6" placeholder="000000" autocomplete="one-time-code"><button class="btn btn-chico" id="b-verif">Ver</button></div>'
+        + '<div class="error" id="e-cod"></div><button class="link" id="b-recod" style="margin-top:8px">Reenviar código</button></div>';
+    }
+  }
+  x += '<div id="items">' + Q.items.map(function(it, i){
+    return '<div class="item-med" style="border:1.5px solid var(--line);border-radius:14px;padding:10px 12px;margin-bottom:10px;position:relative'+(it.repetir?';background:var(--blue-light)':'')+'">'
+      + (Q.items.length > 1 ? '<button class="copiar" data-quitar="'+i+'" style="position:absolute;top:8px;right:8px" aria-label="Quitar">✕</button>' : '')
+      + (it.repetir ? '<div class="nota" style="margin:0 0 4px">🔁 Repetir</div>' : '')
+      + '<label for="m-f-'+i+'" style="margin-top:0">Droga / medicamento</label><input type="text" id="m-f-'+i+'" data-campo="farmaco" data-i="'+i+'" value="'+h(it.farmaco)+'" placeholder="Ej.: losartán">'
+      + '<div class="fila2"><div><label for="m-d-'+i+'">Dosis</label><input type="text" id="m-d-'+i+'" data-campo="dosis" data-i="'+i+'" value="'+h(it.dosis)+'" placeholder="Ej.: 50 mg"></div>'
+      + '<div><label for="m-v-'+i+'">¿Cuántas veces por día?</label>' + htmlFrecuencia(it, i) + '</div></div>'
+      + (esFrecOtra(it.frecuencia) ? '<input type="text" id="m-o-'+i+'" data-campo="frecuencia" data-i="'+i+'" value="'+h(it.frecuencia === 'otra' ? '' : it.frecuencia)+'" placeholder="Ej.: día por medio, 1 por semana…" style="margin-top:8px">' : '')
+      + '<label for="m-m-'+i+'">Marca <span style="text-transform:none;letter-spacing:0;font-weight:400">(si corresponde)</span></label><input type="text" id="m-m-'+i+'" data-campo="marca" data-i="'+i+'" value="'+h(it.marca)+'"></div>';
+  }).join('') + '</div>'
+    + (Q.items.length < 8 ? '<button class="btn sec" id="b-mas" style="margin-top:4px">+ Agregar otro medicamento</button>' : '');
+  // Cobertura
+  x += '<h2 style="font-family:var(--display);font-size:16px;margin:22px 0 4px">Obra social o prepaga</h2>';
+  if(p.existe && p.tiene_os && !Q.osCambio){
+    x += '<div class="hola" style="margin-top:6px">✓ Ya tenemos registrada tu cobertura'
+      + (Q.mis && Q.mis.obra_social ? ': <b>'+h(Q.mis.obra_social)+'</b> '+h(Q.mis.afiliado_mask) : '') + '.'
+      + '<br><button class="link" id="b-oscambio">Cambió mi obra social / prepaga</button></div>';
+  } else {
+    x += '<div class="fila2"><div><label for="f-os">Obra social / prepaga</label><input type="text" id="f-os" list="os-lista" value="'+h(Q.os||'')+'" placeholder="Ej.: OSDE"><datalist id="os-lista">'+OS_COMUNES.map(function(o){ return '<option value="'+h(o)+'">'; }).join('')+'</datalist></div>'
+      + '<div><label for="f-af">N.º de afiliado</label><input type="text" id="f-af" value="'+h(Q.af||'')+'"></div></div>'
+      + (p.existe && p.tiene_os ? '<button class="link" id="b-osnocambio" style="margin-top:8px">No cambió, dejar la registrada</button>' : '');
+  }
+  x += '<label for="f-nota">Aclaración <span style="text-transform:none;letter-spacing:0;font-weight:400">(opcional)</span></label><textarea id="f-nota" maxlength="400" placeholder="Ej.: 2 cajas, genérico está bien…">'+h(Q.nota||'')+'</textarea>'
+    + '<div class="error" id="e-rec"></div><button class="btn" id="b-rec">Continuar</button></section>';
+  return x;
+}
+var FRECS = ['1 vez por día', '2 veces por día', '3 veces por día', '4 veces por día'];
+function esFrecOtra(f){ return !!f && FRECS.indexOf(f) < 0; }
+function htmlFrecuencia(it, i){
+  var f = it.frecuencia || '';
+  return '<select id="m-v-'+i+'" data-frec="'+i+'" style="width:100%;padding:12px 10px;border-radius:12px;border:1.5px solid var(--line);background:var(--chip);font-size:16px">'
+    + '<option value=""'+(f?'':' selected')+'>Elegí…</option>'
+    + FRECS.map(function(o, k){ return '<option value="'+h(o)+'"'+(f===o?' selected':'')+'>'+(k+1)+' '+(k?'veces':'vez')+'</option>'; }).join('')
+    + '<option value="otra"'+(esFrecOtra(f)?' selected':'')+'>Otra</option></select>';
+}
+/** Pasa la frecuencia anotada en la HC (ej. "c/12 h", "2 veces") a "N veces por día" si se puede */
+function frecDesdeHC(t){
+  t = String(t||'').toLowerCase().trim(); if(!t) return '';
+  var m = /c\/?\s*(\d+)\s*h/.exec(t) || /cada\s*(\d+)\s*h/.exec(t);
+  if(m && 24 % (+m[1]) === 0 && 24 / (+m[1]) <= 4) return FRECS[24 / (+m[1]) - 1];
+  m = /^(\d)\s*(vez|veces)/.exec(t); if(m && +m[1] >= 1 && +m[1] <= 4) return FRECS[+m[1] - 1];
+  return t;
+}
+function guardarCamposReceta(){
+  document.querySelectorAll('[data-campo]').forEach(function(inp){ Q.items[+inp.dataset.i][inp.dataset.campo] = inp.dataset.campo === 'frecuencia' ? (inp.value || 'otra') : inp.value; });
+  if($('#f-os')) Q.os = $('#f-os').value; if($('#f-af')) Q.af = $('#f-af').value; if($('#f-nota')) Q.nota = $('#f-nota').value;
+}
+function engancharReceta(){
+  document.querySelectorAll('[data-campo]').forEach(function(inp){ inp.addEventListener('input', function(){ Q.items[+inp.dataset.i][inp.dataset.campo] = inp.dataset.campo === 'frecuencia' ? (inp.value || 'otra') : inp.value; }); });
+  document.querySelectorAll('[data-frec]').forEach(function(sel){ sel.onchange = function(){
+    guardarCamposReceta(); Q.items[+sel.dataset.frec].frecuencia = sel.value; renderPedido();
+    var o = $('#m-o-' + sel.dataset.frec); if(o) o.focus();
+  }; });
+  document.querySelectorAll('[data-quitar]').forEach(function(b){ b.onclick = function(){ guardarCamposReceta(); Q.items.splice(+b.dataset.quitar, 1); renderPedido(); }; });
+  var bm = $('#b-mas'); if(bm) bm.onclick = function(){ guardarCamposReceta(); Q.items.push({ farmaco:'', dosis:'', frecuencia:'', marca:'' }); renderPedido(); var u = $('#m-f-' + (Q.items.length-1)); if(u) u.focus(); };
+  document.querySelectorAll('[data-rep]').forEach(function(c){ c.onchange = function(){
+    guardarCamposReceta();
+    var o = Q._opciones[+c.dataset.rep];
+    if(c.checked){
+      Q.items = Q.items.filter(function(it){ return it.farmaco.trim(); });
+      Q.items.push({ farmaco:o.farmaco, dosis:o.dosis, frecuencia:o.frecuencia||'', marca:o.marca||'', repetir:true });
+    } else Q.items = Q.items.filter(function(it){ return !(it.repetir && it.farmaco === o.farmaco); });
+    if(!Q.items.length) Q.items.push({ farmaco:'', dosis:'', frecuencia:'', marca:'' });
+    renderPedido();
+  }; });
+  var enviarCod = async function(btn){
+    var e = $('#e-cod'); if(e) limpiarError(e);
+    btn.disabled = true;
+    try{ await api({ accion:'codigo_enviar', dni:Q.pac.dni, prof:Q.prof.id }); guardarCamposReceta(); Q.codigoEnviado = true; renderPedido(); var fc = $('#f-cod'); if(fc) fc.focus(); }
+    catch(err){ btn.disabled = false; if(e) mostrarError(e, err); }
+  };
+  var bc = $('#b-codigo'); if(bc) bc.onclick = function(){ enviarCod(bc); };
+  var br = $('#b-recod'); if(br) br.onclick = function(){ enviarCod(br); };
+  var bv = $('#b-verif');
+  if(bv){
+    var verif = async function(){
+      var e = $('#e-cod'); limpiarError(e); bv.disabled = true;
+      try{
+        var r = await api({ accion:'codigo_verificar', dni:Q.pac.dni, codigo:$('#f-cod').value });
+        Q.sesion = r.sesion; Q.mis = await api({ accion:'mis_datos', sesion:Q.sesion });
+        guardarCamposReceta(); renderPedido();
+      }catch(err){ bv.disabled = false; mostrarError(e, err); }
+    };
+    bv.onclick = verif; $('#f-cod').addEventListener('keydown', function(ev){ if(ev.key === 'Enter') verif(); });
+  }
+  var bo = $('#b-oscambio'); if(bo) bo.onclick = function(){ guardarCamposReceta(); Q.osCambio = true; renderPedido(); $('#f-os').focus(); };
+  var bn = $('#b-osnocambio'); if(bn) bn.onclick = function(){ guardarCamposReceta(); Q.osCambio = false; renderPedido(); };
+  $('#b-rec').onclick = function(){
+    guardarCamposReceta();
+    var e = $('#e-rec'); limpiarError(e);
+    Q.items = Q.items.filter(function(it){ return (it.farmaco||'').trim() || (it.dosis||'').trim(); });
+    if(!Q.items.length){ Q.items = [{ farmaco:'', dosis:'', frecuencia:'', marca:'' }]; renderPedido(); return mostrarError($('#e-rec'), 'Indicá al menos un medicamento.'); }
+    var falta = Q.items.find(function(it){ return !(it.farmaco||'').trim() || !(it.dosis||'').trim(); });
+    if(falta){ renderPedido(); return mostrarError($('#e-rec'), 'Completá la droga y la dosis de cada medicamento.'); }
+    var sinFrec = Q.items.find(function(it){ return !it.frecuencia || it.frecuencia === 'otra'; });
+    if(sinFrec){ renderPedido(); return mostrarError($('#e-rec'), 'Indicá cuántas veces por día toma cada medicamento.'); }
+    var necesitaOS = !(Q.pac.existe && Q.pac.tiene_os) || Q.osCambio;
+    if(necesitaOS){
+      if(!(Q.os||'').trim()) return mostrarError(e, 'Indicá tu obra social o prepaga (o "Particular / sin cobertura").');
+      if(!/particular|sin cobertura/i.test(Q.os) && !(Q.af||'').trim()) return mostrarError(e, 'Indicá tu número de afiliado.');
+    }
+    Q.detalleOk = true; Q.metodo = Q.prof.comprobante ? 'comprobante' : 'mercadopago'; Q.archivo = null; renderPedido();
+    var sp = $('#seccion-pago'); if(sp && sp.scrollIntoView) sp.scrollIntoView({ behavior:'smooth', block:'start' });
+  };
+}
+
+/* ── Consulta por mensaje ── */
+function htmlConsulta(n){
+  return '<section class="card" id="seccion-detalle"><div class="paso"><div class="n">'+n+'</div><h2>Escribí tu consulta</h2></div>'
+    + '<div class="aviso amber" style="margin:0 0 12px;font-size:13.5px">⚠️ ' + URGENCIA + '</div>'
+    + '<label for="f-texto">Tu consulta</label><textarea id="f-texto" maxlength="3000" style="min-height:150px" placeholder="Contanos qué te pasa o qué querés consultar. Si es por un estudio, adjuntalo abajo.">'+h(Q.texto)+'</textarea>'
+    + '<p class="nota"><span id="cont-texto">'+Q.texto.length+'</span>/3000</p>'
+    + '<label class="archivo" id="f-adj-box" style="margin-top:12px"><input type="file" id="f-adj" accept="image/*,application/pdf" multiple><div class="ic">📎</div><div><b>Adjuntar estudios o fotos</b><span>Opcional · hasta 3 archivos (foto o PDF)</span></div></label>'
+    + '<div id="lista-adj">'+htmlListaAdj()+'</div>'
+    + '<div class="error" id="e-con"></div><button class="btn" id="b-con">Continuar</button></section>';
+}
+function htmlListaAdj(){
+  return Q.adjuntos.map(function(f, i){ return '<div class="dt" style="border:none;padding:6px 2px"><div style="font-size:14px">📄 '+h(f.name)+'</div><button class="copiar" data-qadj="'+i+'">Quitar</button></div>'; }).join('');
+}
+function engancharConsulta(){
+  var t = $('#f-texto');
+  t.addEventListener('input', function(){ Q.texto = t.value; $('#cont-texto').textContent = t.value.length; });
+  var pintarAdj = function(){ $('#lista-adj').innerHTML = htmlListaAdj(); document.querySelectorAll('[data-qadj]').forEach(function(b){ b.onclick = function(){ Q.adjuntos.splice(+b.dataset.qadj, 1); pintarAdj(); }; }); };
+  pintarAdj();
+  $('#f-adj').addEventListener('change', function(){
+    var e = $('#e-con'); limpiarError(e);
+    Array.prototype.forEach.call(this.files, function(f){ if(Q.adjuntos.length < 3) Q.adjuntos.push(f); });
+    if(this.files.length + Q.adjuntos.length > 3 && Q.adjuntos.length === 3) mostrarError(e, 'Podés adjuntar hasta 3 archivos.');
+    this.value = ''; pintarAdj();
+  });
+  $('#b-con').onclick = function(){
+    var e = $('#e-con'); limpiarError(e);
+    if(Q.texto.trim().length < 15) return mostrarError(e, 'Contanos un poco más tu consulta.');
+    Q.detalleOk = true; Q.metodo = Q.prof.comprobante ? 'comprobante' : 'mercadopago'; Q.archivo = null; renderPedido();
+    var sp = $('#seccion-pago'); if(sp && sp.scrollIntoView) sp.scrollIntoView({ behavior:'smooth', block:'start' });
+  };
+}
+
+/* ── Pago del pedido ── */
+function htmlPagoPedido(n){
+  var P = Q.prof, monto = precioPedido();
+  var x = '<section class="card" id="seccion-pago"><div class="paso"><div class="n">'+n+'</div><h2>Pago</h2></div>'
+    + '<div class="montos"><div><small>'+(Q.tipo === 'receta' ? 'Receta' : 'Consulta por mensaje')+'</small><div class="grande">'+pesos(monto)+'</div></div></div>';
+  var metodos = [];
+  if(P.comprobante) metodos.push(['comprobante','🏦 Transferencia']);
+  if(P.mp) metodos.push(['mercadopago','Mercado Pago']);
+  x += '<div class="tabs'+(metodos.length===1?' uno':'')+'">' + metodos.map(function(m){ return '<button class="tab'+(Q.metodo===m[0]?' sel':'')+'" data-qmetodo="'+m[0]+'">'+m[1]+'</button>'; }).join('') + '</div>';
+  var accion = Q.tipo === 'receta' ? 'Enviar pedido' : 'Enviar consulta';
+  if(Q.metodo === 'comprobante'){
+    x += '<p style="font-size:14.5px;margin-bottom:10px">Transferí <b>'+pesos(monto)+'</b> a:</p>' + htmlTransferencia(P.transferencia) + htmlArchivo('f-qcomp')
+      + htmlAviso(Q.tipo, Q) + '<div class="error" id="e-qpago"></div><button class="btn" id="b-qenviar" disabled>'+accion+'</button>';
+  } else {
+    x += '<p style="font-size:14.5px">Vas a pagar <b>'+pesos(monto)+'</b> con Mercado Pago. Cuando se acredite, el pedido nos llega solo y te avisamos por mail.</p>'
+      + htmlAviso(Q.tipo, Q) + '<div class="error" id="e-qpago"></div><button class="btn mp" id="b-qenviar">Pagar con Mercado Pago</button>';
+  }
+  return x + '</section>';
+}
+function engancharPagoPedido(){
+  document.querySelectorAll('[data-qmetodo]').forEach(function(b){ b.onclick = function(){ Q.metodo = b.dataset.qmetodo; Q.archivo = null; renderPedido(); }; });
+  var bc = $('#b-qenviar');
+  var listo = function(){ bc.disabled = !Q.acepto || (Q.metodo === 'comprobante' && !Q.archivo); };
+  if(Q.metodo === 'comprobante') engancharArchivo('f-qcomp', function(f){ Q.archivo = f; listo(); });
+  engancharAviso(Q, listo); listo();
+  bc.onclick = enviarPedido;
+}
+async function enviarPedido(){
+  if(Q.enviando) return;
+  var e = $('#e-qpago'), bc = $('#b-qenviar'); limpiarError(e);
+  if(!Q.acepto) return mostrarError(e, 'Tildá "Leí y acepto" para continuar.');
+  if(Q.metodo === 'comprobante' && !Q.archivo) return mostrarError(e, 'Adjuntá el comprobante de la transferencia.');
+  Q.enviando = true; bc.disabled = true; var txt = bc.textContent;
+  bc.innerHTML = '<div class="spin" style="border-top-color:#fff;border-color:rgba(255,255,255,.35)"></div> ' + (Q.metodo === 'comprobante' ? 'Enviando…' : 'Abriendo Mercado Pago…');
+  try{
+    var fd = new FormData();
+    fd.append('accion','pedir'); fd.append('tipo', Q.tipo); fd.append('prof', Q.prof.id); fd.append('metodo', Q.metodo); fd.append('acepto', AVISO_VERSION);
+    Object.keys(Q.datos).forEach(function(k){ if(k !== 'resumen' && Q.datos[k]) fd.append(k, Q.datos[k]); });
+    if(Q.tipo === 'receta'){
+      fd.append('items', JSON.stringify(Q.items));
+      if(Q.nota) fd.append('nota', Q.nota);
+      if(!(Q.pac.existe && Q.pac.tiene_os) || Q.osCambio){ fd.append('obra_social', Q.os || ''); fd.append('afiliado', Q.af || ''); if(Q.osCambio) fd.append('os_cambio', '1'); }
+    } else {
+      fd.append('texto', Q.texto.trim());
+      for(var i = 0; i < Q.adjuntos.length; i++) fd.append('adjuntos', await prepararArchivo(Q.adjuntos[i]));
+    }
+    if(Q.metodo === 'comprobante') fd.append('comprobante', await prepararArchivo(Q.archivo));
+    var r = await apiForm(fd);
+    if(r.pagar_url){ location.href = r.pagar_url; return; }
+    history.replaceState(null, '', '?p=' + encodeURIComponent(r.token));
+    verPedido(r.token, { recien:true });
+  }catch(err){ Q.enviando = false; bc.disabled = false; bc.textContent = txt; mostrarError(e, err); }
+}
+
+/* ═══════════════════ Mi pedido (link del mail) ═══════════════════ */
+var PD = { token:null, datos:null, timer:null, intentos:0, adj:[] };
+async function verPedido(token, opt){
+  AYUDA = 'pedido';
+  opt = opt || {};
+  PD.token = token;
+  if(!PD.datos) $('#app').innerHTML = '<div class="card"><div class="cargando"><div class="spin"></div>Buscando tu pedido…</div></div>';
+  try{ PD.datos = await api({ accion:'pedido', token:token }); }
+  catch(e){ $('#app').innerHTML = '<div class="card"><div class="error on">'+h(e.message)+'</div><a class="btn sec" href="'+location.pathname+'">Ir al inicio</a></div>'; return; }
+  $('#titulo').textContent = PD.datos.tipo === 'receta' ? 'Tu pedido de receta' : 'Tu consulta';
+  $('#subtitulo').textContent = '';
+  pintarPedido(opt);
+  clearTimeout(PD.timer);
+  if(PD.datos.estado === 'pendiente_pago' && PD.intentos < 30){ PD.intentos++; PD.timer = setTimeout(function(){ verPedido(token, opt); }, 4000); }
+}
+function fechaHora(iso){ var d = new Date(iso); return d.toLocaleString('es-AR', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' }); }
+function btnInicio(){ return '<a class="btn sec" href="'+location.pathname+'">← Volver al menú principal</a>'; }
+function pintarPedido(opt){
+  var d = PD.datos, esRec = d.tipo === 'receta', x = '';
+  var est = {
+    pendiente_pago:['pendiente_pago','⏳ Esperando el pago'],
+    pendiente: esRec ? ['pendiente_pago','💊 En preparación'] : ['pendiente_pago','⏳ Esperando respuesta'],
+    respondida:['confirmada','✓ Respondida'], resuelta:['confirmada', esRec ? '✓ Receta enviada' : '✓ Respondida'],
+    vencida:['vencida','Venció sin pago'], cancelada:['cancelada','Cancelado'] }[d.estado] || ['vencida', d.estado];
+  if(opt.recien && d.estado !== 'pendiente_pago') x += '<div class="card centro"><div class="big-ok">✅</div><h2 style="font-family:var(--display);font-size:20px">¡Listo, '+h(d.paciente)+'!</h2><p class="sub">'
+    + (esRec ? 'Recibimos tu pedido. Cuando la receta esté lista te llega por mail a ' : 'Recibimos tu consulta. Te respondemos dentro de las '+d.consulta_horas+' h y te avisamos a ') + h(d.email_mask) + '.</p></div>';
+  x += '<section class="card"><span class="estado '+est[0]+'">'+est[1]+'</span>'
+    + '<table class="tabla"><tr><td>Profesional</td><td><b>'+h(d.profesional)+'</b></td></tr><tr><td>Pedido</td><td>'+fechaHora(d.creado)+'</td></tr>'
+    + (d.vence_at ? '<tr><td>Respuesta</td><td>antes del <b>'+fechaHora(d.vence_at)+' h</b></td></tr>' : '')
+    + '</table>';
+  if(esRec){
+    x += '<div style="margin-top:6px">' + (d.items||[]).map(function(it){ return '<div style="padding:8px 0;border-bottom:1px solid var(--line);font-size:15px">💊 <strong>'+h(it.farmaco)+'</strong> '+h(it.dosis)+(it.frecuencia?' · '+h(it.frecuencia):'')+(it.marca?' <small style="color:var(--soft)">('+h(it.marca)+')</small>':'')+(it.repetir?' <small title="Repetir">🔁</small>':'')+'</div>'; }).join('') + '</div>'
+      + (d.obra_social ? '<p class="nota" style="margin-top:6px">Cobertura: '+h(d.obra_social)+'</p>' : '')
+      + (d.receta_url ? '<a class="btn meet" href="'+h(d.receta_url)+'" target="_blank" rel="noopener">📄 Descargar la receta</a><p class="nota centro">También te la mandamos por mail.</p>' : '');
+  } else {
+    x += '<div style="margin-top:10px">' + (d.mensajes||[]).map(function(m){
+      var prof = m.de === 'prof';
+      return '<div style="margin:10px 0;'+(prof?'margin-left:18px':'margin-right:18px')+'"><div class="nota" style="margin-bottom:3px">'+(prof?h(d.profesional):'Vos')+' · '+fechaHora(m.at)+'</div>'
+        + '<div style="background:'+(prof?'var(--blue-light)':'var(--chip)')+';border-radius:14px;padding:10px 12px;font-size:15px;white-space:pre-wrap;word-break:break-word">'+h(m.texto)+'</div>'
+        + (m.adjuntos && m.adjuntos.length ? '<div class="nota" style="margin-top:3px">📎 '+m.adjuntos.map(h).join(', ')+'</div>' : '') + '</div>';
+    }).join('') + '</div>';
+  }
+  if(d.estado === 'pendiente_pago') x += '<div class="aviso amber"><div class="cargando" style="padding:0"><div class="spin"></div><span>Estamos esperando la confirmación de Mercado Pago. Si ya pagaste, se actualiza solo en unos segundos.</span></div></div>'
+    + (d.pago.mp ? '<div class="error" id="e-pmp"></div><button class="btn mp" id="b-pmp">Ir a pagar</button>' : '');
+  if(d.estado === 'vencida') x += '<div class="aviso amber">No recibimos el pago. Si pagaste y ves este mensaje, respondé el mail y lo resolvemos.</div><a class="btn" href="'+location.pathname+'">Hacer un pedido nuevo</a>';
+  x += '</section>';
+  if(d.puede_repreguntar){
+    x += '<section class="card"><div class="paso"><div class="n">?</div><h2>¿Te quedó alguna duda?</h2></div><p class="nota" style="margin:-6px 0 8px">Podés hacer <b>una repregunta</b>.</p>'
+      + '<textarea id="f-rep" maxlength="3000" style="min-height:110px"></textarea>'
+      + '<label class="archivo" style="margin-top:10px"><input type="file" id="f-repadj" accept="image/*,application/pdf" multiple><div class="ic">📎</div><div><b>Adjuntar</b><span id="repadj-s">Opcional · hasta 3 archivos</span></div></label>'
+      + '<div class="error" id="e-rep"></div><button class="btn" id="b-rep">Enviar repregunta</button></section>';
+  } else if(!esRec && d.estado === 'resuelta'){
+    x += '<p class="nota centro" style="margin-top:4px">La consulta quedó cerrada. <a href="'+location.pathname+'">Hacer otra consulta o sacar un turno</a></p>';
+  }
+  x += btnInicio();
+  $('#app').innerHTML = x;
+  var bp = $('#b-pmp'); if(bp) bp.onclick = async function(){ bp.disabled = true; try{ var r = await api({ accion:'pedido_pagar_mp', token:PD.token }); location.href = r.pagar_url; }catch(err){ bp.disabled = false; mostrarError($('#e-pmp'), err); } };
+  var br = $('#b-rep');
+  if(br){
+    PD.adj = [];
+    $('#f-repadj').addEventListener('change', function(){ PD.adj = Array.prototype.slice.call(this.files, 0, 3); $('#repadj-s').textContent = PD.adj.length ? PD.adj.map(function(f){ return f.name; }).join(', ') : 'Opcional · hasta 3 archivos'; });
+    br.onclick = async function(){
+      var e = $('#e-rep'); limpiarError(e);
+      var t = $('#f-rep').value.trim(); if(t.length < 5) return mostrarError(e, 'Escribí tu repregunta.');
+      br.disabled = true; br.textContent = 'Enviando…';
+      try{
+        var fd = new FormData(); fd.append('accion','repreguntar'); fd.append('token', PD.token); fd.append('texto', t);
+        for(var i = 0; i < PD.adj.length; i++) fd.append('adjuntos', await prepararArchivo(PD.adj[i]));
+        await apiForm(fd); await verPedido(PD.token, {});
+      }catch(err){ br.disabled = false; br.textContent = 'Enviar repregunta'; mostrarError(e, err); }
+    };
+  }
+}
+
+/* ═══════════════════ Mi turno (link del mail) ═══════════════════ */
+var R = { token:null, datos:null, timer:null, intentos:0, archivo:null, metodo:null };
+async function verReserva(token, opt){
+  AYUDA = 'reserva';
+  opt = opt || {};
+  R.token = token;
+  $('#titulo').textContent = 'Tu videoconsulta';
+  $('#subtitulo').textContent = '';
+  if(!R.datos) $('#app').innerHTML = '<div class="card"><div class="cargando"><div class="spin"></div>Buscando tu turno…</div></div>';
+  try{ R.datos = await api({ accion:'reserva', token:token }); }
+  catch(e){
+    $('#app').innerHTML = '<div class="card"><div class="error on">'+h(e.message)+'</div><a class="btn sec" href="'+location.pathname+'">Sacar un turno</a></div>';
+    return;
+  }
+  pintarReserva(opt);
+  // Volviendo de Mercado Pago: el aviso puede tardar unos segundos
+  clearTimeout(R.timer);
+  var esperando = (R.datos.estado === 'pendiente_pago') || (opt.esperaSaldo && !R.datos.saldo_pagado);
+  if(esperando && R.intentos < 30){ R.intentos++; R.timer = setTimeout(function(){ verReserva(token, opt); }, 4000); }
+}
+function pintarReserva(opt){
+  var d = R.datos, x = '';
+  var est = { confirmada:'✓ Confirmado', pendiente_pago:'⏳ Esperando el pago', vencida:'Reserva vencida', cancelada:'Cancelado' }[d.estado];
+  if(opt.recien && d.estado === 'confirmada') x += '<div class="card centro"><div class="big-ok">🎉</div><h2 style="font-family:var(--display);font-size:20px">¡Listo, '+h(d.paciente)+'!</h2><p class="sub">Tu turno quedó confirmado. Te mandamos un mail a '+h(d.email_mask)+'.</p></div>';
+  x += '<section class="card"><span class="estado '+d.estado+'">'+est+'</span>'
+    + '<table class="tabla"><tr><td>Profesional</td><td><b>'+h(d.profesional)+'</b></td></tr>'
+    + '<tr><td>Día</td><td><b>'+h(cap(d.etiqueta))+'</b></td></tr>'
+    + '<tr><td>Hora</td><td><b>'+h(d.hora)+' h</b> <span class="nota">(hora argentina)</span></td></tr>'
+    + '<tr><td>Modalidad</td><td>Videollamada · Google Meet</td></tr>'
+    + '<tr><td>Seña</td><td>'+pesos(d.sena)+(d.sena_pagada?' <span style="color:var(--green);font-weight:700">· pagada</span>':'')+'</td></tr>'
+    + (d.saldo>0 ? '<tr><td>Saldo</td><td>'+pesos(d.saldo)+(d.saldo_pagado?' <span style="color:var(--green);font-weight:700">· pagado</span>':' <span style="color:var(--amber);font-weight:700">· pendiente</span>')+'</td></tr>' : '')
+    + '</table>';
+  if(d.estado === 'pendiente_pago'){
+    x += '<div class="aviso amber"><div class="cargando" style="padding:0"><div class="spin"></div><span>Estamos esperando la confirmación de Mercado Pago. Si ya pagaste, en unos segundos se actualiza solo.</span></div></div>'
+      + (d.pago.mp ? '<div class="error" id="e-mp"></div><button class="btn mp" id="b-mp-sena">Ir a pagar la seña</button>' : '');
+  }
+  if(d.estado === 'vencida') x += '<div class="aviso amber">No recibimos el pago a tiempo y el horario se liberó. Si pagaste y ves este mensaje, escribinos y lo resolvemos.</div><a class="btn" href="'+location.pathname+'">Sacar un turno nuevo</a>';
+  if(d.estado === 'cancelada') x += '<div class="aviso amber">Este turno fue cancelado. Si tenés dudas, comunicate con el consultorio.</div><a class="btn sec" href="'+location.pathname+'">Sacar un turno nuevo</a>';
+  if(d.estado === 'confirmada'){
+    if(d.meet_link && !d.pasada) x += '<a class="btn meet" href="'+h(d.meet_link)+'" target="_blank" rel="noopener">🎥 Entrar a la videollamada</a><p class="nota centro">Usá este botón el día del turno'+(d.meet_invitacion?'. También te llegó una invitación de Google Calendar.':' y esperá a que te admitan.')+'</p>';
+    else if(!d.pasada && d.meet_tras_saldo && !d.saldo_pagado) x += '<div class="aviso azul">El link de la videollamada aparece acá (y te llega por mail) cuando se acredite el saldo.</div>';
+    else if(!d.pasada && !d.meet_link) x += '<div class="aviso azul">El link de la videollamada te llega por mail antes del turno.</div>';
+  }
+  x += '</section>';
+  if(d.estado === 'confirmada' && !d.saldo_pagado && !d.pasada) x += htmlSaldo(d);
+  x += btnInicio();
+  $('#app').innerHTML = x;
+  var bm = $('#b-mp-sena'); if(bm) bm.onclick = function(){ irAMP('sena', bm, $('#e-mp')); };
+  if(d.estado === 'confirmada' && !d.saldo_pagado && !d.pasada) engancharSaldo(d);
+}
+function htmlSaldo(d){
+  var metodos = [];
+  if(d.pago.comprobante) metodos.push(['comprobante','🏦 Transferencia']);
+  if(d.pago.mp) metodos.push(['mercadopago','Mercado Pago']);
+  if(!R.metodo || !metodos.some(function(m){ return m[0] === R.metodo; })) R.metodo = metodos.length ? metodos[0][0] : null;
+  var x = '<section class="card"><div class="paso"><div class="n">$</div><h2>Pagar el saldo</h2></div>'
+    + '<div class="montos"><div><small>Saldo de la consulta</small><div class="grande">'+pesos(d.saldo)+'</div></div><div style="text-align:right"><small>Abonalo antes del turno</small></div></div>';
+  if(!metodos.length) return x + '<p class="nota">Coordiná el pago con el consultorio.</p></section>';
+  x += '<div class="tabs'+(metodos.length===1?' uno':'')+'">' + metodos.map(function(m){ return '<button class="tab'+(R.metodo===m[0]?' sel':'')+'" data-smetodo="'+m[0]+'">'+m[1]+'</button>'; }).join('') + '</div>';
+  if(R.metodo === 'comprobante') x += '<p style="font-size:14.5px;margin-bottom:10px">Transferí <b>'+pesos(d.saldo)+'</b> a:</p>' + htmlTransferencia(d.pago.transferencia) + htmlArchivo('f-saldo') + '<div class="error" id="e-saldo"></div><button class="btn" id="b-saldo" disabled>Enviar comprobante</button>';
+  else x += '<div class="error" id="e-saldo"></div><button class="btn mp" id="b-saldo">Pagar '+pesos(d.saldo)+' con Mercado Pago</button>';
+  return x + '</section>';
+}
+function engancharSaldo(d){
+  document.querySelectorAll('[data-smetodo]').forEach(function(b){ b.onclick = function(){ R.metodo = b.dataset.smetodo; R.archivo = null; pintarReserva({}); }; });
+  var b = $('#b-saldo'), e = $('#e-saldo'); if(!b) return;
+  if(R.metodo === 'comprobante'){
+    engancharArchivo('f-saldo', function(f){ R.archivo = f; b.disabled = !f; });
+    b.onclick = async function(){
+      if(!R.archivo) return;
+      limpiarError(e); b.disabled = true; b.innerHTML = '<div class="spin" style="border-top-color:#fff;border-color:rgba(255,255,255,.35)"></div> Enviando…';
+      try{
+        var fd = new FormData(); fd.append('accion','saldo_comprobante'); fd.append('token', R.token); fd.append('comprobante', await prepararArchivo(R.archivo));
+        await apiForm(fd); R.archivo = null;
+        await verReserva(R.token, {});
+        var ok = document.createElement('div'); ok.className = 'card centro'; ok.innerHTML = '<div class="big-ok">✅</div><p><b>¡Gracias! Recibimos el comprobante.</b><br><span class="nota">Te mandamos la confirmación por mail.</span></p>';
+        $('#app').prepend(ok);
+      }catch(err){ b.disabled = false; b.textContent = 'Enviar comprobante'; mostrarError(e, err); }
+    };
+  } else {
+    b.onclick = function(){ irAMP('saldo', b, e); };
+  }
+}
+async function irAMP(tipo, b, e){
+  if(e) limpiarError(e); b.disabled = true; var t = b.textContent; b.textContent = 'Abriendo Mercado Pago…';
+  try{ var r = await api({ accion:'pagar_mp', token:R.token, tipo:tipo }); location.href = r.pagar_url; }
+  catch(err){ b.disabled = false; b.textContent = t; if(e) mostrarError(e, err); }
+}
+
+/* ═══════════════════ Ayuda (?) ═══════════════════ */
+var AYUDA = 'menu';
+function textosAyuda(){
+  var dni = 'Poné tu <b>DNI solo con números, sin puntos</b> (ej.: 30111222). Si ya sos paciente, te reconocemos y no tenés que completar nada más.';
+  var pago = 'Elegí cómo pagar: <b>transferencia</b> (copiás el alias o CBU, transferís desde tu banco o billetera y adjuntás la foto o captura del comprobante) o <b>Mercado Pago</b> (pagás ahí mismo con tarjeta o dinero en cuenta).';
+  var T = {
+    menu: { t:'¿Cómo funciona?', p:[
+      'Elegí qué necesitás: una <b>videoconsulta</b>, <b>pedir una receta</b> o hacer una <b>consulta por mensaje</b>.',
+      'Elegí el profesional. Ahí vas a ver el valor del servicio.',
+      dni, pago,
+      'Listo: te llega un mail con todo. Guardalo, porque tiene el link para volver a ver tu pedido o turno.'],
+      n:'Si tenés una urgencia, llamá al 107 o acudí a la guardia más cercana.' },
+    video: { t:'Cómo sacar una videoconsulta', p:[
+      'Elegí el profesional.', 'Elegí el día (deslizá para ver más días) y el horario. Todos los horarios son de Argentina.',
+      dni + ' Si querés, marcá hasta 3 motivos de consulta.',
+      'Pagá la <b>seña</b> para reservar. ' + pago,
+      'Te llega un mail con la confirmación y el link de Google Meet. El resto de la consulta lo pagás antes del turno desde el link del mail.',
+      'El día del turno entrá al link de Meet unos minutos antes.'],
+      n:'Con Mercado Pago tenés un rato para pagar; si no, el horario se libera.' },
+    receta: { t:'Cómo pedir una receta', p:[
+      'Elegí el profesional. Ahí ves el valor de la receta.', dni,
+      'Si ya tomás la medicación, podés pedir un <b>código a tu mail</b> para ver tus remedios y tildar los que querés repetir. Si no, escribí la droga, la dosis, cuántas veces por día la tomás y la marca (si la querés de una marca en particular). Podés agregar varios.',
+      'Si tu obra social o prepaga ya está registrada no hace falta cargarla; si cambió, tocá "Cambió mi obra social". Si no la tenemos, poné el nombre y tu número de afiliado.',
+      pago, 'Cuando el profesional haga la receta, te llega por mail en PDF.'] },
+    consulta: { t:'Cómo hacer una consulta por mensaje', p:[
+      'Elegí el profesional. Ahí ves el valor de la consulta.', dni,
+      'Escribí tu consulta con el mayor detalle posible. Si es por un estudio, adjuntalo (foto o PDF, hasta 3 archivos).',
+      pago, 'Te respondemos dentro de las ' + ((CFG && CFG.consulta_horas) || 24) + ' h: te llega un mail y la respuesta queda en tu link.',
+      'Si te queda una duda, podés hacer <b>una repregunta</b> desde el mismo link.'],
+      n:'No es para urgencias: ante una urgencia llamá al 107 o acudí a una guardia.' },
+    reserva: { t:'Tu turno', p:[
+      'Acá ves el estado de tu turno, la seña y el saldo.',
+      'Si falta pagar el saldo, podés hacerlo desde acá antes de la consulta (transferencia con comprobante o Mercado Pago).',
+      'El día del turno tocá <b>Entrar a la videollamada</b> unos minutos antes.'] },
+    pedido: { t:'Tu pedido', p:[
+      'Acá ves el estado de tu pedido.',
+      'Receta: cuando esté lista te llega por mail y también la podés descargar desde acá.',
+      'Consulta: la respuesta aparece acá y te avisamos por mail. Si te quedó una duda, tenés una repregunta.'] },
+  };
+  return T[AYUDA] || T.menu;
+}
+function abrirAyuda(){
+  var a = textosAyuda();
+  var bg = document.createElement('div'); bg.className = 'ayuda-bg';
+  bg.innerHTML = '<div class="ayuda" role="dialog" aria-modal="true" aria-label="'+h(a.t)+'"><h2>'+a.t+'</h2><ol>'+a.p.map(function(x){ return '<li>'+x+'</li>'; }).join('')+'</ol>'
+    + (a.n ? '<p class="nota">'+a.n+'</p>' : '') + '<button class="btn" id="b-ayuda-ok">Entendido</button></div>';
+  document.body.appendChild(bg);
+  var cerrar = function(){ bg.remove(); };
+  $('#b-ayuda-ok').onclick = cerrar;
+  bg.addEventListener('click', function(e){ if(e.target === bg) cerrar(); });
+  document.addEventListener('keydown', function esc(e){ if(e.key === 'Escape'){ cerrar(); document.removeEventListener('keydown', esc); } });
+}
+$('#b-ayuda').onclick = abrirAyuda;
+
+/* ═══════════════════ Arranque ═══════════════════ */
+(function(){
+  var q = new URLSearchParams(location.search);
+  var t = q.get('t');
+  if(t) return verReserva(t, { recien: q.get('mp') === 'sena', esperaSaldo: q.get('mp') === 'saldo' });
+  if(q.get('p')) return verPedido(q.get('p'), { recien: q.get('mp') === '1' });
+  api({ accion:'config' }).then(function(cfg){
+    CFG = cfg;
+    var s = q.get('s');
+    if(s && serviciosDisponibles().some(function(x){ return x.id === s; })) irA(s); else mostrarMenu();
+  }).catch(function(e){
+    $('#app').innerHTML = '<div class="card"><div class="error on">'+h(e.message)+'</div><button class="btn sec" onclick="location.reload()">Reintentar</button></div>';
+  });
+})();
+</script>
 </body>
 </html>
