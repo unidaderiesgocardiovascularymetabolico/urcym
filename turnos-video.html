@@ -72,6 +72,24 @@ textarea{resize:vertical;min-height:70px}
 .motivo{display:inline-flex;align-items:center;gap:6px;margin:0;padding:9px 13px;border-radius:999px;border:1.5px solid var(--line);background:#fff;cursor:pointer;font-size:14px;font-weight:500;text-transform:none;letter-spacing:0;color:var(--text)}
 .motivo input{width:16px;height:16px;accent-color:var(--blue);margin:0}
 .motivo.sel{border-color:var(--blue);background:var(--blue-light);color:var(--blue-dark);font-weight:600}
+header{position:relative}
+.ayuda-btn{position:absolute;right:0;top:68px;width:38px;height:38px;border-radius:50%;border:1.5px solid var(--blue);background:#fff;color:var(--blue);font-family:var(--display);font-weight:700;font-size:19px;cursor:pointer;box-shadow:var(--shadow)}
+.ayuda-btn:hover{background:var(--blue-light)}
+.ayuda-bg{position:fixed;inset:0;background:rgba(26,37,53,.45);z-index:50;display:flex;align-items:flex-end;justify-content:center;padding:16px}
+@media (min-width:600px){.ayuda-bg{align-items:center}}
+.ayuda{background:#fff;border-radius:20px;max-width:520px;width:100%;max-height:85vh;overflow:auto;padding:22px 20px;box-shadow:0 20px 50px rgba(0,0,0,.25)}
+.ayuda h2{font-family:var(--display);font-size:19px;color:var(--blue-dark);margin-bottom:12px}
+.ayuda ol{padding-left:0;list-style:none;counter-reset:p}
+.ayuda li{counter-increment:p;position:relative;padding:0 0 12px 38px;font-size:15px}
+.ayuda li::before{content:counter(p);position:absolute;left:0;top:0;width:26px;height:26px;border-radius:50%;background:var(--blue);color:#fff;font-weight:700;font-size:13px;display:flex;align-items:center;justify-content:center}
+.ayuda .nota{margin-top:4px}
+.aviso-legal{border:1.5px solid #f2c48a;background:#fffaf2;border-radius:14px;padding:12px 14px;margin:16px 0 4px;font-size:13.5px;line-height:1.5}
+.aviso-tit{display:block;font-family:var(--display);font-size:14.5px;color:#8a4b0f;margin-bottom:6px}
+.aviso-legal ul{padding-left:18px;margin:0}
+.aviso-legal li{margin-bottom:6px}
+.aviso-legal li:first-child{color:#9b2c24}
+.aviso-ok{display:flex;gap:8px;align-items:center;margin:10px 0 0;padding-top:10px;border-top:1px solid #f2dcbc;font-size:14.5px;font-weight:700;text-transform:none;letter-spacing:0;color:var(--text);cursor:pointer}
+.aviso-ok input{width:20px;height:20px;accent-color:var(--blue);margin:0}
 .fila2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .fila2 label{margin-top:14px}
 .dni-row{display:flex;gap:8px}
@@ -142,6 +160,7 @@ footer{text-align:center;font-size:12px;color:var(--faint);margin-top:22px}
 <body>
 <div class="wrap">
   <header>
+    <button type="button" class="ayuda-btn" id="b-ayuda" aria-label="Ayuda: cómo funciona">?</button>
     <div class="marca">URCyM<small>Unidad de Riesgo Cardiovascular y Metabólico</small></div>
     <h1 id="titulo">Atención online</h1>
     <p class="sub" id="subtitulo"></p>
@@ -245,8 +264,9 @@ S.onDatos = function(d){
 };
 
 function iniciarReserva(cfg){
+  AYUDA = 'video';
   S.cfg = Object.assign({}, cfg, { profs: cfg.profs.filter(function(p){ return p.video; }) });
-  S.prof = null; S.fecha = S.hora = null; S.dniOk = null; S.motivos = [];
+  S.prof = null; S.fecha = S.hora = null; S.dniOk = null; S.motivos = []; S.acepto = false;
   $('#titulo').textContent = 'Videoconsulta';
   $('#subtitulo').textContent = 'Elegí día y horario, aboná la seña y listo.';
   if(!S.cfg.activo || !S.cfg.profs.length){
@@ -351,7 +371,7 @@ function htmlDatos(n, st, opt){
   st = st || S; opt = opt || { motivo:true, mailNota:"Ahí te llega la confirmación y el link de la videollamada." };
   var p = st.pac;
   var x = '<section class="card"><div class="paso"><div class="n">'+n+'</div><h2>Tus datos</h2></div>'
-    + '<label for="f-dni">DNI</label><div class="dni-row"><input type="text" id="f-dni" inputmode="numeric" autocomplete="off" placeholder="Sin puntos" value="'+h(p?p.dni:'')+'"><button class="btn btn-chico" id="b-dni">Seguir</button></div>';
+    + '<label for="f-dni">DNI <span style="text-transform:none;letter-spacing:0;font-weight:400">(solo números, sin puntos)</span></label><div class="dni-row"><input type="text" id="f-dni" inputmode="numeric" autocomplete="off" placeholder="Ej.: 30111222" value="'+h(p?p.dni:'')+'"><button class="btn btn-chico" id="b-dni">Seguir</button></div>';
   if(p && p.existe){
     x += '<div class="hola"><b>¡Hola, '+h(p.nombre)+'! 👋</b><br>Ya te tenemos registrada/o, no hace falta que completes tus datos.'
       + (p.tiene_email && !st.otroMail ? '<br>Te mandamos la confirmación a <b>'+h(p.email_mask)+'</b> · <button class="link" id="b-otro">usar otro mail</button>' : '') + '</div>';
@@ -389,7 +409,10 @@ function engancharDatos(st){
   };
   b.onclick = buscar;
   inp.addEventListener('keydown', function(ev){ if(ev.key === 'Enter') buscar(); });
-  inp.addEventListener('input', function(){ if(st.pac && inp.value.replace(/\D/g,'') !== st.pac.dni){ st.pac = null; var v = inp.value; st.render(); var i2 = $('#f-dni'); i2.value = v; i2.focus(); } });
+  inp.addEventListener('input', function(){
+    var limpio = inp.value.replace(/\D/g,'').slice(0, 9);
+    if(inp.value !== limpio){ inp.value = limpio; var ed = $('#e-dni') || $('#e-datos'); if(ed) mostrarError(ed, 'Escribí el DNI sin puntos ni espacios: ya los sacamos por vos 👍'); }
+    if(st.pac && inp.value.replace(/\D/g,'') !== st.pac.dni){ st.pac = null; var v = inp.value; st.render(); var i2 = $('#f-dni'); i2.value = v; i2.focus(); } });
   var bo = $('#b-otro'); if(bo) bo.onclick = function(){ guardarMotivos(st); st.otroMail = true; st.render(); $('#f-email').focus(); };
   document.querySelectorAll('[data-motivo]').forEach(function(c){ c.onchange = function(){
     var marc = document.querySelectorAll('[data-motivo]:checked');
@@ -435,6 +458,31 @@ function htmlMotivos(st){
 }
 function guardarMotivos(st){ st.motivos = Array.prototype.map.call(document.querySelectorAll('[data-motivo]:checked'), function(c){ return c.value; }); }
 
+/* ── Aclaraciones médico-legales (se aceptan antes de pagar) ── */
+var AVISO_VERSION = 'v1-2026-10';
+var URGENCIA = '<b>No es un servicio de urgencias.</b> Si tenés <b>dolor de pecho, falta de aire, mareos o desmayos</b>, no esperes: andá <b>inmediatamente a la guardia</b> más cercana o llamá al <b>107</b>.';
+function textosAviso(tipo){
+  var hc = 'Queda registrado en tu <b>historia clínica</b>, con la misma confidencialidad y secreto profesional que una consulta presencial (Ley 26.529 de Derechos del Paciente y Ley 25.326 de Protección de Datos Personales).';
+  if(tipo === 'video') return [URGENCIA,
+    'La videoconsulta es un <b>acto médico a distancia</b> (teleasistencia, Ley 27.553), con los mismos alcances y responsabilidades que una consulta en el consultorio. ' + hc,
+    'Por ser a distancia no incluye examen físico: si el profesional lo considera necesario, puede indicarte una consulta presencial o estudios.',
+    'Conectate desde un lugar privado y con buena conexión. La videollamada <b>no se graba</b>.'];
+  if(tipo === 'receta') return [URGENCIA,
+    'Pedir una receta es un <b>acto médico</b>: el profesional revisa tu historia clínica y tu tratamiento antes de emitirla y asume la responsabilidad médico-legal de la indicación. <b>Por eso tiene honorarios.</b>',
+    'Si considera que necesitás una consulta o estudios antes de indicarla, te lo va a informar. ' + hc];
+  return [URGENCIA,
+    'La consulta por mensaje es un <b>acto médico a distancia</b> (teleasistencia, Ley 27.553): el profesional analiza tu consulta y tu historia clínica y asume la responsabilidad médico-legal de lo que responde. <b>Por eso tiene honorarios.</b>',
+    'Por ser por escrito y sin examen físico, la respuesta puede ser orientativa o indicarte una consulta presencial. ' + hc];
+}
+function htmlAviso(tipo, st){
+  return '<div class="aviso-legal"><b class="aviso-tit">Antes de confirmar</b><ul>' + textosAviso(tipo).map(function(t){ return '<li>'+t+'</li>'; }).join('') + '</ul>'
+    + '<label class="aviso-ok"><input type="checkbox" id="f-acepto"'+(st.acepto?' checked':'')+'> Leí y acepto estas condiciones</label></div>';
+}
+function engancharAviso(st, alCambiar){
+  var c = $('#f-acepto'); if(!c) return;
+  c.onchange = function(){ st.acepto = c.checked; alCambiar(); };
+}
+
 /* ── Paso 4: seña ── */
 function htmlSena(n){
   var P = S.prof;
@@ -447,31 +495,34 @@ function htmlSena(n){
   x += '<div class="tabs'+(metodos.length===1?' uno':'')+'">' + metodos.map(function(m){ return '<button class="tab'+(S.metodo===m[0]?' sel':'')+'" data-metodo="'+m[0]+'">'+m[1]+'</button>'; }).join('') + '</div>';
   if(S.metodo === 'comprobante'){
     x += '<p style="font-size:14.5px;margin-bottom:10px">Transferí <b>'+pesos(P.sena)+'</b> a:</p>' + htmlTransferencia(P.transferencia) + htmlArchivo('f-comp')
-      + '<div class="error" id="e-sena"></div><button class="btn" id="b-confirmar" disabled>Confirmar turno</button>'
+      + htmlAviso('video', S) + '<div class="error" id="e-sena"></div><button class="btn" id="b-confirmar" disabled>Confirmar turno</button>'
       + '<p class="nota centro">Al confirmar, el turno queda reservado y te llega un mail.</p>';
   } else {
     x += '<p style="font-size:14.5px">Vas a pagar <b>'+pesos(P.sena)+'</b> con Mercado Pago (tarjeta, dinero en cuenta, etc.). Cuando se acredite, el turno se confirma solo y te llega un mail.</p>'
       + '<p class="nota">Tenés '+S.cfg.mp_vencimiento_min+' minutos para pagar; si no, el horario se libera.</p>'
-      + '<div class="error" id="e-sena"></div><button class="btn mp" id="b-confirmar">Pagar la seña con Mercado Pago</button>';
+      + htmlAviso('video', S) + '<div class="error" id="e-sena"></div><button class="btn mp" id="b-confirmar">Pagar la seña con Mercado Pago</button>';
   }
   return x + '</section>';
 }
 function engancharSena(){
   document.querySelectorAll('[data-metodo]').forEach(function(b){ b.onclick = function(){ S.metodo = b.dataset.metodo; S.archivo = null; render(); }; });
   var bc = $('#b-confirmar');
-  if(S.metodo === 'comprobante') engancharArchivo('f-comp', function(f){ S.archivo = f; bc.disabled = !f; });
+  var listo = function(){ bc.disabled = !S.acepto || (S.metodo === 'comprobante' && !S.archivo); };
+  if(S.metodo === 'comprobante') engancharArchivo('f-comp', function(f){ S.archivo = f; listo(); });
+  engancharAviso(S, listo); listo();
   bc.onclick = enviarReserva;
 }
 async function enviarReserva(){
   if(S.enviando) return;
   var e = $('#e-sena'), bc = $('#b-confirmar'); limpiarError(e);
+  if(!S.acepto) return mostrarError(e, 'Tildá "Leí y acepto" para continuar.');
   if(S.metodo === 'comprobante' && !S.archivo) return mostrarError(e, 'Adjuntá el comprobante de la transferencia.');
   S.enviando = true; bc.disabled = true; var txt = bc.textContent;
   bc.innerHTML = '<div class="spin" style="border-top-color:#fff;border-color:rgba(255,255,255,.35)"></div> ' + (S.metodo==='comprobante' ? 'Confirmando…' : 'Abriendo Mercado Pago…');
   try{
     var fd = new FormData();
     fd.append('accion','reservar'); fd.append('prof', S.prof.id); fd.append('fecha', S.fecha); fd.append('hora', S.hora);
-    fd.append('metodo', S.metodo);
+    fd.append('metodo', S.metodo); fd.append('acepto', AVISO_VERSION);
     Object.keys(S.dniOk).forEach(function(k){ if(k !== 'resumen' && S.dniOk[k]) fd.append(k, S.dniOk[k]); });
     if(S.metodo === 'comprobante') fd.append('comprobante', await prepararArchivo(S.archivo));
     var r = await apiForm(fd);
@@ -494,8 +545,8 @@ function serviciosDisponibles(){
   if(!CFG || !CFG.activo) return [];
   var l = [];
   if(CFG.profs.some(function(p){ return p.video; })) l.push({ id:'video', icono:'📹', titulo:'Videoconsulta', sub:'Turno por Google Meet' });
-  if(CFG.profs.some(function(p){ return p.recetas; })) l.push({ id:'receta', icono:'💊', titulo:'Pedir una receta', sub:pesos(CFG.receta_precio) + ' · te llega por mail' });
-  if(CFG.profs.some(function(p){ return p.consultas; })) l.push({ id:'consulta', icono:'💬', titulo:'Consulta por mensaje', sub:pesos(CFG.consulta_precio) + ' · respuesta en ' + CFG.consulta_horas + ' h' });
+  if(CFG.profs.some(function(p){ return p.recetas; })) l.push({ id:'receta', icono:'💊', titulo:'Pedir una receta', sub:'Te llega por mail' });
+  if(CFG.profs.some(function(p){ return p.consultas; })) l.push({ id:'consulta', icono:'💬', titulo:'Consulta por mensaje', sub:'Respuesta dentro de las ' + CFG.consulta_horas + ' h' });
   return l;
 }
 function barraVolver(){
@@ -509,6 +560,7 @@ function irA(serv){
   mostrarMenu();
 }
 function mostrarMenu(){
+  AYUDA = 'menu';
   var l = serviciosDisponibles();
   $('#titulo').textContent = 'Atención online';
   $('#subtitulo').textContent = '¿Qué necesitás?';
@@ -527,10 +579,11 @@ function mostrarMenu(){
 var Q = {};
 var OS_COMUNES = ['OSDE','Swiss Medical','Galeno','Medifé','OMINT','Sancor Salud','Hospital Italiano','Hospital Alemán','IOMA','PAMI','OSECAC','Accord Salud','Particular / sin cobertura'];
 function iniciarPedido(tipo){
+  AYUDA = tipo;
   var profs = CFG.profs.filter(function(p){ return tipo === 'receta' ? p.recetas : p.consultas; });
   Q = { tipo:tipo, profs:profs, prof: profs.length === 1 ? profs[0] : null, pac:null, otroMail:false, datos:null,
         items:[{ farmaco:'', dosis:'', marca:'' }], sesion:null, codigoEnviado:false, mis:null, osCambio:false,
-        texto:'', adjuntos:[], metodo:null, archivo:null, enviando:false };
+        texto:'', adjuntos:[], metodo:null, archivo:null, enviando:false, acepto:false };
   Q.render = renderPedido;
   Q.onDatos = function(d){ Q.datos = d; renderPedido(); var x = $('#seccion-detalle'); if(x && x.scrollIntoView) x.scrollIntoView({ behavior:'smooth', block:'start' }); };
   $('#titulo').textContent = tipo === 'receta' ? 'Pedido de receta' : 'Consulta por mensaje';
@@ -681,7 +734,7 @@ function engancharReceta(){
 /* ── Consulta por mensaje ── */
 function htmlConsulta(n){
   return '<section class="card" id="seccion-detalle"><div class="paso"><div class="n">'+n+'</div><h2>Escribí tu consulta</h2></div>'
-    + '<div class="aviso amber" style="margin:0 0 12px;font-size:13.5px">⚠️ No es para urgencias. Ante una urgencia llamá al <b>107</b> o acudí a la guardia más cercana.</div>'
+    + '<div class="aviso amber" style="margin:0 0 12px;font-size:13.5px">⚠️ ' + URGENCIA + '</div>'
     + '<label for="f-texto">Tu consulta</label><textarea id="f-texto" maxlength="3000" style="min-height:150px" placeholder="Contanos qué te pasa o qué querés consultar. Si es por un estudio, adjuntalo abajo.">'+h(Q.texto)+'</textarea>'
     + '<p class="nota"><span id="cont-texto">'+Q.texto.length+'</span>/3000</p>'
     + '<label class="archivo" id="f-adj-box" style="margin-top:12px"><input type="file" id="f-adj" accept="image/*,application/pdf" multiple><div class="ic">📎</div><div><b>Adjuntar estudios o fotos</b><span>Opcional · hasta 3 archivos (foto o PDF)</span></div></label>'
@@ -722,28 +775,31 @@ function htmlPagoPedido(n){
   var accion = Q.tipo === 'receta' ? 'Enviar pedido' : 'Enviar consulta';
   if(Q.metodo === 'comprobante'){
     x += '<p style="font-size:14.5px;margin-bottom:10px">Transferí <b>'+pesos(monto)+'</b> a:</p>' + htmlTransferencia(P.transferencia) + htmlArchivo('f-qcomp')
-      + '<div class="error" id="e-qpago"></div><button class="btn" id="b-qenviar" disabled>'+accion+'</button>';
+      + htmlAviso(Q.tipo, Q) + '<div class="error" id="e-qpago"></div><button class="btn" id="b-qenviar" disabled>'+accion+'</button>';
   } else {
     x += '<p style="font-size:14.5px">Vas a pagar <b>'+pesos(monto)+'</b> con Mercado Pago. Cuando se acredite, el pedido nos llega solo y te avisamos por mail.</p>'
-      + '<div class="error" id="e-qpago"></div><button class="btn mp" id="b-qenviar">Pagar con Mercado Pago</button>';
+      + htmlAviso(Q.tipo, Q) + '<div class="error" id="e-qpago"></div><button class="btn mp" id="b-qenviar">Pagar con Mercado Pago</button>';
   }
   return x + '</section>';
 }
 function engancharPagoPedido(){
   document.querySelectorAll('[data-qmetodo]').forEach(function(b){ b.onclick = function(){ Q.metodo = b.dataset.qmetodo; Q.archivo = null; renderPedido(); }; });
   var bc = $('#b-qenviar');
-  if(Q.metodo === 'comprobante') engancharArchivo('f-qcomp', function(f){ Q.archivo = f; bc.disabled = !f; });
+  var listo = function(){ bc.disabled = !Q.acepto || (Q.metodo === 'comprobante' && !Q.archivo); };
+  if(Q.metodo === 'comprobante') engancharArchivo('f-qcomp', function(f){ Q.archivo = f; listo(); });
+  engancharAviso(Q, listo); listo();
   bc.onclick = enviarPedido;
 }
 async function enviarPedido(){
   if(Q.enviando) return;
   var e = $('#e-qpago'), bc = $('#b-qenviar'); limpiarError(e);
+  if(!Q.acepto) return mostrarError(e, 'Tildá "Leí y acepto" para continuar.');
   if(Q.metodo === 'comprobante' && !Q.archivo) return mostrarError(e, 'Adjuntá el comprobante de la transferencia.');
   Q.enviando = true; bc.disabled = true; var txt = bc.textContent;
   bc.innerHTML = '<div class="spin" style="border-top-color:#fff;border-color:rgba(255,255,255,.35)"></div> ' + (Q.metodo === 'comprobante' ? 'Enviando…' : 'Abriendo Mercado Pago…');
   try{
     var fd = new FormData();
-    fd.append('accion','pedir'); fd.append('tipo', Q.tipo); fd.append('prof', Q.prof.id); fd.append('metodo', Q.metodo);
+    fd.append('accion','pedir'); fd.append('tipo', Q.tipo); fd.append('prof', Q.prof.id); fd.append('metodo', Q.metodo); fd.append('acepto', AVISO_VERSION);
     Object.keys(Q.datos).forEach(function(k){ if(k !== 'resumen' && Q.datos[k]) fd.append(k, Q.datos[k]); });
     if(Q.tipo === 'receta'){
       fd.append('items', JSON.stringify(Q.items));
@@ -764,6 +820,7 @@ async function enviarPedido(){
 /* ═══════════════════ Mi pedido (link del mail) ═══════════════════ */
 var PD = { token:null, datos:null, timer:null, intentos:0, adj:[] };
 async function verPedido(token, opt){
+  AYUDA = 'pedido';
   opt = opt || {};
   PD.token = token;
   if(!PD.datos) $('#app').innerHTML = '<div class="card"><div class="cargando"><div class="spin"></div>Buscando tu pedido…</div></div>';
@@ -776,6 +833,7 @@ async function verPedido(token, opt){
   if(PD.datos.estado === 'pendiente_pago' && PD.intentos < 30){ PD.intentos++; PD.timer = setTimeout(function(){ verPedido(token, opt); }, 4000); }
 }
 function fechaHora(iso){ var d = new Date(iso); return d.toLocaleString('es-AR', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' }); }
+function btnInicio(){ return '<a class="btn sec" href="'+location.pathname+'">← Volver al menú principal</a>'; }
 function pintarPedido(opt){
   var d = PD.datos, esRec = d.tipo === 'receta', x = '';
   var est = {
@@ -813,6 +871,7 @@ function pintarPedido(opt){
   } else if(!esRec && d.estado === 'resuelta'){
     x += '<p class="nota centro" style="margin-top:4px">La consulta quedó cerrada. <a href="'+location.pathname+'">Hacer otra consulta o sacar un turno</a></p>';
   }
+  x += btnInicio();
   $('#app').innerHTML = x;
   var bp = $('#b-pmp'); if(bp) bp.onclick = async function(){ bp.disabled = true; try{ var r = await api({ accion:'pedido_pagar_mp', token:PD.token }); location.href = r.pagar_url; }catch(err){ bp.disabled = false; mostrarError($('#e-pmp'), err); } };
   var br = $('#b-rep');
@@ -835,6 +894,7 @@ function pintarPedido(opt){
 /* ═══════════════════ Mi turno (link del mail) ═══════════════════ */
 var R = { token:null, datos:null, timer:null, intentos:0, archivo:null, metodo:null };
 async function verReserva(token, opt){
+  AYUDA = 'reserva';
   opt = opt || {};
   R.token = token;
   $('#titulo').textContent = 'Tu videoconsulta';
@@ -876,6 +936,7 @@ function pintarReserva(opt){
   }
   x += '</section>';
   if(d.estado === 'confirmada' && !d.saldo_pagado && !d.pasada) x += htmlSaldo(d);
+  x += btnInicio();
   $('#app').innerHTML = x;
   var bm = $('#b-mp-sena'); if(bm) bm.onclick = function(){ irAMP('sena', bm, $('#e-mp')); };
   if(d.estado === 'confirmada' && !d.saldo_pagado && !d.pasada) engancharSaldo(d);
@@ -918,6 +979,60 @@ async function irAMP(tipo, b, e){
   try{ var r = await api({ accion:'pagar_mp', token:R.token, tipo:tipo }); location.href = r.pagar_url; }
   catch(err){ b.disabled = false; b.textContent = t; if(e) mostrarError(e, err); }
 }
+
+/* ═══════════════════ Ayuda (?) ═══════════════════ */
+var AYUDA = 'menu';
+function textosAyuda(){
+  var dni = 'Poné tu <b>DNI solo con números, sin puntos</b> (ej.: 30111222). Si ya sos paciente, te reconocemos y no tenés que completar nada más.';
+  var pago = 'Elegí cómo pagar: <b>transferencia</b> (copiás el alias o CBU, transferís desde tu banco o billetera y adjuntás la foto o captura del comprobante) o <b>Mercado Pago</b> (pagás ahí mismo con tarjeta o dinero en cuenta).';
+  var T = {
+    menu: { t:'¿Cómo funciona?', p:[
+      'Elegí qué necesitás: una <b>videoconsulta</b>, <b>pedir una receta</b> o hacer una <b>consulta por mensaje</b>.',
+      'Elegí el profesional. Ahí vas a ver el valor del servicio.',
+      dni, pago,
+      'Listo: te llega un mail con todo. Guardalo, porque tiene el link para volver a ver tu pedido o turno.'],
+      n:'Si tenés una urgencia, llamá al 107 o acudí a la guardia más cercana.' },
+    video: { t:'Cómo sacar una videoconsulta', p:[
+      'Elegí el profesional.', 'Elegí el día (deslizá para ver más días) y el horario. Todos los horarios son de Argentina.',
+      dni + ' Si querés, marcá hasta 3 motivos de consulta.',
+      'Pagá la <b>seña</b> para reservar. ' + pago,
+      'Te llega un mail con la confirmación y el link de Google Meet. El resto de la consulta lo pagás antes del turno desde el link del mail.',
+      'El día del turno entrá al link de Meet unos minutos antes.'],
+      n:'Con Mercado Pago tenés un rato para pagar; si no, el horario se libera.' },
+    receta: { t:'Cómo pedir una receta', p:[
+      'Elegí el profesional. Ahí ves el valor de la receta.', dni,
+      'Si ya tomás la medicación, podés pedir un <b>código a tu mail</b> para ver tus remedios y tildar los que querés repetir. Si no, escribí la droga, la dosis y la marca (si la querés de una marca en particular). Podés agregar varios.',
+      'Si tu obra social o prepaga ya está registrada no hace falta cargarla; si cambió, tocá "Cambió mi obra social". Si no la tenemos, poné el nombre y tu número de afiliado.',
+      pago, 'Cuando el profesional haga la receta, te llega por mail en PDF.'] },
+    consulta: { t:'Cómo hacer una consulta por mensaje', p:[
+      'Elegí el profesional. Ahí ves el valor de la consulta.', dni,
+      'Escribí tu consulta con el mayor detalle posible. Si es por un estudio, adjuntalo (foto o PDF, hasta 3 archivos).',
+      pago, 'Te respondemos dentro de las ' + ((CFG && CFG.consulta_horas) || 24) + ' h: te llega un mail y la respuesta queda en tu link.',
+      'Si te queda una duda, podés hacer <b>una repregunta</b> desde el mismo link.'],
+      n:'No es para urgencias: ante una urgencia llamá al 107 o acudí a una guardia.' },
+    reserva: { t:'Tu turno', p:[
+      'Acá ves el estado de tu turno, la seña y el saldo.',
+      'Si falta pagar el saldo, podés hacerlo desde acá antes de la consulta (transferencia con comprobante o Mercado Pago).',
+      'El día del turno tocá <b>Entrar a la videollamada</b> unos minutos antes.'] },
+    pedido: { t:'Tu pedido', p:[
+      'Acá ves el estado de tu pedido.',
+      'Receta: cuando esté lista te llega por mail y también la podés descargar desde acá.',
+      'Consulta: la respuesta aparece acá y te avisamos por mail. Si te quedó una duda, tenés una repregunta.'] },
+  };
+  return T[AYUDA] || T.menu;
+}
+function abrirAyuda(){
+  var a = textosAyuda();
+  var bg = document.createElement('div'); bg.className = 'ayuda-bg';
+  bg.innerHTML = '<div class="ayuda" role="dialog" aria-modal="true" aria-label="'+h(a.t)+'"><h2>'+a.t+'</h2><ol>'+a.p.map(function(x){ return '<li>'+x+'</li>'; }).join('')+'</ol>'
+    + (a.n ? '<p class="nota">'+a.n+'</p>' : '') + '<button class="btn" id="b-ayuda-ok">Entendido</button></div>';
+  document.body.appendChild(bg);
+  var cerrar = function(){ bg.remove(); };
+  $('#b-ayuda-ok').onclick = cerrar;
+  bg.addEventListener('click', function(e){ if(e.target === bg) cerrar(); });
+  document.addEventListener('keydown', function esc(e){ if(e.key === 'Escape'){ cerrar(); document.removeEventListener('keydown', esc); } });
+}
+$('#b-ayuda').onclick = abrirAyuda;
 
 /* ═══════════════════ Arranque ═══════════════════ */
 (function(){
