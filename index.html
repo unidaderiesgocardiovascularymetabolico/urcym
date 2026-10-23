@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Atención online · URCyM</title>
+<title>Turnos y consultas · URCyM</title>
 <meta name="description" content="Videoconsultas, recetas y consultas por mensaje con la Unidad de Riesgo Cardiovascular y Metabólico.">
 <meta name="theme-color" content="#3089ca">
 <meta name="robots" content="noindex">
@@ -107,6 +107,13 @@ header{position:relative}
 .nota{font-size:12.5px;color:var(--soft);margin-top:6px}
 .honor{font-size:13px;color:var(--soft);margin:0 4px 12px;line-height:1.45}
 .honor b{color:var(--text);font-weight:600}
+.lugar{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 0;border-top:1px solid var(--line)}
+.lugar:first-of-type{margin-top:6px}
+.lugar b{display:block;font-size:15.5px}
+.lugar span{display:block;font-size:13.5px;color:var(--soft);margin-top:2px}
+.wapp{flex-shrink:0;display:inline-flex;align-items:center;gap:6px;padding:9px 14px;border-radius:999px;background:#25d366;color:#fff;font-weight:700;font-size:14px;text-decoration:none}
+.wapp::before{content:'💬'}
+.prof.presencial{border-color:#bfe8cf}
 .falta{display:none;margin:14px 0 -6px;padding:10px 12px;border-radius:12px;background:#fff6e0;border:1px solid #f2d18a;color:#7a5200;font-size:13.5px;line-height:1.4}
 .falta.on{display:block}
 
@@ -173,7 +180,7 @@ footer{text-align:center;font-size:12px;color:var(--faint);margin-top:22px}
   <header>
     <button type="button" class="ayuda-btn" id="b-ayuda" aria-label="Ayuda: cómo funciona">?</button>
     <div class="marca">URCyM<small>Unidad de Riesgo Cardiovascular y Metabólico</small></div>
-    <h1 id="titulo">Atención online</h1>
+    <h1 id="titulo">Turnos y consultas</h1>
     <p class="sub" id="subtitulo"></p>
   </header>
 
@@ -578,22 +585,55 @@ function irA(serv){
   window.scrollTo(0, 0);
   if(serv === 'video') return iniciarReserva(CFG);
   if(serv === 'receta' || serv === 'consulta') return iniciarPedido(serv);
+  if(serv === 'presencial') return mostrarPresencial();
   mostrarMenu();
 }
 function mostrarMenu(){
   AYUDA = 'menu';
   var l = serviciosDisponibles();
-  $('#titulo').textContent = 'Atención online';
-  $('#subtitulo').textContent = '¿Qué necesitás?';
+  $('#titulo').textContent = 'Turnos y consultas';
+  $('#subtitulo').textContent = 'Presencial u online: elegí qué necesitás.';
+  var pres = '<div class="profs" style="margin-bottom:18px"><button class="prof card presencial" style="margin:0" data-serv="presencial"><div class="avatar" style="font-size:22px;background:#e7f6ee">🏥</div><div><b>Atención presencial</b><span>Dónde atendemos y cómo pedir turno</span></div></button></div>';
   if(!l.length){
-    $('#app').innerHTML = '<div class="card centro"><div class="big-ok">🗓️</div><p>En este momento no hay servicios online disponibles.</p><p class="nota" style="margin-top:8px">Comunicate con el consultorio.</p></div>';
+    $('#app').innerHTML = pres + '<div class="card centro"><p>En este momento no hay servicios online disponibles.</p></div>';
+    document.querySelector('[data-serv]').onclick = function(){ irA('presencial'); };
     return;
   }
-  if(l.length === 1) return irA(l[0].id);
-  $('#app').innerHTML = '<div class="profs">' + l.map(function(x){
+  $('#app').innerHTML = pres + '<p class="nota" style="margin:0 4px 10px;font-size:13px;text-transform:uppercase;letter-spacing:.06em;font-weight:600">Online</p><div class="profs">' + l.map(function(x){
     return '<button class="prof card" style="margin:0" data-serv="'+x.id+'"><div class="avatar" style="font-size:22px;background:var(--blue-light)">'+x.icono+'</div><div><b>'+h(x.titulo)+'</b><span>'+h(x.sub)+'</span></div></button>';
   }).join('') + '</div>';
   document.querySelectorAll('[data-serv]').forEach(function(b){ b.onclick = function(){ irA(b.dataset.serv); }; });
+}
+
+/* ═══════════════════ Atención presencial ═══════════════════ */
+var LUGARES = [
+  { nombre:'Dr. Omar Bertani', esp:'Especialista en Diabetes e Hipertensión', lugares:[
+    { ciudad:'Santa Teresita', centro:'Costa Bucal', tel:'2257 63 5473' },
+    { ciudad:'San Bernardo', centro:'Sapiens', tel:'2257 50 3574' },
+    { ciudad:'Mar de Ajó', centro:'CEQ', tel:'2257 62 0937' } ] },
+  { nombre:'Dra. Bárbara Guerrero', esp:'Especialista en Hipertensión, Obesidad y Lípidos', lugares:[
+    { ciudad:'Santa Teresita', centro:'Costa Bucal', tel:'2257 63 5473' },
+    { ciudad:'San Bernardo', centro:'Sapiens', tel:'2257 50 3574' },
+    { ciudad:'San Clemente', centro:'CEM', tel:'2257 40 8563' } ] }
+];
+function linkWapp(tel, prof){
+  var n = '549' + String(tel).replace(/\D/g, '');
+  return 'https://wa.me/' + n + '?text=' + encodeURIComponent('Hola, quisiera pedir un turno presencial con ' + prof + '.');
+}
+function mostrarPresencial(){
+  AYUDA = 'menu';
+  $('#titulo').textContent = 'Atención presencial';
+  $('#subtitulo').textContent = 'Pedí tu turno en el lugar o por WhatsApp.';
+  var x = '<button class="link" style="margin:0 0 12px 4px;text-decoration:none" onclick="irA(\'\')">← Volver al menú</button>';
+  x += LUGARES.map(function(p){
+    return '<section class="card"><div class="paso"><div class="avatar" style="width:38px;height:38px;font-size:14px">'+h(iniciales(p.nombre))+'</div><div><h2 style="margin:0">'+h(p.nombre)+'</h2><p class="nota" style="margin:2px 0 0">'+h(p.esp)+'</p></div></div>'
+      + p.lugares.map(function(l){
+        return '<div class="lugar"><div><b>'+h(l.ciudad)+'</b><span>'+h(l.centro)+' · '+h(l.tel)+'</span></div>'
+          + '<a class="wapp" href="'+linkWapp(l.tel, p.nombre)+'" target="_blank" rel="noopener">WhatsApp</a></div>';
+      }).join('') + '</section>';
+  }).join('');
+  x += '<p class="nota centro" style="margin:4px 12px 0">Los turnos presenciales se piden en cada centro o por su WhatsApp.</p>';
+  $('#app').innerHTML = x;
 }
 
 /* ═══════════════════ Recetas y consultas por mensaje ═══════════════════ */
@@ -1107,7 +1147,7 @@ $('#b-ayuda').onclick = abrirAyuda;
   api({ accion:'config' }).then(function(cfg){
     CFG = cfg;
     var s = q.get('s');
-    if(s && serviciosDisponibles().some(function(x){ return x.id === s; })) irA(s); else mostrarMenu();
+    if(s === 'presencial' || (s && serviciosDisponibles().some(function(x){ return x.id === s; }))) irA(s); else mostrarMenu();
   }).catch(function(e){
     $('#app').innerHTML = '<div class="card"><div class="error on">'+h(e.message)+'</div><button class="btn sec" onclick="location.reload()">Reintentar</button></div>';
   });
