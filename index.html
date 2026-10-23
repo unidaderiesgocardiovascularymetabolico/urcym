@@ -100,6 +100,8 @@ header{position:relative}
 .nota{font-size:12.5px;color:var(--soft);margin-top:6px}
 .honor{font-size:13px;color:var(--soft);margin:0 4px 12px;line-height:1.45}
 .honor b{color:var(--text);font-weight:600}
+.falta{display:none;margin:14px 0 -6px;padding:10px 12px;border-radius:12px;background:#fff6e0;border:1px solid #f2d18a;color:#7a5200;font-size:13.5px;line-height:1.4}
+.falta.on{display:block}
 
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:14px;border-radius:14px;border:none;background:var(--blue);color:#fff;font-family:var(--display);font-size:15.5px;font-weight:700;letter-spacing:.02em;cursor:pointer;box-shadow:0 4px 16px rgba(48,137,202,.28);transition:background .15s,transform .1s;margin-top:16px;text-decoration:none}
 .btn:hover{background:var(--blue-dark)}
@@ -493,19 +495,28 @@ function htmlSena(n){
   x += '<div class="tabs'+(metodos.length===1?' uno':'')+'">' + metodos.map(function(m){ return '<button class="tab'+(S.metodo===m[0]?' sel':'')+'" data-metodo="'+m[0]+'">'+m[1]+'</button>'; }).join('') + '</div>';
   if(S.metodo === 'comprobante'){
     x += '<p style="font-size:14.5px;margin-bottom:10px">Transferí <b>'+pesos(P.sena)+'</b> a:</p>' + htmlTransferencia(P.transferencia) + htmlArchivo('f-comp')
-      + htmlAviso('video', S) + '<div class="error" id="e-sena"></div><button class="btn" id="b-confirmar" disabled>Confirmar turno</button>'
+      + htmlAviso('video', S) + '<div class="falta" id="falta-sena"></div><div class="error" id="e-sena"></div><button class="btn" id="b-confirmar" disabled>Confirmar turno</button>'
       + '<p class="nota centro">Al confirmar, el turno queda reservado y te llega un mail.</p>';
   } else {
     x += '<p style="font-size:14.5px">Vas a pagar <b>'+pesos(P.sena)+'</b> con Mercado Pago (tarjeta, dinero en cuenta, etc.). Cuando se acredite, el turno se confirma solo y te llega un mail.</p>'
       + '<p class="nota">Tenés '+S.cfg.mp_vencimiento_min+' minutos para pagar; si no, el horario se libera.</p>'
-      + htmlAviso('video', S) + '<div class="error" id="e-sena"></div><button class="btn mp" id="b-confirmar">Pagar la seña con Mercado Pago</button>';
+      + htmlAviso('video', S) + '<div class="falta" id="falta-sena"></div><div class="error" id="e-sena"></div><button class="btn mp" id="b-confirmar">Pagar la seña con Mercado Pago</button>';
   }
   return x + '</section>';
+}
+/* Aviso de qué falta para habilitar el botón */
+function avisoFalta(id, st, queComp){
+  var el = $('#' + id); if(!el) return;
+  var f = [];
+  if(st.metodo === 'comprobante' && !st.archivo) f.push('adjuntar el <b>comprobante de ' + queComp + '</b>');
+  if(!st.acepto) f.push('tildar <b>«Leí y acepto estas condiciones»</b>');
+  el.innerHTML = f.length ? '⚠️ Para continuar falta ' + f.join(' y ') + '.' : '';
+  el.classList.toggle('on', !!f.length);
 }
 function engancharSena(){
   document.querySelectorAll('[data-metodo]').forEach(function(b){ b.onclick = function(){ S.metodo = b.dataset.metodo; S.archivo = null; render(); }; });
   var bc = $('#b-confirmar');
-  var listo = function(){ bc.disabled = !S.acepto || (S.metodo === 'comprobante' && !S.archivo); };
+  var listo = function(){ bc.disabled = !S.acepto || (S.metodo === 'comprobante' && !S.archivo); avisoFalta('falta-sena', S, 'la seña'); };
   if(S.metodo === 'comprobante') engancharArchivo('f-comp', function(f){ S.archivo = f; listo(); });
   engancharAviso(S, listo); listo();
   bc.onclick = enviarReserva;
@@ -800,17 +811,17 @@ function htmlPagoPedido(n){
   var accion = Q.tipo === 'receta' ? 'Enviar pedido' : 'Enviar consulta';
   if(Q.metodo === 'comprobante'){
     x += '<p style="font-size:14.5px;margin-bottom:10px">Transferí <b>'+pesos(monto)+'</b> a:</p>' + htmlTransferencia(P.transferencia) + htmlArchivo('f-qcomp')
-      + htmlAviso(Q.tipo, Q) + '<div class="error" id="e-qpago"></div><button class="btn" id="b-qenviar" disabled>'+accion+'</button>';
+      + htmlAviso(Q.tipo, Q) + '<div class="falta" id="falta-q"></div><div class="error" id="e-qpago"></div><button class="btn" id="b-qenviar" disabled>'+accion+'</button>';
   } else {
     x += '<p style="font-size:14.5px">Vas a pagar <b>'+pesos(monto)+'</b> con Mercado Pago. Cuando se acredite, el pedido nos llega solo y te avisamos por mail.</p>'
-      + htmlAviso(Q.tipo, Q) + '<div class="error" id="e-qpago"></div><button class="btn mp" id="b-qenviar">Pagar con Mercado Pago</button>';
+      + htmlAviso(Q.tipo, Q) + '<div class="falta" id="falta-q"></div><div class="error" id="e-qpago"></div><button class="btn mp" id="b-qenviar">Pagar con Mercado Pago</button>';
   }
   return x + '</section>';
 }
 function engancharPagoPedido(){
   document.querySelectorAll('[data-qmetodo]').forEach(function(b){ b.onclick = function(){ Q.metodo = b.dataset.qmetodo; Q.archivo = null; renderPedido(); }; });
   var bc = $('#b-qenviar');
-  var listo = function(){ bc.disabled = !Q.acepto || (Q.metodo === 'comprobante' && !Q.archivo); };
+  var listo = function(){ bc.disabled = !Q.acepto || (Q.metodo === 'comprobante' && !Q.archivo); avisoFalta('falta-q', Q, 'pago'); };
   if(Q.metodo === 'comprobante') engancharArchivo('f-qcomp', function(f){ Q.archivo = f; listo(); });
   engancharAviso(Q, listo); listo();
   bc.onclick = enviarPedido;
@@ -975,7 +986,7 @@ function htmlSaldo(d){
     + '<div class="montos"><div><small>Saldo de la consulta</small><div class="grande">'+pesos(d.saldo)+'</div></div><div style="text-align:right"><small>Abonalo antes del turno</small></div></div>';
   if(!metodos.length) return x + '<p class="nota">Coordiná el pago con el consultorio.</p></section>';
   x += '<div class="tabs'+(metodos.length===1?' uno':'')+'">' + metodos.map(function(m){ return '<button class="tab'+(R.metodo===m[0]?' sel':'')+'" data-smetodo="'+m[0]+'">'+m[1]+'</button>'; }).join('') + '</div>';
-  if(R.metodo === 'comprobante') x += '<p style="font-size:14.5px;margin-bottom:10px">Transferí <b>'+pesos(d.saldo)+'</b> a:</p>' + htmlTransferencia(d.pago.transferencia) + htmlArchivo('f-saldo') + '<div class="error" id="e-saldo"></div><button class="btn" id="b-saldo" disabled>Enviar comprobante</button>';
+  if(R.metodo === 'comprobante') x += '<p style="font-size:14.5px;margin-bottom:10px">Transferí <b>'+pesos(d.saldo)+'</b> a:</p>' + htmlTransferencia(d.pago.transferencia) + htmlArchivo('f-saldo') + '<div class="falta on" id="falta-saldo">⚠️ Para continuar falta adjuntar el <b>comprobante del saldo</b>.</div><div class="error" id="e-saldo"></div><button class="btn" id="b-saldo" disabled>Enviar comprobante</button>';
   else x += '<div class="error" id="e-saldo"></div><button class="btn mp" id="b-saldo">Pagar '+pesos(d.saldo)+' con Mercado Pago</button>';
   return x + '</section>';
 }
@@ -983,7 +994,7 @@ function engancharSaldo(d){
   document.querySelectorAll('[data-smetodo]').forEach(function(b){ b.onclick = function(){ R.metodo = b.dataset.smetodo; R.archivo = null; pintarReserva({}); }; });
   var b = $('#b-saldo'), e = $('#e-saldo'); if(!b) return;
   if(R.metodo === 'comprobante'){
-    engancharArchivo('f-saldo', function(f){ R.archivo = f; b.disabled = !f; });
+    engancharArchivo('f-saldo', function(f){ R.archivo = f; b.disabled = !f; var fs = $('#falta-saldo'); if(fs) fs.classList.toggle('on', !f); });
     b.onclick = async function(){
       if(!R.archivo) return;
       limpiarError(e); b.disabled = true; b.innerHTML = '<div class="spin" style="border-top-color:#fff;border-color:rgba(255,255,255,.35)"></div> Enviando…';
