@@ -114,6 +114,7 @@ header{position:relative}
 .wapp{flex-shrink:0;display:inline-flex;align-items:center;gap:6px;padding:9px 14px;border-radius:999px;background:#25d366;color:#fff;font-weight:700;font-size:14px;text-decoration:none}
 .wapp::before{content:'💬'}
 .prof.presencial{border-color:#bfe8cf}
+.tabs.cob{margin-bottom:0}
 .falta{display:none;margin:14px 0 -6px;padding:10px 12px;border-radius:12px;background:#fff6e0;border:1px solid #f2d18a;color:#7a5200;font-size:13.5px;line-height:1.4}
 .falta.on{display:block}
 
@@ -652,17 +653,41 @@ function iniciarPedido(tipo){
   if(!profs.length){ $('#app').innerHTML = barraVolver() + '<div class="card centro"><p>Este servicio no está disponible en este momento.</p></div>'; return; }
   renderPedido();
 }
-function esOsdeQ(){
-  if(Q.tipo !== 'receta') return false;
+/* Cobertura: OSDE (única prepaga con la que se trabaja) o particular */
+function cobQ(){
+  if(Q.cob) return Q.cob;
   var p = Q.pac || {};
-  if(p.existe && p.tiene_os && !Q.osCambio) return !!p.es_osde;
-  return /\bosde\b/i.test(Q.os || '');
+  return (p.existe && p.es_osde) ? 'osde' : null;
 }
-function htmlOsdeBox(){
-  return '<div class="aviso azul" id="osde-box" style="margin:14px 0 0;'+(esOsdeQ()?'':'display:none')+'">'
-    + '<b>🏥 Receta por OSDE · sin cargo</b>'
-    + '<p style="margin:6px 0 8px;font-size:14px">Generá en la <b>app de OSDE</b> el link para tu médico y pegalo acá. Dura 8 horas: si se vence antes de que hagamos la receta, te pedimos uno nuevo por mail.</p>'
-    + '<input type="url" id="f-osde" inputmode="url" placeholder="https://…" value="'+h(Q.osdeLink||'')+'" autocomplete="off"></div>';
+function esOsdeQ(){ return Q.tipo === 'receta' && cobQ() === 'osde'; }
+function htmlCobertura(){
+  var p = Q.pac || {}, c = cobQ(), regOsde = !!(p.existe && p.es_osde);
+  var x = '<h2 style="font-family:var(--display);font-size:16px;margin:22px 0 2px">Cobertura</h2>'
+    + '<p class="nota" style="margin:0 0 10px">La única prepaga con la que trabajamos es OSDE.</p>'
+    + '<div class="tabs cob">'
+    + '<button type="button" class="tab'+(c==='osde'?' sel':'')+'" data-cob="osde">🏥 OSDE</button>'
+    + '<button type="button" class="tab'+(c==='particular'?' sel':'')+'" data-cob="particular">Particular</button></div>';
+  if(c === 'osde'){
+    if(regOsde && !Q.afCambio){
+      x += '<div class="hola" style="margin-top:10px">✓ Ya tenemos registrada tu credencial de OSDE'+(Q.mis && Q.mis.afiliado_mask ? ' <b>'+h(Q.mis.afiliado_mask)+'</b>' : '')+'.'
+        + ' <button class="link" id="b-afcambio">Cambió mi número</button></div>';
+    } else {
+      x += '<label for="f-af">N.º de afiliado de OSDE</label><input type="text" id="f-af" inputmode="numeric" value="'+h(Q.af||'')+'">';
+    }
+    var dni = (Q.prof && Q.prof.dni) || '';
+    x += '<div class="aviso azul" id="osde-box" style="margin:14px 0 0">'
+      + '<b>🔗 Link de tu credencial de OSDE</b>'
+      + '<ol style="margin:8px 0 10px;padding-left:20px;font-size:14px;line-height:1.5">'
+      + '<li>Entrá a la <b>app de OSDE</b> y abrí tu <b>credencial</b>.</li>'
+      + '<li>Tocá <b>Compartir credencial</b>.</li>'
+      + '<li>Ingresá el DNI '+(dni ? '<b>'+h(dni.replace(/\B(?=(\d{3})+(?!\d))/g, '.'))+'</b> ('+h(Q.prof.nombre)+')' : 'de tu médico')+'.</li>'
+      + '<li>Copiá el <b>link</b> que se genera y pegalo acá abajo.</li></ol>'
+      + '<input type="url" id="f-osde" inputmode="url" placeholder="Pegá acá el link de OSDE (https://…)" value="'+h(Q.osdeLink||'')+'" autocomplete="off">'
+      + '<p class="nota" style="margin:6px 0 0">El link dura 8 horas. Si se vence antes de que hagamos la receta, te pedimos uno nuevo por mail.</p></div>';
+  } else if(c === 'particular'){
+    x += '<p class="nota" style="margin:10px 2px 0">Sin prepaga: abonás los honorarios en el último paso.</p>';
+  }
+  return x;
 }
 function precioPedido(){ return Q.tipo === 'receta' ? CFG.receta_precio : CFG.consulta_precio; }
 function renderPedido(){
@@ -675,7 +700,7 @@ function renderPedido(){
   } else {
     x += '<section class="card cerrada"><div class="paso"><div class="avatar" style="width:34px;height:34px;font-size:13px">'+h(iniciales(Q.prof.nombre))+'</div><h2>'+h(Q.prof.nombre)+'</h2></div></section>';
   }
-  if(paso < 4){ var notaH = '<p class="honor">Servicio con honorarios. El valor se informa al final, antes de pagar.' + (Q.tipo === 'receta' ? ' Si es por OSDE, no tiene costo.' : '') + '</p>';
+  if(paso < 4){ var notaH = '<p class="honor">Servicio con honorarios. El valor se informa al final, antes de pagar.' + (Q.tipo === 'receta' ? ' Si es por OSDE, no abonás honorarios.' : '') + '</p>';
     var iS = x.indexOf('<section'); x = iS < 0 ? x + notaH : x.slice(0, iS) + notaH + x.slice(iS); }
   var n0 = Q.profs.length > 1 ? 1 : 0;
   if(paso < 2) x += cardBloqueada(n0+1, 'Tus datos');
@@ -692,7 +717,7 @@ function renderPedido(){
   document.querySelectorAll('[data-qvolver]').forEach(function(b){ b.onclick = function(){
     var v = +b.dataset.qvolver;
     if(v === 1){ Q.prof = null; Q.detalleOk = false; }
-    if(v === 2){ Q.datos = null; Q.detalleOk = false; Q.modoRec = null; }
+    if(v === 2){ Q.datos = null; Q.detalleOk = false; Q.modoRec = null; Q.cob = null; Q.afCambio = false; }
     if(v === 3){ Q.detalleOk = false; }
     renderPedido();
   }; });
@@ -752,17 +777,7 @@ function htmlReceta(n){
   }).join('') + '</div>'
     + (Q.items.length < 8 ? '<button class="btn sec" id="b-mas" style="margin-top:4px">' + (Q.modoRec === 'repetir' ? '+ Agregar uno que no está en la lista' : '+ Agregar otro medicamento') + '</button>' : '');
   // Cobertura
-  x += '<h2 style="font-family:var(--display);font-size:16px;margin:22px 0 4px">Obra social o prepaga</h2>';
-  if(p.existe && p.tiene_os && !Q.osCambio){
-    x += '<div class="hola" style="margin-top:6px">✓ Ya tenemos registrada tu cobertura'
-      + (Q.mis && Q.mis.obra_social ? ': <b>'+h(Q.mis.obra_social)+'</b> '+h(Q.mis.afiliado_mask) : '') + '.'
-      + '<br><button class="link" id="b-oscambio">Cambió mi obra social / prepaga</button></div>';
-  } else {
-    x += '<div class="fila2"><div><label for="f-os">Obra social / prepaga</label><input type="text" id="f-os" list="os-lista" value="'+h(Q.os||'')+'" placeholder="Ej.: OSDE"><datalist id="os-lista">'+OS_COMUNES.map(function(o){ return '<option value="'+h(o)+'">'; }).join('')+'</datalist></div>'
-      + '<div><label for="f-af">N.º de afiliado</label><input type="text" id="f-af" value="'+h(Q.af||'')+'"></div></div>'
-      + (p.existe && p.tiene_os ? '<button class="link" id="b-osnocambio" style="margin-top:8px">No cambió, dejar la registrada</button>' : '');
-  }
-  x += htmlOsdeBox();
+  x += htmlCobertura();
   x += '<label for="f-nota">Aclaración <span style="text-transform:none;letter-spacing:0;font-weight:400">(opcional)</span></label><textarea id="f-nota" maxlength="400" placeholder="Ej.: 2 cajas, genérico está bien…">'+h(Q.nota||'')+'</textarea>'
     + '<div class="error" id="e-rec"></div><button class="btn" id="b-rec">Continuar</button></section>';
   return x;
@@ -786,7 +801,7 @@ function frecDesdeHC(t){
 }
 function guardarCamposReceta(){
   document.querySelectorAll('[data-campo]').forEach(function(inp){ Q.items[+inp.dataset.i][inp.dataset.campo] = inp.dataset.campo === 'frecuencia' ? (inp.value || 'otra') : inp.value; });
-  if($('#f-os')) Q.os = $('#f-os').value; if($('#f-af')) Q.af = $('#f-af').value; if($('#f-nota')) Q.nota = $('#f-nota').value;
+  if($('#f-af')) Q.af = $('#f-af').value; if($('#f-nota')) Q.nota = $('#f-nota').value;
   if($('#f-osde')) Q.osdeLink = $('#f-osde').value.trim();
 }
 function engancharReceta(){
@@ -828,9 +843,8 @@ function engancharReceta(){
     };
     bv.onclick = verif; $('#f-cod').addEventListener('keydown', function(ev){ if(ev.key === 'Enter') verif(); });
   }
-  var fos = $('#f-os'); if(fos) fos.addEventListener('input', function(){ Q.os = fos.value; var ob = $('#osde-box'); if(ob) ob.style.display = esOsdeQ() ? '' : 'none'; });
-  var bo = $('#b-oscambio'); if(bo) bo.onclick = function(){ guardarCamposReceta(); Q.osCambio = true; renderPedido(); $('#f-os').focus(); };
-  var bn = $('#b-osnocambio'); if(bn) bn.onclick = function(){ guardarCamposReceta(); Q.osCambio = false; renderPedido(); };
+  document.querySelectorAll('[data-cob]').forEach(function(b){ b.onclick = function(){ guardarCamposReceta(); Q.cob = b.dataset.cob; renderPedido(); var f = $('#f-af') || $('#f-osde'); if(f && Q.cob === 'osde') f.focus(); }; });
+  var bac = $('#b-afcambio'); if(bac) bac.onclick = function(){ guardarCamposReceta(); Q.afCambio = true; renderPedido(); var f = $('#f-af'); if(f) f.focus(); };
   var brc = $('#b-rec'); if(brc) brc.onclick = function(){
     guardarCamposReceta();
     var e = $('#e-rec'); limpiarError(e);
@@ -840,13 +854,11 @@ function engancharReceta(){
     if(falta){ renderPedido(); return mostrarError($('#e-rec'), 'Completá la droga y la dosis de cada medicamento.'); }
     var sinFrec = Q.items.find(function(it){ return !it.frecuencia || it.frecuencia === 'otra'; });
     if(sinFrec){ renderPedido(); return mostrarError($('#e-rec'), 'Indicá cuántas veces por día toma cada medicamento.'); }
-    var necesitaOS = !(Q.pac.existe && Q.pac.tiene_os) || Q.osCambio;
-    if(necesitaOS){
-      if(!(Q.os||'').trim()) return mostrarError(e, 'Indicá tu obra social o prepaga (o "Particular / sin cobertura").');
-      if(!/particular|sin cobertura/i.test(Q.os) && !(Q.af||'').trim()) return mostrarError(e, 'Indicá tu número de afiliado.');
-    }
+    var c = cobQ();
+    if(!c){ var tc = document.querySelector('.tabs.cob'); if(tc && tc.scrollIntoView) tc.scrollIntoView({ behavior:'smooth', block:'center' }); return mostrarError(e, 'Elegí la cobertura: OSDE o particular.'); }
+    if(c === 'osde' && !(Q.pac.existe && Q.pac.es_osde && !Q.afCambio) && !(Q.af||'').trim()) return mostrarError(e, 'Indicá tu número de afiliado de OSDE.');
     if(esOsdeQ()){
-      if(!/^https:\/\/\S+$/i.test(Q.osdeLink || '')){ var fo = $('#f-osde'); if(fo) fo.focus(); return mostrarError(e, 'Pegá el link de la app de OSDE (empieza con https://).'); }
+      if(!/^https:\/\/\S+$/i.test(Q.osdeLink || '')){ var fo = $('#f-osde'); if(fo) fo.focus(); return mostrarError(e, 'Pegá el link que te da la app de OSDE al compartir tu credencial (empieza con https://).'); }
       Q.detalleOk = true; Q.metodo = 'osde'; Q.archivo = null; renderPedido();
       var so = $('#seccion-pago'); if(so && so.scrollIntoView) so.scrollIntoView({ behavior:'smooth', block:'start' });
       return;
@@ -893,7 +905,7 @@ function htmlPagoPedido(n){
   var P = Q.prof, monto = precioPedido();
   if(Q.metodo === 'osde'){
     return '<section class="card" id="seccion-pago"><div class="paso"><div class="n">'+n+'</div><h2>Enviar pedido</h2></div>'
-      + '<div class="montos"><div><small>Receta por OSDE</small><div class="grande">Sin cargo</div></div></div>'
+      + '<div class="montos"><div><small>Receta</small><div class="grande" style="font-size:22px">Por tu cobertura de OSDE</div><small>No abonás honorarios.</small></div></div>'
       + htmlAviso('receta', Q) + '<div class="falta" id="falta-q"></div><div class="error" id="e-qpago"></div><button class="btn" id="b-qenviar" disabled>Enviar pedido</button>'
       + '<p class="nota centro">Te llega un mail de confirmación.</p></section>';
   }
@@ -935,7 +947,8 @@ async function enviarPedido(){
     if(Q.tipo === 'receta'){
       fd.append('items', JSON.stringify(Q.items));
       if(Q.nota) fd.append('nota', Q.nota);
-      if(!(Q.pac.existe && Q.pac.tiene_os) || Q.osCambio){ fd.append('obra_social', Q.os || ''); fd.append('afiliado', Q.af || ''); if(Q.osCambio) fd.append('os_cambio', '1'); }
+      fd.append('cobertura', cobQ() || '');
+      if(cobQ() === 'osde' && (Q.af||'').trim() && (!(Q.pac.existe && Q.pac.es_osde) || Q.afCambio)) fd.append('afiliado', Q.af.trim());
       if(Q.metodo === 'osde') fd.append('osde_link', Q.osdeLink || '');
     } else {
       fd.append('texto', Q.texto.trim());
@@ -981,7 +994,7 @@ function pintarPedido(opt){
     + '</table>';
   if(esRec){
     x += '<div style="margin-top:6px">' + (d.items||[]).map(function(it){ return '<div style="padding:8px 0;border-bottom:1px solid var(--line);font-size:15px">💊 <strong>'+h(it.farmaco)+'</strong> '+h(it.dosis)+(it.frecuencia?' · '+h(it.frecuencia):'')+(it.marca?' <small style="color:var(--soft)">('+h(it.marca)+')</small>':'')+(it.repetir?' <small title="Repetir">🔁</small>':'')+'</div>'; }).join('') + '</div>'
-      + (d.obra_social ? '<p class="nota" style="margin-top:6px">Cobertura: '+h(d.obra_social)+(d.osde ? ' · sin cargo' : '')+'</p>' : '')
+      + (d.obra_social ? '<p class="nota" style="margin-top:6px">Cobertura: '+h(d.obra_social)+''+'</p>' : '')
       + (d.receta_url ? '<a class="btn meet" href="'+h(d.receta_url)+'" target="_blank" rel="noopener">📄 Descargar la receta</a><p class="nota centro">También te la mandamos por mail.</p>' : '');
   } else {
     x += '<div style="margin-top:10px">' + (d.mensajes||[]).map(function(m){
@@ -1000,7 +1013,7 @@ function pintarPedido(opt){
     var pide = d.osde.pidieron_nuevo || vencido;
     x += '<section class="card" id="sec-osde"><div class="paso"><div class="n">🏥</div><h2>Link de OSDE</h2></div>'
       + (pide
-        ? '<div class="aviso amber" style="margin:0 0 10px">'+(d.osde.pidieron_nuevo ? '<b>Necesitamos un link nuevo de OSDE.</b> ' : '<b>Tu link de OSDE ya venció.</b> ')+'Generalo en la app de OSDE y pegalo acá para que podamos hacer tu receta.</div>'
+        ? '<div class="aviso amber" style="margin:0 0 10px">'+(d.osde.pidieron_nuevo ? '<b>Necesitamos un link nuevo de OSDE.</b> ' : '<b>Tu link de OSDE ya venció.</b> ')+'En la app de OSDE entrá a tu credencial → <b>Compartir credencial</b> → ingresá el DNI '+(d.osde.dni_prof ? '<b>'+h(d.osde.dni_prof)+'</b>' : 'de tu médico')+', copiá el link y pegalo acá.</div>'
         : '<p style="font-size:14.5px;margin:0 0 8px">✓ Recibimos tu link. Vale hasta las <b>'+fechaHora(d.osde.vence_at)+' h</b>. Si se vence antes de que hagamos la receta, te avisamos por mail.</p><p class="nota" style="margin:0 0 6px">¿Lo querés cambiar? Pegá uno nuevo:</p>')
       + '<input type="url" id="f-osde2" inputmode="url" placeholder="https://…" autocomplete="off">'
       + '<div class="error" id="e-osde2"></div><button class="btn'+(pide?'':' sec')+'" id="b-osde2">Enviar link nuevo</button></section>';
