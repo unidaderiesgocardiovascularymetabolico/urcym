@@ -72,7 +72,7 @@ h1{font-family:var(--display);font-size:26px;font-weight:700;color:var(--blue-da
 
 label{display:block;font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--soft);margin:14px 0 6px}
 label:first-child{margin-top:0}
-input[type=text],input[type=email],input[type=tel],input[type=date],textarea{width:100%;padding:12px 14px;border-radius:12px;border:1.5px solid var(--line);background:var(--chip);font-size:16px;outline:none;transition:border-color .15s,box-shadow .15s}
+input[type=text],input[type=email],input[type=tel],input[type=date],input[type=url],textarea{width:100%;padding:12px 14px;border-radius:12px;border:1.5px solid var(--line);background:var(--chip);font-size:16px;outline:none;transition:border-color .15s,box-shadow .15s}
 input:focus,textarea:focus{border-color:var(--blue);background:#fff;box-shadow:0 0 0 3px var(--blue-glow)}
 textarea{resize:vertical;min-height:70px}
 .motivos{display:flex;flex-wrap:wrap;gap:8px}
@@ -652,6 +652,18 @@ function iniciarPedido(tipo){
   if(!profs.length){ $('#app').innerHTML = barraVolver() + '<div class="card centro"><p>Este servicio no está disponible en este momento.</p></div>'; return; }
   renderPedido();
 }
+function esOsdeQ(){
+  if(Q.tipo !== 'receta') return false;
+  var p = Q.pac || {};
+  if(p.existe && p.tiene_os && !Q.osCambio) return !!p.es_osde;
+  return /\bosde\b/i.test(Q.os || '');
+}
+function htmlOsdeBox(){
+  return '<div class="aviso azul" id="osde-box" style="margin:14px 0 0;'+(esOsdeQ()?'':'display:none')+'">'
+    + '<b>🏥 Receta por OSDE · sin cargo</b>'
+    + '<p style="margin:6px 0 8px;font-size:14px">Generá en la <b>app de OSDE</b> el link para tu médico y pegalo acá. Dura 8 horas: si se vence antes de que hagamos la receta, te pedimos uno nuevo por mail.</p>'
+    + '<input type="url" id="f-osde" inputmode="url" placeholder="https://…" value="'+h(Q.osdeLink||'')+'" autocomplete="off"></div>';
+}
 function precioPedido(){ return Q.tipo === 'receta' ? CFG.receta_precio : CFG.consulta_precio; }
 function renderPedido(){
   var paso = !Q.prof ? 1 : !Q.datos ? 2 : !Q.detalleOk ? 3 : 4;
@@ -663,7 +675,7 @@ function renderPedido(){
   } else {
     x += '<section class="card cerrada"><div class="paso"><div class="avatar" style="width:34px;height:34px;font-size:13px">'+h(iniciales(Q.prof.nombre))+'</div><h2>'+h(Q.prof.nombre)+'</h2></div></section>';
   }
-  if(paso < 4){ var notaH = '<p class="honor">Servicio con honorarios. El valor se informa al final, antes de pagar.</p>';
+  if(paso < 4){ var notaH = '<p class="honor">Servicio con honorarios. El valor se informa al final, antes de pagar.' + (Q.tipo === 'receta' ? ' Si es por OSDE, no tiene costo.' : '') + '</p>';
     var iS = x.indexOf('<section'); x = iS < 0 ? x + notaH : x.slice(0, iS) + notaH + x.slice(iS); }
   var n0 = Q.profs.length > 1 ? 1 : 0;
   if(paso < 2) x += cardBloqueada(n0+1, 'Tus datos');
@@ -750,6 +762,7 @@ function htmlReceta(n){
       + '<div><label for="f-af">N.º de afiliado</label><input type="text" id="f-af" value="'+h(Q.af||'')+'"></div></div>'
       + (p.existe && p.tiene_os ? '<button class="link" id="b-osnocambio" style="margin-top:8px">No cambió, dejar la registrada</button>' : '');
   }
+  x += htmlOsdeBox();
   x += '<label for="f-nota">Aclaración <span style="text-transform:none;letter-spacing:0;font-weight:400">(opcional)</span></label><textarea id="f-nota" maxlength="400" placeholder="Ej.: 2 cajas, genérico está bien…">'+h(Q.nota||'')+'</textarea>'
     + '<div class="error" id="e-rec"></div><button class="btn" id="b-rec">Continuar</button></section>';
   return x;
@@ -774,6 +787,7 @@ function frecDesdeHC(t){
 function guardarCamposReceta(){
   document.querySelectorAll('[data-campo]').forEach(function(inp){ Q.items[+inp.dataset.i][inp.dataset.campo] = inp.dataset.campo === 'frecuencia' ? (inp.value || 'otra') : inp.value; });
   if($('#f-os')) Q.os = $('#f-os').value; if($('#f-af')) Q.af = $('#f-af').value; if($('#f-nota')) Q.nota = $('#f-nota').value;
+  if($('#f-osde')) Q.osdeLink = $('#f-osde').value.trim();
 }
 function engancharReceta(){
   document.querySelectorAll('[data-modo]').forEach(function(b){ b.onclick = function(){ Q.modoRec = b.dataset.modo; renderPedido(); }; });
@@ -814,6 +828,7 @@ function engancharReceta(){
     };
     bv.onclick = verif; $('#f-cod').addEventListener('keydown', function(ev){ if(ev.key === 'Enter') verif(); });
   }
+  var fos = $('#f-os'); if(fos) fos.addEventListener('input', function(){ Q.os = fos.value; var ob = $('#osde-box'); if(ob) ob.style.display = esOsdeQ() ? '' : 'none'; });
   var bo = $('#b-oscambio'); if(bo) bo.onclick = function(){ guardarCamposReceta(); Q.osCambio = true; renderPedido(); $('#f-os').focus(); };
   var bn = $('#b-osnocambio'); if(bn) bn.onclick = function(){ guardarCamposReceta(); Q.osCambio = false; renderPedido(); };
   var brc = $('#b-rec'); if(brc) brc.onclick = function(){
@@ -829,6 +844,12 @@ function engancharReceta(){
     if(necesitaOS){
       if(!(Q.os||'').trim()) return mostrarError(e, 'Indicá tu obra social o prepaga (o "Particular / sin cobertura").');
       if(!/particular|sin cobertura/i.test(Q.os) && !(Q.af||'').trim()) return mostrarError(e, 'Indicá tu número de afiliado.');
+    }
+    if(esOsdeQ()){
+      if(!/^https:\/\/\S+$/i.test(Q.osdeLink || '')){ var fo = $('#f-osde'); if(fo) fo.focus(); return mostrarError(e, 'Pegá el link de la app de OSDE (empieza con https://).'); }
+      Q.detalleOk = true; Q.metodo = 'osde'; Q.archivo = null; renderPedido();
+      var so = $('#seccion-pago'); if(so && so.scrollIntoView) so.scrollIntoView({ behavior:'smooth', block:'start' });
+      return;
     }
     Q.detalleOk = true; Q.metodo = Q.prof.comprobante ? 'comprobante' : 'mercadopago'; Q.archivo = null; renderPedido();
     var sp = $('#seccion-pago'); if(sp && sp.scrollIntoView) sp.scrollIntoView({ behavior:'smooth', block:'start' });
@@ -870,6 +891,12 @@ function engancharConsulta(){
 /* ── Pago del pedido ── */
 function htmlPagoPedido(n){
   var P = Q.prof, monto = precioPedido();
+  if(Q.metodo === 'osde'){
+    return '<section class="card" id="seccion-pago"><div class="paso"><div class="n">'+n+'</div><h2>Enviar pedido</h2></div>'
+      + '<div class="montos"><div><small>Receta por OSDE</small><div class="grande">Sin cargo</div></div></div>'
+      + htmlAviso('receta', Q) + '<div class="falta" id="falta-q"></div><div class="error" id="e-qpago"></div><button class="btn" id="b-qenviar" disabled>Enviar pedido</button>'
+      + '<p class="nota centro">Te llega un mail de confirmación.</p></section>';
+  }
   var x = '<section class="card" id="seccion-pago"><div class="paso"><div class="n">'+n+'</div><h2>Pago</h2></div>'
     + '<div class="montos"><div><small>'+(Q.tipo === 'receta' ? 'Receta' : 'Consulta por mensaje')+'</small><div class="grande">'+pesos(monto)+'</div></div></div>';
   var metodos = [];
@@ -900,7 +927,7 @@ async function enviarPedido(){
   if(!Q.acepto) return mostrarError(e, 'Tildá "Leí y acepto" para continuar.');
   if(Q.metodo === 'comprobante' && !Q.archivo) return mostrarError(e, 'Adjuntá el comprobante de la transferencia.');
   Q.enviando = true; bc.disabled = true; var txt = bc.textContent;
-  bc.innerHTML = '<div class="spin" style="border-top-color:#fff;border-color:rgba(255,255,255,.35)"></div> ' + (Q.metodo === 'comprobante' ? 'Enviando…' : 'Abriendo Mercado Pago…');
+  bc.innerHTML = '<div class="spin" style="border-top-color:#fff;border-color:rgba(255,255,255,.35)"></div> ' + (Q.metodo === 'mercadopago' ? 'Abriendo Mercado Pago…' : 'Enviando…');
   try{
     var fd = new FormData();
     fd.append('accion','pedir'); fd.append('tipo', Q.tipo); fd.append('prof', Q.prof.id); fd.append('metodo', Q.metodo); fd.append('acepto', AVISO_VERSION);
@@ -909,6 +936,7 @@ async function enviarPedido(){
       fd.append('items', JSON.stringify(Q.items));
       if(Q.nota) fd.append('nota', Q.nota);
       if(!(Q.pac.existe && Q.pac.tiene_os) || Q.osCambio){ fd.append('obra_social', Q.os || ''); fd.append('afiliado', Q.af || ''); if(Q.osCambio) fd.append('os_cambio', '1'); }
+      if(Q.metodo === 'osde') fd.append('osde_link', Q.osdeLink || '');
     } else {
       fd.append('texto', Q.texto.trim());
       for(var i = 0; i < Q.adjuntos.length; i++) fd.append('adjuntos', await prepararArchivo(Q.adjuntos[i]));
@@ -953,7 +981,7 @@ function pintarPedido(opt){
     + '</table>';
   if(esRec){
     x += '<div style="margin-top:6px">' + (d.items||[]).map(function(it){ return '<div style="padding:8px 0;border-bottom:1px solid var(--line);font-size:15px">💊 <strong>'+h(it.farmaco)+'</strong> '+h(it.dosis)+(it.frecuencia?' · '+h(it.frecuencia):'')+(it.marca?' <small style="color:var(--soft)">('+h(it.marca)+')</small>':'')+(it.repetir?' <small title="Repetir">🔁</small>':'')+'</div>'; }).join('') + '</div>'
-      + (d.obra_social ? '<p class="nota" style="margin-top:6px">Cobertura: '+h(d.obra_social)+'</p>' : '')
+      + (d.obra_social ? '<p class="nota" style="margin-top:6px">Cobertura: '+h(d.obra_social)+(d.osde ? ' · sin cargo' : '')+'</p>' : '')
       + (d.receta_url ? '<a class="btn meet" href="'+h(d.receta_url)+'" target="_blank" rel="noopener">📄 Descargar la receta</a><p class="nota centro">También te la mandamos por mail.</p>' : '');
   } else {
     x += '<div style="margin-top:10px">' + (d.mensajes||[]).map(function(m){
@@ -967,6 +995,16 @@ function pintarPedido(opt){
     + (d.pago.mp ? '<div class="error" id="e-pmp"></div><button class="btn mp" id="b-pmp">Ir a pagar</button>' : '');
   if(d.estado === 'vencida') x += '<div class="aviso amber">No recibimos el pago. Si pagaste y ves este mensaje, respondé el mail y lo resolvemos.</div><a class="btn" href="'+location.pathname+'">Hacer un pedido nuevo</a>';
   x += '</section>';
+  if(d.osde && d.osde.puede_cargar){
+    var vencido = !d.osde.vence_at || new Date(d.osde.vence_at) < new Date();
+    var pide = d.osde.pidieron_nuevo || vencido;
+    x += '<section class="card" id="sec-osde"><div class="paso"><div class="n">🏥</div><h2>Link de OSDE</h2></div>'
+      + (pide
+        ? '<div class="aviso amber" style="margin:0 0 10px">'+(d.osde.pidieron_nuevo ? '<b>Necesitamos un link nuevo de OSDE.</b> ' : '<b>Tu link de OSDE ya venció.</b> ')+'Generalo en la app de OSDE y pegalo acá para que podamos hacer tu receta.</div>'
+        : '<p style="font-size:14.5px;margin:0 0 8px">✓ Recibimos tu link. Vale hasta las <b>'+fechaHora(d.osde.vence_at)+' h</b>. Si se vence antes de que hagamos la receta, te avisamos por mail.</p><p class="nota" style="margin:0 0 6px">¿Lo querés cambiar? Pegá uno nuevo:</p>')
+      + '<input type="url" id="f-osde2" inputmode="url" placeholder="https://…" autocomplete="off">'
+      + '<div class="error" id="e-osde2"></div><button class="btn'+(pide?'':' sec')+'" id="b-osde2">Enviar link nuevo</button></section>';
+  }
   if(d.puede_repreguntar){
     x += '<section class="card"><div class="paso"><div class="n">?</div><h2>¿Te quedó alguna duda?</h2></div><p class="nota" style="margin:-6px 0 8px">Podés hacer <b>una repregunta</b>.</p>'
       + '<textarea id="f-rep" maxlength="3000" style="min-height:110px"></textarea>'
@@ -977,6 +1015,14 @@ function pintarPedido(opt){
   }
   x += btnInicio();
   $('#app').innerHTML = x;
+  var bo2 = $('#b-osde2'); if(bo2) bo2.onclick = async function(){
+    var e = $('#e-osde2'); limpiarError(e);
+    var v = $('#f-osde2').value.trim();
+    if(!/^https:\/\/\S+$/i.test(v)) return mostrarError(e, 'Pegá el link de la app de OSDE (empieza con https://).');
+    bo2.disabled = true; bo2.textContent = 'Enviando…';
+    try{ await api({ accion:'pedido_osde_link', token:PD.token, link:v }); await verPedido(PD.token, {}); }
+    catch(err){ bo2.disabled = false; bo2.textContent = 'Enviar link nuevo'; mostrarError(e, err); }
+  };
   var bp = $('#b-pmp'); if(bp) bp.onclick = async function(){ bp.disabled = true; try{ var r = await api({ accion:'pedido_pagar_mp', token:PD.token }); location.href = r.pagar_url; }catch(err){ bp.disabled = false; mostrarError($('#e-pmp'), err); } };
   var br = $('#b-rep');
   if(br){
