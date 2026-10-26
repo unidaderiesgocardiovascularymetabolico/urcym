@@ -1664,7 +1664,7 @@
           <button class="ag-btn-disp ag-solo-prof" id="ag-btn-disp">&#128197; Disponibilidad</button>
           <button class="ag-btn-inst ag-solo-prof" id="ag-btn-inst">&#127970; Institucional</button>
           <button class="ag-btn-tasks" id="ag-btn-tasks" title="Tareas por profesional">&#9989; Tareas</button>
-          <button id="ag-btn-video-online" class="ag-solo-prof" onclick="window.vidAbrirPanel&&vidAbrirPanel(window._vidHayConsultas?'con':'')" style="background:none;border:1px solid #7B3FC4;border-radius:6px;padding:5px 10px;font-size:12px;color:#7B3FC4;cursor:pointer;font-family:inherit;" title="Videoconsultas, recetas y consultas que piden los pacientes desde la web">🌐 Online <span class="vid-count" style="display:none;background:#f59e0b;color:#fff;border-radius:999px;padding:0 6px;font-size:10.5px;font-weight:700;margin-left:2px;">0</span></button>
+          <button id="ag-btn-video-online" class="ag-solo-prof" onclick="window.vidAbrirPanel&&vidAbrirPanel(window._vidHayConsultas?'con':'')" style="background:none;border:1px solid #7B3FC4;border-radius:6px;padding:5px 10px;font-size:12px;color:#7B3FC4;cursor:pointer;font-family:inherit;" title="Videoconsultas, recetas y consultas que piden los pacientes desde la web">🌐 Online <span class="vid-count" title="Consultas por responder" style="display:none;background:#f59e0b;color:#fff;border-radius:999px;padding:0 6px;font-size:10.5px;font-weight:700;margin-left:2px;">0</span><span class="vid-comp" title="Comprobantes sin revisar" style="display:none;background:#ede9fe;color:#5b21b6;border-radius:999px;padding:0 6px;font-size:10.5px;font-weight:700;margin-left:3px;"></span></button>
           <button id="ag-btn-buscar" class="ag-solo-prof" style="background:none;border:1px solid #185FA5;border-radius:6px;padding:5px 10px;font-size:12px;color:#185FA5;cursor:pointer;font-family:inherit;" title="Buscar turnos de un paciente">&#128269; Buscar paciente</button>
           <button id="ag-btn-aranceles" class="ag-solo-prof" style="background:none;border:1px solid #059669;border-radius:6px;padding:5px 10px;font-size:12px;color:#059669;cursor:pointer;font-family:inherit;" title="Configurar aranceles por consulta">💲 Aranceles</button>
           <button class="ag-solo-prof" onclick="agRecuperarLocalStorage()" style="background:none;border:1px solid #b45309;border-radius:6px;padding:5px 10px;font-size:12px;color:#b45309;cursor:pointer;font-family:inherit;" title="Si se perdieron turnos: fusiona el caché local con Supabase">🔁 Recuperar turnos</button>
@@ -23265,7 +23265,8 @@ function _vidHtmlReserva(r,detalle){
     +(r.saldo_comprobante?'<button class="vid-btn" data-comp="'+_vidEsc(r.saldo_comprobante)+'">📎 ver</button>':'')
     +((r.sena_comprobante||r.saldo_comprobante)?'<label style="margin-left:auto;display:flex;align-items:center;gap:4px;cursor:pointer;'+(pend?'color:#b45309;font-weight:700;':'color:#6b7280;')+'"><input type="checkbox" class="vid-rev" '+(r.comprobante_revisado?'checked':'')+'> comprobantes revisados</label>':'')
     +'</div>'
-    +(r.meet_link?'<div style="margin-top:5px;"><a href="'+_vidEsc(r.meet_link)+'" target="_blank" rel="noopener" style="color:#1d9e75;font-weight:700;">🎥 '+_vidEsc(r.meet_link)+'</a></div>':'');
+    +(r.meet_link?'<div style="margin-top:5px;"><a href="'+_vidEsc(r.meet_link)+'" target="_blank" rel="noopener" style="color:#1d9e75;font-weight:700;">🎥 '+_vidEsc(r.meet_link)+'</a></div>':'')
+    +((r.estado==='cancelada'||r.estado==='vencida')?'<div style="margin-top:6px;text-align:right;"><button type="button" class="vid-borrar-res" data-id="'+r.id+'" style="border:1px solid #fecaca;background:#fff;color:#b91c1c;border-radius:8px;padding:4px 10px;font-size:12px;cursor:pointer;">🗑 Borrar</button></div>':'');
   if(detalle){
     var log=(r.log||[]).slice(-8).map(function(l){var d=new Date(l.at);return '<div>'+d.toLocaleString('es-AR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})+' · '+_vidEsc(l.msg)+'</div>';}).join('');
     if(log)h+='<div style="margin-top:8px;padding-top:6px;border-top:1px dashed #e5e7eb;color:#6b7280;font-size:11.5px;">'+log+'</div>';
@@ -23274,6 +23275,12 @@ function _vidHtmlReserva(r,detalle){
 }
 function _vidEngancharReservas(box){
   box.querySelectorAll('[data-comp]').forEach(function(b){b.onclick=function(){_vidVerComprobante(b.getAttribute('data-comp'));};});
+  box.querySelectorAll('.vid-borrar-res').forEach(function(b){b.onclick=async function(){
+    if(!confirm('¿Borrar esta videoconsulta cancelada? No se puede deshacer.')) return;
+    b.disabled=true;
+    try{ await _vidStaff({accion:'staff_borrar',tipo:'reserva',id:b.dataset.id}); var c=b.closest('.vid-res'); if(c) c.remove(); _vidToast('✓ Borrada'); _vidActualizarBadge(); }
+    catch(e){ alert(e.message); b.disabled=false; }
+  };});
   box.querySelectorAll('.vid-rev').forEach(function(c){c.onchange=async function(){
     var id=c.closest('.vid-res').getAttribute('data-id');
     var r=await sb.from('video_reservas').update({comprobante_revisado:c.checked}).eq('id',id);
@@ -23333,7 +23340,9 @@ async function vidAbrirPanel(abrirEn){
   var html='<div style="display:flex;gap:6px;margin-bottom:12px;">'
     +'<button type="button" class="vid-tab" data-t="res" style="flex:1;padding:8px;border-radius:8px;border:1px solid #7B3FC4;background:#7B3FC4;color:#fff;font-weight:700;cursor:pointer;">📹 Videoconsultas</button>'
     +'<button type="button" class="vid-tab" data-t="con" style="flex:1;padding:8px;border-radius:8px;border:1px solid #7B3FC4;background:#fff;color:#7B3FC4;font-weight:700;cursor:pointer;">💬 Consultas <span id="vid-n-con"></span></button>'
+    +'<button type="button" class="vid-tab" data-t="sum" style="flex:1;padding:8px;border-radius:8px;border:1px solid #7B3FC4;background:#fff;color:#7B3FC4;font-weight:700;cursor:pointer;">📊 Resumen</button>'
     +'<button type="button" class="vid-tab" data-t="cfg" style="flex:1;padding:8px;border-radius:8px;border:1px solid #7B3FC4;background:#fff;color:#7B3FC4;font-weight:700;cursor:pointer;">Configuración</button></div>'
+    +'<div class="vid-pane" data-t="sum" style="display:none;"><div id="vid-resumen" style="font-size:13px;color:#6b7280;">Cargando…</div></div>'
     +'<div class="vid-pane" data-t="res"><div style="display:flex;gap:8px;align-items:center;background:#f5f3ff;border-radius:10px;padding:8px 10px;margin-bottom:10px;font-size:12.5px;">'
     +'<span style="flex:1;word-break:break-all;">Link para pacientes: <b>'+VID_PUBLIC_URL+'</b></span>'
     +'<button type="button" class="vid-btn" id="vid-copiar">Copiar</button><a class="vid-btn" href="'+VID_PUBLIC_URL+'" target="_blank" rel="noopener" style="text-decoration:none;">Abrir</a></div>'
@@ -23391,6 +23400,8 @@ async function vidAbrirPanel(abrirEn){
     };
     _vidCargarLista(box.querySelector('#vid-lista'));
     _vidCargarConsultas(box.querySelector('#vid-consultas'));
+    var _sumCargado=false; var tsum=box.querySelector('.vid-tab[data-t="sum"]');
+    if(tsum){ var _oc=tsum.onclick; tsum.onclick=function(){ _oc.call(this); if(!_sumCargado){ _sumCargado=true; _vidCargarResumen(box.querySelector('#vid-resumen')); } }; }
     if(abrirEn){ var tb=box.querySelector('.vid-tab[data-t="'+abrirEn+'"]'); if(tb) tb.click(); }
   });
 }
@@ -23402,9 +23413,18 @@ async function _vidCargarLista(el){
   var rows=r.data||[];
   if(!rows.length){el.textContent='Todavía no hay reservas online.';return;}
   var sinRevisar=rows.filter(function(x){return (x.sena_comprobante||x.saldo_comprobante)&&!x.comprobante_revisado;}).length;
+  var canc=rows.filter(function(x){return x.estado==='cancelada'||x.estado==='vencida';});
   el.innerHTML=(sinRevisar?'<div style="background:#fef3c7;color:#92400e;border-radius:8px;padding:6px 10px;margin-bottom:8px;font-weight:600;">📎 '+sinRevisar+' con comprobantes sin revisar</div>':'')
+    +(canc.length?'<div style="text-align:right;margin-bottom:8px;"><button type="button" id="vid-bor-canc" style="border:1px solid #fecaca;background:#fff;color:#b91c1c;border-radius:8px;padding:5px 12px;font-size:12.5px;font-weight:700;cursor:pointer;">🗑 Borrar todas las canceladas ('+canc.length+')</button></div>':'')
     +rows.map(function(x){return _vidHtmlReserva(x,false);}).join('');
   _vidEngancharReservas(el);
+  var bc=el.querySelector('#vid-bor-canc');
+  if(bc) bc.onclick=async function(){
+    if(!confirm('¿Borrar las '+canc.length+' videoconsultas canceladas o vencidas? No se puede deshacer.')) return;
+    bc.disabled=true; var err=0;
+    for(var i=0;i<canc.length;i++){ bc.textContent='Borrando '+(i+1)+' de '+canc.length+'…'; try{ await _vidStaff({accion:'staff_borrar',tipo:'reserva',id:canc[i].id}); }catch(e){ err++; } }
+    _vidToast(err?('Se borraron '+(canc.length-err)+'; '+err+' con error'):'✓ Canceladas borradas'); _vidActualizarBadge(); _vidCargarLista(el);
+  };
 }
 // ── Pedidos online: consultas por mensaje y recetas ──
 function _vidFechaHora(iso){ if(!iso) return ''; var d=new Date(iso); return d.toLocaleString('es-AR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}); }
@@ -23499,7 +23519,8 @@ async function _vidCargarConsultas(el){
     var est=pend?_vidFaltan(p.vence_at)+(p.repreguntas?' · <b>repregunta</b>':'')
       :p.estado==='respondida'?'<span style="color:#15803d;font-weight:700;">✓ Respondida</span> · puede repreguntar una vez'
       :'<span style="color:#6b7280;font-weight:700;">✓ Cerrada</span>';
-    return '<div class="vid-res" data-pid="'+p.id+'" style="border:1px solid '+(pend?'#f59e0b':'#e5e7eb')+';border-left-width:'+(pend?'4px':'1px')+';border-radius:10px;padding:10px 12px;margin-bottom:10px;font-size:12.5px;background:'+(pend?'#fffbeb':'#fff')+';">'
+    return '<div class="vid-res" data-pid="'+p.id+'" style="border:1px solid '+(pend?'#f59e0b':'#e5e7eb')+';border-left-width:'+(pend?'4px':'1px')+';border-radius:10px;padding:10px 12px;margin-bottom:10px;padding-bottom:30px;font-size:12.5px;background:'+(pend?'#fffbeb':'#fff')+';position:relative;">'
+      +'<button type="button" class="vid-borrar-con" data-pid="'+p.id+'" title="Borrar consulta" style="position:absolute;bottom:6px;left:10px;border:none;background:none;color:#b91c1c;cursor:pointer;font-size:12px;opacity:.75;">🗑 Borrar</button>'
       +_vidHtmlPedidoCab(p)
       +'<div style="margin-top:6px;">'+est+'</div>'
       +hilo
@@ -23508,6 +23529,9 @@ async function _vidCargarConsultas(el){
       +'</div>';
   }).join('');
   _vidEngancharPedidos(el);
+  el.querySelectorAll('.vid-borrar-con').forEach(function(b){b.onclick=function(){
+    var p=rows.find(function(x){return x.id===b.dataset.pid;}); if(p) vidBorrarPedido(p, function(){ _vidCargarConsultas(el); });
+  };});
   el.querySelectorAll('.vid-enviar').forEach(function(b){b.onclick=async function(){
     var card=b.closest('.vid-res'), ta=card.querySelector('.vid-resp'), txt=ta.value.trim();
     if(txt.length<2){ta.focus();return;}
@@ -23516,6 +23540,103 @@ async function _vidCargarConsultas(el){
     try{ await _vidStaff({accion:'staff_responder',id:card.dataset.pid,texto:txt}); _vidToast('✓ Respuesta enviada'); _vidCargarConsultas(el); _vidActualizarBadge(); }
     catch(e){ alert(e.message); b.disabled=false; b.textContent='Enviar respuesta'; }
   };});
+}
+// ── 📊 Resumen de pedidos online (recetas y consultas) ──
+var _vidSumFiltro={per:'mes',prof:'',inc:true};
+async function _vidCargarResumen(el){
+  if(!el) return;
+  var F=_vidSumFiltro, hoy=new Date(), desde=null, hasta=null;
+  if(F.per==='mes') desde=new Date(hoy.getFullYear(),hoy.getMonth(),1);
+  else if(F.per==='ant'){ desde=new Date(hoy.getFullYear(),hoy.getMonth()-1,1); hasta=new Date(hoy.getFullYear(),hoy.getMonth(),1); }
+  else if(F.per==='30'){ desde=new Date(hoy.getTime()-30*864e5); }
+  var q=sb.from('online_pedidos').select('id,tipo,prof,dni,paciente,email,estado,monto,pago_metodo,pago_comprobante,pagado_at,obra_social,afiliado,created_at,ingreso_id,receta_enviada_at,repreguntas,mensajes').order('created_at',{ascending:false}).limit(1000);
+  if(desde) q=q.gte('created_at',desde.toISOString());
+  if(hasta) q=q.lt('created_at',hasta.toISOString());
+  if(F.prof) q=q.eq('prof',F.prof);
+  var r=await q;
+  if(r.error){ el.innerHTML='<span style="color:#b91c1c">No se pudo leer online_pedidos: '+_vidEsc(r.error.message)+'</span>'; return; }
+  var todos=r.data||[];
+  var noSirve=function(p){ return ['cancelada','vencida','pendiente_pago'].indexOf(p.estado)>=0; };
+  var ok=todos.filter(function(p){ return !noSirve(p); });
+  var rec=ok.filter(function(p){return p.tipo==='receta';}), con=ok.filter(function(p){return p.tipo==='consulta';});
+  var recOsde=rec.filter(_vidEsOsde), recPart=rec.filter(function(p){return !_vidEsOsde(p);});
+  var suma=function(a){ return a.reduce(function(t,p){ return t+(p.pagado_at?Number(p.monto)||0:0); },0); };
+  var pendR=rec.filter(function(p){return p.estado==='pendiente';}).length, pendC=con.filter(function(p){return p.estado==='pendiente';}).length;
+  var inc=todos.length-ok.length;
+  var card=function(t,n,sub,col){ return '<div style="flex:1;min-width:150px;border:1px solid #e5e7eb;border-radius:12px;padding:10px 12px;background:#fff;"><div style="font-size:11.5px;color:#6b7280;font-weight:700;">'+t+'</div><div style="font-size:22px;font-weight:800;color:'+(col||'#111827')+';">'+n+'</div><div style="font-size:11.5px;color:#6b7280;">'+sub+'</div></div>'; };
+  var porProf='';
+  if(!F.prof){
+    porProf='<table style="width:100%;border-collapse:collapse;font-size:12.5px;margin:10px 0 4px;"><tr style="color:#6b7280;text-align:left;"><th style="padding:4px 6px;">Profesional</th><th>💊 Particular</th><th>💊 OSDE</th><th>💬 Consultas</th><th style="text-align:right;padding-right:6px;">Cobrado</th></tr>'
+      +Object.keys(VID_PROFS).map(function(k){
+        var rp=recPart.filter(function(p){return p.prof===k;}), ro=recOsde.filter(function(p){return p.prof===k;}), cc=con.filter(function(p){return p.prof===k;});
+        return '<tr style="border-top:1px solid #f1f5f9;"><td style="padding:5px 6px;font-weight:700;">'+_vidEsc(VID_PROFS[k])+'</td><td>'+rp.length+'</td><td>'+ro.length+'</td><td>'+cc.length+'</td><td style="text-align:right;padding-right:6px;font-weight:700;">'+_vidPesos(suma(rp)+suma(cc))+'</td></tr>';
+      }).join('')+'</table>';
+  }
+  var EST={pendiente:['Pendiente','#b45309'],respondida:['Respondida','#15803d'],resuelta:['Resuelta','#15803d'],pendiente_pago:['Sin pagar','#6b7280'],cancelada:['Cancelada','#b91c1c'],vencida:['Vencida','#b91c1c']};
+  var lista=F.inc?todos:ok;
+  var filas=lista.map(function(p){
+    var e=EST[p.estado]||[p.estado,'#374151'];
+    var serv=p.tipo==='receta'?('💊 Receta'+(_vidEsOsde(p)?' · OSDE':'')):'💬 Consulta';
+    var cobro=_vidEsOsde(p)?'<span style="color:#0369a1">OSDE</span>':(p.pagado_at?_vidPesos(p.monto)+' <span style="color:#6b7280">'+(p.pago_metodo==='mercadopago'?'MP':'transf.')+'</span>':'<span style="color:#9ca3af">—</span>');
+    return '<tr style="border-top:1px solid #f1f5f9;'+(noSirve(p)?'opacity:.6;':'')+'">'
+      +'<td style="padding:6px;white-space:nowrap;">'+_vidFechaHora(p.created_at)+'</td>'
+      +'<td style="min-width:130px;"><b>'+_vidEsc(p.paciente)+'</b><div style="color:#6b7280;font-size:11px;">DNI '+_vidEsc(p.dni)+'</div></td>'
+      +'<td>'+serv+'</td><td>'+_vidEsc(String(VID_PROFS[p.prof]||p.prof).split(' ').pop())+'</td>'
+      +'<td style="color:'+e[1]+';font-weight:700;">'+e[0]+'</td><td style="white-space:nowrap;">'+cobro+'</td>'
+      +'<td style="text-align:right;white-space:nowrap;">'+(p.tipo==='receta'?'<button type="button" class="vid-btn vid-sum-ver" data-id="'+p.id+'">Ver</button> ':'')
+      +'<button type="button" class="vid-sum-bor" data-id="'+p.id+'" title="Borrar" style="border:1px solid #fecaca;background:#fff;color:#b91c1c;border-radius:8px;padding:3px 8px;cursor:pointer;">🗑</button></td></tr>';
+  }).join('');
+  var sel=function(id,opts,val){ return '<select id="'+id+'" style="padding:6px 8px;border:1px solid #d1d5db;border-radius:8px;font:inherit;font-size:12.5px;">'+opts.map(function(o){return '<option value="'+o[0]+'"'+(o[0]===val?' selected':'')+'>'+o[1]+'</option>';}).join('')+'</select>'; };
+  el.innerHTML='<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px;color:#374151;">'
+    +sel('vid-sum-per',[['mes','Este mes'],['ant','Mes anterior'],['30','Últimos 30 días'],['todo','Todo']],F.per)
+    +sel('vid-sum-prof',[['','Todos los profesionales']].concat(Object.keys(VID_PROFS).map(function(k){return [k,VID_PROFS[k]];})),F.prof)
+    +'<label style="display:flex;gap:5px;align-items:center;font-size:12.5px;"><input type="checkbox" id="vid-sum-inc" '+(F.inc?'checked':'')+'> Mostrar cancelados / sin pagar ('+inc+')</label>'
+    +(inc?'<button type="button" id="vid-sum-borinc" style="margin-left:auto;border:1px solid #fecaca;background:#fff;color:#b91c1c;border-radius:8px;padding:5px 10px;font-size:12px;font-weight:700;cursor:pointer;">🗑 Borrar cancelados / sin pagar ('+inc+')</button>':'')+'</div>'
+    +'<div style="display:flex;gap:8px;flex-wrap:wrap;">'
+    +card('💊 RECETAS',rec.length,recPart.length+' particulares · '+recOsde.length+' OSDE'+(pendR?' · <b style="color:#b45309">'+pendR+' pendientes</b>':''))
+    +card('💬 CONSULTAS',con.length,(pendC?'<b style="color:#b45309">'+pendC+' por responder</b>':'todas respondidas'))
+    +card('💲 COBRADO',_vidPesos(suma(recPart)+suma(con)),'recetas '+_vidPesos(suma(recPart))+' · consultas '+_vidPesos(suma(con)),'#15803d')
+    +'</div>'+porProf
+    +(filas?'<div style="overflow-x:auto;margin-top:10px;"><table style="width:100%;border-collapse:collapse;font-size:12.5px;color:#111827;"><tr style="color:#6b7280;text-align:left;"><th style="padding:6px;">Fecha</th><th>Paciente</th><th>Servicio</th><th>Prof.</th><th>Estado</th><th>Cobro</th><th></th></tr>'+filas+'</table></div>'
+      :'<p style="margin-top:12px;">No hay pedidos en este período.</p>');
+  var re=function(){ _vidCargarResumen(el); };
+  el.querySelector('#vid-sum-per').onchange=function(){ F.per=this.value; re(); };
+  el.querySelector('#vid-sum-prof').onchange=function(){ F.prof=this.value; re(); };
+  el.querySelector('#vid-sum-inc').onchange=function(){ F.inc=this.checked; re(); };
+  var bi=el.querySelector('#vid-sum-borinc');
+  if(bi) bi.onclick=async function(){
+    var lst=todos.filter(noSirve);
+    if(!confirm('¿Borrar '+lst.length+' pedidos cancelados, vencidos o sin pagar de este período? No se puede deshacer.')) return;
+    bi.disabled=true; var err=0;
+    for(var i=0;i<lst.length;i++){ bi.textContent='Borrando '+(i+1)+' de '+lst.length+'…';
+      try{ await _vidStaff({accion:'staff_borrar',tipo:'pedido',id:lst[i].id,finanzas:'1'}); if(window.rsQuitarPorPedido) await window.rsQuitarPorPedido(lst[i].id); }catch(e){ err++; } }
+    _vidToast(err?('Se borraron '+(lst.length-err)+'; '+err+' con error'):'✓ Borrados'); _vidActualizarBadge(); re();
+  };
+  el.querySelectorAll('.vid-sum-ver').forEach(function(b){ b.onclick=function(){ vidPedidoDetalle(b.dataset.id); }; });
+  el.querySelectorAll('.vid-sum-bor').forEach(function(b){ b.onclick=function(){
+    var p=todos.find(function(x){return x.id===b.dataset.id;}); if(p) vidBorrarPedido(p, re);
+  }; });
+}
+// Borrar un pedido online (receta o consulta), por ejemplo de prueba
+function vidBorrarPedido(p, alTerminar){
+  var tipo=p.tipo==='receta'?'el pedido de receta':'la consulta';
+  var html='<div style="font-size:13.5px;">¿Borrar '+tipo+' de <b>'+_vidEsc(p.paciente)+'</b> ('+_vidFechaHora(p.created_at)+')?<br><span style="color:#6b7280;">Se borra el pedido, sus archivos y, si es receta, también sale de 💊 Recetas. No se puede deshacer.</span>'
+    +(p.ingreso_id?'<label style="display:flex;gap:6px;align-items:center;margin-top:10px;font-weight:600;"><input type="checkbox" id="vid-bor-fin" checked> Borrar también el cobro en Finanzas ('+_vidPesos(p.monto)+')</label>':'')
+    +'<div id="vid-bor-err" style="color:#b91c1c;margin-top:6px;"></div>'
+    +'<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px;"><button type="button" class="vid-btn" id="vid-bor-no">Cancelar</button>'
+    +'<button type="button" id="vid-bor-si" style="padding:8px 16px;border-radius:8px;border:none;background:#b91c1c;color:#fff;font-weight:700;cursor:pointer;">🗑 Borrar</button></div></div>';
+  _vidModal('🗑 Borrar pedido',html,function(box,cerrar){
+    box.querySelector('#vid-bor-no').onclick=cerrar;
+    box.querySelector('#vid-bor-si').onclick=async function(){
+      var b=this; b.disabled=true; b.textContent='Borrando…';
+      var fin=box.querySelector('#vid-bor-fin');
+      try{
+        await _vidStaff({accion:'staff_borrar',tipo:'pedido',id:p.id,finanzas:(fin&&fin.checked)?'1':''});
+        if(window.rsQuitarPorPedido) await window.rsQuitarPorPedido(p.id);
+        _vidToast('✓ Pedido borrado'); cerrar(); _vidActualizarBadge(); if(alTerminar) alTerminar();
+      }catch(e){ box.querySelector('#vid-bor-err').textContent=e.message; b.disabled=false; b.textContent='🗑 Borrar'; }
+    };
+  });
 }
 // Detalle de un pedido de receta (desde 💊 Recetas)
 async function vidPedidoDetalle(id){
@@ -23528,8 +23649,10 @@ async function vidPedidoDetalle(id){
     +(p.nota?'<div style="margin-top:4px;">Nota: '+_vidEsc(p.nota)+'</div>':'')
     +_vidHtmlOsde(p)
     +(p.receta_pdf?'<div style="margin-top:8px;"><button class="vid-btn" data-comp="'+_vidEsc(p.receta_pdf)+'">📄 Receta enviada '+_vidFechaHora(p.receta_enviada_at)+'</button></div>':'')
+    +'<div style="margin-top:12px;text-align:right;"><button type="button" class="vid-borrar-ped" style="border:1px solid #fecaca;background:#fff;color:#b91c1c;border-radius:8px;padding:5px 12px;font-size:12px;cursor:pointer;">🗑 Borrar pedido</button></div>'
     +'</div>';
-  _vidModal(_vidEsOsde(p)?'💊 Receta online · OSDE':'💊 Receta online',html,function(box,cerrar){_vidEngancharPedidos(box);_vidEngancharOsde(box,function(){ if(cerrar)cerrar(); vidPedidoDetalle(id); });});
+  _vidModal(_vidEsOsde(p)?'💊 Receta online · OSDE':'💊 Receta online',html,function(box,cerrar){_vidEngancharPedidos(box);_vidEngancharOsde(box,function(){ if(cerrar)cerrar(); vidPedidoDetalle(id); });
+    var bb=box.querySelector('.vid-borrar-ped'); if(bb) bb.onclick=function(){ cerrar(); vidBorrarPedido(p, function(){ if(window.rsAbrir && document.getElementById('rs-list')) { try{ rsAbrir(); }catch(e){} } }); }; });
 }
 // Al tildar hecha una receta online: adjuntar PDF y mandarla
 async function vidRecetaOnline(item, alTerminar){
@@ -23582,13 +23705,17 @@ window.vidAbrirPanel=vidAbrirPanel;
 async function _vidActualizarBadge(){
   var b=document.getElementById('ag-btn-video-online');if(!b)return;
   try{
-    var r=await sb.from('video_reservas').select('id',{count:'exact',head:true}).eq('comprobante_revisado',false).or('sena_comprobante.not.is.null,saldo_comprobante.not.is.null').neq('estado','vencida');
+    var r=await sb.from('video_reservas').select('id',{count:'exact',head:true}).eq('comprobante_revisado',false).or('sena_comprobante.not.is.null,saldo_comprobante.not.is.null').not('estado','in','(vencida,cancelada)');
     var r2=await sb.from('online_pedidos').select('id',{count:'exact',head:true}).eq('tipo','consulta').eq('estado','pendiente');
-    var r3=await sb.from('online_pedidos').select('id',{count:'exact',head:true}).eq('comprobante_revisado',false).not('pago_comprobante','is',null);
+    var r3=await sb.from('online_pedidos').select('id',{count:'exact',head:true}).eq('comprobante_revisado',false).not('pago_comprobante','is',null).not('estado','in','(vencida,cancelada)');
     var nCon=r2.count||0; window._vidHayConsultas=nCon>0;
-    var n=(r.count||0)+nCon+(r3.count||0);var s=b.querySelector('.vid-count');
-    b.title=nCon?(nCon+' consulta'+(nCon>1?'s':'')+' por responder'):'Videoconsultas, recetas y consultas que piden los pacientes desde la web';
-    if(s){s.textContent=n;s.style.display=n?'inline-block':'none';}
+    // El número naranja = solo consultas por responder. Los comprobantes sin
+    // revisar van aparte (📎 n), para no confundirlos con tareas pendientes.
+    var nComp=(r.count||0)+(r3.count||0);
+    var s=b.querySelector('.vid-count'), sc=b.querySelector('.vid-comp');
+    b.title=(nCon?nCon+' consulta'+(nCon>1?'s':'')+' por responder':'Sin consultas por responder')+(nComp?' · '+nComp+' comprobante'+(nComp>1?'s':'')+' sin revisar':'');
+    if(s){s.textContent=nCon;s.style.display=nCon?'inline-block':'none';}
+    if(sc){sc.textContent='📎 '+nComp;sc.style.display=nComp?'inline-block':'none';}
   }catch(e){}
 }
 setTimeout(_vidActualizarBadge,4000);setInterval(_vidActualizarBadge,120000);
@@ -27223,6 +27350,11 @@ window.cargarProxConsultas = cargarProxConsultas;
     if(nuevo && nuevo.rec_id && (campo==='monto'||campo==='tipo')) espejoActualizar(nuevo);
   };
 
+  // Saca de la lista las recetas que vinieron de un pedido online que se borró
+  window.rsQuitarPorPedido = async function(pedidoId){
+    if(!pedidoId) return;
+    await mutar(function(arr){ var antes=arr.length; for(var i=arr.length-1;i>=0;i--){ if(arr[i] && arr[i].pedido_id===pedidoId) arr.splice(i,1); } if(arr.length===antes) return false; });
+  };
   window.rsBorrar = async function(id){
     var cur=lista.find(function(r){return r.id===id;}); if(!cur) return;
     if(!confirm('¿Borrar la solicitud de '+cur.paciente+'?')) return;
