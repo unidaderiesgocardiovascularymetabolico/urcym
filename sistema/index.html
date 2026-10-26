@@ -23431,10 +23431,40 @@ function _vidHtmlPedidoCab(p){
     +'<div style="color:#6b7280;margin-top:2px;">'+_vidEsc(p.email)+(p.telefono?' · '+_vidEsc(p.telefono):'')+(p.paciente_nuevo?' · <b style="color:#7B3FC4">paciente nuevo</b>':'')
     +' · pedido '+_vidFechaHora(p.created_at)+'</div>'
     +'<div style="margin-top:4px;display:flex;gap:6px;align-items:center;flex-wrap:wrap;">'
-    +'<span>'+_vidPesos(p.monto)+' '+(p.pagado_at?'<b style="color:#15803d">✓ '+met+'</b>':'<span style="color:#b45309">sin pagar</span>')+'</span>'
+    +(_vidEsOsde(p)?'<span style="color:#0369a1;font-weight:700;">🏥 OSDE · sin cargo</span>'
+      :'<span>'+_vidPesos(p.monto)+' '+(p.pagado_at?'<b style="color:#15803d">✓ '+met+'</b>':'<span style="color:#b45309">sin pagar</span>')+'</span>')
     +(p.pago_comprobante?'<button class="vid-btn" data-comp="'+_vidEsc(p.pago_comprobante)+'">📎 comprobante</button>'
       +'<label style="display:flex;align-items:center;gap:4px;cursor:pointer;'+(p.comprobante_revisado?'color:#6b7280;':'color:#b45309;font-weight:700;')+'"><input type="checkbox" class="vid-prev" data-id="'+p.id+'" '+(p.comprobante_revisado?'checked':'')+'> revisado</label>':'')
     +'</div>';
+}
+// ── Recetas por OSDE (sin cargo, con link de la app de OSDE que dura 8 h) ──
+function _vidEsOsde(p){ return p && p.tipo==='receta' && !(Number(p.monto)>0) && /\bosde\b/i.test(p.obra_social||''); }
+function _vidHtmlOsde(p){
+  if(!_vidEsOsde(p)) return '';
+  var ms=p.mensajes||[], links=ms.filter(function(m){return m.tipo==='osde';}), ult=links[links.length-1];
+  var pedidos=ms.filter(function(m){return m.tipo==='osde_pedido';}), ultPed=pedidos[pedidos.length-1];
+  var h='<div style="margin-top:10px;padding:10px 12px;border:1px solid #bae6fd;background:#f0f9ff;border-radius:10px;">'
+    +'<div style="font-weight:700;color:#0369a1;margin-bottom:6px;">🔗 Link de OSDE</div>';
+  if(ult){
+    var vence=new Date(new Date(ult.at).getTime()+8*3600e3), vig=vence>new Date();
+    var falta=Math.max(0,Math.round((vence-new Date())/60000));
+    h+='<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">'
+      +'<a href="'+_vidEsc(ult.url)+'" target="_blank" rel="noopener" style="padding:7px 14px;border-radius:8px;background:'+(vig?'#0369a1':'#94a3b8')+';color:#fff;font-weight:700;text-decoration:none;">Abrir link de OSDE</a>'
+      +(vig?'<span style="color:#15803d;font-weight:700;">vigente · vence '+_vidFechaHora(vence.toISOString())+' (faltan '+(falta>=60?Math.floor(falta/60)+' h '+(falta%60)+' min':falta+' min')+')</span>'
+           :'<span style="color:#b91c1c;font-weight:700;">⚠️ vencido ('+_vidFechaHora(vence.toISOString())+')</span>')
+      +'</div><div style="font-size:11.5px;color:#6b7280;margin-top:4px;">Cargado '+_vidFechaHora(ult.at)+(links.length>1?' · '+links.length+' links en total':'')+'</div>';
+  } else h+='<div style="color:#b45309;">El paciente todavía no cargó el link.</div>';
+  if(ultPed && (!ult || ultPed.at>ult.at)) h+='<div style="margin-top:6px;color:#b45309;">📩 Se le pidió un link nuevo '+_vidFechaHora(ultPed.at)+' — esperando que lo cargue.</div>';
+  if(p.estado==='pendiente') h+='<button type="button" class="vid-osde-pedir" data-id="'+_vidEsc(p.id)+'" style="margin-top:8px;padding:7px 12px;border-radius:8px;border:1px solid #0369a1;background:#fff;color:#0369a1;font-weight:700;cursor:pointer;">📩 Pedir link nuevo al paciente</button>';
+  return h+'</div>';
+}
+function _vidEngancharOsde(box, alActualizar){
+  box.querySelectorAll('.vid-osde-pedir').forEach(function(b){ b.onclick=async function(){
+    if(!confirm('¿Pedirle al paciente un link nuevo de OSDE? Le llega un mail con el botón para cargarlo.')) return;
+    b.disabled=true; b.textContent='Enviando…';
+    try{ await _vidStaff({accion:'staff_pedir_osde', id:b.dataset.id}); _vidToast('✓ Se le pidió un link nuevo por mail'); if(alActualizar) alActualizar(); else { b.textContent='✓ Pedido enviado'; } }
+    catch(e){ alert(e.message); b.disabled=false; b.textContent='📩 Pedir link nuevo al paciente'; }
+  }; });
 }
 function _vidEngancharPedidos(box){
   box.querySelectorAll('[data-comp]').forEach(function(b){b.onclick=function(){_vidVerComprobante(b.getAttribute('data-comp'));};});
@@ -23496,9 +23526,10 @@ async function vidPedidoDetalle(id){
     +'<div style="margin-top:8px;">'+(p.items||[]).map(function(it){return '<div style="padding:3px 0;font-size:13.5px;">💊 <b>'+_vidEsc(it.farmaco)+'</b> '+_vidEsc(it.dosis)+(it.frecuencia?' · '+_vidEsc(it.frecuencia):'')+(it.marca?' <span style="color:#6b7280">('+_vidEsc(it.marca)+')</span>':'')+(it.repetir?' 🔁':'')+'</div>';}).join('')+'</div>'
     +'<div style="margin-top:6px;">Cobertura: <b>'+_vidEsc(p.obra_social||'—')+'</b>'+(p.afiliado?' · afiliado '+_vidEsc(p.afiliado):'')+(p.os_cambio?' <b style="color:#b45309">⚠️ cambió (actualizar en la HC)</b>':'')+'</div>'
     +(p.nota?'<div style="margin-top:4px;">Nota: '+_vidEsc(p.nota)+'</div>':'')
+    +_vidHtmlOsde(p)
     +(p.receta_pdf?'<div style="margin-top:8px;"><button class="vid-btn" data-comp="'+_vidEsc(p.receta_pdf)+'">📄 Receta enviada '+_vidFechaHora(p.receta_enviada_at)+'</button></div>':'')
     +'</div>';
-  _vidModal('💊 Receta online',html,function(box){_vidEngancharPedidos(box);});
+  _vidModal(_vidEsOsde(p)?'💊 Receta online · OSDE':'💊 Receta online',html,function(box,cerrar){_vidEngancharPedidos(box);_vidEngancharOsde(box,function(){ if(cerrar)cerrar(); vidPedidoDetalle(id); });});
 }
 // Al tildar hecha una receta online: adjuntar PDF y mandarla
 async function vidRecetaOnline(item, alTerminar){
@@ -23508,8 +23539,8 @@ async function vidRecetaOnline(item, alTerminar){
   var html='<div style="font-size:13px;">'
     +'<div><b>'+_vidEsc(p.paciente)+'</b> · DNI '+_vidEsc(p.dni)+' · '+_vidEsc(p.email)+'</div>'
     +'<div style="margin:6px 0 10px;">'+(p.items||[]).map(function(it){return '<div>💊 <b>'+_vidEsc(it.farmaco)+'</b> '+_vidEsc(it.dosis)+(it.frecuencia?' · '+_vidEsc(it.frecuencia):'')+(it.marca?' ('+_vidEsc(it.marca)+')':'')+'</div>';}).join('')
-    +'<div style="color:#6b7280;margin-top:4px;">Cobertura: '+_vidEsc(p.obra_social||'—')+(p.afiliado?' · '+_vidEsc(p.afiliado):'')+'</div></div>'
-    +'<label style="display:block;font-weight:700;margin-bottom:4px;">PDF de la receta</label>'
+    +'<div style="color:#6b7280;margin-top:4px;">Cobertura: '+_vidEsc(p.obra_social||'—')+(p.afiliado?' · '+_vidEsc(p.afiliado):'')+'</div>'+_vidHtmlOsde(p)+'</div>'
+    +'<label style="display:block;font-weight:700;margin-bottom:4px;">PDF de la receta'+(_vidEsOsde(p)?' <span style="font-weight:400;color:#6b7280">(si OSDE no te da PDF, usá "Marcar hecha sin mandar")</span>':'')+'</label>'
     +'<input type="file" id="vid-rx-pdf" accept="application/pdf,image/*" multiple style="font:inherit;">'
     +'<label style="display:block;font-weight:700;margin:10px 0 4px;">Mensaje para el paciente (opcional)</label>'
     +'<textarea id="vid-rx-nota" style="width:100%;min-height:60px;padding:8px;border:1px solid #d1d5db;border-radius:8px;font:inherit;box-sizing:border-box;" placeholder="Ej.: Te dejo 2 recetas, una por cada caja."></textarea>'
@@ -23518,6 +23549,7 @@ async function vidRecetaOnline(item, alTerminar){
     +'<button type="button" id="vid-rx-sin" class="vid-btn">Marcar hecha sin mandar</button>'
     +'<button type="button" id="vid-rx-ok" style="padding:8px 16px;border-radius:8px;border:none;background:#7B3FC4;color:#fff;font-weight:700;cursor:pointer;">Enviar receta al paciente</button></div></div>';
   _vidModal('💊 Enviar receta online',html,function(box,cerrar){
+    _vidEngancharOsde(box);
     box.querySelector('#vid-rx-sin').onclick=function(){ if(confirm('¿Marcarla hecha sin mandarle nada al paciente?')){ cerrar(); alTerminar(); } };
     box.querySelector('#vid-rx-ok').onclick=async function(){
       var files=box.querySelector('#vid-rx-pdf').files, err=box.querySelector('#vid-rx-err'); err.textContent='';
@@ -26977,7 +27009,7 @@ window.cargarProxConsultas = cargarProxConsultas;
   // (Las particulares viejas que ya estaban en un cierre se respetan.)
   function cerrable(r){
     if(!r) return false;
-    if(r.origen==='online') return false; // pedidas y pagadas por la web: van a Finanzas, no al Cierre
+    if(r.origen==='online' && r.tipo!=='osde') return false; // pagadas por la web: van a Finanzas, no al Cierre (las OSDE sí, como cualquier OSDE)
     if(r.tipo==='osde') return r.estado==='hecha';
     return !!r.pagada || (r.estado==='hecha' && !!r.cierre_fecha);
   }
@@ -27218,7 +27250,9 @@ window.cargarProxConsultas = cargarProxConsultas;
         + (r.pagada ? ' · <b style="color:#059669">Pagó '+fmt(r.pagada_fecha)+'</b>' : '')
         + (cerrable(r) ? (r.cierre_fecha ? ' · <span style="color:#059669">cerrada el '+fmt(r.cierre_fecha)+'</span>' : ' · <b style="color:#b45309">sin cerrar</b>') : '');
       var online = r.origen==='online';
-      var pagoHtml = online
+      var pagoHtml = (online && r.tipo==='osde')
+        ? '<span style="font-size:11px;font-weight:700;color:#0369a1" title="Pedida por la web, sin cargo (OSDE)">🏥 OSDE web</span>'
+        : online
         ? '<span style="font-size:11px;font-weight:700;color:#059669" title="Pagó por la web ('+(r.pago_via==='mercadopago'?'Mercado Pago':'transferencia con comprobante')+')">💳 Pagó online</span>'
         : r.tipo==='osde'
         ? '<span style="font-size:10.5px;color:#94a3b8">—</span>'
