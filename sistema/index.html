@@ -6674,6 +6674,9 @@ function showToast(msg, tipo='ok', duracion=2000) {
 }
 
 function _safeJ(v,d){if(v===null||v===undefined)return d;if(typeof v==='object')return v;try{return JSON.parse(v);}catch(e){return d;}}
+// Hábitos (actividad / alimentación): la columna puede llegar como texto JSON o como objeto (jsonb).
+// Devuelve SIEMPRE una copia, para que editar la lista no toque el snapshot compartido.
+function _hj(v){var x=_safeJ(v,null);if(!x||typeof x!=='object')return null;try{return JSON.parse(JSON.stringify(x));}catch(e){return null;}}
 
 // ===== VERIFICACIÓN DE ESQUEMA AL INICIAR =====
 async function verificarEsquema() {
@@ -7204,14 +7207,21 @@ function _guardarEstadoPestana(dni) {
     prev_tabaco:(document.getElementById('prev_tabaco')||{}).checked||false,
     ts: Date.now()
   };
-  // Solo guardar si hay algo
-  const hayCambios = estado.html || estado.indicaciones ||
+  // Solo guardar si hay algo escrito por el profesional (lo autocompletado no cuenta)
+  const _pre = (window._antroPrecarga && window._antroPrecarga.dni === String(dni)) ? window._antroPrecarga : null;
+  const _editorTxt = (function(){ const d = document.createElement('div'); d.innerHTML = estado.html || ''; return d.textContent.trim(); })();
+  const _indTxt = (function(){ const d = document.createElement('div'); d.innerHTML = estado.indicaciones || ''; return d.textContent.trim(); })();
+  const hayCambios = _editorTxt || _indTxt ||
     ['ta1s','ta1d','ta2s','ta2d','ta3s','ta3d','fc1','fc2','fc3',
      'peso','talla','cintura','tap_s','tap_d','tap_fc','proxDias']
-    .some(k => estado[k]);
+    .some(k => estado[k] && !(_pre && (k === 'peso' || k === 'talla' || k === 'cintura') && String(estado[k]) === String(_pre[k])));
   if(hayCambios) {
     sessionStorage.setItem('urcym_tab_' + dni, JSON.stringify(estado));
     _marcarPestanaConBorrador(dni, true);
+  } else if(sessionStorage.getItem('urcym_tab_' + dni) !== null) {
+    // Ya no queda nada escrito: se descarta el borrador viejo para que no pregunte al cerrar
+    sessionStorage.removeItem('urcym_tab_' + dni);
+    _marcarPestanaConBorrador(dni, false);
   }
 }
 
@@ -7273,7 +7283,7 @@ function _guardarDraftLocal(dni) {
       ant:  (_dirty.ant && antDatos) ? JSON.parse(JSON.stringify(antDatos)) : null,
       est:  (_dirty.est && estDatos) ? JSON.parse(JSON.stringify(estDatos)) : null,
       vac:  (_dirty.vac && vacDatos) ? JSON.parse(JSON.stringify(vacDatos)) : null,
-      mdpa: (mdpaPacDni === dni && mdpaEstudios && mdpaEstudios.length)
+      mdpa: (_dirty.mdpa && mdpaPacDni === dni && mdpaEstudios && mdpaEstudios.length)
         ? { estudios: JSON.parse(JSON.stringify(mdpaEstudios)), idx: mdpaIdx }
         : null,
       adip: (_dirty.adip && adipPacDni === dni && typeof adipTratamientos !== 'undefined' && adipTratamientos.length)
@@ -7293,8 +7303,17 @@ function _guardarDraftLocal(dni) {
     });
     // Capturar MDPA ya quedó resuelto arriba, directo desde mdpaEstudios en memoria
 
-    const hayCambios = draft.html || draft.indicaciones ||
-      Object.values(draft.campos).some(v => v !== '' && v !== false) ||
+    // Solo cuenta lo que escribió el profesional: el peso/talla/cintura autocompletados
+    // y los campos de PREVENT (que se precargan solos) no generan un borrador.
+    const _pre = (window._antroPrecarga && window._antroPrecarga.dni === String(dni)) ? window._antroPrecarga : null;
+    const _txt = function(h){ const d = document.createElement('div'); d.innerHTML = h || ''; return d.textContent.trim(); };
+    const camposPropios = Object.keys(draft.campos).some(function(id){
+      const v = draft.campos[id];
+      if(v === '' || v === false || /^prev_/.test(id)) return false;
+      if(_pre && (id === 'evol_peso' || id === 'evol_talla' || id === 'evol_cintura') && String(v) === String(_pre[id.replace('evol_','')])) return false;
+      return true;
+    });
+    const hayCambios = _txt(draft.html) || _txt(draft.indicaciones) || camposPropios ||
       !!draft.mdpa || !!draft.lab || !!draft.ant || !!draft.est || !!draft.vac || !!draft.adip;
     if(hayCambios) {
       localStorage.setItem('urcym_draft_' + dni, JSON.stringify(draft));
@@ -11022,6 +11041,10 @@ async function abrirEvolucion(dni) {
     // pestaña con borrador quedaban los del paciente anterior y se guardaban en este.
     _habDatos = null;
     updTtoItems = [];
+    // Listas de actividades en memoria (ficha clínica y "Actividad & Alimentación"):
+    // también eran globales y pasaban de un paciente a otro al cambiar de pestaña.
+    try { _actItems = []; } catch(e) {}
+    try { if(typeof _fhActItems !== 'undefined') _fhActItems = []; } catch(e) {}
     if(typeof renderTtoUpd === 'function') renderTtoUpd();
     { const _sa = document.getElementById('upd_tto_accion'); if(_sa) _sa.value = 'se agrega'; }
     if(typeof actualizarModoPanelTto === 'function') actualizarModoPanelTto();
@@ -11900,9 +11923,9 @@ async function abrirModalHabitos() {
   // ── Fuente: siempre desde BD (datos permanentes del paciente) ──
   let fuenteAct = null, fuenteAli = null;
   if (evolClinicaSnapshot?.clinica?.hab_actividad_json)
-    try { fuenteAct = JSON.parse(evolClinicaSnapshot.clinica.hab_actividad_json); } catch(e) {}
+    try { fuenteAct = _hj(evolClinicaSnapshot.clinica.hab_actividad_json); } catch(e) {}
   if (evolClinicaSnapshot?.clinica?.hab_alimentacion_json)
-    try { fuenteAli = JSON.parse(evolClinicaSnapshot.clinica.hab_alimentacion_json); } catch(e) {}
+    try { fuenteAli = _hj(evolClinicaSnapshot.clinica.hab_alimentacion_json); } catch(e) {}
   if ((!fuenteAct || !fuenteAli) && pacienteActual?.dni) {
     const _dniHabModal = pacienteActual.dni; // capturado antes del await
     try {
@@ -11913,12 +11936,12 @@ async function abrirModalHabitos() {
       if (_hr && pacienteActual && String(pacienteActual.dni) === String(_dniHabModal)) {
         if (!evolClinicaSnapshot) evolClinicaSnapshot = {clinica:{},medicacion:[]};
         if (!evolClinicaSnapshot.clinica) evolClinicaSnapshot.clinica = {};
-        if (_hr.hab_actividad_json)    { evolClinicaSnapshot.clinica.hab_actividad_json    = _hr.hab_actividad_json;    if(!fuenteAct) try{fuenteAct=JSON.parse(_hr.hab_actividad_json);}catch(e){} }
-        if (_hr.hab_alimentacion_json) { evolClinicaSnapshot.clinica.hab_alimentacion_json = _hr.hab_alimentacion_json; if(!fuenteAli) try{fuenteAli=JSON.parse(_hr.hab_alimentacion_json);}catch(e){} }
+        if (_hr.hab_actividad_json)    { evolClinicaSnapshot.clinica.hab_actividad_json    = _hr.hab_actividad_json;    if(!fuenteAct) try{fuenteAct=_hj(_hr.hab_actividad_json);}catch(e){} }
+        if (_hr.hab_alimentacion_json) { evolClinicaSnapshot.clinica.hab_alimentacion_json = _hr.hab_alimentacion_json; if(!fuenteAli) try{fuenteAli=_hj(_hr.hab_alimentacion_json);}catch(e){} }
       } else if (_hr) {
         // Cambiaron de pestaña: igual usamos los datos recién leídos solo para precargar ESTE modal
-        if (_hr.hab_actividad_json && !fuenteAct)    try{fuenteAct=JSON.parse(_hr.hab_actividad_json);}catch(e){}
-        if (_hr.hab_alimentacion_json && !fuenteAli) try{fuenteAli=JSON.parse(_hr.hab_alimentacion_json);}catch(e){}
+        if (_hr.hab_actividad_json && !fuenteAct)    try{fuenteAct=_hj(_hr.hab_actividad_json);}catch(e){}
+        if (_hr.hab_alimentacion_json && !fuenteAli) try{fuenteAli=_hj(_hr.hab_alimentacion_json);}catch(e){}
       }
     } catch(e) { console.warn('[abrirModalHabitos] BD:', e); }
   }
@@ -13392,6 +13415,10 @@ function precargarAntropometriaSidebar() {
     const v = getUltimoValorAnt('Cintura');
     if(v != null) { cinturaEl.value = v; huboAutocompletado = true; }
   }
+  // Recordar lo autocompletado: no es algo que escribió el profesional, así que
+  // no debe hacer que la pestaña pregunte "¿guardar cambios?" si solo la miró.
+  window._antroPrecarga = { dni: pacienteActual ? String(pacienteActual.dni) : null,
+    peso: pesoEl ? pesoEl.value : '', talla: tallaEl ? tallaEl.value : '', cintura: cinturaEl ? cinturaEl.value : '' };
   const nota = document.getElementById('evol_antro_nota');
   if(nota) nota.classList.toggle('show', huboAutocompletado);
   if(typeof actualizarIMC === 'function') actualizarIMC();
@@ -17357,7 +17384,11 @@ function adipCalcularRequerimientos() {
   if(!resDiv) return;
 
   const actSel = document.getElementById('adip_nutri_actividad');
+  // Solo cuenta como "cambio sin guardar" si el usuario cambió el nivel de actividad;
+  // mirar el tratamiento (este cálculo corre al mostrarlo) no debe pedir guardar.
+  const _actAntes = trat.actividad_factor || 'sedentario';
   if(actSel) trat.actividad_factor = actSel.value;
+  const _actCambio = !!(actSel && actSel.value !== _actAntes);
 
   const r = adipCalcularEstimacionNutricional(trat);
   const setTxt = (id,v) => { const el = document.getElementById(id); if(el) el.textContent = v; };
@@ -17368,7 +17399,7 @@ function adipCalcularRequerimientos() {
 
   if(!r.ok) {
     resDiv.innerHTML = '<div style="font-size:11.5px;color:#94a3b8;padding:6px 2px">Faltan datos (peso, talla y/o fecha de nacimiento) para calcular los requerimientos. Cargalos en Evolución o en la ficha del paciente.</div>';
-    marcarDirty('adip');
+    if(_actCambio) marcarDirty('adip');
     return;
   }
 
@@ -17405,7 +17436,7 @@ function adipCalcularRequerimientos() {
     ${r.pesoAjustado===r.peso ? '' : `<div style="font-size:10.5px;color:#6d28d9;margin-top:6px">Meta proteica calculada sobre <b>peso ajustado</b> (Academy of Nutrition and Dietetics/ESPEN: peso guía + 25% del exceso): peso guía (Hamwi) ≈ ${r.ibw.toFixed(1)} kg → peso ajustado ≈ ${r.pesoAjustado.toFixed(1)} kg. <i>El peso guía es solo un valor de referencia usado para estimar otras variables; no es necesario ni el objetivo alcanzarlo.</i></div>`}
     <div style="font-size:10px;color:#94a3b8;font-style:italic;margin-top:6px">Estimación orientativa según ecuación de Mifflin-St Jeor y nivel de actividad reportado; ajustar según criterio clínico.</div>
   `;
-  marcarDirty('adip');
+  if(_actCambio) marcarDirty('adip');
 }
 
 function adipCambiarTipoTratamiento() {
@@ -29182,7 +29213,7 @@ function precargarTabActAli(){
 
   if(snap.hab_actividad_json){
     try{
-      var a=JSON.parse(snap.hab_actividad_json);
+      var a=_hj(snap.hab_actividad_json);
       if(a.actividades&&a.actividades.length){
         _fhActItems=a.actividades;
         _fhActItems.forEach(function(item){ if(!Array.isArray(item.diasArr)) item.diasArr = []; });
@@ -29202,7 +29233,7 @@ function precargarTabActAli(){
   }
   if(snap.hab_alimentacion_json){
     try{
-      var al=JSON.parse(snap.hab_alimentacion_json);
+      var al=_hj(snap.hab_alimentacion_json);
       [['fhcli_hiposodica',al.hiposodica],['fhcli_edulc',al.edulc],['fhcli_pollo_cerdo',al.pollo_cerdo],['fhcli_ali_social',al.social]].forEach(function(p){
         if(p[1]){var r=document.querySelector('input[name="'+p[0]+'"][value="'+p[1]+'"]');if(r)r.checked=true;}
       });
@@ -29570,8 +29601,8 @@ async function imprimirInformeHabitos(opts) {
   // Incluir estado actual si difiere del último
   const snapActual = evolClinicaSnapshot?.clinica;
   if (snapActual) {
-    const actA = snapActual.hab_actividad_json ? (() => { try { return JSON.parse(snapActual.hab_actividad_json); } catch(e) { return null; }})() : null;
-    const aliA = snapActual.hab_alimentacion_json ? (() => { try { return JSON.parse(snapActual.hab_alimentacion_json); } catch(e) { return null; }})() : null;
+    const actA = snapActual.hab_actividad_json ? (() => { try { return _hj(snapActual.hab_actividad_json); } catch(e) { return null; }})() : null;
+    const aliA = snapActual.hab_alimentacion_json ? (() => { try { return _hj(snapActual.hab_alimentacion_json); } catch(e) { return null; }})() : null;
     if (actA || aliA) {
       const last = historial[historial.length - 1];
       if (!last || JSON.stringify(last.act) !== JSON.stringify(actA) || JSON.stringify(last.ali) !== JSON.stringify(aliA))
