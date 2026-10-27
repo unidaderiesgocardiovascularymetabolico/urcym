@@ -12935,13 +12935,19 @@ async function _enviarDocPorMail(opts) {
   }
 }
 // Botón "✉ Enviar por mail" de las indicaciones en la evolución
-async function enviarMailIndicacionesEvol() {
+async function enviarMailIndicacionesEvol(conIndic) {
   const p = pacienteActual; if(!p) return;
   const indEl2 = document.getElementById('evol_indicaciones_editor');
   const txt = indEl2 ? indEl2.innerText.trim() : '';
-  if(!txt) { alert('Sin indicaciones.'); return; }
+  const desdeMaterial = conIndic === false;
+  if(!txt && !desdeMaterial) { alert('Sin indicaciones.'); return; }
   const email = await _mailPacienteAsegurado(p); if(!email) return;
-  const eleccion = await _modalEnviarMail({ email: email, que: 'las indicaciones (PDF)' }); if(!eleccion) return;
+  const eleccion = await _modalEnviarMail({ email: email, que: txt ? 'las indicaciones (PDF)' : null, marcado: !desdeMaterial }); if(!eleccion) return;
+  if(!eleccion.incluirDoc) {
+    _enviarDocPorMail({ tipo:'material', p:p, texto:'', doc:null, filename:'', materiales: eleccion.materiales, extras: eleccion.extras,
+      btn: document.querySelector('button[onclick="' + (desdeMaterial ? 'enviarMaterialesPaciente()' : 'enviarMailIndicacionesEvol()') + '"]') });
+    return;
+  }
   const btn = document.querySelector('button[onclick="enviarMailIndicacionesEvol()"]');
   _getLogoPNG(function() {
     let info; try { info = _crearPDFIndicacionesEvol(txt, true); } catch(e) { alert('No se pudo armar el PDF: ' + e.message); return; }
@@ -12966,6 +12972,7 @@ async function enviarPorMail(tipo) {
   const email = await _mailPacienteAsegurado(p); if(!email) return;
   const eleccion = await _modalEnviarMail({ email: email, que: tipo === 'receta' ? 'la receta (PDF)' : 'las indicaciones (PDF)' }); if(!eleccion) return;
   const btn = document.querySelector('button[onclick="enviarPorMail(\'' + tipo + '\')"]');
+  if(!eleccion.incluirDoc) { _enviarDocPorMail({ tipo:'material', p:p, texto:'', doc:null, filename:'', materiales: eleccion.materiales, extras: eleccion.extras, btn:btn }); return; }
   generarPDF(tipo, function(doc, filename) {
     let htmlDoc = '';
     if(tipo === 'indicaciones') { try { htmlDoc = _htmlMailIndicaciones(document.getElementById('ind_contenido'), p, _pieDireccionSeleccionada('ind_direccion')); } catch(e) { console.warn('mail indicaciones html', e); } }
@@ -12975,6 +12982,8 @@ async function enviarPorMail(tipo) {
 // Botón "📚 Materiales": mandar solo material (planillas, dietas…) sin indicaciones
 async function enviarMaterialesPaciente() {
   const p = pacienteActual; if(!p) { alert('Abrí primero un paciente.'); return; }
+  // En la evolución: se marca el material y después se decide si van también las indicaciones (arranca sin marcar)
+  if(document.getElementById('evol_indicaciones_editor')) return enviarMailIndicacionesEvol(false);
   const email = await _mailPacienteAsegurado(p); if(!email) return;
   const eleccion = await _modalEnviarMail({ email: email, que: null }); if(!eleccion) return;
   if(!eleccion.materiales.length && !eleccion.extras.length) { alert('No elegiste nada para mandar.'); return; }
@@ -13034,11 +13043,13 @@ function _modalEnviarMail(o) {
     const lista = await _leerMateriales();
     const m = _uiModal('✉ Enviar por mail',
       '<div style="font-size:13.5px;margin-bottom:8px;">Para: <b>' + _esc(o.email) + '</b> · sale desde tu Gmail.</div>'
-      + (o.que ? '<div style="font-size:13.5px;margin-bottom:10px;">✓ Se envía ' + _esc(o.que) + '.</div>' : '')
+      + (o.que ? '<label style="display:flex;align-items:center;gap:8px;padding:9px 11px;border:1.5px solid #99d6d7;background:#f0fbfb;border-radius:10px;margin:0 0 10px;font-size:13.5px;font-weight:600;text-transform:none;letter-spacing:0;color:#1f2937;cursor:pointer;">'
+        + '<input type="checkbox" class="ui-doc"' + (o.marcado === false ? '' : ' checked') + ' style="width:17px;height:17px;accent-color:var(--teal);">'
+        + '<span>Incluir ' + _esc(o.que) + '</span></label>' : '')
       + '<div style="font-weight:700;font-size:13.5px;margin:6px 0 2px;">📋 Planillas e informes de este paciente</div>'
       + '<div style="font-size:12px;color:#64748b;margin-bottom:4px;">Se arman con lo que tenés cargado en la HC y van en PDF.</div>'
       + _htmlInformesPaciente()
-      + '<div style="font-weight:700;font-size:13.5px;margin:12px 0 2px;">📚 ' + (o.que ? 'Sumar material' : 'Elegí el material') + '</div>'
+      + '<div style="font-weight:700;font-size:13.5px;margin:12px 0 2px;">📚 Material</div>'
       + '<div class="ui-lista">' + _htmlListaMateriales(lista, true) + '</div>'
       + '<button type="button" class="ui-admin" style="margin-top:6px;border:none;background:none;color:var(--blue);cursor:pointer;font-size:12.5px;padding:0;">⚙ Cargar o administrar materiales</button>'
       + '<div style="font-weight:700;font-size:13.5px;margin:12px 0 2px;">📎 Otro archivo de la compu</div>'
@@ -13057,6 +13068,8 @@ function _modalEnviarMail(o) {
       const grandes = archivos.filter(function(f){ return f.size > 9 * 1024 * 1024; });
       if(grandes.length) { alert('"' + grandes[0].name + '" pesa más de 9 MB. Para archivos grandes subilo a la biblioteca (⚙ Cargar o administrar materiales).'); return; }
       const infs = Array.prototype.map.call(m.box.querySelectorAll('.ui-inf:checked'), function(c){ return c.value; });
+      const cDoc = m.box.querySelector('.ui-doc'); const incluirDoc = !!(cDoc && cDoc.checked);
+      if(!incluirDoc && !ids.length && !infs.length && !archivos.length) { alert('No marcaste nada para mandar.'); return; }
       const extras = archivos.slice();
       if(infs.length) {
         const bSi = this, prog = m.box.querySelector('.ui-prog'); bSi.disabled = true;
@@ -13069,7 +13082,7 @@ function _modalEnviarMail(o) {
         prog.textContent = ''; bSi.disabled = false;
         if(fallas.length && !confirm('No se pudo armar:\n• ' + fallas.join('\n• ') + '\n\n¿Enviar igual lo demás?')) return;
       }
-      fin({ materiales: ids, extras: extras });
+      fin({ incluirDoc: incluirDoc, materiales: ids, extras: extras });
     };
     m.box.querySelector('.ui-admin').onclick = function(){
       abrirMaterialesManager(async function(){
