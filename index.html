@@ -117,6 +117,20 @@ header{position:relative}
 .mailbtn::before{content:'✉'}
 .lugar .mail-dir{display:block;font-size:12.5px;color:var(--soft);word-break:break-all}
 .prof.presencial{border-color:#bfe8cf}
+.seg{display:flex;background:var(--chip);border:1.5px solid var(--line);border-radius:999px;padding:4px;margin:0 0 16px;gap:4px}
+.seg button{flex:1;border:none;background:none;border-radius:999px;padding:9px 10px;font:inherit;font-size:14px;font-weight:600;color:var(--soft);cursor:pointer;transition:all .15s}
+.seg button.on{background:#fff;color:var(--blue);box-shadow:0 2px 8px rgba(26,37,53,.10)}
+.grupo{margin:0 4px 10px;font-size:13px;text-transform:uppercase;letter-spacing:.06em;font-weight:600;color:var(--soft)}
+.prof .tag{display:inline-block;margin-top:4px;font-size:11.5px;font-weight:600;color:#0f766e;background:#e6f6f4;border-radius:999px;padding:2px 9px}
+.prof .tag.mail{color:#1f6aab;background:var(--blue-light)}
+.prof .flecha{margin-left:auto;color:var(--faint);font-size:20px}
+.perfil-cab{display:flex;align-items:center;gap:14px;margin-bottom:6px}
+.perfil-cab .avatar{width:56px;height:56px;font-size:18px}
+.acc{display:flex;align-items:center;gap:12px;width:100%;text-align:left;padding:13px 14px;border-radius:12px;border:1.5px solid var(--line);background:var(--chip);cursor:pointer;font:inherit;color:var(--text);margin-top:8px;text-decoration:none}
+.acc:hover{border-color:var(--blue)}
+.acc .ico{font-size:22px;width:30px;text-align:center}
+.acc b{display:block;font-size:15px;color:var(--text)}
+.acc span{display:block;font-size:12.5px;color:var(--soft)}
 .tabs.cob{margin-bottom:0}
 .falta{display:none;margin:14px 0 -6px;padding:10px 12px;border-radius:12px;background:#fff6e0;border:1px solid #f2d18a;color:#7a5200;font-size:13.5px;line-height:1.4}
 .falta.on{display:block}
@@ -286,7 +300,7 @@ S.onDatos = function(d){
   var ult = $('#seccion-sena'); if(ult && ult.scrollIntoView) ult.scrollIntoView({ behavior:'smooth', block:'start' });
 };
 
-function iniciarReserva(cfg){
+function iniciarReserva(cfg, profId){
   AYUDA = 'video';
   S.cfg = Object.assign({}, cfg, { profs: cfg.profs.filter(function(p){ return p.video; }) });
   S.prof = null; S.fecha = S.hora = null; S.dniOk = null; S.motivos = []; S.acepto = false;
@@ -296,7 +310,8 @@ function iniciarReserva(cfg){
     $('#app').innerHTML = '<div class="card centro"><div class="big-ok">🗓️</div><p>En este momento no hay turnos por videollamada disponibles para sacar online.</p><p class="nota" style="margin-top:8px">Comunicate con el consultorio para coordinar.</p></div>';
     return;
   }
-  if(S.cfg.profs.length === 1) S.prof = S.cfg.profs[0];
+  if(profId) S.prof = S.cfg.profs.find(function(p){ return p.id === profId; }) || null;
+  if(!S.prof && S.cfg.profs.length === 1 && !OTRAS_PROF.length) S.prof = S.cfg.profs[0];
   render();
   if(S.prof) cargarSlots();
 }
@@ -304,20 +319,26 @@ function iniciarReserva(cfg){
 function render(){
   var paso = !S.prof ? 1 : !S.hora ? 2 : !S.dniOk ? 3 : 4;
   var html = '';
-  // 1 · Profesional
-  if(S.cfg.profs.length > 1){
+  // 1 · Profesional (las otras especialistas también atienden por video: el turno se pide por mail)
+  var variosV = S.cfg.profs.length > 1 || OTRAS_PROF.length > 0;
+  if(variosV){
     if(paso === 1){
       html += '<section class="card"><div class="paso"><div class="n">1</div><h2>¿Con quién?</h2></div><div class="profs">'
         + S.cfg.profs.map(function(p){
           return '<button class="prof" data-prof="'+p.id+'"><div class="avatar">'+h(iniciales(p.nombre))+'</div><div><b>'+h(p.nombre)+'</b><span>Videoconsulta · '+pesos(p.arancel)+'</span></div></button>';
-        }).join('') + '</div></section>';
+        }).join('') + '</div>'
+        + (OTRAS_PROF.length ? '<p class="grupo" style="margin:16px 2px 8px">Otras especialistas · turno por mail</p><div class="profs">'
+          + OTRAS_PROF.map(function(p){
+            return '<a class="prof" style="text-decoration:none;color:inherit" href="'+linkMailTurno(p)+'"><div class="avatar" style="background:#5b8fb9">'+h(iniciales(p.nombre))+'</div><div><b>'+h(p.nombre)+'</b><span>'+h(p.esp)+'</span><span class="mail-dir" style="display:block;font-size:12px;color:var(--blue)">✉ '+h(p.mail)+'</span></div></a>';
+          }).join('') + '</div>' : '')
+        + '</section>';
     } else {
       html += '<section class="card cerrada"><div class="paso"><div class="n">✓</div><h2>'+h(S.prof.nombre)+'</h2><button class="ok" data-volver="1">Cambiar</button></div></section>';
     }
   } else {
     html += '<section class="card cerrada"><div class="paso"><div class="avatar" style="width:34px;height:34px;font-size:13px">'+h(iniciales(S.prof.nombre))+'</div><h2>'+h(S.prof.nombre)+'</h2></div></section>';
   }
-  var nro = S.cfg.profs.length > 1 ? 1 : 0;
+  var nro = variosV ? 1 : 0;
   // 2 · Día y hora
   if(paso < 2) html += cardBloqueada(nro+1, 'Día y horario');
   else if(paso === 2) html += '<section class="card"><div class="paso"><div class="n">'+(nro+1)+'</div><h2>Elegí día y horario</h2></div><div id="slots"><div class="cargando"><div class="spin"></div>Buscando horarios libres…</div></div></section>';
@@ -584,29 +605,86 @@ function serviciosDisponibles(){
 function barraVolver(){
   return serviciosDisponibles().length > 1 ? '<button class="link" style="margin:0 0 12px 4px;text-decoration:none" onclick="irA(\'\')">← Otros servicios</button>' : '';
 }
-function irA(serv){
-  history.replaceState(null, '', serv ? '?s=' + serv : location.pathname);
+function irA(serv, profId){
+  history.replaceState(null, '', serv ? '?s=' + serv + (profId ? '&pr=' + encodeURIComponent(profId) : '') : location.pathname);
   window.scrollTo(0, 0);
-  if(serv === 'video') return iniciarReserva(CFG);
-  if(serv === 'receta' || serv === 'consulta') return iniciarPedido(serv);
+  if(serv === 'prof') return mostrarPerfil(profId);
+  if(serv === 'video') return iniciarReserva(CFG, profId);
+  if(serv === 'receta' || serv === 'consulta') return iniciarPedido(serv, profId);
   if(serv === 'presencial') return mostrarPresencial();
   mostrarMenu();
+}
+var MENU_MODO = 'tipo';
+try { MENU_MODO = localStorage.getItem('urcym_menu_modo') === 'prof' ? 'prof' : 'tipo'; } catch(e) {}
+function htmlSeg(){
+  return '<div class="seg" role="tablist"><button type="button" data-modo="tipo" class="'+(MENU_MODO==='tipo'?'on':'')+'">Por tipo de atención</button><button type="button" data-modo="prof" class="'+(MENU_MODO==='prof'?'on':'')+'">Por profesional</button></div>';
+}
+function engancharSeg(){
+  document.querySelectorAll('[data-modo]').forEach(function(b){ b.onclick = function(){ MENU_MODO = b.dataset.modo; try { localStorage.setItem('urcym_menu_modo', MENU_MODO); } catch(e) {} mostrarMenu(); }; });
+}
+function serviciosDe(id){
+  var p = (CFG && CFG.activo && CFG.profs || []).find(function(x){ return x.id === id; });
+  return p || null;
+}
+function mostrarMenuProf(){
+  var cards = EQUIPO.map(function(p){
+    var cp = serviciosDe(p.id);
+    var tags = '<span class="tag">Presencial</span>' + (cp && (cp.video || cp.recetas || cp.consultas) ? ' <span class="tag">Online</span>' : '');
+    return '<button class="prof card" style="margin:0" data-perfil="'+p.id+'"><div class="avatar">'+h(iniciales(p.nombre))+'</div><div><b>'+h(p.nombre)+'</b><span>'+h(p.esp)+'</span><div>'+tags+'</div></div><span class="flecha">›</span></button>';
+  }).join('');
+  var otras = OTRAS_PROF.map(function(p){
+    return '<button class="prof card" style="margin:0" data-perfil="'+p.id+'"><div class="avatar" style="background:#5b8fb9">'+h(iniciales(p.nombre))+'</div><div><b>'+h(p.nombre)+'</b><span>'+h(p.esp)+'</span><div><span class="tag mail">Videoconsulta · turno por mail</span></div></div><span class="flecha">›</span></button>';
+  }).join('');
+  $('#app').innerHTML = htmlSeg() + '<p class="grupo">Equipo URCyM</p><div class="profs" style="margin-bottom:18px">' + cards + '</div>'
+    + '<p class="grupo">Otras especialistas</p><div class="profs">' + otras + '</div>';
+  engancharSeg();
+  document.querySelectorAll('[data-perfil]').forEach(function(b){ b.onclick = function(){ irA('prof', b.dataset.perfil); }; });
+}
+function mostrarPerfil(id){
+  AYUDA = 'menu';
+  var eq = EQUIPO.find(function(p){ return p.id === id; });
+  var ot = OTRAS_PROF.find(function(p){ return p.id === id; });
+  var p = eq || ot;
+  if(!p) return mostrarMenu();
+  $('#titulo').textContent = p.nombre;
+  $('#subtitulo').textContent = p.esp;
+  var x = '<button class="link" style="margin:0 0 12px 4px;text-decoration:none" onclick="irA(\'\')">← Volver</button>';
+  if(ot){
+    x += '<section class="card"><h2 style="margin:0 0 2px;font-size:17px">Online</h2>'
+      + '<a class="acc" href="'+linkMailTurno(p)+'"><span class="ico">📹</span><span><b>Videoconsulta</b><span>El turno se pide por mail a '+h(p.mail)+'</span></span></a>'
+      + '<p class="nota" style="margin-top:10px">Te responde la profesional para coordinar día, horario y honorarios.</p></section>';
+    $('#app').innerHTML = x; return;
+  }
+  var cp = serviciosDe(p.id), lug = LUGARES[p.lug];
+  var on = '';
+  if(cp && cp.video) on += '<button class="acc" data-ir="video"><span class="ico">📹</span><span><b>Videoconsulta</b><span>Elegí día y horario · turno por Google Meet</span></span></button>';
+  if(cp && cp.recetas) on += '<button class="acc" data-ir="receta"><span class="ico">💊</span><span><b>Pedir una receta</b><span>Te llega por mail · con honorarios</span></span></button>';
+  if(cp && cp.consultas) on += '<button class="acc" data-ir="consulta"><span class="ico">💬</span><span><b>Consulta por mensaje</b><span>Respuesta dentro de las ' + h(CFG.consulta_horas) + ' h · con honorarios</span></span></button>';
+  if(on) x += '<section class="card"><h2 style="margin:0 0 2px;font-size:17px">Online</h2>' + on + '</section>';
+  if(lug) x += '<section class="card"><h2 style="margin:0 0 2px;font-size:17px">Presencial</h2><p class="nota" style="margin:0">Pedí tu turno en el centro o por WhatsApp.</p>'
+    + lug.lugares.map(function(l){ return '<div class="lugar"><div><b>'+h(l.ciudad)+'</b><span>'+h(l.centro)+' · '+h(l.tel)+'</span></div><a class="wapp" href="'+linkWapp(l.tel, lug.nombre)+'" target="_blank" rel="noopener">WhatsApp</a></div>'; }).join('') + '</section>';
+  $('#app').innerHTML = x;
+  document.querySelectorAll('[data-ir]').forEach(function(b){ b.onclick = function(){ irA(b.dataset.ir, p.id); }; });
 }
 function mostrarMenu(){
   AYUDA = 'menu';
   var l = serviciosDisponibles();
   $('#titulo').textContent = 'Turnos y consultas';
-  $('#subtitulo').textContent = 'Presencial u online: elegí qué necesitás.';
-  var pres = '<div class="profs" style="margin-bottom:18px"><button class="prof card presencial" style="margin:0" data-serv="presencial"><div class="avatar" style="font-size:22px;background:#e7f6ee">🏥</div><div><b>Atención presencial</b><span>Dónde atendemos, cómo pedir turno y otras especialistas</span></div></button></div>';
+  $('#subtitulo').textContent = 'Elegí cómo querés atenderte o con quién.';
+  if(MENU_MODO === 'prof') return mostrarMenuProf();
+  var pres = htmlSeg() + '<div class="profs" style="margin-bottom:18px"><button class="prof card presencial" style="margin:0" data-serv="presencial"><div class="avatar" style="font-size:22px;background:#e7f6ee">🏥</div><div><b>Atención presencial</b><span>Dónde atendemos y cómo pedir turno</span></div></button></div>';
   if(!l.length){
     $('#app').innerHTML = pres + '<div class="card centro"><p>En este momento no hay servicios online disponibles.</p></div>';
     document.querySelector('[data-serv]').onclick = function(){ irA('presencial'); };
+    engancharSeg();
     return;
   }
-  $('#app').innerHTML = pres + '<p class="nota" style="margin:0 4px 10px;font-size:13px;text-transform:uppercase;letter-spacing:.06em;font-weight:600">Online</p><div class="profs">' + l.map(function(x){
-    return '<button class="prof card" style="margin:0" data-serv="'+x.id+'"><div class="avatar" style="font-size:22px;background:var(--blue-light)">'+x.icono+'</div><div><b>'+h(x.titulo)+'</b><span>'+h(x.sub)+'</span></div></button>';
+  $('#app').innerHTML = pres + '<p class="grupo">Online</p><div class="profs">' + l.map(function(x){
+    var sub = x.id === 'video' ? 'Turno por Google Meet · también otras especialistas' : x.sub;
+    return '<button class="prof card" style="margin:0" data-serv="'+x.id+'"><div class="avatar" style="font-size:22px;background:var(--blue-light)">'+x.icono+'</div><div><b>'+h(x.titulo)+'</b><span>'+h(sub)+'</span></div></button>';
   }).join('') + '</div>';
   document.querySelectorAll('[data-serv]').forEach(function(b){ b.onclick = function(){ irA(b.dataset.serv); }; });
+  engancharSeg();
 }
 
 /* ═══════════════════ Atención presencial ═══════════════════ */
@@ -620,11 +698,19 @@ var LUGARES = [
     { ciudad:'San Bernardo', centro:'Sapiens', tel:'2257 50 3574' },
     { ciudad:'San Clemente', centro:'CEM', tel:'2257 40 8563' } ] }
 ];
-// Otras especialistas: el turno se pide por mail
+// Otras especialistas: solo videoconsulta, el turno se pide por mail
 var OTRAS_PROF = [
-  { nombre:'Dra. Ana Saracho', esp:'Especialista en Hígado, con orientación en hígado graso', mail:'drasarachoana@gmail.com' },
-  { nombre:'Dra. López Armaretti', esp:'Especialista en enfermedades cerebrovasculares', mail:'dra.lopezarmateretti@gmail.com' }
+  { id:'AS', nombre:'Dra. Ana Saracho', esp:'Especialista en Hígado, con orientación en hígado graso', mail:'drasarachoana@gmail.com' },
+  { id:'LA', nombre:'Dra. López Armaretti', esp:'Especialista en enfermedades cerebrovasculares', mail:'dra.lopezarmateretti@gmail.com' }
 ];
+// Equipo URCyM (id = el de la agenda online) + presencial
+var EQUIPO = [
+  { id:'BG', nombre:'Dra. Bárbara Guerrero', esp:'Especialista en Hipertensión, Obesidad y Lípidos', lug: 1 },
+  { id:'OB', nombre:'Dr. Omar Bertani', esp:'Especialista en Diabetes e Hipertensión', lug: 0 }
+];
+function linkMailTurno(p){
+  return 'mailto:' + p.mail + '?subject=' + encodeURIComponent('Pedido de turno · videoconsulta') + '&body=' + encodeURIComponent('Hola, quisiera pedir un turno por videoconsulta con ' + p.nombre + '.\n\nNombre y apellido:\nDNI:\nTeléfono:\nObra social:\nMotivo de consulta:\n');
+}
 function htmlOtrasProf(){
   return '<section class="card"><h2 style="margin:0 0 2px;font-size:18px">Otras especialistas</h2><p class="nota" style="margin:0 0 4px">Los turnos se piden por mail.</p>'
     + OTRAS_PROF.map(function(p){
@@ -650,7 +736,6 @@ function mostrarPresencial(){
       }).join('') + '</section>';
   }).join('');
   x += '<p class="nota centro" style="margin:4px 12px 16px">Los turnos presenciales se piden en cada centro o por su WhatsApp.</p>';
-  x += htmlOtrasProf();
   $('#app').innerHTML = x;
 }
 
@@ -680,10 +765,11 @@ function mostrarCrono(){
 /* ═══════════════════ Recetas y consultas por mensaje ═══════════════════ */
 var Q = {};
 var OS_COMUNES = ['OSDE','Swiss Medical','Galeno','Medifé','OMINT','Sancor Salud','Hospital Italiano','Hospital Alemán','IOMA','PAMI','OSECAC','Accord Salud','Particular / sin cobertura'];
-function iniciarPedido(tipo){
+function iniciarPedido(tipo, profId){
   AYUDA = tipo;
   var profs = CFG.profs.filter(function(p){ return tipo === 'receta' ? p.recetas : p.consultas; });
-  Q = { tipo:tipo, profs:profs, prof: profs.length === 1 ? profs[0] : null, pac:null, otroMail:false, datos:null,
+  var elegido = profId ? profs.find(function(p){ return p.id === profId; }) : null;
+  Q = { tipo:tipo, profs:profs, prof: elegido || (profs.length === 1 ? profs[0] : null), pac:null, otroMail:false, datos:null,
         items:[{ farmaco:'', dosis:'', frecuencia:'', marca:'' }], sesion:null, codigoEnviado:false, mis:null, osCambio:false,
         texto:'', adjuntos:[], metodo:null, archivo:null, enviando:false, acepto:false };
   Q.render = renderPedido;
@@ -1247,7 +1333,9 @@ $('#b-ayuda').onclick = abrirAyuda;
   api({ accion:'config' }).then(function(cfg){
     CFG = cfg;
     var s = q.get('s');
-    if(s === 'presencial' || (s && serviciosDisponibles().some(function(x){ return x.id === s; }))) irA(s); else mostrarMenu();
+    var pp = q.get('pr') || undefined;
+    if(s === 'prof' && pp) irA('prof', pp);
+    else if(s === 'presencial' || (s && serviciosDisponibles().some(function(x){ return x.id === s; }))) irA(s, pp); else mostrarMenu();
   }).catch(function(e){
     $('#app').innerHTML = '<div class="card"><div class="error on">'+h(e.message)+'</div><button class="btn sec" onclick="location.reload()">Reintentar</button></div>';
   });
