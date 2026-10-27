@@ -3592,6 +3592,7 @@
                 <option value="cem">CEM (San Clemente del Tuyú)</option>
                 <option value="ceq">CEQ (Mar de Ajó)</option>
                 <option value="urcym">URCyM (Santa Teresita)</option>
+                <option value="costabucal">COSTA BUCAL (Santa Teresita)</option>
               </select>
               <button class="btn btn-teal" onclick="generarPDFIndicacionesEvol()" style="width:auto;margin:0;padding:7px 16px;font-size:12px">⬇ PDF</button>
               <button class="btn" onclick="enviarMailIndicacionesEvol()" style="width:auto;margin:0;padding:7px 16px;font-size:12px;background:var(--gray);border:1.5px solid var(--border);color:var(--text)">✉ Enviar por mail</button>
@@ -5165,6 +5166,7 @@
         <option value="cem">CEM – Centro de especialidades médicas (San Clemente del Tuyú)</option>
         <option value="ceq">CEQ – Consultorio de especialidades quirúrgicas (Mar de Ajó)</option>
         <option value="urcym">URCyM – Unidad de riesgo cardiovascular y metabólico (Santa Teresita)</option>
+        <option value="costabucal">COSTA BUCAL – Av. 32 Nº 626 (Santa Teresita)</option>
       </select>
     </div>
     <div class="form-actions" style="flex-wrap:wrap;gap:8px">
@@ -8514,7 +8516,8 @@ const PIE_DIRECCIONES = {
   sapiens: { nombre: 'SAPIENS', subtitulo: 'Centro de rehabilitación e investigación multidisciplinaria', direccion: 'Av. Costanera 2525, B7111 San Bernardo' },
   cem:     { nombre: 'CEM', subtitulo: 'Centro de especialidades médicas', direccion: 'Calle 1 Nº 1553, San Clemente del Tuyú' },
   ceq:     { nombre: 'CEQ', subtitulo: 'Consultorio de especialidades quirúrgicas', direccion: 'Marano 250, Mar de Ajó' },
-  urcym:   { nombre: 'URCyM', subtitulo: 'Unidad de riesgo cardiovascular y metabólico', direccion: 'Calle 2 Nº 1556, Santa Teresita' }
+  urcym:   { nombre: 'URCyM', subtitulo: 'Unidad de riesgo cardiovascular y metabólico', direccion: 'Calle 2 Nº 1556, Santa Teresita' },
+  costabucal: { nombre: 'COSTA BUCAL', subtitulo: '', direccion: 'Av. 32 Nº 626, Santa Teresita' }
 };
 function _pieDireccionSeleccionada(selectId) {
   const el = document.getElementById(selectId);
@@ -13054,17 +13057,34 @@ function _modalEnviarMail(o) {
       + '<button type="button" class="ui-admin" style="margin-top:6px;border:none;background:none;color:var(--blue);cursor:pointer;font-size:12.5px;padding:0;">⚙ Cargar o administrar materiales</button>'
       + '<div style="font-weight:700;font-size:13.5px;margin:12px 0 2px;">📎 Otro archivo de la compu</div>'
       + '<div style="font-size:12px;color:#64748b;margin-bottom:4px;">Por ejemplo una planilla editable que completaste. Va solo a este paciente (no queda en la biblioteca).</div>'
-      + '<input type="file" class="ui-extra" multiple accept="application/pdf,image/*" style="font-size:12.5px;max-width:100%;">'
+      + '<div class="ui-extra-lista"></div>'
+      + '<input type="file" class="ui-extra" multiple accept="application/pdf,image/*" style="display:none;">'
+      + '<button type="button" class="ui-extra-btn" style="padding:7px 13px;border-radius:9px;border:1.5px dashed #b6c3d3;background:#fff;cursor:pointer;font-size:12.5px;color:#334155;">📎 Elegir archivo…</button>'
       + '<div class="ui-prog" style="font-size:12.5px;color:#0f766e;margin-top:8px;"></div>'
       + '<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px;"><button type="button" class="ui-no" style="padding:8px 14px;border-radius:9px;border:1.5px solid #e5e7eb;background:#fff;cursor:pointer;">Cancelar</button>'
       + '<button type="button" class="ui-si" style="padding:8px 18px;border-radius:9px;border:none;background:var(--teal);color:#fff;font-weight:700;cursor:pointer;">Enviar</button></div>');
     let listo = false;
     const fin = function(v){ if(listo) return; listo = true; m.cerrar(); resolve(v); };
+    // Archivos de la compu: se van sumando y cada uno se puede quitar con ✕
+    const adjuntosCompu = [];
+    const pintarAdj = function(){
+      m.box.querySelector('.ui-extra-lista').innerHTML = adjuntosCompu.map(function(f, i){
+        const kb = f.size > 1048576 ? (f.size/1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(f.size/1024)) + ' KB';
+        return '<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;border:1px solid #e5e7eb;border-radius:9px;margin:0 0 5px;font-size:13px;">'
+          + '<span>📄</span><span style="flex:1;word-break:break-all;">' + _esc(f.name) + ' <span style="color:#94a3b8;font-size:11.5px;">' + kb + '</span></span>'
+          + '<button type="button" class="ui-extra-quitar" data-i="' + i + '" title="Quitar" style="border:1px solid #fecaca;background:#fff;color:#b91c1c;border-radius:7px;padding:2px 9px;cursor:pointer;font-size:13px;">✕</button></div>';
+      }).join('');
+      m.box.querySelectorAll('.ui-extra-quitar').forEach(function(b){ b.onclick = function(){ adjuntosCompu.splice(Number(b.dataset.i), 1); pintarAdj(); }; });
+      m.box.querySelector('.ui-extra-btn').textContent = adjuntosCompu.length ? '📎 Agregar otro archivo…' : '📎 Elegir archivo…';
+    };
+    const inpExtra = m.box.querySelector('.ui-extra');
+    m.box.querySelector('.ui-extra-btn').onclick = function(){ inpExtra.click(); };
+    inpExtra.onchange = function(){ Array.prototype.forEach.call(inpExtra.files || [], function(f){ adjuntosCompu.push(f); }); inpExtra.value = ''; pintarAdj(); };
     m.bg.querySelector('.ui-x').onclick = function(){ fin(null); };
     m.box.querySelector('.ui-no').onclick = function(){ fin(null); };
     m.box.querySelector('.ui-si').onclick = async function(){
       const ids = Array.prototype.map.call(m.box.querySelectorAll('.ui-mat:checked'), function(c){ return c.value; });
-      const archivos = Array.prototype.slice.call(m.box.querySelector('.ui-extra').files || []);
+      const archivos = adjuntosCompu.slice();
       const grandes = archivos.filter(function(f){ return f.size > 9 * 1024 * 1024; });
       if(grandes.length) { alert('"' + grandes[0].name + '" pesa más de 9 MB. Para archivos grandes subilo a la biblioteca (⚙ Cargar o administrar materiales).'); return; }
       const infs = Array.prototype.map.call(m.box.querySelectorAll('.ui-inf:checked'), function(c){ return c.value; });
@@ -27665,7 +27685,7 @@ window.cargarProxConsultas = cargarProxConsultas;
   // (Las particulares viejas que ya estaban en un cierre se respetan.)
   function cerrable(r){
     if(!r) return false;
-    if(r.origen==='online' && r.tipo!=='osde') return false; // pagadas por la web: van a Finanzas, no al Cierre (las OSDE sí, como cualquier OSDE)
+    if(r.origen==='online') return false; // pedidas por la web (particulares u OSDE): son del profesional, no van al Cierre del consultorio
     if(r.tipo==='osde') return r.estado==='hecha';
     return !!r.pagada || (r.estado==='hecha' && !!r.cierre_fecha);
   }
@@ -30368,6 +30388,7 @@ ${profNombre?`<div class="prof"><span class="prof-name">${profNombre}</span>${pr
         <option value="cem">CEM – Centro de especialidades médicas (San Clemente del Tuyú)</option>
         <option value="ceq">CEQ – Consultorio de especialidades quirúrgicas (Mar de Ajó)</option>
         <option value="urcym">URCyM – Unidad de riesgo cardiovascular y metabólico (Santa Teresita)</option>
+        <option value="costabucal">COSTA BUCAL – Av. 32 Nº 626 (Santa Teresita)</option>
       </select>
     </div>
     <div class="form-actions" style="margin-top:16px;flex-wrap:wrap">
