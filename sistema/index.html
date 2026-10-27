@@ -1385,6 +1385,13 @@
 .mdpa-informe-body{overflow-y:auto;flex:1}
 /* ── fin MDPA STYLES ── */
 </style>
+<style>
+.mail-copiar{font:inherit;font-size:12px;color:var(--blue);background:#fff;border:1.5px solid var(--border);border-radius:10px;padding:2px 9px;cursor:pointer;max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;transition:all .15s;line-height:1.5}
+.mail-copiar:hover{border-color:var(--blue);background:var(--blue-light)}
+.mail-copiar.sin{color:var(--text-soft);cursor:default;font-style:italic;background:transparent;border-style:dashed}
+.mail-copiar.sin:hover{border-color:var(--border);background:transparent}
+.mail-copiar.ok{color:#15803d;border-color:#86efac;background:#f0fdf4}
+</style>
 <style id="movil-css">
 /* ═══ Ajustes para celular ═══ */
 #agenda-app .ag-tool-scroll{display:contents}
@@ -2081,6 +2088,7 @@
           <span id="hc_dni" style="font-size:13px;color:var(--text-soft)"></span>
           <span id="hc_edad" style="font-size:13px;color:var(--text-soft)"></span>
           <span id="hc_os" style="font-size:12px;background:var(--blue-light);color:var(--blue);padding:2px 8px;border-radius:10px"></span>
+          <button type="button" id="hc_mail" class="mail-copiar" onclick="copiarMailPaciente(this)" style="display:none"></button>
         </div>
         <div style="font-size:12px;color:var(--text-soft);font-style:italic;background:var(--gray);padding:4px 10px;border-radius:20px">👁 Solo lectura</div>
       </div>
@@ -3367,6 +3375,7 @@
           <span id="evol_edad" style="font-size:12px;font-weight:600;color:var(--blue)"></span>
           <span id="evol_os" style="font-size:11px;background:var(--blue-light);color:var(--blue);padding:2px 8px;border-radius:10px"></span>
           <span id="evol_ocupacion" style="font-size:11px;color:var(--text-soft)"></span>
+          <button type="button" id="evol_mail" class="mail-copiar" onclick="copiarMailPaciente(this)" style="display:none"></button>
         </div>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
           <button class="btn-previas" onclick="abrirCargaEvolucionHistorica()">📅 Cargar evolución histórica</button>
@@ -7982,6 +7991,7 @@ function abrirHistoriaClinica(dni) {
   _hcSoloLectura = true;
   document.getElementById('hc_nombre').textContent = p.apellido + ', ' + p.nombre;
   document.getElementById('hc_dni').textContent = 'DNI: ' + p.dni;
+  _pintarMailHeader(p);
   document.getElementById('hc_edad').textContent = edadDesde(p.fecha_nacimiento) + ' años';
   document.getElementById('hc_os').textContent = p.obra_social || '';
   cargarHistoria(dni);
@@ -9316,6 +9326,7 @@ async function guardarPaciente() {
     document.getElementById('evol_edad').textContent = edadDesde(paciente.fecha_nacimiento) + ' años';
     document.getElementById('evol_os').textContent = paciente.obra_social || 'Sin obra social';
     document.getElementById('evol_ocupacion').textContent = paciente.ocupacion ? '· '+paciente.ocupacion : '';
+    _pintarMailHeader(paciente);
     // Notificación sutil
     const notif = document.createElement('div');
     notif.style.cssText = 'position:fixed;bottom:24px;right:24px;background:#3089ca;color:white;padding:12px 20px;border-radius:10px;font-size:13px;font-weight:600;z-index:9999;box-shadow:0 4px 16px rgba(0,0,0,.2)';
@@ -11005,6 +11016,7 @@ async function abrirEvolucion(dni) {
   const evhNombre = document.getElementById('evh_nombre_paciente');
   if(evhNombre) evhNombre.textContent = p.apellido + ', ' + p.nombre;
   document.getElementById('evol_dni').textContent = 'DNI: ' + p.dni;
+  _pintarMailHeader(p);
   document.getElementById('evol_fnac').textContent = 'F. Nac: ' + formatFecha(p.fecha_nacimiento);
   document.getElementById('evol_edad').textContent = edadDesde(p.fecha_nacimiento) + ' años';
   document.getElementById('evol_os').textContent = p.obra_social || 'Sin obra social';
@@ -11151,6 +11163,7 @@ function verHistoria(dni) {
   _hcSoloLectura = false;
   document.getElementById('hc_nombre').textContent = p.apellido + ', ' + p.nombre;
   document.getElementById('hc_dni').textContent = 'DNI: ' + p.dni;
+  _pintarMailHeader(p);
   document.getElementById('hc_edad').textContent = edadDesde(p.fecha_nacimiento) + ' años';
   document.getElementById('hc_os').textContent = p.obra_social || '';
   cargarHistoria(dni);
@@ -12767,6 +12780,102 @@ function _crearPDFIndicacionesEvol(txt, usarOtro) {
   return { doc, filename, hoy };
 }
 
+// ── Mail del paciente en el encabezado: un clic lo copia ──
+function _pintarMailHeader(p) {
+  const email = String((p && p.email) || '').trim();
+  ['evol_mail', 'hc_mail'].forEach(function(id){
+    const b = document.getElementById(id); if(!b) return;
+    b.style.display = '';
+    b.dataset.mail = email;
+    b.classList.toggle('sin', !email);
+    b.textContent = email ? '✉ ' + email : '✉ sin mail';
+    b.title = email ? 'Copiar el mail' : 'No tiene mail cargado (se agrega con ✏️ Editar)';
+  });
+}
+function copiarMailPaciente(b) {
+  const email = b.dataset.mail; if(!email) return;
+  const ok = function(){ b.textContent = '✓ Copiado'; b.classList.add('ok'); setTimeout(function(){ b.classList.remove('ok'); const m = b.dataset.mail; b.textContent = m ? '✉ ' + m : '✉ sin mail'; }, 1400); };
+  if(navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(email).then(ok, function(){ _copiarViejo(email); ok(); });
+  else { _copiarViejo(email); ok(); }
+}
+function _copiarViejo(t) {
+  const ta = document.createElement('textarea'); ta.value = t; ta.style.cssText = 'position:fixed;left:-9999px;';
+  document.body.appendChild(ta); ta.select(); try { document.execCommand('copy'); } catch(e) {} ta.remove();
+}
+
+// ── Cuerpo del mail de indicaciones con el mismo diseño del PDF ──
+// Encabezado con el color del profesional, barra del paciente, título, el texto con su formato
+// (negrita, colores, listas) y pie con mail y dirección. Todo en tablas para que se vea bien en Gmail.
+function _limpiarHtmlRico(el) {
+  const OK = { B:'b', STRONG:'b', I:'i', EM:'i', U:'u', S:'s', STRIKE:'s', BR:'br', DIV:'div', P:'div', UL:'ul', OL:'ol', LI:'li', SPAN:'span', FONT:'span', H1:'div', H2:'div', H3:'div' };
+  function estilo(n) {
+    const out = [], st = n.style || {};
+    let color = st.color || (n.tagName === 'FONT' ? n.getAttribute('color') : '');
+    if(color) out.push('color:' + color);
+    if(/bold|[6-9]00/.test(st.fontWeight || '') || /^H[1-3]$/.test(n.tagName)) out.push('font-weight:bold');
+    if(st.fontStyle === 'italic') out.push('font-style:italic');
+    if(/underline/.test(st.textDecoration || st.textDecorationLine || '')) out.push('text-decoration:underline');
+    if(st.backgroundColor) out.push('background:' + st.backgroundColor);
+    if(st.border || st.borderWidth) out.push('border:1px solid #9aa9bb;padding:2px 6px;border-radius:4px');
+    return out.join(';').replace(/["<>]/g, '');
+  }
+  function walk(n) {
+    if(n.nodeType === 3) return _esc(n.textContent);
+    if(n.nodeType !== 1) return '';
+    const hijos = Array.prototype.map.call(n.childNodes, walk).join('');
+    const t = OK[n.tagName];
+    if(!t) return hijos;
+    if(t === 'br') return '<br>';
+    const st = estilo(n);
+    const base = t === 'div' ? 'margin:0 0 2px;' : t === 'ul' || t === 'ol' ? 'margin:4px 0 6px;padding-left:22px;' : t === 'li' ? 'margin:0 0 3px;' : '';
+    return '<' + t + ((base || st) ? ' style="' + base + st + '"' : '') + '>' + (hijos || (t === 'div' ? '<br>' : '')) + '</' + t + '>';
+  }
+  const h = Array.prototype.map.call(el.childNodes, walk).join('');
+  return h.trim() ? h : _esc(el.innerText || '').replace(/\n/g, '<br>');
+}
+function _htmlMailIndicaciones(el, p, direccion) {
+  const u = users[selectedUser] || {};
+  const c = _colorProfesionalOtro(u), hex = function(a){ return '#' + a.map(function(x){ return ('0' + Math.max(0, Math.min(255, x)).toString(16)).slice(-2); }).join(''); };
+  const col = hex(c), oscuro = hex([c[0]-18, c[1]-10, c[2]-8]), acento = hex([c[0]+45, c[1]+35, c[2]+55]);
+  const specs = Array.isArray(u.especialidades) ? u.especialidades : [];
+  const uName = String(u.id || u.name || '').toLowerCase();
+  const mailProf = (uName.includes('omar') || uName.includes('bertani')) ? 'dr.bertaniomar@gmail.com' : 'dra.guerrerobarbara@gmail.com';
+  const hoy = new Date().toLocaleDateString('es-AR', { day:'2-digit', month:'2-digit', year:'numeric' });
+  const F = 'font-family:Helvetica,Arial,sans-serif;';
+  return '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;margin:0 auto;border-collapse:collapse;background:#ffffff;border:1px solid #e3e8ef;' + F + '">'
+    // Encabezado
+    + '<tr><td style="padding:0;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;"><tr>'
+    + '<td width="6" style="background:' + acento + ';font-size:0;">&nbsp;</td>'
+    + '<td style="background:' + oscuro + ';background-image:linear-gradient(90deg,' + oscuro + ' 0%,' + oscuro + ' 38%,' + col + ' 38%);padding:18px 20px;">'
+    + '<div style="' + F + 'font-size:20px;font-weight:bold;color:#ffffff;padding-bottom:4px;border-bottom:1px solid #a5a5bc;display:inline-block;">' + _esc(u.titulo || u.name || '') + '</div>'
+    + '<div style="' + F + 'font-size:12px;color:#d7d7e6;margin-top:6px;">' + _esc(u.mp || '') + '</div>'
+    + specs.map(function(x){ return '<div style="' + F + 'font-size:13px;color:#b9b9d0;margin-top:3px;">' + _esc(x) + '</div>'; }).join('')
+    + '</td>'
+    + '<td width="70" align="center" style="background:' + col + ';padding:0 16px 0 0;"><div style="width:44px;height:44px;border-radius:50%;background:' + acento + ';border:8px solid ' + oscuro + ';"></div></td>'
+    + '</tr></table></td></tr>'
+    // Barra del paciente
+    + '<tr><td style="padding:16px 22px 4px;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;"><tr>'
+    + '<td style="' + F + '"><div style="font-size:16px;font-weight:bold;color:#1a2535;">' + _esc((p.apellido || '') + ', ' + (p.nombre || '')) + '</div>'
+    + (p.dni ? '<div style="font-size:12px;color:#6b7a8d;margin-top:2px;">DNI ' + _esc(p.dni) + '</div>' : '') + '</td>'
+    + '<td align="right" valign="top" style="' + F + 'font-size:14px;font-weight:bold;color:#3089ca;">' + hoy + '</td>'
+    + '</tr></table></td></tr>'
+    // Título y texto
+    + '<tr><td style="padding:14px 22px 6px;"><span style="' + F + 'font-size:15px;font-weight:bold;color:#1a2535;border-bottom:1px solid #c8d7e4;padding-bottom:3px;">Indicaciones para el paciente</span></td></tr>'
+    + '<tr><td style="padding:10px 22px 18px;' + F + 'font-size:15px;line-height:1.55;color:#232323;">' + _limpiarHtmlRico(el) + '</td></tr>'
+    // Firma (texto)
+    + '<tr><td align="right" style="padding:4px 22px 18px;' + F + '"><div style="display:inline-block;text-align:center;border-top:1px solid #c8d7e4;padding-top:5px;">'
+    + '<div style="font-size:13px;font-weight:bold;color:#1a2535;">' + _esc(u.titulo || '') + '</div><div style="font-size:11.5px;color:#6b7a8d;">' + _esc(u.mp || '') + '</div></div></td></tr>'
+    // Pie
+    + '<tr><td style="padding:0;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;"><tr>'
+    + '<td width="6" style="background:' + acento + ';font-size:0;">&nbsp;</td>'
+    + '<td style="background:' + col + ';background-image:linear-gradient(90deg,' + oscuro + ' 0%,' + oscuro + ' 38%,' + col + ' 38%);padding:10px 18px 12px;' + F + '">'
+    + '<div style="font-size:11.5px;color:#b9b9d0;border-bottom:1px solid #8f8faa;padding-bottom:5px;">Evaluaciones cardiometabólicas</div>'
+    + '<div style="font-size:13px;font-weight:bold;color:#ffffff;text-align:center;margin-top:7px;">' + mailProf + '</div>'
+    + (direccion ? '<div style="font-size:11.5px;font-weight:bold;color:#d0d0de;text-align:center;margin-top:4px;">' + _esc(direccion.nombre + (direccion.subtitulo ? ' · ' + direccion.subtitulo : '')) + '</div>'
+      + '<div style="font-size:11.5px;color:#d0d0de;text-align:center;">' + _esc(direccion.direccion || '') + '</div>' : '')
+    + '</td></tr></table></td></tr></table>';
+}
+
 // ── Mandar indicaciones o recetas por mail DIRECTO al paciente ──
 // Sale desde el Gmail del profesional, con el PDF adjunto, y solo al mail registrado en la ficha.
 // Si algo falla, ofrece la forma anterior: descargar el PDF y abrir el programa de mail.
@@ -12780,6 +12889,7 @@ async function _mailPacienteAsegurado(p) {
   const r = await sb.from('pacientes').update({ email: nuevo }).eq('dni', p.dni);
   if(r.error) { alert('No se pudo guardar el mail en la ficha: ' + r.error.message); return null; }
   p.email = nuevo;
+  _pintarMailHeader(p);
   const enLista = (typeof pacientesData !== 'undefined') ? pacientesData.find(function(x){ return String(x.dni) === String(p.dni); }) : null;
   if(enLista) enLista.email = nuevo;
   return nuevo;
@@ -12795,20 +12905,23 @@ async function _enviarDocPorMail(opts) {
     const fd = new FormData();
     fd.append('accion', 'staff_mail_indicaciones'); fd.append('tipo', opts.tipo); fd.append('dni', opts.p.dni); fd.append('prof', prof);
     if(opts.texto) fd.append('texto', opts.texto);
+    if(opts.htmlDoc) fd.append('html_doc', opts.htmlDoc);
     if(opts.doc) fd.append('pdf', new File([opts.doc.output('blob')], opts.filename, { type: 'application/pdf' }));
     if(opts.materiales && opts.materiales.length) fd.append('materiales', opts.materiales.join(','));
+    (opts.extras || []).forEach(function(f){ fd.append('extra', f, f.name); });
     const r = await fetch('https://qdjzetylyojfjdottjrk.supabase.co/functions/v1/video-turnos', { method:'POST', body: fd });
     const j = await r.json().catch(function(){ return {}; });
     if(!r.ok) throw new Error(j.error || ('Error ' + r.status));
     fin();
     if(opts.btn) { opts.btn.textContent = '✓ Enviado'; setTimeout(function(){ opts.btn.textContent = txtBtn; }, 3000); }
-    const nMat = (opts.materiales||[]).length;
+    const nMat = (opts.materiales||[]).length + (opts.extras||[]).length;
     alert('✓ ' + (!opts.doc ? 'Material enviado' : opts.tipo === 'receta' ? 'Receta enviada' : 'Indicaciones enviadas') + ' a ' + (j.email || opts.p.email)
       + (opts.doc ? ' con el PDF adjunto' : '') + (nMat ? ' (+ ' + nMat + ' material' + (nMat > 1 ? 'es' : '') + ')' : '') + '.');
     if(opts.alTerminar) opts.alTerminar(true);
   } catch(e) {
     fin();
     if(!opts.doc) { alert('No se pudo enviar: ' + e.message); return; }
+    (opts.extras || []).forEach(function(f){ const a = document.createElement('a'); a.href = URL.createObjectURL(f); a.download = f.name; a.click(); });
     if(confirm('No se pudo enviar automáticamente (' + e.message + ').\n\n¿Querés descargar el PDF y abrir tu programa de mail para mandarlo a mano?')) {
       opts.doc.save(opts.filename);
       const u = users[selectedUser] || {};
@@ -12832,7 +12945,8 @@ async function enviarMailIndicacionesEvol() {
   const btn = document.querySelector('button[onclick="enviarMailIndicacionesEvol()"]');
   _getLogoPNG(function() {
     let info; try { info = _crearPDFIndicacionesEvol(txt, true); } catch(e) { alert('No se pudo armar el PDF: ' + e.message); return; }
-    _enviarDocPorMail({ tipo:'indicaciones', p:p, texto:txt, doc:info.doc, filename:info.filename, btn:btn, materiales: eleccion.materiales,
+    let htmlDoc = ''; try { htmlDoc = _htmlMailIndicaciones(indEl2, p, _pieDireccionSeleccionada('evol_ind_direccion')); } catch(e) { console.warn('mail indicaciones html', e); }
+    _enviarDocPorMail({ tipo:'indicaciones', p:p, texto:txt, htmlDoc: htmlDoc, doc:info.doc, filename:info.filename, btn:btn, materiales: eleccion.materiales, extras: eleccion.extras,
       alTerminar: function(){ _indicacionesPdfDescargado = true; _preguntarVolcarIndicacionesSiCorresponde(); } });
   });
 }
@@ -12853,7 +12967,9 @@ async function enviarPorMail(tipo) {
   const eleccion = await _modalEnviarMail({ email: email, que: tipo === 'receta' ? 'la receta (PDF)' : 'las indicaciones (PDF)' }); if(!eleccion) return;
   const btn = document.querySelector('button[onclick="enviarPorMail(\'' + tipo + '\')"]');
   generarPDF(tipo, function(doc, filename) {
-    _enviarDocPorMail({ tipo:tipo, p:p, texto:(tipo === 'indicaciones' ? texto : ''), doc:doc, filename:filename, btn:btn, materiales: eleccion.materiales });
+    let htmlDoc = '';
+    if(tipo === 'indicaciones') { try { htmlDoc = _htmlMailIndicaciones(document.getElementById('ind_contenido'), p, _pieDireccionSeleccionada('ind_direccion')); } catch(e) { console.warn('mail indicaciones html', e); } }
+    _enviarDocPorMail({ tipo:tipo, p:p, texto:(tipo === 'indicaciones' ? texto : ''), htmlDoc: htmlDoc, doc:doc, filename:filename, btn:btn, materiales: eleccion.materiales, extras: eleccion.extras });
   });
 }
 // Botón "📚 Materiales": mandar solo material (planillas, dietas…) sin indicaciones
@@ -12861,8 +12977,8 @@ async function enviarMaterialesPaciente() {
   const p = pacienteActual; if(!p) { alert('Abrí primero un paciente.'); return; }
   const email = await _mailPacienteAsegurado(p); if(!email) return;
   const eleccion = await _modalEnviarMail({ email: email, que: null }); if(!eleccion) return;
-  if(!eleccion.materiales.length) { alert('No elegiste ningún material.'); return; }
-  _enviarDocPorMail({ tipo:'material', p:p, texto:'', doc:null, filename:'', materiales: eleccion.materiales,
+  if(!eleccion.materiales.length && !eleccion.extras.length) { alert('No elegiste nada para mandar.'); return; }
+  _enviarDocPorMail({ tipo:'material', p:p, texto:'', doc:null, filename:'', materiales: eleccion.materiales, extras: eleccion.extras,
     btn: document.querySelector('button[onclick="enviarMaterialesPaciente()"]') });
 }
 
@@ -12919,18 +13035,41 @@ function _modalEnviarMail(o) {
     const m = _uiModal('✉ Enviar por mail',
       '<div style="font-size:13.5px;margin-bottom:8px;">Para: <b>' + _esc(o.email) + '</b> · sale desde tu Gmail.</div>'
       + (o.que ? '<div style="font-size:13.5px;margin-bottom:10px;">✓ Se envía ' + _esc(o.que) + '.</div>' : '')
-      + '<div style="font-weight:700;font-size:13.5px;margin:6px 0 2px;">📚 ' + (o.que ? 'Sumar material' : 'Elegí el material') + '</div>'
+      + '<div style="font-weight:700;font-size:13.5px;margin:6px 0 2px;">📋 Planillas e informes de este paciente</div>'
+      + '<div style="font-size:12px;color:#64748b;margin-bottom:4px;">Se arman con lo que tenés cargado en la HC y van en PDF.</div>'
+      + _htmlInformesPaciente()
+      + '<div style="font-weight:700;font-size:13.5px;margin:12px 0 2px;">📚 ' + (o.que ? 'Sumar material' : 'Elegí el material') + '</div>'
       + '<div class="ui-lista">' + _htmlListaMateriales(lista, true) + '</div>'
       + '<button type="button" class="ui-admin" style="margin-top:6px;border:none;background:none;color:var(--blue);cursor:pointer;font-size:12.5px;padding:0;">⚙ Cargar o administrar materiales</button>'
+      + '<div style="font-weight:700;font-size:13.5px;margin:12px 0 2px;">📎 Otro archivo de la compu</div>'
+      + '<div style="font-size:12px;color:#64748b;margin-bottom:4px;">Por ejemplo una planilla editable que completaste. Va solo a este paciente (no queda en la biblioteca).</div>'
+      + '<input type="file" class="ui-extra" multiple accept="application/pdf,image/*" style="font-size:12.5px;max-width:100%;">'
+      + '<div class="ui-prog" style="font-size:12.5px;color:#0f766e;margin-top:8px;"></div>'
       + '<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px;"><button type="button" class="ui-no" style="padding:8px 14px;border-radius:9px;border:1.5px solid #e5e7eb;background:#fff;cursor:pointer;">Cancelar</button>'
       + '<button type="button" class="ui-si" style="padding:8px 18px;border-radius:9px;border:none;background:var(--teal);color:#fff;font-weight:700;cursor:pointer;">Enviar</button></div>');
     let listo = false;
     const fin = function(v){ if(listo) return; listo = true; m.cerrar(); resolve(v); };
     m.bg.querySelector('.ui-x').onclick = function(){ fin(null); };
     m.box.querySelector('.ui-no').onclick = function(){ fin(null); };
-    m.box.querySelector('.ui-si').onclick = function(){
+    m.box.querySelector('.ui-si').onclick = async function(){
       const ids = Array.prototype.map.call(m.box.querySelectorAll('.ui-mat:checked'), function(c){ return c.value; });
-      fin({ materiales: ids });
+      const archivos = Array.prototype.slice.call(m.box.querySelector('.ui-extra').files || []);
+      const grandes = archivos.filter(function(f){ return f.size > 9 * 1024 * 1024; });
+      if(grandes.length) { alert('"' + grandes[0].name + '" pesa más de 9 MB. Para archivos grandes subilo a la biblioteca (⚙ Cargar o administrar materiales).'); return; }
+      const infs = Array.prototype.map.call(m.box.querySelectorAll('.ui-inf:checked'), function(c){ return c.value; });
+      const extras = archivos.slice();
+      if(infs.length) {
+        const bSi = this, prog = m.box.querySelector('.ui-prog'); bSi.disabled = true;
+        const fallas = [];
+        for(const k of infs) {
+          const def = _INFORMES_MAIL.find(function(x){ return x.k === k; });
+          prog.textContent = '⏳ Armando ' + def.nombre + '…';
+          try { extras.push(await _informeAPdf(def)); } catch(e) { fallas.push(def.nombre + ': ' + e.message); }
+        }
+        prog.textContent = ''; bSi.disabled = false;
+        if(fallas.length && !confirm('No se pudo armar:\n• ' + fallas.join('\n• ') + '\n\n¿Enviar igual lo demás?')) return;
+      }
+      fin({ materiales: ids, extras: extras });
     };
     m.box.querySelector('.ui-admin').onclick = function(){
       abrirMaterialesManager(async function(){
@@ -12942,10 +13081,97 @@ function _modalEnviarMail(o) {
     };
   });
 }
+// ── Planillas e informes del paciente que se pueden mandar por mail ──
+// Reutiliza las mismas funciones de "Imprimir informe": se captura el HTML que abrirían en la
+// ventana de impresión y se convierte a PDF (html2pdf, se carga solo cuando hace falta).
+const _INFORMES_MAIL = [
+  { k:'adip', nombre:'Adiposidad · cronograma e indicaciones', archivo:'Adiposidad', fn: async function(){
+      const p = pacienteActual;
+      let trat = (adipPacDni === p.dni && adipTratamientos.length) ? adipTratamientos[adipIdx >= 0 ? adipIdx : 0] : null;
+      if(!trat) {
+        const r = await sb.from('adiposidad_tratamientos').select('*').eq('paciente_dni', p.dni).order('fecha_inicio', { ascending:false }).limit(1);
+        const x = r.data && r.data[0];
+        if(!x) throw new Error('no tiene un tratamiento de adiposidad cargado');
+        trat = { id:x.id, fecha_inicio:x.fecha_inicio, fecha_control:x.fecha_control||'', tipo_tratamiento:x.tipo_tratamiento||'farmacologico', tipo_cirugia:x.tipo_cirugia||'',
+          actividad_factor:x.actividad_factor||'sedentario', droga:x.droga||'', dosis:x.dosis||'', nota_informe:x.nota_informe||'' };
+      }
+      return _adipGenerarHTMLInforme(trat, false, ADIP_OPTS_DEFAULT);
+    } },
+  { k:'lip', nombre:'Riesgo cardiovascular y lípidos', archivo:'Riesgo_cardiovascular', fn: function(){ return lipImprimirInforme({ general:true, antro:true, nutri:true, actividad:true }); } },
+  { k:'obe', nombre:'Obesidad', archivo:'Obesidad', fn: function(){ return obeImprimirInforme({ general:true, antro:true, nutri:true, actividad:true }); } },
+  { k:'dbt', nombre:'Diabetes', archivo:'Diabetes', fn: async function(){ if(typeof dbtIniciar === 'function') await dbtIniciar(pacienteActual.dni); return dbtImprimirInforme(); } },
+  { k:'hab', nombre:'Hábitos (alimentación y actividad)', archivo:'Habitos', fn: function(){ return imprimirInformeHabitos({ antro:true, nutri:true, actOms:true }); } },
+  { k:'ant', nombre:'Antropometría', archivo:'Antropometria', fn: function(){ return imprimirInformeAnt(); } },
+  { k:'mdpa', nombre:'MDPA (presión arterial)', archivo:'MDPA', disponible: function(){ return mdpaPacDni === pacienteActual.dni && mdpaIdx >= 0; }, fn: function(){ return mdpaImprimirInforme(); } },
+];
+function _htmlInformesPaciente() {
+  if(!pacienteActual) return '';
+  return '<div style="display:grid;grid-template-columns:1fr 1fr;gap:5px;">' + _INFORMES_MAIL.filter(function(d){ return !d.disponible || d.disponible(); }).map(function(d){
+    return '<label style="display:flex;align-items:center;gap:7px;padding:6px 9px;border:1px solid #e5e7eb;border-radius:9px;font-size:13px;font-weight:500;text-transform:none;letter-spacing:0;color:#1f2937;cursor:pointer;">'
+      + '<input type="checkbox" class="ui-inf" value="' + d.k + '" style="width:16px;height:16px;accent-color:var(--teal);"><span>' + _esc(d.nombre) + '</span></label>';
+  }).join('') + '</div>';
+}
+// Corre una función de "imprimir informe" sin abrir ventana: devuelve el HTML que iba a imprimir.
+async function _capturarHTMLInforme(fn) {
+  let html = '', aviso = '';
+  const fake = { document: { write: function(h){ html += h; }, writeln: function(h){ html += h + '\n'; }, open: function(){}, close: function(){}, title: '' },
+    focus: function(){}, print: function(){}, close: function(){}, addEventListener: function(){}, closed: false };
+  const oOpen = window.open, oAlert = window.alert;
+  window.open = function(){ return fake; };
+  window.alert = function(t){ aviso = String(t || ''); };
+  try {
+    const r = await fn();
+    if(typeof r === 'string' && /<(html|body|div|table)/i.test(r)) html = r;
+  } finally { window.open = oOpen; window.alert = oAlert; }
+  if(!html) throw new Error(aviso || 'no hay datos cargados');
+  return html;
+}
+let _h2pPromesa = null;
+function _cargarScript(url, win) {
+  win = win || window;
+  return new Promise(function(ok, mal){ const sc = win.document.createElement('script'); sc.src = url; sc.onload = ok; sc.onerror = function(){ mal(new Error('no se pudo cargar el generador de PDF (¿hay internet?)')); }; win.document.head.appendChild(sc); });
+}
+const _H2P_URL = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
+async function _htmlAPdfBlob(html) {
+  // Se dibuja en un iframe propio (con los estilos del informe) a ancho A4 y se pasa a PDF
+  const ifr = document.createElement('iframe');
+  ifr.style.cssText = 'position:fixed;left:-12000px;top:0;width:794px;height:1123px;border:0;background:#fff;';
+  document.body.appendChild(ifr);
+  try {
+    const d = ifr.contentDocument;
+    d.open(); d.write(html.replace(/window\.print\(\)/g, 'void 0')); d.close();
+    await new Promise(function(ok){ setTimeout(ok, 350); });
+    const imgs = Array.prototype.slice.call(d.images || []);
+    await Promise.all(imgs.map(function(im){ return im.complete ? 0 : new Promise(function(ok){ im.onload = im.onerror = ok; setTimeout(ok, 4000); }); }));
+    if(!ifr.contentWindow.html2pdf) await _cargarScript(_H2P_URL, ifr.contentWindow);
+    const est = d.createElement('style');
+    est.textContent = 'html,body{background:#fff!important;} body{margin:0!important;} .no-print,.noprint,button{display:none!important;} *{-webkit-print-color-adjust:exact;print-color-adjust:exact;}';
+    d.head.appendChild(est);
+    // Las opciones se arman dentro del iframe: html2pdf no reconoce arrays creados en otra ventana
+    const conf = ifr.contentWindow.JSON.parse(JSON.stringify({
+      margin: [8, 8, 10, 8], image: { type:'jpeg', quality:0.86 },
+      html2canvas: { scale: 1.6, useCORS: true, backgroundColor: '#ffffff', windowWidth: 794 },
+      jsPDF: { unit:'mm', format:'a4', orientation:'portrait' },
+      pagebreak: { mode: ['css', 'legacy'], avoid: ['tr', 'img', '.crono-box', '.avoid-break'] }
+    }));
+    const blob = await ifr.contentWindow.html2pdf().set(conf).from(d.body).outputPdf('blob');
+    return blob;
+  } finally { ifr.remove(); }
+}
+async function _informeAPdf(def) {
+  const html = await _capturarHTMLInforme(def.fn);
+  const blob = await _htmlAPdfBlob(html);
+  const p = pacienteActual || {};
+  const hoy = new Date().toLocaleDateString('es-AR', { day:'2-digit', month:'2-digit', year:'numeric' }).replace(/\//g, '-');
+  const nom = (def.archivo + '_' + (p.apellido || '') + '_' + (p.nombre || '').split(' ')[0] + '_' + hoy).replace(/\s+/g, '_') + '.pdf';
+  if(blob.size > 9 * 1024 * 1024) throw new Error('quedó muy pesado (' + (blob.size/1048576).toFixed(1) + ' MB)');
+  return new File([blob], nom, { type: 'application/pdf' });
+}
+
 // Administrar la biblioteca: subir, renombrar y borrar
 async function abrirMaterialesManager(alCambiar) {
   const m = _uiModal('📚 Materiales para pacientes',
-    '<div style="font-size:12.5px;color:#64748b;margin-bottom:10px;">Planillas, dietas, guías… (PDF o imagen, hasta 10 MB). Los ven los dos profesionales y los elegís al mandar un mail.</div>'
+    '<div style="font-size:12.5px;color:#64748b;margin-bottom:10px;">Planillas, dietas, guías… (PDF o imagen, hasta 50 MB). Los ven los dos profesionales y los elegís al mandar un mail. Los archivos pesados se mandan como link de descarga.</div>'
     + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">'
     + '<input type="text" id="ui-mat-nom" placeholder="Nombre (ej.: Dieta hiposódica)" style="padding:8px 10px;border:1.5px solid #e5e7eb;border-radius:9px;font:inherit;font-size:13px;">'
     + '<input type="text" id="ui-mat-cat" list="ui-mat-cats" placeholder="Categoría (ej.: Dietas)" style="padding:8px 10px;border:1.5px solid #e5e7eb;border-radius:9px;font:inherit;font-size:13px;"><datalist id="ui-mat-cats"><option value="Dietas"><option value="Planillas"><option value="Guías"><option value="Adiposidad"><option value="Ejercicio"></datalist></div>'
@@ -12977,8 +13203,19 @@ async function abrirMaterialesManager(alCambiar) {
     const f = m.box.querySelector('#ui-mat-arch').files[0];
     if(!f) { err.textContent = 'Elegí un archivo.'; return; }
     const b = this; b.disabled = true; b.textContent = 'Subiendo…';
+    const nombreM = m.box.querySelector('#ui-mat-nom').value.trim() || f.name, catM = m.box.querySelector('#ui-mat-cat').value.trim() || 'General';
     try {
-      await _fnStaff({ accion:'staff_material_subir', nombre: m.box.querySelector('#ui-mat-nom').value.trim() || f.name, categoria: m.box.querySelector('#ui-mat-cat').value.trim() || 'General' }, f);
+      if(f.size > 50 * 1024 * 1024) throw new Error('El archivo pesa ' + (f.size/1048576).toFixed(0) + ' MB: el máximo es 50 MB. Probá comprimirlo (por ejemplo en ilovepdf.com → Comprimir PDF).');
+      if(f.size <= 9 * 1024 * 1024) {
+        await _fnStaff({ accion:'staff_material_subir', nombre: nombreM, categoria: catM }, f);
+      } else {
+        // Grande: se sube directo a Storage con un permiso firmado
+        const prep = await _fnStaff({ accion:'staff_material_preparar', archivo: f.name, tipo: f.type || '', size: String(f.size) });
+        b.textContent = 'Subiendo ' + (f.size/1048576).toFixed(0) + ' MB…';
+        const up = await fetch(prep.upload_url, { method:'PUT', headers: { 'Content-Type': f.type || 'application/octet-stream', 'x-upsert': 'true' }, body: f });
+        if(!up.ok) throw new Error('No se pudo subir el archivo (' + up.status + ')');
+        await _fnStaff({ accion:'staff_material_registrar', id: prep.id, path: prep.path, nombre: nombreM, categoria: catM, archivo: f.name, tipo: f.type || '', size: String(f.size) });
+      }
       m.box.querySelector('#ui-mat-arch').value = ''; m.box.querySelector('#ui-mat-nom').value = '';
       await pintar(); if(alCambiar) alCambiar();
     } catch(e2) { err.textContent = e2.message; }
