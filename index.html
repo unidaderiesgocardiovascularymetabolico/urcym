@@ -654,6 +654,29 @@ function mostrarPresencial(){
   $('#app').innerHTML = x;
 }
 
+/* ═══════════════════ Calculadora del cronograma (tratamiento de adiposidad) ═══════════════════ */
+function mostrarCrono(){
+  AYUDA = 'menu';
+  document.title = 'Tu cronograma de aplicación · URCyM';
+  $('#titulo').textContent = 'Tu cronograma de aplicación';
+  $('#subtitulo').textContent = 'Poné el día de tu primera aplicación y te calculamos el resto.';
+  $('#app').innerHTML = '<section class="card"><label for="cr-f" style="font-weight:600;display:block;margin-bottom:6px">¿Qué día te aplicaste (o te vas a aplicar) la 1ª dosis?</label>'
+    + '<input type="date" id="cr-f"><p class="nota" style="margin:8px 0 0">El <b>Día 1</b> es el de la primera aplicación, no el de la compra. Después, una vez por semana, siempre el mismo día.</p></section>'
+    + '<div id="cr-res"></div><p class="nota centro" style="margin:10px 12px 0"><a href="./" style="color:inherit">← Ir a turnos y consultas</a></p>';
+  var inp = $('#cr-f');
+  var pintar = function(){
+    if(!inp.value){ $('#cr-res').innerHTML = ''; return; }
+    var base = new Date(inp.value + 'T12:00:00');
+    var f = function(n){ var d = new Date(base); d.setDate(d.getDate() + n - 1); return d.toLocaleDateString('es-AR', { weekday:'long', day:'numeric', month:'long' }); };
+    var filas = [[1, '💉 1ª aplicación'], [8, '💉 2ª aplicación'], [15, '💉 3ª aplicación · 📅 <b>primera consulta de control</b>'], [22, '💉 4ª aplicación · última de la caja']];
+    $('#cr-res').innerHTML = '<section class="card">' + filas.map(function(x, i){
+      return '<div class="lugar"' + (i === 0 ? ' style="border-top:0"' : '') + '><div><b>' + f(x[0]).charAt(0).toUpperCase() + f(x[0]).slice(1) + '</b><span>Semana ' + (i + 1) + ' · Día ' + x[0] + ' — ' + x[1] + '</span></div></div>';
+    }).join('') + '</section>'
+      + '<section class="card" style="background:#f3fbf5;border-color:#bfe8cf"><b>📅 Tu primer control:</b> a partir del <b>' + f(15) + '</b> y siempre <b>antes del ' + f(22) + '</b>, antes de comprar la próxima caja. Pedí el turno con anticipación.</section>';
+  };
+  inp.oninput = pintar; inp.onchange = pintar;
+}
+
 /* ═══════════════════ Recetas y consultas por mensaje ═══════════════════ */
 var Q = {};
 var OS_COMUNES = ['OSDE','Swiss Medical','Galeno','Medifé','OMINT','Sancor Salud','Hospital Italiano','Hospital Alemán','IOMA','PAMI','OSECAC','Accord Salud','Particular / sin cobertura'];
@@ -1220,6 +1243,7 @@ $('#b-ayuda').onclick = abrirAyuda;
   var t = q.get('t');
   if(t) return verReserva(t, { recien: q.get('mp') === 'sena', esperaSaldo: q.get('mp') === 'saldo' });
   if(q.get('p')) return verPedido(q.get('p'), { recien: q.get('mp') === '1' });
+  if(q.get('s') === 'crono') return mostrarCrono();
   api({ accion:'config' }).then(function(cfg){
     CFG = cfg;
     var s = q.get('s');
