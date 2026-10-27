@@ -3585,7 +3585,8 @@
                 <option value="urcym">URCyM (Santa Teresita)</option>
               </select>
               <button class="btn btn-teal" onclick="generarPDFIndicacionesEvol()" style="width:auto;margin:0;padding:7px 16px;font-size:12px">⬇ PDF</button>
-              <button class="btn" onclick="enviarMailIndicacionesEvol()" style="width:auto;margin:0;padding:7px 16px;font-size:12px;background:var(--gray);border:1.5px solid var(--border);color:var(--text)">✉ Email</button>
+              <button class="btn" onclick="enviarMailIndicacionesEvol()" style="width:auto;margin:0;padding:7px 16px;font-size:12px;background:var(--gray);border:1.5px solid var(--border);color:var(--text)">✉ Enviar por mail</button>
+              <button class="btn" onclick="enviarMaterialesPaciente()" title="Mandar planillas, dietas o guías al paciente" style="width:auto;margin:0;padding:7px 16px;font-size:12px;background:var(--gray);border:1.5px solid var(--border);color:var(--text)">📚 Materiales</button>
             </div>
           </div>
 
@@ -3946,7 +3947,7 @@
             <button type="button" onclick="adipCalcularFechaControl()" title="Calcular automáticamente: 3ra dosis semanal (mismo día de la semana), 3 semanas desde el inicio" style="padding:5px 10px;border:1.5px solid var(--teal);border-radius:8px;background:var(--teal-light);color:var(--teal);font-size:11px;font-weight:600;cursor:pointer;font-family:var(--font-main)">🧮 Calcular</button>
             <div id="adip_guardado_badge" style="display:none;background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:3px 10px;font-size:11px;font-weight:600;color:#16a34a">✓ Guardado</div>
           </div>
-          <div class="mdpa-modal-help" style="margin-bottom:10px">📌 Si el/la paciente todavía no compró la medicación, podés dejar la fecha de inicio vacía: el informe le va a indicar que debe calcular el cronograma él/ella mismo/a a partir del día que se aplique la primera dosis.</div>
+          <div class="mdpa-modal-help" style="margin-bottom:10px">📌 Si el/la paciente todavía no compró la medicación, podés dejar la fecha de inicio vacía: el informe trae el cronograma contado desde el <b>Día 1 = su primera aplicación</b> (semanas 1 a 4) y le marca la primera consulta con la 3ª aplicación, antes de comprar la próxima caja.</div>
           <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap">
             <span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-soft)">Tipo de tratamiento:</span>
             <div style="display:flex;gap:6px">
@@ -4355,7 +4356,7 @@
       <div>
         <label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-soft);display:block;margin-bottom:6px">Fecha de inicio del tratamiento</label>
         <input type="date" lang="es-AR" id="adip_nuevo_fecha" oninput="adipNuevoAutoControl()" style="width:100%;padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:14px;font-family:var(--font-main);background:white;outline:none;box-sizing:border-box"/>
-        <span class="mdpa-modal-help">📌 Dejala vacía si el/la paciente todavía no compró la medicación: el informe le va a indicar que debe calcular el cronograma él/ella mismo/a a partir del día que se aplique la primera dosis.</span>
+        <span class="mdpa-modal-help">📌 Dejala vacía si el/la paciente todavía no compró la medicación: el informe trae el cronograma contado desde el <b>Día 1 = su primera aplicación</b> (semanas 1 a 4) y le marca la primera consulta con la 3ª aplicación, antes de comprar la próxima caja.</span>
       </div>
       <div>
         <label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-soft);display:block;margin-bottom:6px">Fecha estipulada para el 1er control</label>
@@ -8914,7 +8915,7 @@ function _parseRichTextSegments(container, preserveBlankLines) {
 
 /*  GENERAR PDF                                        */
 /* ─────────────────────────────────────────────────── */
-function generarPDF(tipo) {
+function generarPDF(tipo, alListo) {
   const u = users[selectedUser]; if (!u) return;
   _getLogoPNG(function() {
   const p = pacienteActual;
@@ -9014,7 +9015,8 @@ function generarPDF(tipo) {
   if (usarOtro) { _pdfFooterOtro(doc, u, PW, PH, direccionPie); } else { _pdfFooter(doc, PW, PH); }
 
   const np = p ? [p.apellido, p.nombre].filter(Boolean).join('_').replace(/\s+/g, '_') || 'doc' : 'doc';
-  doc.save(`${tipo}_${np}_${hoy.replace(/\//g, '-')}.pdf`);
+  const _nombrePdf = `${tipo}_${np}_${hoy.replace(/\//g, '-')}.pdf`;
+  if (typeof alListo === 'function') alListo(doc, _nombrePdf); else doc.save(_nombrePdf);
   // Limpiar el box correspondiente y cerrar el modal al guardar el PDF
   if (tipo === 'receta') {
     const elRClean = document.getElementById('rec_contenido');
@@ -12765,23 +12767,224 @@ function _crearPDFIndicacionesEvol(txt, usarOtro) {
   return { doc, filename, hoy };
 }
 
-function enviarMailIndicacionesEvol() {
+// ── Mandar indicaciones o recetas por mail DIRECTO al paciente ──
+// Sale desde el Gmail del profesional, con el PDF adjunto, y solo al mail registrado en la ficha.
+// Si algo falla, ofrece la forma anterior: descargar el PDF y abrir el programa de mail.
+const _MAIL_OK = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+async function _mailPacienteAsegurado(p) {
+  let email = String(p.email||'').trim();
+  if(_MAIL_OK.test(email)) return email;
+  const nuevo = (prompt('El paciente no tiene mail registrado. Escribilo para mandárselo (queda guardado en su ficha):', '') || '').trim().toLowerCase();
+  if(!nuevo) return null;
+  if(!_MAIL_OK.test(nuevo)) { alert('Ese mail no parece válido.'); return null; }
+  const r = await sb.from('pacientes').update({ email: nuevo }).eq('dni', p.dni);
+  if(r.error) { alert('No se pudo guardar el mail en la ficha: ' + r.error.message); return null; }
+  p.email = nuevo;
+  const enLista = (typeof pacientesData !== 'undefined') ? pacientesData.find(function(x){ return String(x.dni) === String(p.dni); }) : null;
+  if(enLista) enLista.email = nuevo;
+  return nuevo;
+}
+async function _enviarDocPorMail(opts) {
+  // opts: { tipo:'indicaciones'|'receta', p, texto, doc, filename, btn, alTerminar }
+  const prof = { barbara:'BG', omar:'OB' }[String(selectedUser||'').toLowerCase()];
+  const txtBtn = opts.btn ? opts.btn.textContent : '';
+  const fin = function(){ if(opts.btn) { opts.btn.disabled = false; opts.btn.textContent = txtBtn; } };
+  try {
+    if(!prof) throw new Error('solo se envía desde el usuario de un profesional');
+    if(opts.btn) { opts.btn.disabled = true; opts.btn.textContent = 'Enviando…'; }
+    const fd = new FormData();
+    fd.append('accion', 'staff_mail_indicaciones'); fd.append('tipo', opts.tipo); fd.append('dni', opts.p.dni); fd.append('prof', prof);
+    if(opts.texto) fd.append('texto', opts.texto);
+    if(opts.doc) fd.append('pdf', new File([opts.doc.output('blob')], opts.filename, { type: 'application/pdf' }));
+    if(opts.materiales && opts.materiales.length) fd.append('materiales', opts.materiales.join(','));
+    const r = await fetch('https://qdjzetylyojfjdottjrk.supabase.co/functions/v1/video-turnos', { method:'POST', body: fd });
+    const j = await r.json().catch(function(){ return {}; });
+    if(!r.ok) throw new Error(j.error || ('Error ' + r.status));
+    fin();
+    if(opts.btn) { opts.btn.textContent = '✓ Enviado'; setTimeout(function(){ opts.btn.textContent = txtBtn; }, 3000); }
+    const nMat = (opts.materiales||[]).length;
+    alert('✓ ' + (!opts.doc ? 'Material enviado' : opts.tipo === 'receta' ? 'Receta enviada' : 'Indicaciones enviadas') + ' a ' + (j.email || opts.p.email)
+      + (opts.doc ? ' con el PDF adjunto' : '') + (nMat ? ' (+ ' + nMat + ' material' + (nMat > 1 ? 'es' : '') + ')' : '') + '.');
+    if(opts.alTerminar) opts.alTerminar(true);
+  } catch(e) {
+    fin();
+    if(!opts.doc) { alert('No se pudo enviar: ' + e.message); return; }
+    if(confirm('No se pudo enviar automáticamente (' + e.message + ').\n\n¿Querés descargar el PDF y abrir tu programa de mail para mandarlo a mano?')) {
+      opts.doc.save(opts.filename);
+      const u = users[selectedUser] || {};
+      setTimeout(function(){
+        const asunto = encodeURIComponent((opts.tipo === 'receta' ? 'Receta' : 'Indicaciones médicas') + ' - Evaluaciones cardiometabólicas');
+        const cuerpo = encodeURIComponent('Estimado/a ' + (opts.p.nombre||'') + ',\n\n' + (opts.texto ? opts.texto + '\n\n' : 'Le adjunto el PDF.\n\n') + 'Saludos,\n' + (u.titulo||''));
+        window.location.href = 'mailto:' + (opts.p.email||'') + '?subject=' + asunto + '&body=' + cuerpo;
+      }, 800);
+      if(opts.alTerminar) opts.alTerminar(false);
+    }
+  }
+}
+// Botón "✉ Enviar por mail" de las indicaciones en la evolución
+async function enviarMailIndicacionesEvol() {
   const p = pacienteActual; if(!p) return;
   const indEl2 = document.getElementById('evol_indicaciones_editor');
   const txt = indEl2 ? indEl2.innerText.trim() : '';
-  if(!txt || !p.email) { alert(!txt?'Sin indicaciones.':'El paciente no tiene email registrado.'); return; }
+  if(!txt) { alert('Sin indicaciones.'); return; }
+  const email = await _mailPacienteAsegurado(p); if(!email) return;
+  const eleccion = await _modalEnviarMail({ email: email, que: 'las indicaciones (PDF)' }); if(!eleccion) return;
+  const btn = document.querySelector('button[onclick="enviarMailIndicacionesEvol()"]');
   _getLogoPNG(function() {
-    const { doc, filename, hoy } = _crearPDFIndicacionesEvol(txt, true);
-    doc.save(filename);
-    _indicacionesPdfDescargado = true;
-    _preguntarVolcarIndicacionesSiCorresponde();
-    const u = users[selectedUser];
-    setTimeout(() => {
-      const asunto = encodeURIComponent('Indicaciones médicas - Evaluaciones cardiometabólicas - '+hoy);
-      const cuerpo = encodeURIComponent('Estimado/a '+p.nombre+',\n\nSus indicaciones del '+hoy+':\n\n'+txt+'\n\nSaludos,\n'+u.titulo+'\nEvaluaciones cardiometabólicas - 2246 58-8469');
-      window.location.href = 'mailto:'+p.email+'?subject='+asunto+'&body='+cuerpo;
-    }, 800);
+    let info; try { info = _crearPDFIndicacionesEvol(txt, true); } catch(e) { alert('No se pudo armar el PDF: ' + e.message); return; }
+    _enviarDocPorMail({ tipo:'indicaciones', p:p, texto:txt, doc:info.doc, filename:info.filename, btn:btn, materiales: eleccion.materiales,
+      alTerminar: function(){ _indicacionesPdfDescargado = true; _preguntarVolcarIndicacionesSiCorresponde(); } });
   });
+}
+// Botón "✉️ Enviar por mail" de los modales Receta e Indicaciones (desde la lista de pacientes)
+async function enviarPorMail(tipo) {
+  const p = pacienteActual; if(!p) { alert('No hay paciente seleccionado.'); return; }
+  let texto = '';
+  if(tipo === 'indicaciones') {
+    const el = document.getElementById('ind_contenido');
+    texto = el ? (el.innerText || el.value || '').trim() : '';
+    if(!texto) { alert('Escribí las indicaciones.'); return; }
+  } else {
+    const elR = document.querySelector('#modalReceta [contenteditable]') || document.querySelector('#modalReceta textarea') || document.getElementById('rec_contenido');
+    const t = elR ? (elR.innerText || elR.value || '').trim() : '';
+    if(!t) { alert('Escribí la receta.'); return; }
+  }
+  const email = await _mailPacienteAsegurado(p); if(!email) return;
+  const eleccion = await _modalEnviarMail({ email: email, que: tipo === 'receta' ? 'la receta (PDF)' : 'las indicaciones (PDF)' }); if(!eleccion) return;
+  const btn = document.querySelector('button[onclick="enviarPorMail(\'' + tipo + '\')"]');
+  generarPDF(tipo, function(doc, filename) {
+    _enviarDocPorMail({ tipo:tipo, p:p, texto:(tipo === 'indicaciones' ? texto : ''), doc:doc, filename:filename, btn:btn, materiales: eleccion.materiales });
+  });
+}
+// Botón "📚 Materiales": mandar solo material (planillas, dietas…) sin indicaciones
+async function enviarMaterialesPaciente() {
+  const p = pacienteActual; if(!p) { alert('Abrí primero un paciente.'); return; }
+  const email = await _mailPacienteAsegurado(p); if(!email) return;
+  const eleccion = await _modalEnviarMail({ email: email, que: null }); if(!eleccion) return;
+  if(!eleccion.materiales.length) { alert('No elegiste ningún material.'); return; }
+  _enviarDocPorMail({ tipo:'material', p:p, texto:'', doc:null, filename:'', materiales: eleccion.materiales,
+    btn: document.querySelector('button[onclick="enviarMaterialesPaciente()"]') });
+}
+
+// ── 📚 Biblioteca de materiales para pacientes ──
+const _FN_ONLINE = 'https://qdjzetylyojfjdottjrk.supabase.co/functions/v1/video-turnos';
+async function _fnStaff(campos, archivo) {
+  const fd = new FormData();
+  Object.keys(campos).forEach(function(k){ fd.append(k, campos[k]); });
+  if(archivo) fd.append('archivo', archivo);
+  const r = await fetch(_FN_ONLINE, { method:'POST', body: fd });
+  const j = await r.json().catch(function(){ return {}; });
+  if(!r.ok) throw new Error(j.error || ('Error ' + r.status));
+  return j;
+}
+async function _leerMateriales() {
+  try {
+    const r = await sb.from('urcym_agenda_config').select('value').eq('key','materiales').maybeSingle();
+    const v = r.data && r.data.value; const l = typeof v === 'string' ? JSON.parse(v || '[]') : (v || []);
+    return Array.isArray(l) ? l : [];
+  } catch(e) { return []; }
+}
+function _esc(t){ return String(t==null?'':t).replace(/[&<>"]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+function _uiModal(titulo, html) {
+  const bg = document.createElement('div');
+  bg.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:100001;display:flex;align-items:flex-start;justify-content:center;padding:5vh 12px;overflow:auto;';
+  bg.innerHTML = '<div style="background:#fff;border-radius:14px;max-width:560px;width:100%;padding:18px 20px;box-shadow:0 20px 60px rgba(0,0,0,.25);font-family:var(--font-main);">'
+    + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;"><b style="font-size:16px;">' + titulo + '</b>'
+    + '<button type="button" class="ui-x" style="border:none;background:none;font-size:22px;cursor:pointer;color:#64748b;">×</button></div><div class="ui-body">' + html + '</div></div>';
+  document.body.appendChild(bg);
+  const cerrar = function(){ bg.remove(); };
+  bg.querySelector('.ui-x').onclick = cerrar;
+  return { box: bg.querySelector('.ui-body'), cerrar: cerrar, bg: bg };
+}
+function _htmlListaMateriales(lista, conCheck) {
+  if(!lista.length) return '<div style="color:#64748b;font-size:13px;padding:10px;border:1.5px dashed #dde3ec;border-radius:10px;text-align:center;">Todavía no cargaste materiales.</div>';
+  const cats = {}; lista.forEach(function(m){ (cats[m.categoria || 'General'] = cats[m.categoria || 'General'] || []).push(m); });
+  return Object.keys(cats).sort().map(function(c){
+    return '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#64748b;margin:10px 0 4px;">' + _esc(c) + '</div>'
+      + cats[c].map(function(m){
+        const kb = m.size ? (m.size > 1048576 ? (m.size/1048576).toFixed(1) + ' MB' : Math.round(m.size/1024) + ' KB') : '';
+        return '<label style="display:flex;align-items:center;gap:8px;padding:7px 10px;border:1px solid #e5e7eb;border-radius:9px;margin:0 0 5px;font-size:13.5px;text-transform:none;letter-spacing:0;font-weight:500;color:#1f2937;cursor:' + (conCheck ? 'pointer' : 'default') + ';">'
+          + (conCheck ? '<input type="checkbox" class="ui-mat" value="' + _esc(m.id) + '" style="width:16px;height:16px;accent-color:var(--teal);">' : '<span>📄</span>')
+          + '<span style="flex:1;">' + _esc(m.nombre) + ' <span style="color:#94a3b8;font-size:11.5px;">' + kb + '</span></span>'
+          + (conCheck ? '' : '<button type="button" class="ui-mat-ren" data-id="' + _esc(m.id) + '" style="border:1px solid #e5e7eb;background:#fff;border-radius:7px;padding:3px 8px;cursor:pointer;font-size:12px;">✏️</button>'
+            + '<button type="button" class="ui-mat-bor" data-id="' + _esc(m.id) + '" style="border:1px solid #fecaca;background:#fff;color:#b91c1c;border-radius:7px;padding:3px 8px;cursor:pointer;font-size:12px;">🗑</button>')
+          + '</label>';
+      }).join('');
+  }).join('');
+}
+// Modal de envío: confirma el mail y deja elegir materiales para adjuntar. Devuelve {materiales:[ids]} o null.
+function _modalEnviarMail(o) {
+  return new Promise(async function(resolve){
+    const lista = await _leerMateriales();
+    const m = _uiModal('✉ Enviar por mail',
+      '<div style="font-size:13.5px;margin-bottom:8px;">Para: <b>' + _esc(o.email) + '</b> · sale desde tu Gmail.</div>'
+      + (o.que ? '<div style="font-size:13.5px;margin-bottom:10px;">✓ Se envía ' + _esc(o.que) + '.</div>' : '')
+      + '<div style="font-weight:700;font-size:13.5px;margin:6px 0 2px;">📚 ' + (o.que ? 'Sumar material' : 'Elegí el material') + '</div>'
+      + '<div class="ui-lista">' + _htmlListaMateriales(lista, true) + '</div>'
+      + '<button type="button" class="ui-admin" style="margin-top:6px;border:none;background:none;color:var(--blue);cursor:pointer;font-size:12.5px;padding:0;">⚙ Cargar o administrar materiales</button>'
+      + '<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px;"><button type="button" class="ui-no" style="padding:8px 14px;border-radius:9px;border:1.5px solid #e5e7eb;background:#fff;cursor:pointer;">Cancelar</button>'
+      + '<button type="button" class="ui-si" style="padding:8px 18px;border-radius:9px;border:none;background:var(--teal);color:#fff;font-weight:700;cursor:pointer;">Enviar</button></div>');
+    let listo = false;
+    const fin = function(v){ if(listo) return; listo = true; m.cerrar(); resolve(v); };
+    m.bg.querySelector('.ui-x').onclick = function(){ fin(null); };
+    m.box.querySelector('.ui-no').onclick = function(){ fin(null); };
+    m.box.querySelector('.ui-si').onclick = function(){
+      const ids = Array.prototype.map.call(m.box.querySelectorAll('.ui-mat:checked'), function(c){ return c.value; });
+      fin({ materiales: ids });
+    };
+    m.box.querySelector('.ui-admin').onclick = function(){
+      abrirMaterialesManager(async function(){
+        const l2 = await _leerMateriales();
+        const marcados = Array.prototype.map.call(m.box.querySelectorAll('.ui-mat:checked'), function(c){ return c.value; });
+        m.box.querySelector('.ui-lista').innerHTML = _htmlListaMateriales(l2, true);
+        m.box.querySelectorAll('.ui-mat').forEach(function(c){ if(marcados.indexOf(c.value) >= 0) c.checked = true; });
+      });
+    };
+  });
+}
+// Administrar la biblioteca: subir, renombrar y borrar
+async function abrirMaterialesManager(alCambiar) {
+  const m = _uiModal('📚 Materiales para pacientes',
+    '<div style="font-size:12.5px;color:#64748b;margin-bottom:10px;">Planillas, dietas, guías… (PDF o imagen, hasta 10 MB). Los ven los dos profesionales y los elegís al mandar un mail.</div>'
+    + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">'
+    + '<input type="text" id="ui-mat-nom" placeholder="Nombre (ej.: Dieta hiposódica)" style="padding:8px 10px;border:1.5px solid #e5e7eb;border-radius:9px;font:inherit;font-size:13px;">'
+    + '<input type="text" id="ui-mat-cat" list="ui-mat-cats" placeholder="Categoría (ej.: Dietas)" style="padding:8px 10px;border:1.5px solid #e5e7eb;border-radius:9px;font:inherit;font-size:13px;"><datalist id="ui-mat-cats"><option value="Dietas"><option value="Planillas"><option value="Guías"><option value="Adiposidad"><option value="Ejercicio"></datalist></div>'
+    + '<div style="display:flex;gap:8px;align-items:center;"><input type="file" id="ui-mat-arch" accept="application/pdf,image/*" style="flex:1;font-size:12.5px;">'
+    + '<button type="button" id="ui-mat-subir" style="padding:8px 14px;border-radius:9px;border:none;background:var(--teal);color:#fff;font-weight:700;cursor:pointer;">⬆ Subir</button></div>'
+    + '<div id="ui-mat-err" style="color:#b91c1c;font-size:12.5px;margin-top:6px;"></div>'
+    + '<div id="ui-mat-lista" style="margin-top:10px;max-height:50vh;overflow:auto;">Cargando…</div>');
+  const pintar = async function(){
+    const l = await _leerMateriales();
+    const cont = m.box.querySelector('#ui-mat-lista'); cont.innerHTML = _htmlListaMateriales(l, false);
+    cont.querySelectorAll('.ui-mat-bor').forEach(function(b){ b.onclick = async function(e){
+      e.preventDefault(); const it = l.find(function(x){ return x.id === b.dataset.id; });
+      if(!confirm('¿Borrar "' + (it ? it.nombre : '') + '" de la biblioteca?')) return;
+      try { await _fnStaff({ accion:'staff_material_borrar', id: b.dataset.id }); await pintar(); if(alCambiar) alCambiar(); } catch(err){ alert(err.message); }
+    }; });
+    cont.querySelectorAll('.ui-mat-ren').forEach(function(b){ b.onclick = async function(e){
+      e.preventDefault(); const it = l.find(function(x){ return x.id === b.dataset.id; }); if(!it) return;
+      const nom = prompt('Nombre:', it.nombre); if(nom === null) return;
+      const cat = prompt('Categoría:', it.categoria || 'General'); if(cat === null) return;
+      try { await _fnStaff({ accion:'staff_material_editar', id: it.id, nombre: nom, categoria: cat }); await pintar(); if(alCambiar) alCambiar(); } catch(err){ alert(err.message); }
+    }; });
+  };
+  m.box.querySelector('#ui-mat-arch').onchange = function(){
+    const f = this.files[0]; const n = m.box.querySelector('#ui-mat-nom');
+    if(f && !n.value.trim()) n.value = f.name.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ');
+  };
+  m.box.querySelector('#ui-mat-subir').onclick = async function(){
+    const err = m.box.querySelector('#ui-mat-err'); err.textContent = '';
+    const f = m.box.querySelector('#ui-mat-arch').files[0];
+    if(!f) { err.textContent = 'Elegí un archivo.'; return; }
+    const b = this; b.disabled = true; b.textContent = 'Subiendo…';
+    try {
+      await _fnStaff({ accion:'staff_material_subir', nombre: m.box.querySelector('#ui-mat-nom').value.trim() || f.name, categoria: m.box.querySelector('#ui-mat-cat').value.trim() || 'General' }, f);
+      m.box.querySelector('#ui-mat-arch').value = ''; m.box.querySelector('#ui-mat-nom').value = '';
+      await pintar(); if(alCambiar) alCambiar();
+    } catch(e2) { err.textContent = e2.message; }
+    b.disabled = false; b.textContent = '⬆ Subir';
+  };
+  pintar();
 }
 
 // ===== PESTAÑAS PACIENTE =====
@@ -17944,22 +18147,48 @@ function _adipGenerarHTMLInforme(trat, modoModal, opts) {
 
   const esBar = trat.tipo_tratamiento === 'bariatrica';
 
-  // ── ¿Cuándo es tu primer control? (siempre visible: regla general + fecha concreta si se conoce) ──
+  // ── Cronograma de aplicación + primer control ──
+  // Sirve desde el primer día que se atiende al paciente, aunque todavía no haya comprado
+  // la medicación: el "Día 1" es el día de la PRIMERA aplicación (no el de la compra).
+  // El primer control es con la 3ra aplicación (día 15) y siempre antes de terminar la caja
+  // (4ta aplicación, día 22), para ajustar la dosis antes de comprar la siguiente.
+  const _fechaDia = function(n){
+    if(fechaDesconocida) return '';
+    const d = new Date(trat.fecha_inicio + 'T12:00:00'); d.setDate(d.getDate() + n - 1);
+    return d.toLocaleDateString('es-AR', { weekday:'short', day:'2-digit', month:'2-digit' });
+  };
+  const _filaCrono = function(sem, dia, txt, destacada){
+    return '<tr' + (destacada ? ' class="crono-ctrl"' : '') + '><td>Semana ' + sem + '</td><td><strong>Día ' + dia + '</strong>' + (_fechaDia(dia) ? '<br><span class="crono-fecha">' + _fechaDia(dia) + '</span>' : '') + '</td><td>' + txt + '</td></tr>';
+  };
+  const cronogramaHTML = (!opts.indic || esBar) ? '' : `<div class="crono-box">
+    <div class="crono-title">🗓️ Tu cronograma de aplicación</div>
+    <div class="crono-intro">${fechaDesconocida
+      ? 'Todavía no empezaste: el <strong>Día 1 es el día que te aplicás la primera dosis</strong> (no el día que comprás la medicación). Desde ahí, aplicate <strong>una vez por semana, siempre el mismo día</strong>.'
+      : 'Empezaste el <strong>' + fechaIni + '</strong> (Día 1). Aplicate <strong>una vez por semana, siempre el mismo día</strong>.'}</div>
+    <table class="crono-table"><thead><tr><th>Semana</th><th>Día</th><th>Qué hacés</th></tr></thead><tbody>
+      ${_filaCrono(1, 1, '💉 <strong>1ª aplicación</strong> — empezás a contar desde acá')}
+      ${_filaCrono(2, 8, '💉 2ª aplicación')}
+      ${_filaCrono(3, 15, '💉 3ª aplicación<br>📅 <strong>PRIMERA CONSULTA DE CONTROL</strong>: pedí el turno para este día o los siguientes', true)}
+      ${_filaCrono(4, 22, '💉 4ª aplicación — es la última de la caja: <strong>la consulta tiene que ser antes de comprar la próxima</strong>, así ajustamos la dosis')}
+    </tbody></table>
+  </div>`;
+
+  // ── ¿Cuándo es tu primer control? (regla general + fecha concreta si se conoce) ──
   const controlBoxHTML = !opts.indic ? '' : (fechaDesconocida
     ? `<div class="control-box">
     <div class="control-ico">📅</div>
     <div class="control-txt">
       <div class="control-title">¿Cuándo es tu primer control?</div>
-      <div>Contá desde el día que te apliques la <strong>primera dosis</strong>: las dosis siguientes van todas ese <strong>mismo día de la semana</strong>. Tu primer control corresponde después de la <strong>3ra dosis</strong> (3 semanas después de haber empezado).</div>
-      <div class="control-sub">🗓️ Todavía no tenés cargada la fecha de inicio: cuando compres la medicación y te apliques la primera dosis, calculá la fecha con esta regla y solicitá el turno con anticipación.</div>
+      <div>${esBar ? 'Según lo indicado en la consulta.' : 'Con la <strong>3ª aplicación (Día 15)</strong>, y siempre <strong>antes de comprar la próxima caja</strong>. Así revisamos cómo te sentiste y ajustamos la dosis.'}</div>
+      <div class="control-sub">🗓️ Cuando te apliques la primera dosis, anotá esa fecha como Día 1 y pedí el turno con anticipación.</div>
     </div>
   </div>`
     : `<div class="control-box">
     <div class="control-ico">📅</div>
     <div class="control-txt">
       <div class="control-title">¿Cuándo es tu primer control?</div>
-      <div>Contá desde el día que te aplicaste la <strong>primera dosis</strong> (${fechaIni}): las dosis siguientes van todas ese <strong>mismo día de la semana</strong>. Tu primer control corresponde después de la <strong>3ra dosis</strong>.</div>
-      <div class="control-sub">✅ Según esa fecha, tu control te corresponde a partir del <strong>${fechaControl}</strong>. Esta fecha no es un turno reservado: solicitalo con anticipación para que la consulta se concrete alrededor de esa fecha.</div>
+      <div>${esBar ? 'Según lo indicado en la consulta.' : 'Con la <strong>3ª aplicación (Día 15)</strong>, y siempre <strong>antes de comprar la próxima caja</strong>.'}</div>
+      <div class="control-sub">✅ Te corresponde a partir del <strong>${trat.fecha_control ? fechaControl : _fechaDia(15)}</strong>. Esta fecha no es un turno reservado: solicitalo con anticipación.</div>
     </div>
   </div>`);
 
@@ -18121,6 +18350,15 @@ function _adipGenerarHTMLInforme(trat, modoModal, opts) {
     .turno-box{display:flex;align-items:flex-start;gap:12px;background:#fffbeb;border:1.5px solid #fcd34d;border-radius:10px;padding:12px 16px;margin-bottom:16px}
     .turno-ico{font-size:18px;flex-shrink:0}
     .turno-txt{font-size:11px;color:#78350f;line-height:1.5}
+    .crono-box{border:2px solid #3089ca;border-radius:12px;padding:14px 18px;margin-bottom:14px;background:#f5faff}
+    .crono-title{font-weight:800;font-size:15px;color:#1f5f99;margin-bottom:6px}
+    .crono-intro{font-size:13px;color:#334155;margin-bottom:10px;line-height:1.5}
+    .crono-table{width:100%;border-collapse:collapse;font-size:13px}
+    .crono-table th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:#64748b;padding:4px 8px;border-bottom:2px solid #dbe7f3}
+    .crono-table td{padding:8px;border-bottom:1px solid #e5edf5;vertical-align:top}
+    .crono-table td:nth-child(1),.crono-table td:nth-child(2){white-space:nowrap}
+    .crono-table tr.crono-ctrl td{background:#e8f8f7;border-left:0;font-weight:500}
+    .crono-fecha{font-size:11.5px;color:#64748b}
     .control-box{display:flex;gap:12px;align-items:flex-start;background:linear-gradient(135deg,#eefcfb 0%,#ffffff 100%);border:2px solid #4dbcbe;border-radius:12px;padding:14px 18px;margin-bottom:12px}
     .control-ico{font-size:20px;flex-shrink:0}
     .control-title{font-size:12.5px;font-weight:700;color:#1f6aab;margin-bottom:4px}
@@ -18154,7 +18392,7 @@ function _adipGenerarHTMLInforme(trat, modoModal, opts) {
     .antro-table th{background:#ede9fe;color:#6d28d9;font-weight:700}
     .antro-table td:first-child{text-align:left;font-weight:600;color:#334155;background:#faf9ff}
     @import url('https://fonts.googleapis.com/css2?family=Amiko:wght@400;600;700&family=Encode+Sans:wght@300;400;500;600;700&display=swap');
-    @media print{body{background:white}@page{margin:8mm 10mm;size:A4}.rh,.chk-hdr,.nutri-hdr2,.antro-table th{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+    @media print{body{background:white}@page{margin:8mm 10mm;size:A4}.rh,.chk-hdr,.nutri-hdr2,.antro-table th,.crono-box,.crono-table tr.crono-ctrl td{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
   `;
 
   const tituloTrat = esBar ? 'Adiposidad — Tratamiento Bariátrico' : 'Adiposidad — Tratamiento Farmacológico';
@@ -18174,7 +18412,7 @@ function _adipGenerarHTMLInforme(trat, modoModal, opts) {
   <div class="pac-chip"><span class="pac-lbl">Paciente</span><span class="pac-val">${nombre}</span></div>
   ${edad ? '<div class="pac-div"></div><div class="pac-chip"><span class="pac-lbl">Edad</span><span class="pac-val">'+edad+'</span></div>' : ''}
   <div class="pac-div"></div>
-  <div class="pac-chip"><span class="pac-lbl">Inicio del tratamiento</span><span class="pac-val">${fechaIni}</span></div>
+  <div class="pac-chip"><span class="pac-lbl">Inicio del tratamiento</span><span class="pac-val">${fechaDesconocida && !esBar ? 'Día 1 = tu 1ª aplicación' : fechaIni}</span></div>
 </div>
 ${profNombre ? `<div class="prof-strip"><span class="prof-name">${profNombre}</span>${profMP?`<span class="prof-sep">·</span><span class="prof-mp">${profMP}</span>`:''} ${profEspec?`<span class="prof-sep">·</span><span class="prof-esp">${profEspec}</span>`:''}</div>` : ''}
 <div class="body">
@@ -18182,6 +18420,8 @@ ${profNombre ? `<div class="prof-strip"><span class="prof-name">${profNombre}</s
     <div class="med-item"><div class="med-lbl">${chip1.lbl}</div><div class="med-val">${chip1.val}</div></div>
     ${chip2.lbl!=='—' ? `<div class="med-item"><div class="med-lbl">${chip2.lbl}</div><div class="med-val">${chip2.val}</div></div>` : ''}
   </div>
+
+  ${cronogramaHTML}
 
   ${controlBoxHTML}
 
