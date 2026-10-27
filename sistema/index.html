@@ -1565,6 +1565,7 @@
         <div style="font-family:var(--font-display);font-size:13px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--text-soft);margin-bottom:8px">UNIDAD DE RIESGO CARDIOVASCULAR Y METABÓLICO</div>
         <div id="dashWelcome" style="font-family:var(--font-display);font-size:28px;font-weight:700;color:var(--text)"></div>
       </div>
+      <div id="dash-pendientes"></div>
       <div class="dash-grid">
         <div class="dash-card dash-pacientes" onclick="showPage('pacientes')">
           <div class="dash-card-icon" style="background:var(--blue-light)">
@@ -7139,6 +7140,8 @@ function _entrarAlSistema() {
     else if(typeof renderGrid === 'function') renderGrid();
     // Recetas solicitadas: pintar el botón (naranja si hay pendientes)
     if(typeof window.rsRefrescar === 'function') window.rsRefrescar();
+    // Pendientes online: se ven apenas se entra
+    setTimeout(function(){ if(typeof window._avisoPendientes === 'function') window._avisoPendientes(); }, 1200);
     // Secretaría entra directo a la Agenda
     if(currentUser.secretaria && typeof showPage === 'function') showPage('agenda');
     // Modo solo lectura para invitado
@@ -24411,6 +24414,92 @@ async function _vidActualizarBadge(){
 }
 setTimeout(_vidActualizarBadge,4000);setInterval(_vidActualizarBadge,120000);
 
+// ===== AVISO DE PENDIENTES (recetas, consultas por mensaje, comprobantes) =====
+// Se ve apenas se entra (Inicio), en la pestaña Agenda y en el título de la pestaña del navegador.
+// Si aparece algo nuevo (o al entrar hay pendientes) salta un aviso abajo a la derecha.
+var _pendUlt = null;
+async function _avisoPendientes(){
+  if(!window._cu) return;
+  var miProf = { barbara:'BG', omar:'OB' }[window._su] || null;
+  try {
+    if(typeof window.rsRefrescar === 'function') { try { await window.rsRefrescar(); } catch(e) {} }
+    var rec = (window.rsPendientes || []).filter(function(r){ return !miProf || r.prof === miProf; });
+    var q = sb.from('online_pedidos').select('id,prof,vence_at').eq('tipo','consulta').eq('estado','pendiente');
+    if(miProf) q = q.eq('prof', miProf);
+    var rc = await q; var con = rc.data || [];
+    var r1 = await sb.from('video_reservas').select('id',{count:'exact',head:true}).eq('comprobante_revisado',false).or('sena_comprobante.not.is.null,saldo_comprobante.not.is.null').not('estado','in','(vencida,cancelada)');
+    var r2 = await sb.from('online_pedidos').select('id',{count:'exact',head:true}).eq('comprobante_revisado',false).not('pago_comprobante','is',null).not('estado','in','(vencida,cancelada)');
+    var nRec = rec.length, nCon = con.length, nComp = (r1.count||0) + (r2.count||0);
+    var proxVence = con.map(function(c){ return c.vence_at; }).filter(Boolean).sort()[0];
+    _pintarPendientes(nRec, nCon, nComp, proxVence);
+    var total = nRec + nCon;
+    var clave = nRec + '/' + nCon;
+    if(total > 0 && (_pendUlt === null || nRec > Number(_pendUlt.split('/')[0]) || nCon > Number(_pendUlt.split('/')[1]))) _llamadoPendientes(nRec, nCon);
+    _pendUlt = clave;
+  } catch(e) { console.warn('[URCyM pendientes]', e); }
+}
+function _irPendiente(que){
+  var abrir = function(){
+    if(que === 'rec' && window.rsAbrir) rsAbrir();
+    else if(window.vidAbrirPanel) vidAbrirPanel(que === 'con' ? 'con' : '');
+  };
+  var t = document.getElementById('urcym-llamado'); if(t) t.remove();
+  Promise.resolve(typeof showPage === 'function' ? showPage('agenda') : null).then(function(){ setTimeout(abrir, 250); });
+}
+function _pintarPendientes(nRec, nCon, nComp, proxVence){
+  var esSecre = !!(window._cu && window._cu.secretaria);
+  var pl = function(n, a, b){ return n + ' ' + (n === 1 ? a : b); };
+  var chip = function(ico, txt, que, color, sub){
+    return '<button type="button" onclick="_irPendiente(\'' + que + '\')" style="display:flex;align-items:center;gap:10px;padding:12px 16px;border-radius:14px;border:2px solid ' + color + ';background:#fff;cursor:pointer;font:inherit;text-align:left;box-shadow:0 2px 10px rgba(0,0,0,.05);">'
+      + '<span style="font-size:24px;">' + ico + '</span><span><b style="font-size:15px;color:#1a2535;">' + txt + '</b>' + (sub ? '<br><span style="font-size:12px;color:#6b7a8d;">' + sub + '</span>' : '') + '</span>'
+      + '<span style="margin-left:6px;color:' + color + ';font-weight:700;font-size:13px;">Ver →</span></button>';
+  };
+  var hrs = proxVence ? Math.round((new Date(proxVence) - Date.now()) / 3600e3) : null;
+  var html = '';
+  if(nRec) html += chip('💊', pl(nRec, 'receta por hacer', 'recetas por hacer'), 'rec', '#f59e0b');
+  if(nCon && !esSecre) html += chip('💬', pl(nCon, 'consulta por responder', 'consultas por responder'), 'con', '#7B3FC4', hrs != null ? (hrs <= 0 ? '¡Vence ahora!' : 'La primera vence en ' + hrs + ' h') : '');
+  if(nComp) html += chip('📎', pl(nComp, 'comprobante sin revisar', 'comprobantes sin revisar'), 'comp', '#3089ca');
+  var cont = document.getElementById('dash-pendientes');
+  if(cont) cont.innerHTML = html
+    ? '<div style="display:flex;flex-wrap:wrap;gap:10px;justify-content:center;margin:6px auto 18px;max-width:900px;">' + html + '</div>'
+    : '<div style="text-align:center;color:#16a34a;font-size:13px;margin:0 0 14px;">✓ Sin recetas ni consultas pendientes</div>';
+  // Pestaña Agenda y título del navegador
+  var total = nRec + (esSecre ? 0 : nCon);
+  var nav = document.getElementById('nav-tab-agenda');
+  if(nav){
+    var bd = nav.querySelector('.pend-badge');
+    if(!bd){ bd = document.createElement('span'); bd.className = 'pend-badge'; bd.style.cssText = 'display:none;margin-left:6px;background:#ef4444;color:#fff;border-radius:9px;padding:0 6px;font-size:11px;font-weight:800;line-height:17px;'; nav.appendChild(bd); }
+    bd.textContent = total; bd.title = 'Recetas y consultas pendientes'; bd.style.display = total ? 'inline-block' : 'none';
+  }
+  if(!window._tituloBase) window._tituloBase = document.title.replace(/^\(\d+\)\s*/, '');
+  document.title = (total ? '(' + total + ') ' : '') + window._tituloBase;
+}
+function _llamadoPendientes(nRec, nCon){
+  var esSecre = !!(window._cu && window._cu.secretaria);
+  if(esSecre) nCon = 0;
+  if(!nRec && !nCon) return;
+  var t = document.getElementById('urcym-llamado'); if(t) t.remove();
+  t = document.createElement('div'); t.id = 'urcym-llamado';
+  t.style.cssText = 'position:fixed;right:18px;bottom:18px;z-index:100002;background:#fff;border:2px solid #f59e0b;border-radius:16px;box-shadow:0 14px 40px rgba(0,0,0,.22);padding:14px 16px;max-width:330px;font-family:var(--font-main);animation:fadeUp .3s ease both;';
+  var lineas = [];
+  if(nRec) lineas.push('💊 <b>' + nRec + '</b> receta' + (nRec > 1 ? 's' : '') + ' por hacer');
+  if(nCon) lineas.push('💬 <b>' + nCon + '</b> consulta' + (nCon > 1 ? 's' : '') + ' por responder');
+  t.innerHTML = '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:6px;"><b style="font-size:15px;color:#b45309;">🔔 Tenés pendientes</b>'
+    + '<button type="button" class="ll-x" style="border:none;background:none;font-size:20px;cursor:pointer;color:#94a3b8;line-height:1;">×</button></div>'
+    + '<div style="font-size:14px;line-height:1.7;color:#1a2535;">' + lineas.join('<br>') + '</div>'
+    + '<div style="display:flex;gap:8px;margin-top:10px;">'
+    + (nRec ? '<button type="button" class="ll-rec" style="flex:1;white-space:nowrap;padding:8px;border-radius:10px;border:none;background:#f59e0b;color:#fff;font-weight:700;cursor:pointer;">Ver recetas</button>' : '')
+    + (nCon ? '<button type="button" class="ll-con" style="flex:1;white-space:nowrap;padding:8px;border-radius:10px;border:none;background:#7B3FC4;color:#fff;font-weight:700;cursor:pointer;">Responder</button>' : '')
+    + '</div>';
+  document.body.appendChild(t);
+  t.querySelector('.ll-x').onclick = function(){ t.remove(); };
+  var b1 = t.querySelector('.ll-rec'); if(b1) b1.onclick = function(){ _irPendiente('rec'); };
+  var b2 = t.querySelector('.ll-con'); if(b2) b2.onclick = function(){ _irPendiente('con'); };
+}
+window._avisoPendientes = _avisoPendientes; window._irPendiente = _irPendiente;
+setInterval(function(){ if(window._cu) _avisoPendientes(); }, 120000);
+document.addEventListener('visibilitychange', function(){ if(document.visibilityState === 'visible' && window._cu) _avisoPendientes(); });
+
 // ===== PLANTILLAS WHATSAPP =====
 var LS_WAPP='urcym_wapp_templates';
 var PROF_LABELS={'BG':'Guerrero','OB':'Bertani','CB':'Costa Bucal'};
@@ -27881,6 +27970,7 @@ window.cargarProxConsultas = cargarProxConsultas;
 
   // ── Botón de la barra: cambia de color si hay pendientes ──
   function pintarBoton(){
+    window.rsPendientes = lista.filter(function(r){return r.estado!=='hecha';});
     var n=lista.filter(function(r){return r.estado!=='hecha';}).length;
     var b=$r('ag-btn-recetas'); if(b){
       b.classList.toggle('rs-pend', n>0);
