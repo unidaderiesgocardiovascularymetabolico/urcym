@@ -4423,6 +4423,19 @@
           <input type="text" id="adip_inf_dosis" placeholder="Ej: 0.6mg/día" style="width:100%;padding:6px 8px;border:1.5px solid var(--border);border-radius:7px;font-size:12.5px;font-family:var(--font-main);background:white;outline:none;box-sizing:border-box"/>
         </div>
       </div>
+      <div id="adip_inf_prog_wrap">
+        <label style="font-size:10.5px;font-weight:600;color:var(--text-soft);display:block;margin-bottom:4px">💳 Programa de descuento</label>
+        <select id="adip_inf_programa" style="width:100%;padding:6px 8px;border:1.5px solid var(--border);border-radius:7px;font-size:12.5px;font-family:var(--font-main);background:white;outline:none;box-sizing:border-box">
+          <option value="ambos">Los dos (el paciente elige según lo indicado)</option>
+          <option value="elea">ELEA · Obetide / Dutide (nacional)</option>
+          <option value="novo">Novo Nordisk · Wegovy / Ozempic (importado)</option>
+          <option value="no">No incluir</option>
+        </select>
+      </div>
+      <label id="adip_inf_fechas_wrap" style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text);cursor:pointer;text-transform:none;letter-spacing:0;font-weight:500;margin:0">
+        <input type="checkbox" id="adip_inf_fechas" checked style="width:15px;height:15px;accent-color:var(--blue)">
+        <span>Poner las fechas en el cronograma <span style="color:var(--text-soft)">(si no, el paciente las anota o las calcula)</span></span>
+      </label>
       <div id="adip_inf_bar_wrap" style="display:none">
         <label style="font-size:10.5px;font-weight:600;color:var(--text-soft);display:block;margin-bottom:4px">🔪 Tipo de cirugía</label>
         <select id="adip_inf_cirugia" style="width:100%;padding:6px 8px;border:1.5px solid var(--border);border-radius:7px;font-size:12.5px;font-family:var(--font-main);background:white;outline:none;box-sizing:border-box">
@@ -12879,6 +12892,25 @@ function _htmlMailIndicaciones(el, p, direccion) {
     + '</td></tr></table></td></tr></table>';
 }
 
+// Deja constancia en la evolución abierta de lo que se mandó por mail al paciente
+function _registrarEnvioEnEvolucion(p, email, resumen) {
+  const editor = document.getElementById('evol_editor');
+  const pag = document.getElementById('page-evolucion');
+  if(!editor || !p || !pacienteActual || String(pacienteActual.dni) !== String(p.dni)) return false;
+  if(pag && !pag.classList.contains('active')) return false;
+  const items = (resumen && resumen.length) ? resumen : ['Documentación'];
+  const hora = new Date().toLocaleTimeString('es-AR', { hour:'2-digit', minute:'2-digit', hour12:false });
+  const div = document.createElement('div');
+  div.className = 'bloque-mail-enviado';
+  div.setAttribute('style', 'font-family:Arial,sans-serif;font-size:10pt;color:#1a2535;border-left:3px solid #4dbcbe;padding:6px 10px;margin:8px 0 10px;line-height:1.6');
+  div.innerHTML = '<strong>✉ Enviado por mail al paciente</strong> <span style="font-weight:400;font-size:8.5pt;color:#6b7a8d">(' + _esc(email || '') + ' · ' + hora + ' h)</span><br>'
+    + items.map(function(t){ return '• ' + _esc(t); }).join('<br>');
+  editor.appendChild(div);
+  if(typeof _asegurarLineaLibreEvolSinFoco === 'function') _asegurarLineaLibreEvolSinFoco(editor);
+  if(typeof marcarDirty === 'function') marcarDirty('evol');
+  return true;
+}
+
 // ── Mandar indicaciones o recetas por mail DIRECTO al paciente ──
 // Sale desde el Gmail del profesional, con el PDF adjunto, y solo al mail registrado en la ficha.
 // Si algo falla, ofrece la forma anterior: descargar el PDF y abrir el programa de mail.
@@ -12920,6 +12952,7 @@ async function _enviarDocPorMail(opts) {
     const nMat = (opts.materiales||[]).length + (opts.extras||[]).length;
     alert('✓ ' + (!opts.doc ? 'Material enviado' : opts.tipo === 'receta' ? 'Receta enviada' : 'Indicaciones enviadas') + ' a ' + (j.email || opts.p.email)
       + (opts.doc ? ' con el PDF adjunto' : '') + (nMat ? ' (+ ' + nMat + ' material' + (nMat > 1 ? 'es' : '') + ')' : '') + '.');
+    try { _registrarEnvioEnEvolucion(opts.p, j.email || opts.p.email, opts.resumen); } catch(e2) { console.warn('registro de envío', e2); }
     if(opts.alTerminar) opts.alTerminar(true);
   } catch(e) {
     fin();
@@ -12947,7 +12980,7 @@ async function enviarMailIndicacionesEvol(conIndic) {
   const email = await _mailPacienteAsegurado(p); if(!email) return;
   const eleccion = await _modalEnviarMail({ email: email, que: txt ? 'las indicaciones (PDF)' : null, marcado: !desdeMaterial }); if(!eleccion) return;
   if(!eleccion.incluirDoc) {
-    _enviarDocPorMail({ tipo:'material', p:p, texto:'', doc:null, filename:'', materiales: eleccion.materiales, extras: eleccion.extras,
+    _enviarDocPorMail({ tipo:'material', p:p, texto:'', doc:null, filename:'', materiales: eleccion.materiales, extras: eleccion.extras, resumen: eleccion.resumen,
       btn: document.querySelector('button[onclick="' + (desdeMaterial ? 'enviarMaterialesPaciente()' : 'enviarMailIndicacionesEvol()') + '"]') });
     return;
   }
@@ -12955,7 +12988,7 @@ async function enviarMailIndicacionesEvol(conIndic) {
   _getLogoPNG(function() {
     let info; try { info = _crearPDFIndicacionesEvol(txt, true); } catch(e) { alert('No se pudo armar el PDF: ' + e.message); return; }
     let htmlDoc = ''; try { htmlDoc = _htmlMailIndicaciones(indEl2, p, _pieDireccionSeleccionada('evol_ind_direccion')); } catch(e) { console.warn('mail indicaciones html', e); }
-    _enviarDocPorMail({ tipo:'indicaciones', p:p, texto:txt, htmlDoc: htmlDoc, doc:info.doc, filename:info.filename, btn:btn, materiales: eleccion.materiales, extras: eleccion.extras,
+    _enviarDocPorMail({ tipo:'indicaciones', p:p, texto:txt, htmlDoc: htmlDoc, doc:info.doc, filename:info.filename, btn:btn, materiales: eleccion.materiales, extras: eleccion.extras, resumen: eleccion.resumen,
       alTerminar: function(){ _indicacionesPdfDescargado = true; _preguntarVolcarIndicacionesSiCorresponde(); } });
   });
 }
@@ -12975,11 +13008,11 @@ async function enviarPorMail(tipo) {
   const email = await _mailPacienteAsegurado(p); if(!email) return;
   const eleccion = await _modalEnviarMail({ email: email, que: tipo === 'receta' ? 'la receta (PDF)' : 'las indicaciones (PDF)' }); if(!eleccion) return;
   const btn = document.querySelector('button[onclick="enviarPorMail(\'' + tipo + '\')"]');
-  if(!eleccion.incluirDoc) { _enviarDocPorMail({ tipo:'material', p:p, texto:'', doc:null, filename:'', materiales: eleccion.materiales, extras: eleccion.extras, btn:btn }); return; }
+  if(!eleccion.incluirDoc) { _enviarDocPorMail({ tipo:'material', p:p, texto:'', doc:null, filename:'', materiales: eleccion.materiales, extras: eleccion.extras, resumen: eleccion.resumen, btn:btn }); return; }
   generarPDF(tipo, function(doc, filename) {
     let htmlDoc = '';
     if(tipo === 'indicaciones') { try { htmlDoc = _htmlMailIndicaciones(document.getElementById('ind_contenido'), p, _pieDireccionSeleccionada('ind_direccion')); } catch(e) { console.warn('mail indicaciones html', e); } }
-    _enviarDocPorMail({ tipo:tipo, p:p, texto:(tipo === 'indicaciones' ? texto : ''), htmlDoc: htmlDoc, doc:doc, filename:filename, btn:btn, materiales: eleccion.materiales, extras: eleccion.extras });
+    _enviarDocPorMail({ tipo:tipo, p:p, texto:(tipo === 'indicaciones' ? texto : ''), htmlDoc: htmlDoc, doc:doc, filename:filename, btn:btn, materiales: eleccion.materiales, extras: eleccion.extras, resumen: eleccion.resumen });
   });
 }
 // Botón "📚 Materiales": mandar solo material (planillas, dietas…) sin indicaciones
@@ -12990,7 +13023,7 @@ async function enviarMaterialesPaciente() {
   const email = await _mailPacienteAsegurado(p); if(!email) return;
   const eleccion = await _modalEnviarMail({ email: email, que: null }); if(!eleccion) return;
   if(!eleccion.materiales.length && !eleccion.extras.length) { alert('No elegiste nada para mandar.'); return; }
-  _enviarDocPorMail({ tipo:'material', p:p, texto:'', doc:null, filename:'', materiales: eleccion.materiales, extras: eleccion.extras,
+  _enviarDocPorMail({ tipo:'material', p:p, texto:'', doc:null, filename:'', materiales: eleccion.materiales, extras: eleccion.extras, resumen: eleccion.resumen,
     btn: document.querySelector('button[onclick="enviarMaterialesPaciente()"]') });
 }
 
@@ -13102,11 +13135,16 @@ function _modalEnviarMail(o) {
         prog.textContent = ''; bSi.disabled = false;
         if(fallas.length && !confirm('No se pudo armar:\n• ' + fallas.join('\n• ') + '\n\n¿Enviar igual lo demás?')) return;
       }
-      fin({ incluirDoc: incluirDoc, materiales: ids, extras: extras });
+      const resumen = [];
+      if(incluirDoc && o.que) resumen.push(o.que.replace(/^(las|la) /, '').replace(/^./, function(c){ return c.toUpperCase(); }));
+      infs.forEach(function(k){ const d = _INFORMES_MAIL.find(function(x){ return x.k === k; }); if(d && extras.some(function(f){ return f.name.indexOf(d.archivo + '_') === 0; })) resumen.push('Informe: ' + d.nombre); });
+      ids.forEach(function(id){ const it = lista.find(function(x){ return x.id === id; }); resumen.push('Material: ' + (it ? it.nombre : id)); });
+      archivos.forEach(function(f){ resumen.push('Archivo: ' + f.name); });
+      fin({ incluirDoc: incluirDoc, materiales: ids, extras: extras, resumen: resumen });
     };
     m.box.querySelector('.ui-admin').onclick = function(){
       abrirMaterialesManager(async function(){
-        const l2 = await _leerMateriales();
+        const l2 = await _leerMateriales(); lista.splice(0, lista.length); l2.forEach(function(x){ lista.push(x); });
         const marcados = Array.prototype.map.call(m.box.querySelectorAll('.ui-mat:checked'), function(c){ return c.value; });
         m.box.querySelector('.ui-lista').innerHTML = _htmlListaMateriales(l2, true);
         m.box.querySelectorAll('.ui-mat').forEach(function(c){ if(marcados.indexOf(c.value) >= 0) c.checked = true; });
@@ -13128,7 +13166,7 @@ const _INFORMES_MAIL = [
         trat = { id:x.id, fecha_inicio:x.fecha_inicio, fecha_control:x.fecha_control||'', tipo_tratamiento:x.tipo_tratamiento||'farmacologico', tipo_cirugia:x.tipo_cirugia||'',
           actividad_factor:x.actividad_factor||'sedentario', droga:x.droga||'', dosis:x.dosis||'', nota_informe:x.nota_informe||'' };
       }
-      return _adipGenerarHTMLInforme(trat, false, ADIP_OPTS_DEFAULT);
+      return _adipGenerarHTMLInforme(trat, false, Object.assign({}, ADIP_OPTS_DEFAULT, { programa: adipProgramaSugerido(trat), fechas: trat.poner_fechas !== false }));
     } },
   { k:'lip', nombre:'Riesgo cardiovascular y lípidos', archivo:'Riesgo_cardiovascular', fn: function(){ return lipImprimirInforme({ general:true, antro:true, nutri:true, actividad:true }); } },
   { k:'obe', nombre:'Obesidad', archivo:'Obesidad', fn: function(){ return obeImprimirInforme({ general:true, antro:true, nutri:true, actividad:true }); } },
@@ -13182,7 +13220,7 @@ async function _htmlAPdfBlob(html) {
     d.head.appendChild(est);
     // Las opciones se arman dentro del iframe: html2pdf no reconoce arrays creados en otra ventana
     const conf = ifr.contentWindow.JSON.parse(JSON.stringify({
-      margin: [8, 8, 10, 8], image: { type:'jpeg', quality:0.86 },
+      margin: [8, 8, 10, 8], image: { type:'jpeg', quality:0.86 }, enableLinks: true,
       html2canvas: { scale: 1.6, useCORS: true, backgroundColor: '#ffffff', windowWidth: 794 },
       jsPDF: { unit:'mm', format:'a4', orientation:'portrait' },
       pagebreak: { mode: ['css', 'legacy'], avoid: ['tr', 'img', '.crono-box', '.avoid-break'] }
@@ -17115,7 +17153,7 @@ async function mdpaGuardar() {
   };
   try {
     let result;
-    if(est.id && !est.id.startsWith('new_')) {
+    if(est.id && !String(est.id).startsWith('new_')) {
       // Guardar en historial la versión que está por ser sobreescrita
       await _archivarMdpaEstudio(est.id);
       result = await sb.from('mdpa_estudios').update(payload).eq('id', est.id);
@@ -17232,7 +17270,7 @@ function mdpaEliminarEstudio() { if(mdpaIdx >= 0) mdpaConfirmarEliminar(mdpaIdx)
 
 async function mdpaEliminarPorIdx(i) {
   const est = mdpaEstudios[i];
-  if(est.id && !est.id.startsWith('new_')) {
+  if(est.id && !String(est.id).startsWith('new_')) {
     try {
       // Guardar en historial el estudio antes de borrarlo definitivamente
       await _archivarMdpaEstudio(est.id);
@@ -18179,7 +18217,7 @@ async function adipGuardar() {
   const _adipEraNuevo = !trat.id || String(trat.id).startsWith('new_');
   const payload = {
     paciente_dni: adipPacDni,
-    fecha_inicio: trat.fecha_inicio,
+    fecha_inicio: trat.fecha_inicio || null,
     fecha_control: trat.fecha_control || null,
     tipo_tratamiento: trat.tipo_tratamiento || 'farmacologico',
     tipo_cirugia: trat.tipo_cirugia || '',
@@ -18190,7 +18228,7 @@ async function adipGuardar() {
   };
   try {
     let result;
-    if(trat.id && !trat.id.startsWith('new_')) {
+    if(trat.id && !String(trat.id).startsWith('new_')) {
       result = await sb.from('adiposidad_tratamientos').update(payload).eq('id', trat.id);
     } else {
       result = await sb.from('adiposidad_tratamientos').insert(payload).select().single();
@@ -18224,7 +18262,7 @@ function adipEliminarTratamiento() { if(adipIdx >= 0) adipConfirmarEliminar(adip
 
 async function adipEliminarPorIdx(i) {
   const trat = adipTratamientos[i];
-  if(trat.id && !trat.id.startsWith('new_')) {
+  if(trat.id && !String(trat.id).startsWith('new_')) {
     try { await sb.from('adiposidad_tratamientos').delete().eq('id', trat.id); } catch(e) { console.error('Adiposidad delete:', e); }
   }
   adipTratamientos.splice(i, 1);
@@ -18316,6 +18354,13 @@ function adipAbrirOpcionesInforme() {
   if(fCirugia) fCirugia.value = trat.tipo_cirugia || '';
   const fNota = document.getElementById('adip_inf_nota');
   if(fNota) fNota.value = trat.nota_informe || '';
+  const fProg = document.getElementById('adip_inf_programa');
+  if(fProg) fProg.value = adipProgramaSugerido(trat);
+  const wProg = document.getElementById('adip_inf_prog_wrap'); if(wProg) wProg.style.display = esBar ? 'none' : 'block';
+  const fFechas = document.getElementById('adip_inf_fechas');
+  if(fFechas) { fFechas.checked = !!trat.fecha_inicio && trat.poner_fechas !== false; fFechas.disabled = !trat.fecha_inicio; }
+  const wFechas = document.getElementById('adip_inf_fechas_wrap');
+  if(wFechas) { wFechas.style.display = esBar ? 'none' : 'flex'; wFechas.title = trat.fecha_inicio ? '' : 'Sin fecha de inicio: el paciente anota o calcula sus fechas'; }
 
   const m = document.getElementById('adip_modal_opciones_informe');
   if(m) { m.style.display = 'flex'; document.body.style.overflow = 'hidden'; }
@@ -18353,10 +18398,15 @@ function adipGenerarInformeConOpciones() {
   if(typeof adipActualizarPill === 'function') adipActualizarPill();
   adipGuardar();
 
+  const fProg = document.getElementById('adip_inf_programa');
+  if(fProg) trat.programa = fProg.value;
+  const fFechas = document.getElementById('adip_inf_fechas');
+  if(fFechas && trat.fecha_inicio) trat.poner_fechas = fFechas.checked;
   const opts = {
     indic: !!(document.getElementById('adip_chk_inf_indic')||{}).checked,
     nutri: !!(document.getElementById('adip_chk_inf_nutri')||{}).checked,
     antro: !!(document.getElementById('adip_chk_inf_antro')||{}).checked,
+    programa: trat.programa, fechas: trat.poner_fechas !== false,
   };
   adipCerrarOpcionesInforme();
   adipImprimirInforme(opts);
@@ -18396,6 +18446,15 @@ function adipInformeModalImprimir() {
   setTimeout(() => win.print(), 450);
 }
 
+// Programa sugerido según la marca escrita en "Droga" (si no se reconoce: se muestran los dos)
+function adipProgramaSugerido(trat) {
+  if(!trat) return 'ambos';
+  if(trat.programa) return trat.programa;
+  const d = String(trat.droga || '').toLowerCase();
+  if(/obetide|dutide|elea/.test(d)) return 'elea';
+  if(/wegovy|ozempic|novo/.test(d)) return 'novo';
+  return 'ambos';
+}
 function _adipGenerarHTMLInforme(trat, modoModal, opts) {
   opts = opts || ADIP_OPTS_DEFAULT;
   const p       = pacienteActual || {};
@@ -18405,7 +18464,8 @@ function _adipGenerarHTMLInforme(trat, modoModal, opts) {
   const fmtF    = f => f ? new Date(f+'T12:00:00').toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'}) : '—';
   const fechaIni     = fmtF(trat.fecha_inicio);
   const fechaControl = fmtF(trat.fecha_control);
-  const fechaDesconocida = !trat.fecha_inicio;
+  // Sin fecha de inicio (o si se eligió no ponerlas): columna para que el paciente anote sus fechas
+  const fechaDesconocida = !trat.fecha_inicio || opts.fechas === false;
 
   const profAdip     = currentUser ? users[currentUser] : null;
   const profNombre   = profAdip ? (profAdip.titulo || profAdip.name || '') : '';
@@ -18428,14 +18488,16 @@ function _adipGenerarHTMLInforme(trat, modoModal, opts) {
     return d.toLocaleDateString('es-AR', { weekday:'short', day:'2-digit', month:'2-digit' });
   };
   const _filaCrono = function(sem, dia, txt, destacada){
-    return '<tr' + (destacada ? ' class="crono-ctrl"' : '') + '><td>Semana ' + sem + '</td><td><strong>Día ' + dia + '</strong>' + (_fechaDia(dia) ? '<br><span class="crono-fecha">' + _fechaDia(dia) + '</span>' : '') + '</td><td>' + txt + '</td></tr>';
+    return '<tr' + (destacada ? ' class="crono-ctrl"' : '') + '><td>Semana ' + sem + '</td><td><strong>Día ' + dia + '</strong>' + (_fechaDia(dia) ? '<br><span class="crono-fecha">' + _fechaDia(dia) + '</span>' : '') + '</td>'
+      + (fechaDesconocida ? '<td class="crono-anotar">' + (dia === 1 ? '___ / ___' : '___ / ___') + '</td>' : '') + '<td>' + txt + '</td></tr>';
   };
   const cronogramaHTML = (!opts.indic || esBar) ? '' : `<div class="crono-box">
     <div class="crono-title">🗓️ Tu cronograma de aplicación</div>
     <div class="crono-intro">${fechaDesconocida
       ? 'Todavía no empezaste: el <strong>Día 1 es el día que te aplicás la primera dosis</strong> (no el día que comprás la medicación). Desde ahí, aplicate <strong>una vez por semana, siempre el mismo día</strong>.'
       : 'Empezaste el <strong>' + fechaIni + '</strong> (Día 1). Aplicate <strong>una vez por semana, siempre el mismo día</strong>.'}</div>
-    <table class="crono-table"><thead><tr><th>Semana</th><th>Día</th><th>Qué hacés</th></tr></thead><tbody>
+    ${fechaDesconocida ? '<div class="crono-calc">✍️ Anotá en la columna <strong>“Tu fecha”</strong> el día de tu 1ª aplicación y sumá 7 días para cada una. O calculalas acá: <a href="https://urcym.com.ar/?s=crono">urcym.com.ar/?s=crono</a></div>' : ''}
+    <table class="crono-table"><thead><tr><th>Semana</th><th>Día</th>${fechaDesconocida ? '<th>Tu fecha</th>' : ''}<th>Qué hacés</th></tr></thead><tbody>
       ${_filaCrono(1, 1, '💉 <strong>1ª aplicación</strong> — empezás a contar desde acá')}
       ${_filaCrono(2, 8, '💉 2ª aplicación')}
       ${_filaCrono(3, 15, '💉 3ª aplicación<br>📅 <strong>PRIMERA CONSULTA DE CONTROL</strong>: pedí el turno para este día o los siguientes', true)}
@@ -18461,6 +18523,28 @@ function _adipGenerarHTMLInforme(trat, modoModal, opts) {
       <div class="control-sub">✅ Te corresponde a partir del <strong>${trat.fecha_control ? fechaControl : _fechaDia(15)}</strong>. Esta fecha no es un turno reservado: solicitalo con anticipación.</div>
     </div>
   </div>`);
+
+  // ── Programas de descuento de los laboratorios ──
+  // opts.programa: 'ambos' (el paciente lee los dos) | 'elea' | 'novo' | 'no'
+  const _prog = esBar ? 'no' : (opts.programa || adipProgramaSugerido(trat));
+  const _cardElea = function(el){ return `<div class="prog-card${el ? ' elegido' : ''} avoid-break">
+      <div><span class="prog-lab">Laboratorio ELEA</span>${el ? '<span class="prog-badge">✓ Es el que te indicamos</span>' : ''}</div>
+      <div class="prog-med">Obetide o Dutide · medicación nacional</div>
+      <div>📲 Se solicita por WhatsApp <a href="https://wa.me/5491171313106">(011) 15 7131-3106</a> o por mail a <a href="mailto:picc@elea.com">picc@elea.com</a></div>
+      <div>▶️ Video de colocación: <a href="https://www.youtube.com/watch?v=Z8ngHAa8ABM">youtube.com/watch?v=Z8ngHAa8ABM</a></div>
+    </div>`; };
+  const _cardNovo = function(el){ return `<div class="prog-card${el ? ' elegido' : ''} avoid-break">
+      <div><span class="prog-lab">Laboratorio Novo Nordisk</span>${el ? '<span class="prog-badge">✓ Es el que te indicamos</span>' : ''}</div>
+      <div class="prog-med">Wegovy u Ozempic · medicación importada</div>
+      <div>🌐 Se solicita en la página <a href="https://novoalapar.com.ar/">Novo a la Par (novoalapar.com.ar)</a></div>
+      <div>▶️ Video de aplicación: <a href="https://pro.novonordisk.es/obesidad/wegovy-semaglutida-2-4-mg-flextouch.html">pro.novonordisk.es · Wegovy FlexTouch</a></div>
+    </div>`; };
+  const programaHTML = (_prog === 'no') ? '' : `<div class="prog-box">
+    <div class="prog-title">💳 Programa de descuento del laboratorio</div>
+    <div class="prog-intro">${_prog === 'ambos' ? 'Elegí el programa del laboratorio de la medicación que te indicamos.' : 'Pedí el descuento en el programa de tu medicación:'}</div>
+    ${_prog === 'elea' ? _cardElea(true) : _prog === 'novo' ? _cardNovo(true) : _cardElea(false) + _cardNovo(false)}
+    <div class="prog-nota">Los videos no son de nuestra autoría, pero entendemos que son claros y precisos. Ante cualquier duda, consultanos antes de aplicar.</div>
+  </div>`;
 
   // ── ¿Cómo y cuándo me aplico la inyección? ──
   const colocacionBoxHTML = (opts.indic && trat.chk_colocacion) ? `
@@ -18629,6 +18713,18 @@ function _adipGenerarHTMLInforme(trat, modoModal, opts) {
     .crono-table td:nth-child(1),.crono-table td:nth-child(2){white-space:nowrap}
     .crono-table tr.crono-ctrl td{background:#e8f8f7;border-left:0;font-weight:500}
     .crono-fecha{font-size:11.5px;color:#64748b}
+    .crono-anotar{color:#94a3b8;font-size:13px;letter-spacing:.06em;white-space:nowrap}
+    .crono-calc{font-size:12.5px;color:#334155;background:#fff;border:1px dashed #9cc7e8;border-radius:8px;padding:7px 10px;margin:0 0 10px}
+    .crono-calc a,.prog-card a{color:#1f6aab;font-weight:600}
+    .prog-box{margin-bottom:14px}
+    .prog-title{font-size:14px;font-weight:700;color:#1e293b;margin:0 0 4px}
+    .prog-intro{font-size:12.5px;color:#475569;margin:0 0 8px}
+    .prog-card{border:1.5px solid #e2e8f0;border-radius:12px;padding:12px 16px;margin-bottom:8px;background:#fff;font-size:13px;line-height:1.55;color:#1e293b}
+    .prog-card.elegido{border:2px solid #16a34a;background:#f3fbf5}
+    .prog-badge{display:inline-block;background:#16a34a;color:#fff;font-size:11px;font-weight:700;border-radius:999px;padding:2px 9px;margin-left:6px;vertical-align:middle}
+    .prog-lab{font-size:14px;font-weight:700}
+    .prog-med{color:#475569;font-size:12.5px}
+    .prog-nota{font-size:11.5px;color:#64748b;font-style:italic;margin-top:4px}
     .control-box{display:flex;gap:12px;align-items:flex-start;background:linear-gradient(135deg,#eefcfb 0%,#ffffff 100%);border:2px solid #4dbcbe;border-radius:12px;padding:14px 18px;margin-bottom:12px}
     .control-ico{font-size:20px;flex-shrink:0}
     .control-title{font-size:12.5px;font-weight:700;color:#1f6aab;margin-bottom:4px}
@@ -18694,6 +18790,8 @@ ${profNombre ? `<div class="prof-strip"><span class="prof-name">${profNombre}</s
   ${cronogramaHTML}
 
   ${controlBoxHTML}
+
+  ${programaHTML}
 
   ${colocacionBoxHTML}
 
