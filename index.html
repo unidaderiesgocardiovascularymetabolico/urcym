@@ -905,6 +905,9 @@ function htmlReceta(n){
   // Cobertura
   x += htmlCobertura();
   x += '<label for="f-nota">Aclaración <span style="text-transform:none;letter-spacing:0;font-weight:400">(opcional)</span></label><textarea id="f-nota" maxlength="400" placeholder="Ej.: 2 cajas, genérico está bien…">'+h(Q.nota||'')+'</textarea>'
+    + '<label class="archivo" id="f-adj-box" style="margin-top:12px"><input type="file" id="f-adj" accept="image/*" multiple><div class="ic">📷</div><div><b>Adjuntar fotos</b><span>Opcional · hasta 3</span></div></label>'
+    + '<p class="nota" style="margin:6px 2px 0">Por ejemplo, la caja del remedio o una receta anterior. Las borramos cuando hacemos tu receta.</p>'
+    + '<div id="lista-adj">'+htmlListaAdj()+'</div>'
     + '<div class="error" id="e-rec"></div><button class="btn" id="b-rec">Continuar</button></section>';
   return x;
 }
@@ -971,6 +974,7 @@ function engancharReceta(){
   }
   document.querySelectorAll('[data-cob]').forEach(function(b){ b.onclick = function(){ guardarCamposReceta(); Q.cob = b.dataset.cob; renderPedido(); var f = $('#f-af') || $('#f-osde'); if(f && Q.cob === 'osde') f.focus(); }; });
   var bac = $('#b-afcambio'); if(bac) bac.onclick = function(){ guardarCamposReceta(); Q.afCambio = true; renderPedido(); var f = $('#f-af'); if(f) f.focus(); };
+  if($('#f-adj')) engancharAdjuntos('e-rec', true);
   var brc = $('#b-rec'); if(brc) brc.onclick = function(){
     guardarCamposReceta();
     var e = $('#e-rec'); limpiarError(e);
@@ -1007,17 +1011,24 @@ function htmlConsulta(n){
 function htmlListaAdj(){
   return Q.adjuntos.map(function(f, i){ return '<div class="dt" style="border:none;padding:6px 2px"><div style="font-size:14px">📄 '+h(f.name)+'</div><button class="copiar" data-qadj="'+i+'">Quitar</button></div>'; }).join('');
 }
+function engancharAdjuntos(errId, soloFotos){
+  var pintarAdj = function(){ $('#lista-adj').innerHTML = htmlListaAdj(); document.querySelectorAll('[data-qadj]').forEach(function(b){ b.onclick = function(){ Q.adjuntos.splice(+b.dataset.qadj, 1); limpiarError($('#' + errId)); pintarAdj(); }; }); };
+  pintarAdj();
+  $('#f-adj').addEventListener('change', function(){
+    var e = $('#' + errId); limpiarError(e);
+    var antes = Q.adjuntos.length, total = antes + this.files.length;
+    Array.prototype.forEach.call(this.files, function(f){
+      if(soloFotos && !/^image\//.test(f.type || '')) return mostrarError(e, 'Solo fotos (JPG o PNG).');
+      if(Q.adjuntos.length < 3) Q.adjuntos.push(f);
+    });
+    if(total > 3) mostrarError(e, soloFotos ? 'Podés adjuntar hasta 3 fotos.' : 'Podés adjuntar hasta 3 archivos.');
+    this.value = ''; pintarAdj();
+  });
+}
 function engancharConsulta(){
   var t = $('#f-texto');
   t.addEventListener('input', function(){ Q.texto = t.value; $('#cont-texto').textContent = t.value.length; });
-  var pintarAdj = function(){ $('#lista-adj').innerHTML = htmlListaAdj(); document.querySelectorAll('[data-qadj]').forEach(function(b){ b.onclick = function(){ Q.adjuntos.splice(+b.dataset.qadj, 1); pintarAdj(); }; }); };
-  pintarAdj();
-  $('#f-adj').addEventListener('change', function(){
-    var e = $('#e-con'); limpiarError(e);
-    Array.prototype.forEach.call(this.files, function(f){ if(Q.adjuntos.length < 3) Q.adjuntos.push(f); });
-    if(this.files.length + Q.adjuntos.length > 3 && Q.adjuntos.length === 3) mostrarError(e, 'Podés adjuntar hasta 3 archivos.');
-    this.value = ''; pintarAdj();
-  });
+  engancharAdjuntos('e-con', false);
   $('#b-con').onclick = function(){
     var e = $('#e-con'); limpiarError(e);
     if(Q.texto.trim().length < 15) return mostrarError(e, 'Contanos un poco más tu consulta.');
@@ -1076,6 +1087,7 @@ async function enviarPedido(){
       fd.append('cobertura', cobQ() || '');
       if(cobQ() === 'osde' && (Q.af||'').trim() && (!(Q.pac.existe && Q.pac.es_osde) || Q.afCambio)) fd.append('afiliado', Q.af.trim());
       if(Q.metodo === 'osde') fd.append('osde_link', Q.osdeLink || '');
+      for(var j = 0; j < Q.adjuntos.length; j++) fd.append('fotos', await prepararArchivo(Q.adjuntos[j]));
     } else {
       fd.append('texto', Q.texto.trim());
       for(var i = 0; i < Q.adjuntos.length; i++) fd.append('adjuntos', await prepararArchivo(Q.adjuntos[i]));
