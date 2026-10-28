@@ -24337,6 +24337,14 @@ function vidBorrarPedido(p, alTerminar){
   });
 }
 // Detalle de un pedido de receta (desde 💊 Recetas)
+// Fotos que mandó el paciente con el pedido de receta
+function _vidHtmlFotos(p){
+  var m=(p.mensajes||[]).filter(function(x){return x.tipo==='fotos';})[0];
+  if(!m) return '';
+  if(m.borradas) return '<div style="margin-top:6px;color:#6b7280;">📷 '+(m.cantidad||'')+' foto'+(m.cantidad===1?'':'s')+' del paciente (ya borradas)</div>';
+  return '<div style="margin-top:8px;"><div style="font-weight:700;margin-bottom:4px;">📷 Fotos del paciente <span style="font-weight:400;color:#6b7280;">(se borran al hacer la receta)</span></div><div style="display:flex;gap:6px;flex-wrap:wrap;">'
+    +(m.adjuntos||[]).map(function(a,i){return '<button type="button" class="vid-btn" data-comp="'+_vidEsc(a.path)+'">📷 Foto '+(i+1)+'</button>';}).join('')+'</div></div>';
+}
 async function vidPedidoDetalle(id){
   var r=await sb.from('online_pedidos').select('*').eq('id',id).maybeSingle();
   if(r.error||!r.data){alert('No se encontró el pedido.');return;}
@@ -24345,6 +24353,7 @@ async function vidPedidoDetalle(id){
     +'<div style="margin-top:8px;">'+(p.items||[]).map(function(it){return '<div style="padding:3px 0;font-size:13.5px;">💊 <b>'+_vidEsc(it.farmaco)+'</b> '+_vidEsc(it.dosis)+(it.frecuencia?' · '+_vidEsc(it.frecuencia):'')+(it.marca?' <span style="color:#6b7280">('+_vidEsc(it.marca)+')</span>':'')+(it.repetir?' 🔁':'')+'</div>';}).join('')+'</div>'
     +'<div style="margin-top:6px;">Cobertura: <b>'+_vidEsc(p.obra_social||'—')+'</b>'+(p.afiliado?' · afiliado '+_vidEsc(p.afiliado):'')+(p.os_cambio?' <b style="color:#b45309">⚠️ cambió (actualizar en la HC)</b>':'')+'</div>'
     +(p.nota?'<div style="margin-top:4px;">Nota: '+_vidEsc(p.nota)+'</div>':'')
+    +_vidHtmlFotos(p)
     +_vidHtmlOsde(p)
     +(p.receta_pdf?'<div style="margin-top:8px;"><button class="vid-btn" data-comp="'+_vidEsc(p.receta_pdf)+'">📄 Receta enviada '+_vidFechaHora(p.receta_enviada_at)+'</button></div>':'')
     +'<div style="margin-top:12px;text-align:right;"><button type="button" class="vid-borrar-ped" style="border:1px solid #fecaca;background:#fff;color:#b91c1c;border-radius:8px;padding:5px 12px;font-size:12px;cursor:pointer;">🗑 Borrar pedido</button></div>'
@@ -24360,7 +24369,7 @@ async function vidRecetaOnline(item, alTerminar){
   var html='<div style="font-size:13px;">'
     +'<div><b>'+_vidEsc(p.paciente)+'</b> · DNI '+_vidEsc(p.dni)+' · '+_vidEsc(p.email)+'</div>'
     +'<div style="margin:6px 0 10px;">'+(p.items||[]).map(function(it){return '<div>💊 <b>'+_vidEsc(it.farmaco)+'</b> '+_vidEsc(it.dosis)+(it.frecuencia?' · '+_vidEsc(it.frecuencia):'')+(it.marca?' ('+_vidEsc(it.marca)+')':'')+'</div>';}).join('')
-    +'<div style="color:#6b7280;margin-top:4px;">Cobertura: '+_vidEsc(p.obra_social||'—')+(p.afiliado?' · '+_vidEsc(p.afiliado):'')+'</div>'+_vidHtmlOsde(p)+'</div>'
+    +'<div style="color:#6b7280;margin-top:4px;">Cobertura: '+_vidEsc(p.obra_social||'—')+(p.afiliado?' · '+_vidEsc(p.afiliado):'')+'</div>'+(p.nota?'<div style="margin-top:4px;">Nota: '+_vidEsc(p.nota)+'</div>':'')+_vidHtmlFotos(p)+_vidHtmlOsde(p)+'</div>'
     +'<label style="display:block;font-weight:700;margin-bottom:4px;">PDF de la receta'+(_vidEsOsde(p)?' <span style="font-weight:400;color:#6b7280">(si OSDE no te da PDF, usá "Marcar hecha sin mandar")</span>':'')+'</label>'
     +'<input type="file" id="vid-rx-pdf" accept="application/pdf,image/*" multiple style="font:inherit;">'
     +'<label style="display:block;font-weight:700;margin:10px 0 4px;">Mensaje para el paciente (opcional)</label>'
@@ -24370,8 +24379,10 @@ async function vidRecetaOnline(item, alTerminar){
     +'<button type="button" id="vid-rx-sin" class="vid-btn">Marcar hecha sin mandar</button>'
     +'<button type="button" id="vid-rx-ok" style="padding:8px 16px;border-radius:8px;border:none;background:#7B3FC4;color:#fff;font-weight:700;cursor:pointer;">Enviar receta al paciente</button></div></div>';
   _vidModal('💊 Enviar receta online',html,function(box,cerrar){
-    _vidEngancharOsde(box);
-    box.querySelector('#vid-rx-sin').onclick=function(){ if(confirm('¿Marcarla hecha sin mandarle nada al paciente?')){ cerrar(); alTerminar(); } };
+    _vidEngancharOsde(box); _vidEngancharPedidos(box);
+    box.querySelector('#vid-rx-sin').onclick=function(){ if(confirm('¿Marcarla hecha sin mandarle nada al paciente?')){
+      _vidStaff({accion:'staff_borrar_fotos',id:p.id}).catch(function(){});   // las fotos del paciente ya no hacen falta
+      cerrar(); alTerminar(); } };
     box.querySelector('#vid-rx-ok').onclick=async function(){
       var files=box.querySelector('#vid-rx-pdf').files, err=box.querySelector('#vid-rx-err'); err.textContent='';
       if(!files.length){ err.textContent='Adjuntá el PDF de la receta.'; return; }
