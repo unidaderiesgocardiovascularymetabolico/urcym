@@ -124,6 +124,7 @@ header{position:relative}
 .primer{display:flex;align-items:center;gap:10px;width:100%;margin:0 0 12px;padding:12px 14px;border-radius:14px;border:2px solid var(--blue);background:var(--blue-light);color:var(--blue-dark,#1f6aab);font:inherit;cursor:pointer;text-align:left}
 .primer b{display:block;font-size:15.5px}
 .primer small{display:block;font-size:12.5px;color:var(--soft)}
+.cal-rep{position:absolute;left:42px;bottom:10px;border:1.5px solid var(--blue);background:var(--blue-light);color:var(--blue-dark,#1f6aab);border-radius:999px;padding:5px 12px;font:inherit;font-size:13px;font-weight:700;cursor:pointer}
 .cal-btns{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
 .cal-btns a,.cal-btns button{display:flex;align-items:center;justify-content:center;gap:6px;padding:10px;border-radius:12px;border:1.5px solid var(--line);background:#fff;color:var(--text);font:inherit;font-size:13.5px;font-weight:600;text-decoration:none;cursor:pointer}
 .lugar .dir{display:block;font-size:12.5px;color:var(--soft);margin-top:2px}
@@ -506,20 +507,23 @@ function engancharDatos(st){
     var e = $('#e-dni') || $('#e-datos');
     if(dni.length < 6 || dni.length > 9){ if(e) mostrarError(e, 'Escribí tu DNI sin puntos (7 u 8 números).'); return; }
     if(st.pac && st.pac.dni === dni) return;
+    var mio = st._busqN = (st._busqN || 0) + 1;   // si el paciente escribe otro DNI mientras busca, esta respuesta se descarta
     b.disabled = true; b.innerHTML = '<div class="spin" style="border-top-color:#fff;border-color:rgba(255,255,255,.35)"></div>';
     try{
       var r = await api({ accion:'dni', dni:dni });
+      if(mio !== st._busqN) return;
       r.dni = dni; st.pac = r; st.otroMail = false;
       if(r.existe) recordarPaciente(dni, r.nombre);
       st.render();
       var foco = $('#f-nombre') || $('#f-email') || $('#b-datos'); if(foco) foco.focus();
-    }catch(err){ b.disabled = false; b.textContent = 'Seguir'; if(e) mostrarError(e, err); }
+    }catch(err){ if(mio !== st._busqN) return; b.disabled = false; b.textContent = 'Seguir'; if(e) mostrarError(e, err); }
   };
   b.onclick = buscar;
   inp.addEventListener('keydown', function(ev){ if(ev.key === 'Enter') buscar(); });
-  if(!st.pac && REC && REC.dni && inp.value === REC.dni && !st._autoDni){ st._autoDni = true; buscar(); }
+  if(!st.pac && REC && REC.dni && inp.value === REC.dni){ b.textContent = 'Seguir'; b.focus(); }   // DNI recordado: un toque en "Seguir"
   inp.addEventListener('input', function(){
     var limpio = inp.value.replace(/\D/g,'').slice(0, 9);
+    if(b.disabled){ st._busqN = (st._busqN || 0) + 1; b.disabled = false; b.textContent = 'Seguir'; }
     if(inp.value !== limpio){ inp.value = limpio; var ed = $('#e-dni') || $('#e-datos'); if(ed) mostrarError(ed, 'Escribí el DNI sin puntos ni espacios: ya los sacamos por vos 👍'); }
     if(st.pac && inp.value.replace(/\D/g,'') !== st.pac.dni){ st.pac = null; var v = inp.value; st.render(); var i2 = $('#f-dni'); i2.value = v; i2.focus(); } });
   var bo = $('#b-otro'); if(bo) bo.onclick = function(){ guardarMotivos(st); st.otroMail = true; st.render(); $('#f-email').focus(); };
@@ -664,20 +668,26 @@ function serviciosDisponibles(){
   if(!CFG || !CFG.activo) return [];
   var l = [];
   if(CFG.profs.some(function(p){ return p.video; })) l.push({ id:'video', icono:'📹', titulo:'Videoconsulta', sub:'Turno por Google Meet' });
-  if(CFG.profs.some(function(p){ return p.recetas; })) l.push({ id:'receta', icono:'💊', titulo:'Pedir una receta', sub:'Te llega por mail · con honorarios' });
+  if(CFG.profs.some(function(p){ return p.recetas; })) {
+    l.push({ id:'receta', icono:'💊', titulo:'Pedir una receta', sub:'Te llega por mail · con honorarios' });
+    l.push({ id:'repetir', icono:'🔁', titulo:'Repetir una receta', sub:'Elegí de tus recetas anteriores y cambiá lo que necesites' });
+  }
   if(CFG.profs.some(function(p){ return p.consultas; })) l.push({ id:'consulta', icono:'💬', titulo:'Consulta por mensaje', sub:'Respuesta dentro de las ' + CFG.consulta_horas + ' h · con honorarios' });
   return l;
 }
 function barraVolver(){
   return serviciosDisponibles().length > 1 ? '<button class="link" style="margin:0 0 12px 4px;text-decoration:none" onclick="irA(\'\')">← Otros servicios</button>' : '';
 }
-function irA(serv, profId){
+var IR_OPT = null;
+function irA(serv, profId, opt){
+  IR_OPT = opt || null;
   history.replaceState(null, '', serv ? '?s=' + serv + (profId ? '&pr=' + encodeURIComponent(profId) : '') : location.pathname);
   window.scrollTo(0, 0);
   if(serv === 'prof') return mostrarPerfil(profId);
   if(serv === 'mis') return mostrarMis();
   if(serv === 'video') return iniciarReserva(CFG, profId);
-  if(serv === 'receta' || serv === 'consulta') return iniciarPedido(serv, profId);
+  if(serv === 'repetir') { history.replaceState(null, '', '?s=repetir'); return iniciarPedido('receta', profId, Object.assign({ repetir:true }, opt || {})); }
+  if(serv === 'receta' || serv === 'consulta') return iniciarPedido(serv, profId, opt);
   if(serv === 'presencial') return mostrarPresencial();
   mostrarMenu();
 }
@@ -738,7 +748,8 @@ function mostrarPerfil(id){
   var cp = serviciosDe(p.id), lug = LUGARES[p.lug];
   var on = '';
   if(cp && cp.video) on += '<button class="acc" data-ir="video"><span class="ico">📹</span><span><b>Videoconsulta</b><span>Elegí día y horario · turno por Google Meet</span></span></button>';
-  if(cp && cp.recetas) on += '<button class="acc" data-ir="receta"><span class="ico">💊</span><span><b>Pedir una receta</b><span>Te llega por mail · con honorarios</span></span></button>';
+  if(cp && cp.recetas) on += '<button class="acc" data-ir="receta"><span class="ico">💊</span><span><b>Pedir una receta</b><span>Te llega por mail · con honorarios</span></span></button>'
+    + '<button class="acc" data-ir="repetir"><span class="ico">🔁</span><span><b>Repetir una receta</b><span>De tu medicación o una receta anterior, con cambios si hace falta</span></span></button>';
   if(cp && cp.consultas) on += '<button class="acc" data-ir="consulta"><span class="ico">💬</span><span><b>Consulta por mensaje</b><span>Respuesta dentro de las ' + h(CFG.consulta_horas) + ' h · con honorarios</span></span></button>';
   if(on) x += '<section class="card"><h2 style="margin:0 0 2px;font-size:17px">Online</h2>' + on + '</section>';
   if(lug) x += '<section class="card"><h2 style="margin:0 0 2px;font-size:17px">Presencial</h2><p class="nota" style="margin:0">Pedí tu turno en el centro o por WhatsApp.</p>'
@@ -858,7 +869,7 @@ function mostrarMis(){
       limpiarError(e); ver.disabled = true;
       try {
         var r = await api({ accion:'codigo_verificar', dni:MIS.dni, codigo:$('#mis-cod').value });
-        try { sessionStorage.setItem('urcym_mis_sesion', r.sesion); } catch(_) {}
+        try { sessionStorage.setItem('urcym_mis_sesion', r.sesion); sessionStorage.setItem('urcym_mis_dni', MIS.dni); } catch(_) {}
         MIS.codigo = false; cargarMis(r.sesion);
       } catch(err){ ver.disabled = false; mostrarError(e, err); }
     };
@@ -877,13 +888,18 @@ async function cargarMis(sesion){
   var prox = d.turnos.filter(function(t){ return t.futuro && t.estado !== 'cancelada'; }).reverse();
   var ant = d.turnos.filter(function(t){ return !(t.futuro && t.estado !== 'cancelada'); });
   var itT = function(t){ return '<a class="mis-item" href="?t='+encodeURIComponent(t.token)+'"><span class="ic">📹</span><span><b>'+h(cap(t.etiqueta))+' · '+h(t.hora)+' h</b><small>Videoconsulta · '+h(t.profesional)+'</small></span>'+badge(t.estado)+'</a>'; };
-  var itP = function(p){ return '<a class="mis-item" href="?p='+encodeURIComponent(p.token)+'"><span class="ic">'+(p.tipo === 'receta' ? '💊' : '💬')+'</span><span><b>'+(p.tipo === 'receta' ? 'Receta' : 'Consulta por mensaje')+'</b><small>'+h(p.detalle && p.tipo === 'receta' ? p.detalle : p.profesional)+' · '+h(p.fecha.split('-').reverse().join('/'))+'</small></span>'+badge(p.estado)+'</a>'; };
+  var itP = function(p, i){ return '<div style="position:relative"><a class="mis-item" href="?p='+encodeURIComponent(p.token)+'"'+(p.tipo === 'receta' ? ' style="padding-bottom:42px"' : '')+'><span class="ic">'+(p.tipo === 'receta' ? '💊' : '💬')+'</span><span><b>'+(p.tipo === 'receta' ? 'Receta' : 'Consulta por mensaje')+'</b><small>'+h(p.detalle && p.tipo === 'receta' ? p.detalle : p.profesional)+' · '+h(p.fecha.split('-').reverse().join('/'))+'</small></span>'+badge(p.estado)+'</a>'
+    + (p.tipo === 'receta' && (p.items || []).length ? '<button class="cal-rep" data-rep-i="'+i+'">🔁 Repetir esta receta</button>' : '') + '</div>'; };
   var x = '<button class="link" style="margin:0 0 12px 4px;text-decoration:none" onclick="irA(\'\')">← Volver</button>';
   x += '<section class="card"><h2 style="margin:0 0 6px;font-size:17px">Próximos turnos</h2>' + (prox.length ? prox.map(itT).join('') : '<p class="nota">No tenés turnos próximos. <button class="link" onclick="irA(\'video\')" style="font-size:inherit">Sacar una videoconsulta</button></p>') + '</section>';
   x += '<section class="card"><h2 style="margin:0 0 6px;font-size:17px">Recetas y consultas</h2>' + (d.pedidos.length ? d.pedidos.map(itP).join('') : '<p class="nota">No hiciste pedidos en los últimos 3 meses.</p>') + '</section>';
   if(ant.length) x += '<section class="card"><h2 style="margin:0 0 6px;font-size:17px">Turnos anteriores</h2>' + ant.map(itT).join('') + '</section>';
   x += '<p class="centro"><button class="link" id="mis-salir" style="font-size:13px;color:var(--soft)">Salir de mis turnos</button></p>';
   $('#app').innerHTML = x;
+  document.querySelectorAll('[data-rep-i]').forEach(function(b){ b.onclick = function(){
+    var p = d.pedidos[+b.dataset.repI];
+    irA('repetir', p.prof, { items: p.items, fechaReceta: p.fecha.split('-').reverse().join('/') });
+  }; });
   $('#mis-salir').onclick = function(){ try { sessionStorage.removeItem('urcym_mis_sesion'); } catch(_) {} irA(''); };
 }
 
@@ -950,8 +966,8 @@ function mostrarCrono(){
 /* ═══════════════════ Recetas y consultas por mensaje ═══════════════════ */
 var Q = {};
 var OS_COMUNES = ['OSDE','Swiss Medical','Galeno','Medifé','OMINT','Sancor Salud','Hospital Italiano','Hospital Alemán','IOMA','PAMI','OSECAC','Accord Salud','Particular / sin cobertura'];
-function iniciarPedido(tipo, profId){
-  AYUDA = tipo;
+function iniciarPedido(tipo, profId, opt){
+  AYUDA = tipo; opt = opt || {};
   var profs = CFG.profs.filter(function(p){ return tipo === 'receta' ? p.recetas : p.consultas; });
   var elegido = profId ? profs.find(function(p){ return p.id === profId; }) : null;
   Q = { tipo:tipo, profs:profs, prof: elegido || (profs.length === 1 ? profs[0] : null), pac:null, otroMail:false, datos:null,
@@ -959,7 +975,13 @@ function iniciarPedido(tipo, profId){
         texto:'', adjuntos:[], metodo:null, archivo:null, enviando:false, acepto:false };
   Q.render = renderPedido;
   Q.onDatos = function(d){ Q.datos = d; renderPedido(); var x = $('#seccion-detalle'); if(x && x.scrollIntoView) x.scrollIntoView({ behavior:'smooth', block:'start' }); };
-  $('#titulo').textContent = tipo === 'receta' ? 'Pedido de receta' : 'Consulta por mensaje';
+  if(tipo === 'receta' && (opt.repetir || opt.items)){
+    Q.modoRec = 'repetir';
+    if(opt.items && opt.items.length){ Q.items = opt.items.map(function(it){ return { farmaco:it.farmaco, dosis:it.dosis, frecuencia:it.frecuencia||'', marca:it.marca||'', repetir:true }; }); Q.desdeReceta = opt.fechaReceta || ''; }
+    var ses = null, sesDni = null; try { ses = sessionStorage.getItem('urcym_mis_sesion'); sesDni = sessionStorage.getItem('urcym_mis_dni'); } catch(e) {}
+    if(ses){ Q.sesion = ses; Q.misDni = sesDni; api({ accion:'mis_datos', sesion:ses }).then(function(m){ Q.mis = m; if(Q.datos && !Q.detalleOk) renderPedido(); }).catch(function(){ Q.sesion = null; }); }
+  }
+  $('#titulo').textContent = tipo === 'receta' ? (opt.repetir || opt.items ? 'Repetir receta' : 'Pedido de receta') : 'Consulta por mensaje';
   $('#subtitulo').textContent = tipo === 'receta' ? 'Indicá qué necesitás, aboná y te llega por mail.' : 'Escribí tu consulta y te respondemos dentro de las ' + CFG.consulta_horas + ' h.';
   if(!profs.length){ $('#app').innerHTML = barraVolver() + '<div class="card centro"><p>Este servicio no está disponible en este momento.</p></div>'; return; }
   renderPedido();
@@ -1042,15 +1064,17 @@ function htmlReceta(n){
   var p = Q.pac || {};
   var x = '<section class="card" id="seccion-detalle"><div class="paso"><div class="n">'+n+'</div><h2>¿Qué medicación necesitás?</h2></div>';
   // "Repetir lo que ya tomo" solo si tiene medicación cargada en la HC (si no, se escribe a mano)
-  var puedeRepetir = !!(p.existe && p.tiene_email && !Q.datos.email && p.tiene_medicacion !== false);
+  // Si la sesión de "Mis turnos" es de otro DNI, no se usa
+  if(Q.mis && Q.misDni && Q.misDni !== p.dni){ Q.mis = null; Q.sesion = null; }
+  var puedeRepetir = !!(p.existe && ((p.tiene_email && !Q.datos.email) || Q.mis) && (p.tiene_medicacion !== false || p.tiene_recetas));
   if(!puedeRepetir) Q.modoRec = 'escribir';
   if(!Q.modoRec){
     return x + '<p style="font-size:15px;margin:0 0 12px">¿Cómo querés pedirla?</p><div class="profs">'
-      + '<button class="prof" data-modo="repetir"><div class="avatar" style="font-size:20px;background:var(--blue-light)">🔁</div><div><b>Repetir lo que ya tomo</b><span>Te mandamos un código a '+h(p.email_mask)+' y tildás de tu medicación</span></div></button>'
+      + '<button class="prof" data-modo="repetir"><div class="avatar" style="font-size:20px;background:var(--blue-light)">🔁</div><div><b>Repetir una receta</b><span>Elegís de tu medicación o de una receta anterior y podés cambiar lo que necesites'+(Q.mis ? '' : ' · te mandamos un código a '+h(p.email_mask))+'</span></div></button>'
       + '<button class="prof" data-modo="escribir"><div class="avatar" style="font-size:20px;background:var(--blue-light)">✍️</div><div><b>Escribir el medicamento</b><span>Droga, dosis y cuántas veces por día</span></div></button>'
       + '</div></section>';
   }
-  if(puedeRepetir) x += '<p class="nota" style="margin:-4px 0 12px">' + (Q.modoRec === 'repetir' ? '🔁 Repetir lo que ya tomo' : '✍️ Escribir el medicamento') + ' · <button class="link" id="b-modo" style="font-size:inherit">cambiar</button></p>';
+  if(puedeRepetir) x += '<p class="nota" style="margin:-4px 0 12px">' + (Q.modoRec === 'repetir' ? '🔁 Repetir una receta' : '✍️ Escribir el medicamento') + ' · <button class="link" id="b-modo" style="font-size:inherit">cambiar</button></p>';
   if(Q.modoRec === 'repetir' && !Q.mis){
     if(!Q.codigoEnviado){
       x += '<div class="aviso azul" style="margin:0 0 12px">Te mandamos un código a <b>'+h(p.email_mask)+'</b> para mostrarte tu medicación.'
@@ -1066,9 +1090,11 @@ function htmlReceta(n){
     {
       var opciones = Q.mis.medicacion.map(function(m){ return { farmaco:m.farmaco, dosis:m.dosis, frecuencia:frecDesdeHC(m.frecuencia), marca:'' }; });
       Q.mis.previas.forEach(function(pv){ if(!opciones.some(function(o){ return o.farmaco.toLowerCase() === pv.farmaco.toLowerCase(); })) opciones.push(pv); });
-      x += '<div class="aviso azul" style="margin:0 0 12px"><b>Tildá lo que querés repetir</b>'
+      Q.items.forEach(function(it){ if(it.repetir && it.farmaco && !opciones.some(function(o){ return o.farmaco.toLowerCase() === it.farmaco.toLowerCase(); })) opciones.push({ farmaco:it.farmaco, dosis:it.dosis, frecuencia:it.frecuencia, marca:it.marca }); });
+      x += (Q.desdeReceta ? '<div class="aviso verde" style="margin:0 0 12px">🔁 Cargamos tu receta del <b>'+h(Q.desdeReceta)+'</b>. Revisá y cambiá lo que necesites: dosis, frecuencia, marca, sacar o agregar.</div>' : '')
+        + '<div class="aviso azul" style="margin:0 0 12px"><b>Tildá lo que querés repetir</b> <span class="nota" style="margin:0">(después podés cambiar la dosis o la frecuencia)</span>'
         + (opciones.length ? opciones.map(function(o, i){
-            var ya = Q.items.some(function(it){ return it.repetir && it.farmaco === o.farmaco; });
+            var ya = Q.items.some(function(it){ return it.repetir && String(it.farmaco).toLowerCase() === String(o.farmaco).toLowerCase(); });
             return '<label style="display:flex;gap:10px;align-items:flex-start;text-transform:none;letter-spacing:0;font-weight:400;color:var(--text);font-size:15px;margin:10px 0 0;cursor:pointer"><input type="checkbox" data-rep="'+i+'"'+(ya?' checked':'')+' style="width:20px;height:20px;margin-top:2px;accent-color:var(--blue)"><span><b>'+h(o.farmaco)+'</b> '+h(o.dosis)+(o.frecuencia?' · '+h(o.frecuencia):'')+(o.marca?' <span class="nota">('+h(o.marca)+')</span>':'')+'</span></label>';
           }).join('') : '<p class="nota" style="margin-top:6px">No encontramos medicación registrada. Escribila abajo.</p>')
         + '</div>';
@@ -1135,7 +1161,7 @@ function engancharReceta(){
     if(c.checked){
       Q.items = Q.items.filter(function(it){ return it.farmaco.trim(); });
       Q.items.push({ farmaco:o.farmaco, dosis:o.dosis, frecuencia:o.frecuencia||'', marca:o.marca||'', repetir:true });
-    } else Q.items = Q.items.filter(function(it){ return !(it.repetir && it.farmaco === o.farmaco); });
+    } else Q.items = Q.items.filter(function(it){ return !(it.repetir && String(it.farmaco).toLowerCase() === String(o.farmaco).toLowerCase()); });
     renderPedido();
   }; });
   var enviarCod = async function(btn){
@@ -1568,6 +1594,7 @@ $('#b-ayuda').onclick = abrirAyuda;
     var pp = q.get('pr') || undefined;
     if(s === 'prof' && pp) irA('prof', pp);
     else if(s === 'mis') irA('mis');
+    else if(s === 'repetir' && serviciosDisponibles().some(function(x){ return x.id === 'receta'; })) irA('repetir', pp);
     else if(s === 'presencial' || (s && serviciosDisponibles().some(function(x){ return x.id === s; }))) irA(s, pp); else mostrarMenu();
   }).catch(function(e){
     $('#app').innerHTML = '<div class="card"><div class="error on">'+h(e.message)+'</div><button class="btn sec" onclick="location.reload()">Reintentar</button></div>';
