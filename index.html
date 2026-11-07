@@ -141,6 +141,15 @@ header{position:relative}
 .arrep-link{display:inline-block;margin-top:8px;color:var(--soft);font-weight:600;font-size:12.5px;border:1px solid var(--line);border-radius:999px;padding:5px 12px;text-decoration:none;background:#fff}
 .arrep-link:hover{color:var(--blue);border-color:var(--blue)}
 button.arrep-link{cursor:pointer;font-family:inherit}
+.sug-wrap{position:relative}
+.sug{display:none;position:absolute;left:0;right:0;top:100%;z-index:30;background:#fff;border:1.5px solid var(--blue);border-top:0;border-radius:0 0 12px 12px;box-shadow:0 10px 24px rgba(20,60,100,.14);overflow:hidden}
+.sug-it{display:block;width:100%;text-align:left;padding:11px 14px;border:0;border-top:1px solid var(--line);background:#fff;font:inherit;font-size:15px;color:var(--text);cursor:pointer}
+.sug-it:first-child{border-top:0}
+.sug-it:hover,.sug-it:focus{background:var(--blue-light)}
+.sug-it span{color:var(--soft);font-size:13.5px}
+.dchips{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 0}
+.dchip{border:1.5px solid var(--line);background:var(--chip);border-radius:999px;padding:5px 11px;font:inherit;font-size:13.5px;font-weight:600;color:var(--text);cursor:pointer}
+.dchip.sel{border-color:var(--blue);background:var(--blue-light);color:var(--blue)}
 .arrep-link.arm{color:#b42318;border-color:#f3b4ae;background:#fff5f4}
 .resumen-turno .fila-r{display:grid;grid-template-columns:1fr auto;column-gap:10px;align-items:start;padding:12px 0;border-top:1px solid var(--line)}
 .resumen-turno .fila-r:first-of-type{border-top:0}
@@ -1116,15 +1125,72 @@ function htmlCajaFotos(principal){
     + '<div id="lista-adj">'+htmlListaAdj()+'</div>';
 }
 function fechaCorta(iso){ var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso||'')); return m ? m[3]+'/'+m[2]+'/'+m[1] : ''; }
+
+/* ── Autocompletar el medicamento: catálogo del sistema (mismo que la HC) + marcas comerciales conocidas ── */
+var MEDS_CAT = [["Enalapril", ["2.5 mg", "5 mg", "10 mg", "20 mg"]], ["Ramipril", ["2.5 mg", "5 mg", "10 mg"]], ["Lisinopril", ["5 mg", "10 mg", "20 mg", "40 mg"]], ["Perindopril", ["4 mg", "8 mg"]], ["Losartán", ["25 mg", "50 mg", "100 mg"]], ["Valsartán", ["80 mg", "160 mg", "320 mg"]], ["Irbesartán", ["150 mg", "300 mg"]], ["Telmisartán", ["40 mg", "80 mg"]], ["Olmesartán", ["20 mg", "40 mg"]], ["Amlodipina", ["2.5 mg", "5 mg", "10 mg"]], ["Nifedipina LP", ["30 mg", "60 mg"]], ["Verapamilo", ["80 mg", "120 mg", "240 mg"]], ["Diltiazem", ["60 mg", "90 mg", "120 mg", "180 mg"]], ["Atenolol", ["25 mg", "50 mg", "100 mg"]], ["Carvedilol", ["3.125 mg", "6.25 mg", "12.5 mg", "25 mg"]], ["Bisoprolol", ["2.5 mg", "5 mg", "10 mg"]], ["Nebivolol", ["5 mg", "10 mg"]], ["Metoprolol", ["25 mg", "50 mg", "100 mg"]], ["Hidroclorotiazida", ["12.5 mg", "25 mg"]], ["Clortalidona", ["12.5 mg", "25 mg", "50 mg"]], ["Indapamida", ["1.5 mg", "2.5 mg"]], ["Espironolactona", ["25 mg", "50 mg", "100 mg"]], ["Furosemida", ["20 mg", "40 mg", "80 mg"]], ["Doxazosina", ["1 mg", "2 mg", "4 mg", "8 mg"]], ["Clonidina", ["0.075 mg", "0.15 mg"]], ["Metformina", ["500 mg", "850 mg", "1000 mg"]], ["Semaglutida", ["0.25 mg", "0.5 mg", "1 mg", "1.7 mg", "2 mg", "2.4 mg"]], ["Liraglutida", ["0.6 mg", "1.2 mg", "1.8 mg", "2.4 mg", "3 mg"]], ["Dulaglutida", ["0.75 mg", "1.5 mg", "3 mg", "4.5 mg"]], ["Exenatida", ["5 mcg", "10 mcg"]], ["Empagliflozina", ["10 mg", "25 mg"]], ["Dapagliflozina", ["5 mg", "10 mg"]], ["Canagliflozina", ["100 mg", "300 mg"]], ["Sitagliptina", ["25 mg", "50 mg", "100 mg"]], ["Vildagliptina", ["50 mg"]], ["Saxagliptina", ["2.5 mg", "5 mg"]], ["Alogliptina", ["12.5 mg", "25 mg"]], ["Pioglitazona", ["15 mg", "30 mg", "45 mg"]], ["Glibenclamida", ["2.5 mg", "5 mg"]], ["Gliclazida", ["30 mg", "60 mg", "80 mg"]], ["Glimepirida", ["1 mg", "2 mg", "4 mg"]], ["Insulina NPH", ["10 UI", "20 UI", "30 UI", "40 UI", "50 UI"]], ["Insulina Glargina", ["10 UI", "20 UI", "30 UI", "40 UI"]], ["Insulina Detemir", ["10 UI", "20 UI", "30 UI"]], ["Insulina Degludec", ["10 UI", "20 UI", "30 UI"]], ["Insulina Lispro", ["4 UI", "6 UI", "8 UI", "10 UI"]], ["Insulina Aspart", ["4 UI", "6 UI", "8 UI", "10 UI"]], ["Insulina Glulisina", ["4 UI", "6 UI", "8 UI", "10 UI"]], ["Tirzepatida", ["2.5 mg", "5 mg", "7.5 mg", "10 mg", "12.5 mg", "15 mg"]], ["Orlistat", ["60 mg", "120 mg"]], ["Naltrexona/Bupropión", ["8/90 mg", "16/180 mg"]], ["Atorvastatina", ["10 mg", "20 mg", "40 mg", "80 mg"]], ["Rosuvastatina", ["5 mg", "10 mg", "20 mg", "40 mg"]], ["Simvastatina", ["10 mg", "20 mg", "40 mg"]], ["Pravastatina", ["20 mg", "40 mg"]], ["Fluvastatina", ["20 mg", "40 mg", "80 mg"]], ["Pitavastatina", ["1 mg", "2 mg", "4 mg"]], ["Ezetimibe", ["10 mg"]], ["Atorva+Ezeti", ["10/10 mg", "20/10 mg", "40/10 mg"]], ["Rosuva+Ezeti", ["5/10 mg", "10/10 mg", "20/10 mg"]], ["Fenofibrato", ["145 mg", "160 mg", "200 mg"]], ["Gemfibrozilo", ["600 mg"]], ["Evolocumab", ["140 mg"]], ["Alirocumab", ["75 mg", "150 mg"]], ["Inclisirán", ["284 mg"]], ["Ácido bempedoico", ["180 mg"]], ["Omega 3", ["1g", "2g", "4g"]], ["Aspirina", ["100 mg"]], ["Clopidogrel", ["75 mg"]], ["Ticagrelor", ["60 mg", "90 mg"]], ["Prasugrel", ["5 mg", "10 mg"]], ["AAS+Clopidogrel", ["100/75 mg"]], ["AAS+Ticagrelor", ["100/90 mg"]], ["Warfarina", ["1 mg", "2 mg", "2.5 mg", "5 mg"]], ["Dabigatrán", ["75 mg", "110 mg", "150 mg"]], ["Rivaroxabán", ["2.5 mg", "10 mg", "15 mg", "20 mg"]], ["Apixabán", ["2.5 mg", "5 mg"]], ["Edoxabán", ["30 mg", "60 mg"]], ["Amiodarona", ["100 mg", "200 mg"]], ["Dronedarona", ["400 mg"]], ["Digoxina", ["0.125 mg", "0.25 mg"]], ["Flecainida", ["50 mg", "100 mg"]], ["Propafenona", ["150 mg", "300 mg"]], ["Sotalol", ["40 mg", "80 mg", "160 mg"]]];
+var MARCAS_CAT = { 'Ozempic':'Semaglutida', 'Wegovy':'Semaglutida', 'Rybelsus':'Semaglutida', 'Mounjaro':'Tirzepatida', 'Zepbound':'Tirzepatida', 'Saxenda':'Liraglutida', 'Victoza':'Liraglutida', 'Trulicity':'Dulaglutida', 'Xenical':'Orlistat', 'Jardiance':'Empagliflozina', 'Forxiga':'Dapagliflozina', 'Januvia':'Sitagliptina', 'Galvus':'Vildagliptina', 'Crestor':'Rosuvastatina', 'Lipitor':'Atorvastatina', 'Eliquis':'Apixabán', 'Xarelto':'Rivaroxabán', 'Pradaxa':'Dabigatrán', 'Plavix':'Clopidogrel', 'Brilinta':'Ticagrelor', 'Lotrial':'Enalapril', 'Bayaspirina':'Aspirina' };
+function sinAc(t){ return String(t||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim(); }
+function medDelCat(nombre){ var n = sinAc(nombre); return MEDS_CAT.find(function(m){ return sinAc(m[0]) === n; }) || null; }
+function sugerenciasMed(t){
+  var q = sinAc(t); if(q.length < 2) return [];
+  var res = [], vistos = {};
+  var poner = function(nom, marca, prio){ var k = nom + '|' + (marca||''); if(!vistos[k]){ vistos[k] = 1; res.push({ n:nom, marca:marca||'', p:prio }); } };
+  MEDS_CAT.forEach(function(m){ var x = sinAc(m[0]); if(x.indexOf(q) === 0) poner(m[0], '', 0); else if(x.indexOf(q) > 0) poner(m[0], '', 2); });
+  Object.keys(MARCAS_CAT).forEach(function(b){ if(sinAc(b).indexOf(q) === 0) poner(MARCAS_CAT[b], b, 1); });
+  // si ya escribió exactamente el nombre, no molestar
+  if(res.length === 1 && sinAc(res[0].n) === q && !res[0].marca) return [];
+  return res.sort(function(a, b){ return a.p - b.p || a.n.localeCompare(b.n); }).slice(0, 6);
+}
+function htmlSugMed(i){
+  var l = sugerenciasMed((Q.items[i]||{}).farmaco);
+  return l.map(function(o){ return '<button type="button" class="sug-it" data-sug="'+i+'" data-n="'+h(o.n)+'" data-marca="'+h(o.marca)+'">'
+    + (o.marca ? '<b>'+h(o.marca)+'</b> <span>→ '+h(o.n)+'</span>' : '<b>'+h(o.n)+'</b>') + '</button>'; }).join('');
+}
+function htmlDosisChips(i){
+  var it = Q.items[i] || {}, m = medDelCat(it.farmaco);
+  if(!m || !m[1].length) return '';
+  return '<div class="dchips">' + m[1].map(function(d){ return '<button type="button" class="dchip'+(String(it.dosis).trim() === d ? ' sel' : '')+'" data-dch="'+i+'" data-v="'+h(d)+'">'+h(d)+'</button>'; }).join('') + '</div>';
+}
+function engancharAutocompletar(){
+  var pintarChips = function(i){ var c = $('#dch-' + i); if(c){ c.innerHTML = htmlDosisChips(i); engancharChips(); } };
+  var engancharChips = function(){ document.querySelectorAll('[data-dch]').forEach(function(b){ b.onclick = function(){
+    var i = +b.dataset.dch; Q.items[i].dosis = b.dataset.v; var d = $('#m-d-' + i); if(d) d.value = b.dataset.v; pintarChips(i);
+    var f = $('#m-v-' + i); if(f && !f.value) f.focus();
+  }; }); };
+  engancharChips();
+  document.querySelectorAll('[data-campo=farmaco]').forEach(function(inp){
+    var i = +inp.dataset.i, box = $('#sug-' + i); if(!box) return;
+    var pintar = function(){
+      box.innerHTML = htmlSugMed(i); box.style.display = box.innerHTML ? 'block' : 'none';
+      box.querySelectorAll('[data-sug]').forEach(function(b){
+        // mousedown para que no se pierda antes por el blur del campo
+        b.onmousedown = function(ev){ ev.preventDefault(); };
+        b.onclick = function(){
+          Q.items[i].farmaco = b.dataset.n; inp.value = b.dataset.n;
+          if(b.dataset.marca && !(Q.items[i].marca||'').trim()){ Q.items[i].marca = b.dataset.marca; var mm = $('#m-m-' + i); if(mm) mm.value = b.dataset.marca; }
+          box.innerHTML = ''; box.style.display = 'none'; pintarChips(i);
+          var d = $('#m-d-' + i); if(d && !d.value) d.focus();
+        };
+      });
+    };
+    inp.setAttribute('autocomplete', 'off');
+    inp.addEventListener('input', function(){ pintar(); pintarChips(i); });
+    inp.addEventListener('focus', pintar);
+    inp.addEventListener('blur', function(){ setTimeout(function(){ box.style.display = 'none'; }, 120); });
+    inp.addEventListener('keydown', function(ev){ var p = box.querySelector('[data-sug]'); if(ev.key === 'Enter' && p && box.style.display !== 'none'){ ev.preventDefault(); p.click(); } });
+  });
+  document.querySelectorAll('[data-campo=dosis]').forEach(function(inp){ inp.addEventListener('input', function(){ var i = +inp.dataset.i, c = $('#dch-' + i); if(c) c.querySelectorAll('.dchip').forEach(function(x){ x.classList.toggle('sel', x.dataset.v === inp.value.trim()); }); }); });
+}
 function htmlItemsRec(){
   var opcional = Q.modoRec === 'fotos';
   return '<div id="items">' + Q.items.map(function(it, i){
     return '<div class="item-med" style="border:1.5px solid var(--line);border-radius:14px;padding:10px 12px;margin-bottom:10px;position:relative'+(it.repetir?';background:var(--blue-light)':'')+'">'
       + (Q.items.length > 1 || Q.modoRec !== 'escribir' ? '<button class="copiar" data-quitar="'+i+'" style="position:absolute;top:8px;right:8px" aria-label="Quitar">✕</button>' : '')
       + (it.repetir ? '<div class="nota" style="margin:0 0 4px">🔁 Repetir</div>' : '')
-      + '<label for="m-f-'+i+'" style="margin-top:0">Droga / medicamento</label><input type="text" id="m-f-'+i+'" data-campo="farmaco" data-i="'+i+'" value="'+h(it.farmaco)+'" placeholder="Ej.: losartán">'
+      + '<label for="m-f-'+i+'" style="margin-top:0">Droga / medicamento</label><div class="sug-wrap"><input type="text" id="m-f-'+i+'" data-campo="farmaco" data-i="'+i+'" value="'+h(it.farmaco)+'" placeholder="Empezá a escribir… ej.: losartán" autocomplete="off"><div class="sug" id="sug-'+i+'"></div></div>'
       + '<div class="fila2"><div><label for="m-d-'+i+'">Dosis</label><input type="text" id="m-d-'+i+'" data-campo="dosis" data-i="'+i+'" value="'+h(it.dosis)+'" placeholder="Ej.: 50 mg"></div>'
       + '<div><label for="m-v-'+i+'">¿Cuántas veces por día?</label>' + htmlFrecuencia(it, i) + '</div></div>'
+      + '<div id="dch-'+i+'">'+htmlDosisChips(i)+'</div>'
       + (esFrecOtra(it.frecuencia) ? '<input type="text" id="m-o-'+i+'" data-campo="frecuencia" data-i="'+i+'" value="'+h(it.frecuencia === 'otra' ? '' : it.frecuencia)+'" placeholder="Ej.: día por medio, 1 por semana…" style="margin-top:8px">' : '')
       + '<label for="m-m-'+i+'">Marca <span style="text-transform:none;letter-spacing:0;font-weight:400">(si corresponde)</span></label><input type="text" id="m-m-'+i+'" data-campo="marca" data-i="'+i+'" value="'+h(it.marca)+'"></div>';
   }).join('') + '</div>'
@@ -1251,6 +1317,7 @@ function engancharReceta(){
     var o = $('#m-o-' + sel.dataset.frec); if(o) o.focus();
   }; });
   document.querySelectorAll('[data-quitar]').forEach(function(b){ b.onclick = function(){ guardarCamposReceta(); Q.items.splice(+b.dataset.quitar, 1); renderPedido(); }; });
+  engancharAutocompletar();
   var bm = $('#b-mas'); if(bm) bm.onclick = function(){ guardarCamposReceta(); Q.items.push({ farmaco:'', dosis:'', frecuencia:'', marca:'', nuevo:true }); renderPedido(); var u = $('#m-f-' + (Q.items.length-1)); if(u) u.focus(); };
   document.querySelectorAll('[data-rep]').forEach(function(c){ c.onchange = function(){
     guardarCamposReceta();
