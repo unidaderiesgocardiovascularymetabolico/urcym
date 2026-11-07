@@ -23951,7 +23951,7 @@ function _vidHtmlReserva(r,detalle){
     +'<div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap;align-items:center;">'
     +'<span>Seña '+_vidPesos(r.sena_monto)+' '+(r.sena_pagada_at?'<b style="color:#15803d">✓ '+met(r.sena_metodo)+'</b>':'<span style="color:#b45309">pendiente</span>')+'</span>'
     +(r.sena_comprobante?'<button class="vid-btn" data-comp="'+_vidEsc(r.sena_comprobante)+'">📎 ver</button>':'')
-    +'<span style="margin-left:6px;">Saldo '+_vidPesos(r.saldo_monto)+' '+(r.saldo_pagado_at?'<b style="color:#15803d">✓ '+met(r.saldo_metodo)+'</b>':'<span style="color:#b45309">pendiente</span>')+'</span>'
+    +'<span style="margin-left:6px;">Saldo '+_vidPesos(r.saldo_monto)+' '+(r.saldo_pagado_at?(r.saldo_comprobante&&r.saldo_comprobante===r.sena_comprobante?'<b style="color:#15803d">✓ pagó todo junto</b>':'<b style="color:#15803d">✓ '+met(r.saldo_metodo)+'</b>'):'<span style="color:#6b7280" title="No hay nada que hacer: el paciente lo abona antes de la consulta">💳 a pagar por el paciente</span>')+'</span>'
     +(r.saldo_comprobante?'<button class="vid-btn" data-comp="'+_vidEsc(r.saldo_comprobante)+'">📎 ver</button>':'')
     +((r.sena_comprobante||r.saldo_comprobante)?'<label style="margin-left:auto;display:flex;align-items:center;gap:4px;cursor:pointer;'+(pend?'color:#b45309;font-weight:700;':'color:#6b7280;')+'"><input type="checkbox" class="vid-rev" '+(r.comprobante_revisado?'checked':'')+'> comprobantes revisados</label>':'')
     +'</div>'
@@ -24473,9 +24473,12 @@ window.vidAbrirPanel=vidAbrirPanel;
 async function _vidActualizarBadge(){
   var b=document.getElementById('ag-btn-video-online');if(!b)return;
   try{
-    var r=await sb.from('video_reservas').select('id',{count:'exact',head:true}).eq('comprobante_revisado',false).or('sena_comprobante.not.is.null,saldo_comprobante.not.is.null').not('estado','in','(vencida,cancelada)');
-    var r2=await sb.from('online_pedidos').select('id',{count:'exact',head:true}).eq('tipo','consulta').eq('estado','pendiente');
-    var r3=await sb.from('online_pedidos').select('id',{count:'exact',head:true}).eq('comprobante_revisado',false).not('pago_comprobante','is',null).not('estado','in','(vencida,cancelada)');
+    var miProf={ barbara:'BG', omar:'OB' }[window._su]||null;   // cada profesional ve lo suyo; Secretaría, todo
+    var q1=sb.from('video_reservas').select('id',{count:'exact',head:true}).eq('comprobante_revisado',false).or('sena_comprobante.not.is.null,saldo_comprobante.not.is.null').not('estado','in','(vencida,cancelada)');
+    var q2=sb.from('online_pedidos').select('id',{count:'exact',head:true}).eq('tipo','consulta').eq('estado','pendiente');
+    var q3=sb.from('online_pedidos').select('id',{count:'exact',head:true}).eq('comprobante_revisado',false).not('pago_comprobante','is',null).not('estado','in','(vencida,cancelada)');
+    if(miProf){ q1=q1.eq('prof',miProf); q2=q2.eq('prof',miProf); q3=q3.eq('prof',miProf); }
+    var r=await q1, r2=await q2, r3=await q3;
     var nCon=r2.count||0; window._vidHayConsultas=nCon>0;
     // El número naranja = solo consultas por responder. Los comprobantes sin
     // revisar van aparte (📎 n), para no confundirlos con tareas pendientes.
