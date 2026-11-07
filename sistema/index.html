@@ -1930,6 +1930,7 @@
           </div><!-- /ag-modal-body -->
           <div class="ag-modal-actions">
             <button class="ag-btn-danger" id="ag-btn-delete" style="display:none">&#128465; Eliminar</button>
+            <button class="ag-btn-ghost" id="ag-btn-hc" style="display:none;border-color:var(--teal);color:var(--teal);font-weight:700">📖 Historia clínica</button>
             <button class="ag-btn-ghost" id="ag-btn-cancel">Cancelar</button>
             <button class="ag-btn-primary" id="ag-btn-save">Guardar</button>
           </div>
@@ -11550,8 +11551,10 @@ async function guardarEvolucion() {
   }
   // Persistir hab_* antes de cerrar el paciente
   try {
-    const _hA = evolClinicaSnapshot?.clinica?.hab_actividad_json;
-    const _hL = evolClinicaSnapshot?.clinica?.hab_alimentacion_json;
+    // Solo si el snapshot en memoria es de ESTE paciente (si quedó el de otra pestaña, no se copia)
+    const _snapEsDeP = String(evolClinicaSnapshot?.clinica?.dni_paciente ?? '') === String(p.dni);
+    const _hA = _snapEsDeP ? evolClinicaSnapshot?.clinica?.hab_actividad_json : null;
+    const _hL = _snapEsDeP ? evolClinicaSnapshot?.clinica?.hab_alimentacion_json : null;
     if (_hA || _hL) {
       const _hu = {dni_paciente: p.dni};
       if(_hA) _hu.hab_actividad_json    = _hA;
@@ -12016,7 +12019,7 @@ async function abrirModalHabitos() {
         .eq('dni_paciente', _dniHabModal).maybeSingle();
       // Solo escribir en el snapshot compartido si seguimos en la MISMA pestaña de paciente
       if (_hr && pacienteActual && String(pacienteActual.dni) === String(_dniHabModal)) {
-        if (!evolClinicaSnapshot) evolClinicaSnapshot = {clinica:{},medicacion:[]};
+        if (!evolClinicaSnapshot) evolClinicaSnapshot = {clinica:{dni_paciente: pacienteActual && pacienteActual.dni},medicacion:[]};
         if (!evolClinicaSnapshot.clinica) evolClinicaSnapshot.clinica = {};
         if (_hr.hab_actividad_json)    { evolClinicaSnapshot.clinica.hab_actividad_json    = _hr.hab_actividad_json;    if(!fuenteAct) try{fuenteAct=_hj(_hr.hab_actividad_json);}catch(e){} }
         if (_hr.hab_alimentacion_json) { evolClinicaSnapshot.clinica.hab_alimentacion_json = _hr.hab_alimentacion_json; if(!fuenteAli) try{fuenteAli=_hj(_hr.hab_alimentacion_json);}catch(e){} }
@@ -12442,7 +12445,7 @@ function confirmarModalHabitos() {
     try { await sb.from('paciente_clinica').upsert(_upd,{onConflict:'dni_paciente'}); } catch(e){}
     // Solo tocar el snapshot en memoria si seguimos en la MISMA pestaña de paciente
     if(!pacienteActual || String(pacienteActual.dni) !== String(_dniHab)) return;
-    if(!evolClinicaSnapshot) evolClinicaSnapshot={clinica:{},medicacion:[]};
+    if(!evolClinicaSnapshot) evolClinicaSnapshot={clinica:{dni_paciente:_dniHab},medicacion:[]};
     if(!evolClinicaSnapshot.clinica) evolClinicaSnapshot.clinica={};
     if(_habDatos.act) evolClinicaSnapshot.clinica.hab_actividad_json    = _habDatos.act;
     if(_habDatos.ali) evolClinicaSnapshot.clinica.hab_alimentacion_json = _habDatos.ali;
@@ -12626,7 +12629,7 @@ async function volcarActualizacion() {
         await sb.from('paciente_clinica').upsert(_hu,{onConflict:'dni_paciente'});
         // Solo tocar el snapshot compartido si seguimos en la MISMA pestaña de paciente
         if(pacienteActual && String(pacienteActual.dni) === String(dni)) {
-          if(!evolClinicaSnapshot) evolClinicaSnapshot={clinica:{},medicacion:[]};
+          if(!evolClinicaSnapshot) evolClinicaSnapshot={clinica:{dni_paciente:dni},medicacion:[]};
           if(!evolClinicaSnapshot.clinica) evolClinicaSnapshot.clinica={};
           if(_habDatos?.act) evolClinicaSnapshot.clinica.hab_actividad_json    = _hu.hab_actividad_json;
           if(_habDatos?.ali) evolClinicaSnapshot.clinica.hab_alimentacion_json = _hu.hab_alimentacion_json;
@@ -13112,11 +13115,13 @@ function _htmlListaMateriales(lista, conCheck) {
   if(!lista.length) return '<div style="color:#64748b;font-size:13px;padding:10px;border:1.5px dashed #dde3ec;border-radius:10px;text-align:center;">Todavía no cargaste materiales.</div>';
   const cats = {}; lista.forEach(function(m){ (cats[m.categoria || 'General'] = cats[m.categoria || 'General'] || []).push(m); });
   return Object.keys(cats).sort().map(function(c){
-    return '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#64748b;margin:10px 0 4px;">' + _esc(c) + '</div>'
+    return '<div style="display:flex;align-items:center;gap:8px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#64748b;margin:10px 0 4px;">'
+      + (conCheck ? '' : '<input type="checkbox" class="ui-mat-cat-todos" data-cat="' + _esc(c) + '" title="Seleccionar toda la categoría" style="width:14px;height:14px;accent-color:var(--teal);">') + _esc(c) + '</div>'
       + cats[c].map(function(m){
         const kb = m.size ? (m.size > 1048576 ? (m.size/1048576).toFixed(1) + ' MB' : Math.round(m.size/1024) + ' KB') : '';
-        return '<label style="display:flex;align-items:center;gap:8px;padding:7px 10px;border:1px solid #e5e7eb;border-radius:9px;margin:0 0 5px;font-size:13.5px;text-transform:none;letter-spacing:0;font-weight:500;color:#1f2937;cursor:' + (conCheck ? 'pointer' : 'default') + ';">'
-          + (conCheck ? '<input type="checkbox" class="ui-mat" value="' + _esc(m.id) + '" style="width:16px;height:16px;accent-color:var(--teal);">' : '<span>📄</span>')
+        return '<label style="display:flex;align-items:center;gap:8px;padding:7px 10px;border:1px solid #e5e7eb;border-radius:9px;margin:0 0 5px;font-size:13.5px;text-transform:none;letter-spacing:0;font-weight:500;color:#1f2937;cursor:pointer;">'
+          + (conCheck ? '<input type="checkbox" class="ui-mat" value="' + _esc(m.id) + '" style="width:16px;height:16px;accent-color:var(--teal);">'
+            : '<input type="checkbox" class="ui-mat-sel" value="' + _esc(m.id) + '" data-cat="' + _esc(m.categoria || 'General') + '" style="width:16px;height:16px;accent-color:var(--teal);">')
           + '<span style="flex:1;">' + _esc(m.nombre) + ' <span style="color:#94a3b8;font-size:11.5px;">' + kb + '</span></span>'
           + (conCheck ? '' : '<button type="button" class="ui-mat-ren" data-id="' + _esc(m.id) + '" style="border:1px solid #e5e7eb;background:#fff;border-radius:7px;padding:3px 8px;cursor:pointer;font-size:12px;">✏️</button>'
             + '<button type="button" class="ui-mat-bor" data-id="' + _esc(m.id) + '" style="border:1px solid #fecaca;background:#fff;color:#b91c1c;border-radius:7px;padding:3px 8px;cursor:pointer;font-size:12px;">🗑</button>')
@@ -13138,7 +13143,7 @@ function _modalEnviarMail(o) {
       + _htmlInformesPaciente()
       + '<div style="font-weight:700;font-size:13.5px;margin:12px 0 2px;">📚 Material</div>'
       + '<div class="ui-lista">' + _htmlListaMateriales(lista, true) + '</div>'
-      + '<button type="button" class="ui-admin" style="margin-top:6px;border:none;background:none;color:var(--blue);cursor:pointer;font-size:12.5px;padding:0;">⚙ Cargar o administrar materiales</button>'
+      + '<button type="button" class="ui-admin" style="margin-top:6px;border:none;background:none;color:var(--blue);cursor:pointer;font-size:12.5px;padding:0;">⚙ Organizar materiales (subir, mover de categoría, eliminar)</button>'
       + '<div style="font-weight:700;font-size:13.5px;margin:12px 0 2px;">📎 Otro archivo de la compu</div>'
       + '<div style="font-size:12px;color:#64748b;margin-bottom:4px;">Por ejemplo una planilla editable que completaste. Va solo a este paciente (no queda en la biblioteca).</div>'
       + '<div class="ui-extra-lista"></div>'
@@ -13300,10 +13305,28 @@ async function abrirMaterialesManager(alCambiar) {
     + '<div style="display:flex;gap:8px;align-items:center;"><input type="file" id="ui-mat-arch" accept="application/pdf,image/*" style="flex:1;font-size:12.5px;">'
     + '<button type="button" id="ui-mat-subir" style="padding:8px 14px;border-radius:9px;border:none;background:var(--teal);color:#fff;font-weight:700;cursor:pointer;">⬆ Subir</button></div>'
     + '<div id="ui-mat-err" style="color:#b91c1c;font-size:12.5px;margin-top:6px;"></div>'
+    + '<div id="ui-mat-acc" style="display:none;align-items:center;gap:8px;flex-wrap:wrap;margin-top:12px;padding:9px 11px;border-radius:10px;background:#f0fbfb;border:1.5px solid #99d6d7;font-size:13px;">'
+    + '<b id="ui-mat-n">0</b> seleccionados · Mover a <input type="text" id="ui-mat-dest" list="ui-mat-cats" placeholder="Categoría" style="width:150px;padding:6px 8px;border:1.5px solid #e5e7eb;border-radius:8px;font:inherit;font-size:13px;">'
+    + '<button type="button" id="ui-mat-mover" style="padding:6px 12px;border-radius:8px;border:none;background:var(--teal);color:#fff;font-weight:700;cursor:pointer;">Mover</button>'
+    + '<button type="button" id="ui-mat-borsel" style="margin-left:auto;padding:6px 12px;border-radius:8px;border:1.5px solid #fecaca;background:#fff;color:#b91c1c;font-weight:700;cursor:pointer;">🗑 Eliminar</button></div>'
     + '<div id="ui-mat-lista" style="margin-top:10px;max-height:50vh;overflow:auto;">Cargando…</div>');
+  let _ultLista = [];
+  const selIds = function(){ return Array.prototype.map.call(m.box.querySelectorAll('.ui-mat-sel:checked'), function(c){ return c.value; }); };
+  const pintarAcc = function(){
+    const n = selIds().length;
+    m.box.querySelector('#ui-mat-acc').style.display = n ? 'flex' : 'none';
+    m.box.querySelector('#ui-mat-n').textContent = n;
+  };
   const pintar = async function(){
-    const l = await _leerMateriales();
+    const l = await _leerMateriales(); _ultLista = l;
     const cont = m.box.querySelector('#ui-mat-lista'); cont.innerHTML = _htmlListaMateriales(l, false);
+    const cats = {}; ['Dietas','Planillas','Guías','Adiposidad','Ejercicio'].concat(l.map(function(x){ return x.categoria || 'General'; })).forEach(function(c){ cats[c] = 1; });
+    m.box.querySelector('#ui-mat-cats').innerHTML = Object.keys(cats).sort().map(function(c){ return '<option value="' + _esc(c) + '">'; }).join('');
+    cont.querySelectorAll('.ui-mat-sel').forEach(function(c){ c.onchange = pintarAcc; });
+    cont.querySelectorAll('.ui-mat-cat-todos').forEach(function(c){ c.onchange = function(){
+      cont.querySelectorAll('.ui-mat-sel').forEach(function(x){ if(x.dataset.cat === c.dataset.cat) x.checked = c.checked; }); pintarAcc();
+    }; });
+    pintarAcc();
     cont.querySelectorAll('.ui-mat-bor').forEach(function(b){ b.onclick = async function(e){
       e.preventDefault(); const it = l.find(function(x){ return x.id === b.dataset.id; });
       if(!confirm('¿Borrar "' + (it ? it.nombre : '') + '" de la biblioteca?')) return;
@@ -13315,6 +13338,26 @@ async function abrirMaterialesManager(alCambiar) {
       const cat = prompt('Categoría:', it.categoria || 'General'); if(cat === null) return;
       try { await _fnStaff({ accion:'staff_material_editar', id: it.id, nombre: nom, categoria: cat }); await pintar(); if(alCambiar) alCambiar(); } catch(err){ alert(err.message); }
     }; });
+  };
+  m.box.querySelector('#ui-mat-mover').onclick = async function(){
+    const ids = selIds(), dest = m.box.querySelector('#ui-mat-dest').value.trim();
+    const err = m.box.querySelector('#ui-mat-err'); err.textContent = '';
+    if(!dest) { err.textContent = 'Escribí o elegí la categoría a la que querés moverlos.'; return; }
+    const b = this; b.disabled = true; b.textContent = 'Moviendo…';
+    try {
+      for(const id of ids) { const it = _ultLista.find(function(x){ return x.id === id; }); if(it && (it.categoria || 'General') !== dest) await _fnStaff({ accion:'staff_material_editar', id: id, nombre: it.nombre, categoria: dest }); }
+      m.box.querySelector('#ui-mat-dest').value = '';
+      await pintar(); if(alCambiar) alCambiar();
+    } catch(e2) { err.textContent = e2.message; }
+    b.disabled = false; b.textContent = 'Mover';
+  };
+  m.box.querySelector('#ui-mat-borsel').onclick = async function(){
+    const ids = selIds(); const err = m.box.querySelector('#ui-mat-err'); err.textContent = '';
+    if(!confirm('¿Eliminar ' + ids.length + ' material' + (ids.length === 1 ? '' : 'es') + ' de la biblioteca? Se borran los archivos.')) return;
+    const b = this; b.disabled = true; b.textContent = 'Eliminando…';
+    try { for(const id of ids) await _fnStaff({ accion:'staff_material_borrar', id: id }); await pintar(); if(alCambiar) alCambiar(); }
+    catch(e2) { err.textContent = e2.message; }
+    b.disabled = false; b.textContent = '🗑 Eliminar';
   };
   m.box.querySelector('#ui-mat-arch').onchange = function(){
     const f = this.files[0]; const n = m.box.querySelector('#ui-mat-nom');
@@ -18130,6 +18173,7 @@ function adipSeleccionarTratamiento(i) {
   adipRenderResumen();
   adipRenderPills();
   adipCalcularRequerimientos();
+  try { adipPintarOpcionesInforme(); } catch(e) { console.warn('opciones informe', e); }
 }
 
 function adipToggleAnticoncepcion() {
@@ -18383,9 +18427,26 @@ function adipImprimirInforme(opts) {
   setTimeout(() => win.print(), 450);
 }
 
+// "Generar informe": sin ventana previa. Las opciones del informe (programa, fechas, nota, secciones)
+// están en el mismo formulario del tratamiento; los datos del tratamiento se toman de lo cargado.
 function adipAbrirOpcionesInforme() {
   if(adipIdx < 0) return;
+  adipPintarOpcionesInforme(true);
+  adipGenerarInformeConOpciones();
+}
+function adipPintarOpcionesInforme(soloDatos) {
+  if(adipIdx < 0) return;
+  _adipMoverOpcionesInline();
   const trat = adipTratamientos[adipIdx];
+  if(soloDatos) {
+    // solo los datos del tratamiento (lo demás ya lo eligió en el formulario)
+    const fF = document.getElementById('adip_inf_fecha_control'); if(fF) fF.value = trat.fecha_control || '';
+    const fD = document.getElementById('adip_inf_droga'); if(fD) fD.value = trat.droga || '';
+    const fDo = document.getElementById('adip_inf_dosis'); if(fDo) fDo.value = trat.dosis || '';
+    const fC = document.getElementById('adip_inf_cirugia'); if(fC) fC.value = trat.tipo_cirugia || '';
+    const fN = document.getElementById('adip_inf_nota'); if(fN) trat.nota_informe = fN.value || '';
+    return;
+  }
   const chkAntro = document.getElementById('adip_chk_inf_antro');
   if(chkAntro) chkAntro.checked = !!(typeof antDatos !== 'undefined' && antDatos?.columnas?.length);
 
@@ -18413,8 +18474,32 @@ function adipAbrirOpcionesInforme() {
   const wFechas = document.getElementById('adip_inf_fechas_wrap');
   if(wFechas) { wFechas.style.display = esBar ? 'none' : 'flex'; wFechas.title = trat.fecha_inicio ? '' : 'Sin fecha de inicio: el paciente anota o calcula sus fechas'; }
 
-  const m = document.getElementById('adip_modal_opciones_informe');
-  if(m) { m.style.display = 'flex'; document.body.style.overflow = 'hidden'; }
+}
+// Lleva las opciones del informe del modal al formulario del tratamiento (una sola vez)
+function _adipMoverOpcionesInline() {
+  if(document.getElementById('adip_inf_inline')) return;
+  const btn = document.querySelector('button[onclick="adipAbrirOpcionesInforme()"]');
+  const acciones = btn && btn.parentNode;
+  const nota = document.getElementById('adip_inf_nota');
+  const indic = document.getElementById('adip_chk_inf_indic');
+  if(!acciones || !nota || !indic) return;
+  const box = document.createElement('div');
+  box.id = 'adip_inf_inline';
+  box.style.cssText = 'border:1.5px solid var(--border);border-radius:12px;padding:14px;margin:14px 0 10px;background:var(--gray);display:flex;flex-direction:column;gap:10px';
+  box.innerHTML = '<div style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--text-soft)">📄 Para el informe del paciente</div>';
+  ['adip_inf_prog_wrap', 'adip_inf_fechas_wrap'].forEach(function(id){ const el = document.getElementById(id); if(el) box.appendChild(el); });
+  const notaWrap = nota.parentNode; notaWrap.style.marginBottom = '0'; box.appendChild(notaWrap);
+  const secc = indic.closest('label').parentNode;   // lista de secciones
+  const tit = secc.previousElementSibling;
+  if(tit) box.appendChild(tit);
+  secc.style.marginBottom = '0'; secc.style.flexDirection = 'row'; secc.style.flexWrap = 'wrap';
+  secc.querySelectorAll('label').forEach(function(l){ l.style.background = '#fff'; l.style.padding = '7px 10px'; l.style.fontSize = '12.5px'; });
+  box.appendChild(secc);
+  acciones.parentNode.insertBefore(box, acciones);
+  const t = function(){ return adipIdx >= 0 ? adipTratamientos[adipIdx] : null; };
+  document.getElementById('adip_inf_programa').addEventListener('change', function(){ const x = t(); if(x) x.programa = this.value; });
+  document.getElementById('adip_inf_fechas').addEventListener('change', function(){ const x = t(); if(x && x.fecha_inicio) x.poner_fechas = this.checked; });
+  nota.addEventListener('input', function(){ const x = t(); if(x) x.nota_informe = this.value; });
 }
 function adipCerrarOpcionesInforme() {
   const m = document.getElementById('adip_modal_opciones_informe');
@@ -21317,6 +21402,15 @@ function openCtxMenu(e,key){
   menu.appendChild(mkItem('✎ &nbsp;Editar turno','#374151',function(){openModal(null,null,key);}));
   menu.appendChild(mkItem('📅 &nbsp;Reprogramar','#374151',function(){openReprog(key);}));
   _vidItemsMenu(menu,key,mkItem);
+  // Abajo de todo: ir a la historia clínica (solo profesionales)
+  (function(){
+    var esProf=!!(window._cu && !window._cu.secretaria && !window._cu.readonly);
+    var pacT=esProf?_agPacienteDeTurno(turnos[key]||{}):null;
+    if(!pacT) return;
+    var sepH=document.createElement('div');sepH.style.cssText='height:1px;background:#e5e7eb;margin:4px 0;';menu.appendChild(sepH);
+    var itH=mkItem('📖 &nbsp;Ir a la historia clínica','#0f766e',function(){ abrirHistoriaClinica(pacT.dni); });
+    itH.style.fontWeight='700'; menu.appendChild(itH);
+  })();
 
   var x=e.clientX,y=e.clientY;
   menu.style.left=x+'px';menu.style.top=y+'px';
@@ -22443,6 +22537,18 @@ function openModal(ds,time,key,forcedProf,freeTime){
   }
   document.getElementById('ag-modal-title').textContent=key?'Editar turno':'Nuevo turno';
   document.getElementById('ag-btn-delete').style.display=key?'inline-flex':'none';
+  // Ir a la HC del paciente del turno (solo profesionales; Secretaría no ve historias clínicas)
+  (function(){
+    var bh=document.getElementById('ag-btn-hc'); if(!bh) return;
+    var pac=key&&turnos[key]?_agPacienteDeTurno(turnos[key]):null;
+    var esProf=!!(window._cu && !window._cu.secretaria && !window._cu.readonly);
+    bh.style.display=(esProf&&pac)?'inline-flex':'none';
+    bh.title=pac?'Abrir la historia clínica de '+(pac.apellido||'')+', '+(pac.nombre||''):'';
+    bh.onclick=function(){
+      var c=document.getElementById('ag-btn-cancel'); if(c) c.click();
+      setTimeout(function(){ abrirHistoriaClinica(pac.dni); },60);
+    };
+  })();
   buildDateOptions(prof,pendingDate);
   buildTimeOptions(prof,pendingDate,pendingTime);
   // FIX: cuando cambia la fecha, reconstruir horarios usando el prof del formulario (no closure)
@@ -23060,6 +23166,14 @@ document.addEventListener('change',function(e){
   }
 });
 
+// Paciente del turno: por DNI si lo tiene, si no por "Apellido, Nombre"
+function _agPacienteDeTurno(t){
+  var lista=(typeof pacientesData!=='undefined'&&pacientesData)||[];
+  if(t.dni_paciente){ var p=lista.find(function(x){ return String(x.dni)===String(t.dni_paciente); }); if(p) return p; }
+  var n=String(t.paciente||'').trim().toLowerCase().replace(/\s+/g,' ');
+  if(!n) return null;
+  return lista.find(function(x){ return ((x.apellido||'')+', '+(x.nombre||'')).trim().toLowerCase().replace(/\s+/g,' ')===n; })||null;
+}
 (document.getElementById('ag-btn-delete')||{addEventListener:function(){}}).addEventListener('click',function(){
   if(!editKey||!turnos[editKey])return;
   var _tDel=turnos[editKey];
@@ -24486,7 +24600,8 @@ async function _vidActualizarBadge(){
     var s=b.querySelector('.vid-count'), sc=b.querySelector('.vid-comp');
     b.title=(nCon?nCon+' consulta'+(nCon>1?'s':'')+' por responder':'Sin consultas por responder')+(nComp?' · '+nComp+' comprobante'+(nComp>1?'s':'')+' sin revisar':'');
     if(s){s.textContent=nCon;s.style.display=nCon?'inline-block':'none';}
-    if(sc){sc.textContent='📎 '+nComp;sc.style.display=nComp?'inline-block':'none';}
+    if(sc){sc.textContent='📎 '+nComp;sc.style.display=nComp?'inline-block':'none';sc.title='Ver cuáles';sc.style.cursor='pointer';
+      sc.onclick=function(ev){ ev.stopPropagation(); _vidComprobantesSinRevisar(); };}
   }catch(e){}
 }
 setTimeout(_vidActualizarBadge,4000);setInterval(_vidActualizarBadge,120000);
@@ -24517,7 +24632,35 @@ async function _avisoPendientes(){
     _pendUlt = clave;
   } catch(e) { console.warn('[URCyM pendientes]', e); }
 }
+// Comprobantes sin revisar: la lista exacta (turnos y pedidos), con "ver" y "revisado" en cada uno
+async function _vidComprobantesSinRevisar(){
+  var miProf = { barbara:'BG', omar:'OB' }[window._su] || null;
+  var q1 = sb.from('video_reservas').select('id,prof,fecha,hora,paciente,sena_comprobante,saldo_comprobante,estado').eq('comprobante_revisado',false).or('sena_comprobante.not.is.null,saldo_comprobante.not.is.null').not('estado','in','(vencida,cancelada)');
+  var q2 = sb.from('online_pedidos').select('id,prof,tipo,paciente,pago_comprobante,created_at,estado').eq('comprobante_revisado',false).not('pago_comprobante','is',null).not('estado','in','(vencida,cancelada)');
+  if(miProf){ q1 = q1.eq('prof', miProf); q2 = q2.eq('prof', miProf); }
+  var r1 = await q1, r2 = await q2;
+  var items = (r1.data||[]).map(function(r){ return { tabla:'video_reservas', id:r.id, txt:'📹 Videoconsulta ' + r.fecha.split('-').reverse().join('/') + ' ' + r.hora, pac:r.paciente, comps:[['Seña', r.sena_comprobante], ['Saldo', r.saldo_comprobante]].filter(function(c){ return c[1]; }) }; })
+    .concat((r2.data||[]).map(function(p){ return { tabla:'online_pedidos', id:p.id, txt:(p.tipo === 'receta' ? '💊 Receta' : '💬 Consulta') + ' del ' + String(p.created_at||'').slice(0,10).split('-').reverse().join('/'), pac:p.paciente, comps:[['Pago', p.pago_comprobante]] }; }));
+  var html = items.length ? items.map(function(it, i){
+      return '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 0;border-top:'+(i?'1px solid #eef1f5':'0')+';">'
+        + '<div style="flex:1;min-width:180px;"><b>' + _vidEsc(it.pac || '') + '</b><br><span style="color:#6b7280;font-size:12.5px;">' + it.txt + '</span></div>'
+        + it.comps.map(function(c){ return '<button type="button" class="vid-btn" data-comp="' + _vidEsc(c[1]) + '">📎 ' + c[0] + '</button>'; }).join('')
+        + '<label style="display:flex;align-items:center;gap:5px;cursor:pointer;color:#b45309;font-weight:700;font-size:13px;"><input type="checkbox" class="cs-rev" data-t="' + it.tabla + '" data-id="' + it.id + '"> revisado</label></div>';
+    }).join('') : '<div style="color:#15803d;">✓ No hay comprobantes sin revisar.</div>';
+  _vidModal('📎 Comprobantes sin revisar', '<div style="font-size:13.5px;">' + html + '</div>', function(box){
+    box.querySelectorAll('[data-comp]').forEach(function(b){ b.onclick = function(){ _vidVerComprobante(b.getAttribute('data-comp')); }; });
+    box.querySelectorAll('.cs-rev').forEach(function(c){ c.onchange = async function(){
+      var r = await sb.from(c.dataset.t).update({ comprobante_revisado: c.checked }).eq('id', c.dataset.id);
+      if(r.error){ alert('No se pudo guardar: ' + r.error.message); c.checked = !c.checked; return; }
+      c.parentNode.style.color = c.checked ? '#15803d' : '#b45309';
+      if(typeof _vidActualizarBadge === 'function') _vidActualizarBadge();
+      if(window._avisoPendientes) window._avisoPendientes();
+    }; });
+  });
+}
+window._vidComprobantesSinRevisar = _vidComprobantesSinRevisar;
 function _irPendiente(que){
+  if(que === 'comp'){ var mm0 = document.getElementById('pend-menu'); if(mm0) mm0.remove(); return _vidComprobantesSinRevisar(); }
   var abrir = function(){
     if(que === 'rec' && window.rsAbrir) rsAbrir();
     else if(window.vidAbrirPanel) vidAbrirPanel(que === 'con' ? 'con' : '');
@@ -30239,6 +30382,9 @@ window.abrirModalClinica=abrirModalClinica=async function(){
 // Parche guardarClinica → al guardar, escribe en Supabase y pre-carga "Cambios en esta consulta"
 var _origGuardarCli=guardarClinica;
 guardarClinica=async function(){
+  // Si "Datos clínicos" quedó abierto de OTRO paciente (se cambió de pestaña), no se guarda nada:
+  // antes el guardado principal se cancelaba pero la actividad/alimentación se escribía igual en el paciente nuevo.
+  if(typeof _modalSigueSiendoDelPacienteActual==='function' && !_modalSigueSiendoDelPacienteActual('modalClinica')) return _origGuardarCli();
   var hab=leerTabActAli();
   // Capturar el paciente ANTES del await: si el usuario cambia de pestaña mientras
   // se guarda, esto evita que los datos de actividad física de este paciente
