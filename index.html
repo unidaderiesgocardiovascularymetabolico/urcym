@@ -601,21 +601,27 @@ function engancharAviso(st, alCambiar){
 /* ── Paso 4: seña ── */
 function htmlSena(n){
   var P = S.prof;
-  var x = '<section class="card" id="seccion-sena"><div class="paso"><div class="n">'+n+'</div><h2>Seña para confirmar</h2></div>'
-    + '<div class="montos"><div><small>Seña ('+S.cfg.sena_pct+'%)</small><div class="grande">'+pesos(P.sena)+'</div></div>'
-    + '<div style="text-align:right"><small>Consulta '+pesos(P.arancel)+'</small><small>'+(P.saldo>0 ? 'El resto ('+pesos(P.saldo)+') antes de la consulta' : '')+'</small></div></div>';
+  var total = !!(S.total && P.saldo > 0);
+  var monto = total ? P.arancel : P.sena;
+  var x = '<section class="card" id="seccion-sena"><div class="paso"><div class="n">'+n+'</div><h2>'+(total ? 'Pago de la consulta' : 'Seña para confirmar')+'</h2></div>';
+  if(P.saldo > 0) x += '<p style="font-size:13px;font-weight:700;color:var(--soft);text-transform:uppercase;letter-spacing:.05em;margin:0 0 6px">¿Cuánto pagás ahora?</p>'
+    + '<div class="tabs" style="margin-bottom:12px"><button class="tab'+(total?'':' sel')+'" data-total="0">Solo la seña · '+pesos(P.sena)+'</button><button class="tab'+(total?' sel':'')+'" data-total="1">Todo · '+pesos(P.arancel)+'</button></div>';
+  x += total
+    ? '<div class="montos"><div><small>Consulta completa</small><div class="grande">'+pesos(P.arancel)+'</div></div><div style="text-align:right"><small>Seña '+pesos(P.sena)+' + saldo '+pesos(P.saldo)+'</small><small>No pagás nada después ✓</small></div></div>'
+    : '<div class="montos"><div><small>Seña ('+S.cfg.sena_pct+'%)</small><div class="grande">'+pesos(P.sena)+'</div></div>'
+      + '<div style="text-align:right"><small>Consulta '+pesos(P.arancel)+'</small><small>'+(P.saldo>0 ? 'El resto ('+pesos(P.saldo)+') cuando quieras, antes de la consulta' : '')+'</small></div></div>';
   var metodos = [];
   if(P.comprobante) metodos.push(['comprobante','🏦 Transferencia']);
   if(P.mp) metodos.push(['mercadopago','Mercado Pago']);
   x += '<div class="tabs'+(metodos.length===1?' uno':'')+'">' + metodos.map(function(m){ return '<button class="tab'+(S.metodo===m[0]?' sel':'')+'" data-metodo="'+m[0]+'">'+m[1]+'</button>'; }).join('') + '</div>';
   if(S.metodo === 'comprobante'){
-    x += '<p style="font-size:14.5px;margin-bottom:10px">Transferí <b>'+pesos(P.sena)+'</b> a:</p>' + htmlTransferencia(P.transferencia) + htmlArchivo('f-comp')
+    x += '<p style="font-size:14.5px;margin-bottom:10px">Transferí <b>'+pesos(monto)+'</b> a:</p>' + htmlTransferencia(P.transferencia) + htmlArchivo('f-comp')
       + htmlAviso('video', S) + '<div class="falta" id="falta-sena"></div><div class="error" id="e-sena"></div><button class="btn" id="b-confirmar" disabled>Confirmar turno</button>'
       + '<p class="nota centro">Al confirmar, el turno queda reservado y te llega un mail.</p>';
   } else {
-    x += '<p style="font-size:14.5px">Vas a pagar <b>'+pesos(P.sena)+'</b> con Mercado Pago (tarjeta, dinero en cuenta, etc.). Cuando se acredite, el turno se confirma solo y te llega un mail.</p>'
+    x += '<p style="font-size:14.5px">Vas a pagar <b>'+pesos(monto)+'</b> con Mercado Pago (tarjeta, dinero en cuenta, etc.). Cuando se acredite, el turno se confirma solo y te llega un mail.</p>'
       + '<p class="nota">Tenés '+S.cfg.mp_vencimiento_min+' minutos para pagar; si no, el horario se libera.</p>'
-      + htmlAviso('video', S) + '<div class="falta" id="falta-sena"></div><div class="error" id="e-sena"></div><button class="btn mp" id="b-confirmar">Pagar la seña con Mercado Pago</button>';
+      + htmlAviso('video', S) + '<div class="falta" id="falta-sena"></div><div class="error" id="e-sena"></div><button class="btn mp" id="b-confirmar">'+(total ? 'Pagar '+pesos(monto)+' con Mercado Pago' : 'Pagar la seña con Mercado Pago')+'</button>';
   }
   return x + '</section>';
 }
@@ -630,6 +636,7 @@ function avisoFalta(id, st, queComp){
   el.classList.toggle('on', !!f.length);
 }
 function engancharSena(){
+  document.querySelectorAll('[data-total]').forEach(function(b){ b.onclick = function(){ S.total = b.dataset.total === '1'; render(); var sc = $('#seccion-sena'); if(sc && sc.scrollIntoView) sc.scrollIntoView({ block:'nearest' }); }; });
   document.querySelectorAll('[data-metodo]').forEach(function(b){ b.onclick = function(){ S.metodo = b.dataset.metodo; S.archivo = null; render(); }; });
   var bc = $('#b-confirmar');
   var listo = function(){ bc.disabled = !S.acepto || !!S.editMotivos || (S.metodo === 'comprobante' && !S.archivo); avisoFalta('falta-sena', S, 'la seña'); };
@@ -648,6 +655,7 @@ async function enviarReserva(){
     var fd = new FormData();
     fd.append('accion','reservar'); fd.append('prof', S.prof.id); fd.append('fecha', S.fecha); fd.append('hora', S.hora);
     fd.append('metodo', S.metodo); fd.append('acepto', AVISO_VERSION);
+    if(S.total && S.prof.saldo > 0) fd.append('total', '1');
     Object.keys(S.dniOk).forEach(function(k){ if(k !== 'resumen' && S.dniOk[k]) fd.append(k, S.dniOk[k]); });
     if(S.metodo === 'comprobante') fd.append('comprobante', await prepararArchivo(S.archivo));
     var r = await apiForm(fd);
@@ -1513,7 +1521,7 @@ function htmlSaldo(d){
   if(d.pago.mp) metodos.push(['mercadopago','Mercado Pago']);
   if(!R.metodo || !metodos.some(function(m){ return m[0] === R.metodo; })) R.metodo = metodos.length ? metodos[0][0] : null;
   var x = '<section class="card"><div class="paso"><div class="n">$</div><h2>Pagar el saldo</h2></div>'
-    + '<div class="montos"><div><small>Saldo de la consulta</small><div class="grande">'+pesos(d.saldo)+'</div></div><div style="text-align:right"><small>Abonalo antes del turno</small></div></div>';
+    + '<div class="montos"><div><small>Saldo de la consulta</small><div class="grande">'+pesos(d.saldo)+'</div></div><div style="text-align:right"><small>Podés pagarlo cuando quieras, antes del turno</small></div></div>';
   if(!metodos.length) return x + '<p class="nota">Coordiná el pago con el consultorio.</p></section>';
   x += '<div class="tabs'+(metodos.length===1?' uno':'')+'">' + metodos.map(function(m){ return '<button class="tab'+(R.metodo===m[0]?' sel':'')+'" data-smetodo="'+m[0]+'">'+m[1]+'</button>'; }).join('') + '</div>';
   if(R.metodo === 'comprobante') x += '<p style="font-size:14.5px;margin-bottom:10px">Transferí <b>'+pesos(d.saldo)+'</b> a:</p>' + htmlTransferencia(d.pago.transferencia) + htmlArchivo('f-saldo') + '<div class="falta on" id="falta-saldo">⚠️ Para continuar falta adjuntar el <b>comprobante del saldo</b>.</div><div class="error" id="e-saldo"></div><button class="btn" id="b-saldo" disabled>Enviar comprobante</button>';
