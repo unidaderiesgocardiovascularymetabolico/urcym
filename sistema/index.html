@@ -2,7 +2,7 @@
 <html lang="es-AR">
 <head>
   <meta charset="UTF-8" />
-  <script>var URCYM_BUILD = '2026-11-08-1930';</script>
+  <script>var URCYM_BUILD = '2026-11-08-2330';</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Evaluaciones cardiometabólicas — Sistema de Historia Clínica</title>
 
@@ -2143,6 +2143,7 @@
           <span id="hc_os" style="font-size:12px;background:var(--blue-light);color:var(--blue);padding:2px 8px;border-radius:10px"></span>
           <button type="button" id="hc_mail" class="mail-copiar" onclick="copiarMailPaciente(this)" style="display:none"></button>
         </div>
+        <button type="button" id="btn_hc_resumen" onclick="hcResumenAbrir()" style="padding:6px 14px;border:none;border-radius:8px;background:var(--teal);color:white;font-size:12.5px;font-weight:700;cursor:pointer;font-family:var(--font-main)">🖨 Resumen de HC</button>
         <div style="font-size:12px;color:var(--text-soft);font-style:italic;background:var(--gray);padding:4px 10px;border-radius:20px">👁 Solo lectura</div>
       </div>
       <!-- Encabezado variable (diagnósticos, medicación, hábitos) — solo lectura -->
@@ -3664,7 +3665,7 @@
             <div class="evol-sidebar-title">Presión Arterial <span style="font-size:10px;font-weight:400">(mmHg) + FC</span></div>
             <table class="ta-table">
               <thead>
-                <tr><th>Toma</th><th>SIS</th><th>DIA</th><th>FC</th></tr>
+                <tr><th>Toma</th><th>SIS</th><th>DIA</th><th>FC</th><th title="Brazo derecho / izquierdo">Brazo</th></tr>
               </thead>
               <tbody>
                 <tr class="ta-row ta-descartada">
@@ -3672,21 +3673,40 @@
                   <td><input type="number" id="evol_ta1s" placeholder="—" oninput="actualizarPromedios()"/></td>
                   <td><input type="number" id="evol_ta1d" placeholder="—" oninput="actualizarPromedios()"/></td>
                   <td><input type="number" id="evol_fc1" placeholder="—" oninput="actualizarPromedios()"/></td>
+                  <td><button type="button" class="ta-brazo" data-toma="1" tabindex="-1" title="Brazo derecho (tocá para cambiar)">D</button></td>
                 </tr>
                 <tr class="ta-row">
                   <td><span class="ta-num">2</span></td>
                   <td><input type="number" id="evol_ta2s" placeholder="—" oninput="actualizarPromedios()"/></td>
                   <td><input type="number" id="evol_ta2d" placeholder="—" oninput="actualizarPromedios()"/></td>
                   <td><input type="number" id="evol_fc2" placeholder="—" oninput="actualizarPromedios()"/></td>
+                  <td><button type="button" class="ta-brazo" data-toma="2" tabindex="-1" title="Brazo derecho (tocá para cambiar)">D</button></td>
                 </tr>
                 <tr class="ta-row">
                   <td><span class="ta-num">3</span></td>
                   <td><input type="number" id="evol_ta3s" placeholder="—" oninput="actualizarPromedios()"/></td>
                   <td><input type="number" id="evol_ta3d" placeholder="—" oninput="actualizarPromedios()"/></td>
                   <td><input type="number" id="evol_fc3" placeholder="—" oninput="actualizarPromedios()"/></td>
+                  <td><button type="button" class="ta-brazo" data-toma="3" tabindex="-1" title="Brazo derecho (tocá para cambiar)">D</button></td>
+                </tr>
+                <tr class="ta-row ta-extra" id="ta_fila_4" style="display:none">
+                  <td><span class="ta-num">4</span></td>
+                  <td><input type="number" id="evol_ta4s" placeholder="—" oninput="actualizarPromedios()"/></td>
+                  <td><input type="number" id="evol_ta4d" placeholder="—" oninput="actualizarPromedios()"/></td>
+                  <td><input type="number" id="evol_fc4" placeholder="—" oninput="actualizarPromedios()"/></td>
+                  <td><button type="button" class="ta-brazo" data-toma="4" tabindex="-1" title="Brazo derecho (tocá para cambiar)">D</button></td>
+                </tr>
+                <tr class="ta-row ta-extra" id="ta_fila_5" style="display:none">
+                  <td><span class="ta-num">5</span></td>
+                  <td><input type="number" id="evol_ta5s" placeholder="—" oninput="actualizarPromedios()"/></td>
+                  <td><input type="number" id="evol_ta5d" placeholder="—" oninput="actualizarPromedios()"/></td>
+                  <td><input type="number" id="evol_fc5" placeholder="—" oninput="actualizarPromedios()"/></td>
+                  <td><button type="button" class="ta-brazo" data-toma="5" tabindex="-1" title="Brazo derecho (tocá para cambiar)">D</button></td>
                 </tr>
               </tbody>
             </table>
+            <input type="hidden" id="evol_ta_brazos" value="">
+            <button type="button" id="btn_ta_mas" class="ta-mas" onclick="taAgregarToma()">+ Toma 4</button>
             <div id="evol_promedio_display" class="evol-promedio"></div>
 
             <!-- TA parado a los 3 min -->
@@ -5798,6 +5818,11 @@ const LAB_FILAS = [
   {label:'ACTH', key:'ACTH', unidades:['pg/mL'], defU:0, ref:null},
   {label:'FSH', key:'FSH', unidades:['mUI/mL'], defU:0, ref:null},
   {label:'Testosterona', key:'Testosterona', unidades:['ng/dL','ng/mL'], defU:0, ref:null},
+  {label:'PTH', key:'PTH', unidades:['pg/mL'], defU:0, ref:(v)=>parseFloat(v)>65, refTxt:'15-65 pg/mL'},
+  {label:'Ácido fólico', key:'AcFolico', unidades:['ng/mL'], defU:0, ref:(v)=>parseFloat(v)<4, refTxt:'<4 ng/mL'},
+  {label:'Vitamina A', key:'VitA', unidades:['µg/dL'], defU:0, ref:(v)=>parseFloat(v)<30, refTxt:'<30 µg/dL'},
+  {label:'Vitamina E', key:'VitE', unidades:['mg/L'], defU:0, ref:(v)=>parseFloat(v)<5.5, refTxt:'<5.5 mg/L'},
+  {label:'Vitamina K', key:'VitK', unidades:['ng/mL'], defU:0, ref:(v)=>parseFloat(v)<0.2, refTxt:'<0.2 ng/mL'},
 ];
 // Igual que en estudios: la tabla guarda sus claves (labKeys) y al abrirla se reacomoda,
 // así las filas nuevas no corren de lugar las filas extra que cada paciente agregó.
@@ -7415,6 +7440,9 @@ function _guardarEstadoPestana(dni) {
     fc1:   (document.getElementById('evol_fc1') ||{}).value  || '',
     fc2:   (document.getElementById('evol_fc2') ||{}).value  || '',
     fc3:   (document.getElementById('evol_fc3') ||{}).value  || '',
+    ta4s:  (document.getElementById('evol_ta4s')||{}).value  || '', ta4d: (document.getElementById('evol_ta4d')||{}).value || '', fc4: (document.getElementById('evol_fc4')||{}).value || '',
+    ta5s:  (document.getElementById('evol_ta5s')||{}).value  || '', ta5d: (document.getElementById('evol_ta5d')||{}).value || '', fc5: (document.getElementById('evol_fc5')||{}).value || '',
+    ta_brazos: (document.getElementById('evol_ta_brazos')||{}).value || '',
     peso:  (document.getElementById('evol_peso')||{}).value  || '',
     talla: (document.getElementById('evol_talla')||{}).value || '',
     cintura:(document.getElementById('evol_cintura')||{}).value || '',
@@ -7440,7 +7468,7 @@ function _guardarEstadoPestana(dni) {
   const _editorTxt = (function(){ const d = document.createElement('div'); d.innerHTML = estado.html || ''; return d.textContent.trim(); })();
   const _indTxt = (function(){ const d = document.createElement('div'); d.innerHTML = estado.indicaciones || ''; return d.textContent.trim(); })();
   const hayCambios = _editorTxt || _indTxt ||
-    ['ta1s','ta1d','ta2s','ta2d','ta3s','ta3d','fc1','fc2','fc3',
+    ['ta1s','ta1d','ta2s','ta2d','ta3s','ta3d','fc1','fc2','fc3','ta4s','ta4d','fc4','ta5s','ta5d','fc5',
      'peso','talla','cintura','tap_s','tap_d','tap_fc','proxDias']
     .some(k => estado[k] && !(_pre && (k === 'peso' || k === 'talla' || k === 'cintura') && String(estado[k]) === String(_pre[k])));
   if(hayCambios) {
@@ -7464,7 +7492,7 @@ function _restaurarEstadoPestana(dni) {
     if(editor && estado.html !== undefined) editor.innerHTML = estado.html;
     const indEditor = document.getElementById('evol_indicaciones_editor');
     if(indEditor && estado.indicaciones !== undefined) indEditor.innerHTML = estado.indicaciones;
-    const campos = ['ta1s','ta1d','ta2s','ta2d','ta3s','ta3d','fc1','fc2','fc3',
+    const campos = ['ta1s','ta1d','ta2s','ta2d','ta3s','ta3d','fc1','fc2','fc3','ta4s','ta4d','fc4','ta5s','ta5d','fc5','ta_brazos',
                     'peso','talla','cintura','tap_s','tap_d','tap_fc'];
     campos.forEach(id => {
       const el = document.getElementById('evol_' + id);
@@ -7519,7 +7547,7 @@ function _guardarDraftLocal(dni) {
         : null
     };
     ['evol_ta1s','evol_ta1d','evol_ta2s','evol_ta2d','evol_ta3s','evol_ta3d',
-     'evol_fc1','evol_fc2','evol_fc3','evol_peso','evol_talla','evol_cintura',
+     'evol_fc1','evol_fc2','evol_fc3','evol_ta4s','evol_ta4d','evol_fc4','evol_ta5s','evol_ta5d','evol_fc5','evol_ta_brazos','evol_peso','evol_talla','evol_cintura',
      'evol_tap_s','evol_tap_d','evol_tap_fc','evol_prox_dias',
      'prev_edad','prev_sexo','prev_tas','prev_ct','prev_hdl','prev_glu','prev_egfr'].forEach(id=>{
       const el = document.getElementById(id);
@@ -11277,9 +11305,10 @@ async function abrirEvolucion(dni) {
   const hayBorradorSesion = sessionStorage.getItem('urcym_tab_' + p.dni) !== null;
   if(!hayBorradorSesion) {
     document.getElementById('evol_editor').innerHTML = '';
-    ['evol_ta1s','evol_ta1d','evol_ta2s','evol_ta2d','evol_ta3s','evol_ta3d','evol_fc1','evol_fc2','evol_fc3','evol_peso','evol_talla','evol_cintura','evol_tap_s','evol_tap_d','evol_tap_fc'].forEach(id=>{
+    ['evol_ta1s','evol_ta1d','evol_ta2s','evol_ta2d','evol_ta3s','evol_ta3d','evol_fc1','evol_fc2','evol_fc3','evol_ta4s','evol_ta4d','evol_fc4','evol_ta5s','evol_ta5d','evol_fc5','evol_ta_brazos','evol_peso','evol_talla','evol_cintura','evol_tap_s','evol_tap_d','evol_tap_fc'].forEach(id=>{
       const el = document.getElementById(id); if(el) el.value='';
     });
+    if(typeof taSincronizarUI === 'function') taSincronizarUI();
     // Fix: el id "upd_tto" no existe (el select real es "upd_tto_accion"), por lo
     // que este reset nunca se aplicaba. Al no resetearse, el combo "Se cambia dosis"
     // quedaba con las <option> de medicación cargadas para el paciente ANTERIOR
@@ -11380,7 +11409,7 @@ async function abrirEvolucion(dni) {
     const ed = document.getElementById('evol_editor');
     const ind = document.getElementById('evol_indicaciones_editor');
     const inputIds = ['evol_ta1s','evol_ta1d','evol_ta2s','evol_ta2d','evol_ta3s','evol_ta3d',
-                      'evol_fc1','evol_fc2','evol_fc3','evol_peso','evol_talla','evol_cintura',
+                      'evol_fc1','evol_fc2','evol_fc3','evol_ta4s','evol_ta4d','evol_fc4','evol_ta5s','evol_ta5d','evol_fc5','evol_peso','evol_talla','evol_cintura',
                       'evol_tap_s','evol_tap_d','evol_tap_fc','evol_prox_dias',
                       'prev_edad','prev_sexo','prev_tas','prev_ct','prev_hdl','prev_glu','prev_egfr'];
     const checkIds = ['prev_hta_tto','prev_estatina','prev_asa','prev_tabaco','prev_dm'];
@@ -11720,8 +11749,20 @@ async function guardarEvolucion() {
     proxima_consulta_dias: parseInt(document.getElementById('evol_prox_dias')?.value)||null,
     proxima_consulta_fecha: (function(){ const d=parseInt(document.getElementById('evol_prox_dias')?.value); if(!d) return null; const f=new Date(); f.setDate(f.getDate()+d); return f.toISOString().slice(0,10); })()
   };
+  // Tomas 4 y 5 y brazo: solo si se usaron (si la base todavía no tiene esas columnas, se guarda sin ellas;
+  // igual quedan escritas en el texto de la evolución)
+  const _taExtra = {};
+  ['ta4s','ta4d','fc4','ta5s','ta5d','fc5'].forEach(k => { const v = (document.getElementById('evol_' + k)||{}).value; if(v) _taExtra[k] = v; });
+  const _brz = (document.getElementById('evol_ta_brazos')||{}).value || '';
+  if(/I/.test(_brz)) _taExtra.ta_brazos = _brz;
+  if(Object.keys(_taExtra).length){
+    const r0 = await sb.from('evoluciones').insert({ ..._baseInsert, ..._taExtra, prevent_data: _preventData });
+    if(!r0.error) { _baseInsert.__ok = true; }
+    else if(/ta4|ta5|fc4|fc5|ta_brazos/.test(r0.error.message || '')) { showToast('Las tomas 4/5 y el brazo quedaron en el texto, pero falta correr el SQL para guardarlas aparte.', 'warning', 8000); }
+    else if(!/prevent_data/.test(r0.error.message || '')) { showToast('Error al guardar evolución — ' + (r0.error.message||''), 'error', 10000); btnGuardar.disabled = false; btnGuardar.textContent = '💾 Guardar evolución'; return; }
+  }
   // Intentar guardar con prevent_data; si la columna no existe en la BD, reintentar sin ella
-  let { error } = await sb.from('evoluciones').insert({ ..._baseInsert, prevent_data: _preventData });
+  let { error } = _baseInsert.__ok ? { error: null } : await sb.from('evoluciones').insert({ ..._baseInsert, prevent_data: _preventData });
   if(error && error.message && error.message.includes('prevent_data')) {
     console.warn('[guardarEvolucion] Columna prevent_data no encontrada en la BD, guardando sin ella. Agregue la columna en Supabase para conservar datos PREVENT.');
     const r2 = await sb.from('evoluciones').insert(_baseInsert);
@@ -13245,6 +13286,7 @@ async function _enviarDocPorMail(opts) {
     fin();
     if(opts.btn) { opts.btn.textContent = '✓ Enviado'; setTimeout(function(){ opts.btn.textContent = txtBtn; }, 3000); }
     const nMat = (opts.materiales||[]).length + (opts.extras||[]).length;
+    if(opts.okTxt) alert('✓ ' + opts.okTxt + ' a ' + (j.email || opts.p.email) + '.'); else
     alert('✓ ' + (!opts.doc ? 'Material enviado' : opts.tipo === 'receta' ? 'Receta enviada' : 'Indicaciones enviadas') + ' a ' + (j.email || opts.p.email)
       + (opts.doc ? ' con el PDF adjunto' : '') + (nMat ? ' (+ ' + nMat + ' material' + (nMat > 1 ? 'es' : '') + ')' : '') + '.');
     try { _registrarEnvioEnEvolucion(opts.p, j.email || opts.p.email, opts.resumen); } catch(e2) { console.warn('registro de envío', e2); }
@@ -13780,22 +13822,30 @@ async function abrirAntropometriaSoloLectura(dni) {
 }
 
 
-function calcPromedioTA() {
-  const s2 = parseFloat(document.getElementById('evol_ta2s').value);
-  const d2 = parseFloat(document.getElementById('evol_ta2d').value);
-  const s3 = parseFloat(document.getElementById('evol_ta3s').value);
-  const d3 = parseFloat(document.getElementById('evol_ta3d').value);
-  if(s2&&d2&&s3&&d3) return Math.round((s2+s3)/2) + '/' + Math.round((d2+d3)/2);
-  if(s2&&d2) return s2+'/'+d2;
-  return null;
+// Promedio: siempre se excluye la 1.ª toma. Con 3 tomas → promedio de la 2 y la 3;
+// si se cargaron la 4 y/o la 5 → promedio de todas las demás (2 a 5).
+function _tomasTA(){
+  const out = [];
+  for(let k = 2; k <= 5; k++){
+    const es = document.getElementById('evol_ta' + k + 's'), ed = document.getElementById('evol_ta' + k + 'd'), ef = document.getElementById('evol_fc' + k);
+    if(!es) continue;
+    out.push({ k, s: parseFloat(es.value), d: parseFloat(ed.value), f: parseFloat(ef && ef.value) });
+  }
+  return out;
 }
-
+function calcPromedioTA() {
+  const t = _tomasTA().filter(x => x.s && x.d);
+  if(!t.length) return null;
+  return Math.round(t.reduce((a, x) => a + x.s, 0) / t.length) + '/' + Math.round(t.reduce((a, x) => a + x.d, 0) / t.length);
+}
 function calcPromedioFC() {
-  const f2 = parseFloat(document.getElementById('evol_fc2').value);
-  const f3 = parseFloat(document.getElementById('evol_fc3').value);
-  if(f2&&f3) return Math.round((f2+f3)/2);
-  if(f2) return f2;
-  return null;
+  const t = _tomasTA().filter(x => x.f);
+  if(!t.length) return null;
+  return Math.round(t.reduce((a, x) => a + x.f, 0) / t.length);
+}
+function _tomasUsadasTxt(){
+  const t = _tomasTA().filter(x => x.s && x.d).map(x => x.k);
+  return t.length <= 1 ? 'toma ' + (t[0] || 2) : 'tomas ' + t.slice(0, -1).join(', ') + ' y ' + t[t.length - 1];
 }
 
 function actualizarPromedios() {
@@ -13806,7 +13856,7 @@ function actualizarPromedios() {
     let txt = '';
     if(pTA) txt += 'TA ' + pTA + ' mmHg';
     if(pFC) txt += (txt?' &nbsp;|&nbsp; ':'') + 'FC ' + pFC + ' lpm';
-    el.innerHTML = txt ? '<strong>Promedio 3 tomas protocolarizadas:</strong><br>' + txt : '<span style="color:#b0bcc9;font-size:11px">Completar tomas 2 y 3</span>';
+    el.innerHTML = txt ? '<strong>Promedio (' + _tomasUsadasTxt() + '):</strong><br>' + txt + (typeof taDifInterbrazo === 'function' && taDifInterbrazo() ? '<br><span style="color:var(--red);font-weight:700">' + taDifInterbrazo().txt + '</span>' : '') : '<span style="color:#b0bcc9;font-size:11px">Completar tomas 2 y 3</span>';
   }
   if(typeof actualizarBadgeTA === 'function') actualizarBadgeTA();
   volcarPromedioAlEditor();
@@ -13824,15 +13874,21 @@ function volcarPromedioAlEditor() {
   const s1 = document.getElementById('evol_ta1s').value, d1 = document.getElementById('evol_ta1d').value, f1 = document.getElementById('evol_fc1').value;
   const s2 = document.getElementById('evol_ta2s').value, d2 = document.getElementById('evol_ta2d').value, f2 = document.getElementById('evol_fc2').value;
   const s3 = document.getElementById('evol_ta3s').value, d3 = document.getElementById('evol_ta3d').value, f3 = document.getElementById('evol_fc3').value;
-  if(s1 && d1) lineas.push('Toma 1: ' + s1 + '/' + d1 + ' mmHg' + (f1 ? ' · FC ' + f1 + ' lpm' : ''));
-  if(s2 && d2) lineas.push('Toma 2: ' + s2 + '/' + d2 + ' mmHg' + (f2 ? ' · FC ' + f2 + ' lpm' : ''));
-  if(s3 && d3) lineas.push('Toma 3: ' + s3 + '/' + d3 + ' mmHg' + (f3 ? ' · FC ' + f3 + ' lpm' : ''));
+  const _br = (typeof taBrazos === 'function') ? taBrazos() : [];
+  const _usaI = _br.indexOf('I') >= 0;
+  const _bTxt = k => _usaI ? ' (brazo ' + (_br[k - 1] === 'I' ? 'izq.' : 'der.') + ')' : '';
+  if(s1 && d1) lineas.push('Toma 1' + _bTxt(1) + ': ' + s1 + '/' + d1 + ' mmHg' + (f1 ? ' · FC ' + f1 + ' lpm' : ''));
+  if(s2 && d2) lineas.push('Toma 2' + _bTxt(2) + ': ' + s2 + '/' + d2 + ' mmHg' + (f2 ? ' · FC ' + f2 + ' lpm' : ''));
+  if(s3 && d3) lineas.push('Toma 3' + _bTxt(3) + ': ' + s3 + '/' + d3 + ' mmHg' + (f3 ? ' · FC ' + f3 + ' lpm' : ''));
+  [4, 5].forEach(k => { const es = document.getElementById('evol_ta' + k + 's'), ed = document.getElementById('evol_ta' + k + 'd'), ef = document.getElementById('evol_fc' + k);
+    if(es && es.value && ed.value) lineas.push('Toma ' + k + _bTxt(k) + ': ' + es.value + '/' + ed.value + ' mmHg' + (ef.value ? ' · FC ' + ef.value + ' lpm' : '')); });
   if(pTA || pFC) {
-    let ln = '<strong>Promedio (tomas 2 y 3):</strong>';
+    let ln = '<strong>Promedio (' + _tomasUsadasTxt() + '):</strong>';
     if(pTA) ln += ' TA ' + pTA + ' mmHg';
     if(pFC) ln += ' · FC ' + pFC + ' lpm';
     lineas.push(ln);
   }
+  if(typeof taDifInterbrazo === 'function' && taDifInterbrazo()) lineas.push('<span style="color:#c0392b;font-weight:700">' + taDifInterbrazo().txt + '</span>');
   const tapFc = document.getElementById('evol_tap_fc').value;
   if(tapS && tapD) {
     let tapLine = 'TA ortostática (parado 3 min): ' + tapS + '/' + tapD + ' mmHg';
@@ -15522,7 +15578,7 @@ async function cargarUltimaTAHistorica(dni) {
   const estado = { dni, sis: null, dia: null, fecha: null };
   try {
     const { data, error } = await sb.from('evoluciones')
-      .select('fecha_hora,ta1s,ta1d,ta2s,ta2d,ta3s,ta3d')
+      .select('fecha_hora,ta1s,ta1d,ta2s,ta2d,ta3s,ta3d,ta_promedio')
       .eq('dni_paciente', dni)
       .order('fecha_hora', { ascending: false })
       .limit(15);
@@ -15532,7 +15588,9 @@ async function cargarUltimaTAHistorica(dni) {
         const s3 = parseFloat(row.ta3s), d3 = parseFloat(row.ta3d);
         const s1 = parseFloat(row.ta1s), d1 = parseFloat(row.ta1d);
         let s = null, d = null;
-        if(s2 && d2 && s3 && d3) { s = Math.round((s2+s3)/2); d = Math.round((d2+d3)/2); } // promedio tomas 2 y 3, igual que en la consulta
+        const _tp = /^\s*(\d+)\s*\/\s*(\d+)/.exec(row.ta_promedio || '');   // promedio guardado (incluye tomas 4 y 5)
+        if(_tp) { s = +_tp[1]; d = +_tp[2]; }
+        else if(s2 && d2 && s3 && d3) { s = Math.round((s2+s3)/2); d = Math.round((d2+d3)/2); } // promedio tomas 2 y 3, igual que en la consulta
         else if(s2 && d2) { s = s2; d = d2; }
         else if(s1 && d1) { s = s1; d = d1; }
         else if(s3 && d3) { s = s3; d = d3; }
@@ -32735,13 +32793,15 @@ async function invUltimasTAsBulk(dnis) {
   const map = {};
   if(!dnis || !dnis.length) return map;
   const lim = Math.min(Math.max(dnis.length*8, 200), 4000);
-  const { data } = await sb.from('evoluciones').select('dni_paciente,fecha_hora,ta1s,ta1d,ta2s,ta2d,ta3s,ta3d')
+  const { data } = await sb.from('evoluciones').select('dni_paciente,fecha_hora,ta1s,ta1d,ta2s,ta2d,ta3s,ta3d,ta_promedio')
     .in('dni_paciente', dnis).order('fecha_hora', {ascending:false}).limit(lim);
   (data||[]).forEach(function(row){
     if(map[row.dni_paciente] !== undefined) return;
     const s2=parseFloat(row.ta2s), d2=parseFloat(row.ta2d), s3=parseFloat(row.ta3s), d3=parseFloat(row.ta3d), s1=parseFloat(row.ta1s), d1=parseFloat(row.ta1d);
     let s = null;
-    if(s2&&d2&&s3&&d3) s = Math.round((s2+s3)/2);
+    const _tp = /^\s*(\d+)\s*\/\s*(\d+)/.exec(row.ta_promedio || '');
+    if(_tp) s = +_tp[1];
+    else if(s2&&d2&&s3&&d3) s = Math.round((s2+s3)/2);
     else if(s2&&d2) s = s2;
     else if(s1&&d1) s = s1;
     else if(s3&&d3) s = s3;
@@ -33062,8 +33122,8 @@ document.addEventListener('click', function(e){
 //  · Aviso si un valor no tiene sentido (error de tipeo) y TA de la consulta anterior.
 // ═══════════════════════════════════════════════════════════════════════
 (function(){
-  var ORDEN = ['evol_ta1s','evol_ta1d','evol_fc1','evol_ta2s','evol_ta2d','evol_fc2','evol_ta3s','evol_ta3d','evol_fc3','evol_tap_s','evol_tap_d','evol_tap_fc','evol_peso','evol_talla','evol_cintura'];
-  var AUTO = /^evol_(ta[123][sd]|fc[123]|tap_[sd]|tap_fc)$/;
+  var ORDEN = ['evol_ta1s','evol_ta1d','evol_fc1','evol_ta2s','evol_ta2d','evol_fc2','evol_ta3s','evol_ta3d','evol_fc3','evol_ta4s','evol_ta4d','evol_fc4','evol_ta5s','evol_ta5d','evol_fc5','evol_tap_s','evol_tap_d','evol_tap_fc','evol_peso','evol_talla','evol_cintura'];
+  var AUTO = /^evol_(ta[1-5][sd]|fc[1-5]|tap_[sd]|tap_fc)$/;
   var RANGO = {
     s: [60, 260, 'TA sistólica'], d: [30, 160, 'TA diastólica'], fc: [30, 200, 'FC'],
     evol_peso: [25, 350, 'Peso'], evol_talla: [100, 230, 'Talla'], evol_cintura: [40, 220, 'Cintura']
@@ -33734,27 +33794,37 @@ textarea.nota-chica{min-height:34px;resize:vertical;line-height:1.4}
     if(m && m.classList.contains('open') && ev.key === 'Enter' && (ev.ctrlKey || ev.metaKey)){ ev.preventDefault(); guardarCargaEstudio(); }
   });
 
-  // Todo estudio cargado o corregido en la tabla → a la evolución (solo las fechas que cambiaron)
-  var firmas = {};
-  function firmaCol(ci){ return (estDatos.filas || []).map(function(f){ return f ? (f[ci] == null ? '' : String(f[ci])) : ''; }).join('\u0001'); }
-  function tomarFirmas(){ firmas = {}; (estDatos.columnas || []).forEach(function(c, ci){ firmas[c + '#' + ci] = firmaCol(ci); }); }
-  window._estTomarFirmas = tomarFirmas;
+  // Todo estudio o laboratorio cargado o corregido en la tabla → a la evolución (solo las fechas que cambiaron).
+  // En laboratorio vuelcan los valores fuera de rango (en rojo) y las notas. La Lp(a) se vuelca al cargarla (guardarLpa).
+  var firmas = { est:{}, lab:{} };
+  function datosDe(t){ return t === 'lab' ? (typeof labDatos !== 'undefined' ? labDatos : null) : (typeof estDatos !== 'undefined' ? estDatos : null); }
+  function firmaCol(t, ci){ var d = datosDe(t); return ((d && d.filas) || []).map(function(f){ return f ? (f[ci] == null ? '' : String(f[ci])) : ''; }).join('\u0001'); }
+  function tomarFirmas(t){
+    (t ? [t] : ['est','lab']).forEach(function(tt){ var d = datosDe(tt); firmas[tt] = {}; ((d && d.columnas) || []).forEach(function(c, ci){ firmas[tt][c + '#' + ci] = firmaCol(tt, ci); }); });
+  }
+  window._estTomarFirmas = function(){ tomarFirmas(); };
   if(typeof cargarDatosTablasEvol === 'function'){
     var oc = cargarDatosTablasEvol;
-    window.cargarDatosTablasEvol = async function(){ var r = await oc.apply(this, arguments); try { tomarFirmas(); } catch(e) {} return r; };
+    window.cargarDatosTablasEvol = async function(){
+      var r = await oc.apply(this, arguments);
+      try { tomarFirmas(); } catch(e) {}
+      return r;
+    };
   }
   if(typeof guardarDatosPac === 'function'){
     var og = guardarDatosPac;
     window.guardarDatosPac = async function(wrapId){
       try {
-        if(['est_tabla_wrap','evest_wrap'].indexOf(wrapId) >= 0 && document.getElementById('evol_editor')){
-          (estDatos.columnas || []).forEach(function(c, ci){
-            var f = firmaCol(ci), k = c + '#' + ci;
-            if(firmas[k] !== f && f.replace(/\u0001/g, '').trim()) volcarAlteradosAlEditor('est', ci);
+        var t = ['est_tabla_wrap','evest_wrap'].indexOf(wrapId) >= 0 ? 'est' : ['lab_tabla_wrap','evlab_wrap'].indexOf(wrapId) >= 0 ? 'lab' : null;
+        var d = t && datosDe(t);
+        if(t && d && document.getElementById('evol_editor')){
+          (d.columnas || []).forEach(function(c, ci){
+            var f = firmaCol(t, ci), k = c + '#' + ci;
+            if(firmas[t][k] !== f && f.replace(/\u0001/g, '').trim()) volcarAlteradosAlEditor(t, ci);
           });
-          tomarFirmas();
+          tomarFirmas(t);
         }
-      } catch(e) { console.warn('volcado estudios', e); }
+      } catch(e) { console.warn('volcado tabla', e); }
       return og.apply(this, arguments);
     };
   }
@@ -33956,7 +34026,7 @@ async function _t1Cargar(forzar){
     _t1TraerTodo('paciente_clinica', '*'),
     _t1TraerTodo('medicacion', 'dni_paciente,grupo,farmaco', function(q){ return q.eq('activo', true); }),
     _t1TraerTodo('paciente_tablas', 'dni_paciente,tipo,datos', function(q){ return q.in('tipo', ['lab', 'ant', 'est']); }),
-    _t1TraerTodo('evoluciones', 'dni_paciente,fecha_hora,ta1s,ta1d,ta2s,ta2d,ta3s,ta3d', function(q){ return q.order('fecha_hora', { ascending: false }); })
+    _t1TraerTodo('evoluciones', 'dni_paciente,fecha_hora,ta1s,ta1d,ta2s,ta2d,ta3s,ta3d,ta_promedio', function(q){ return q.order('fecha_hora', { ascending: false }); })
   ]);
   var cli = {}, meds = {}, lab = {}, ant = {}, ta = {}, est = {}, nEvol = {};
   res[0].forEach(function(c){ cli[c.dni_paciente] = c; });
@@ -33967,7 +34037,8 @@ async function _t1Cargar(forzar){
     if(ta[e.dni_paciente]) return;
     var n = function(x){ var v = parseFloat(x); return isNaN(v) ? null : v; };
     var s2 = n(e.ta2s), d2 = n(e.ta2d), s3 = n(e.ta3s), d3 = n(e.ta3d), s1 = n(e.ta1s), d1 = n(e.ta1d), s = null, d = null;
-    if(s2 && d2 && s3 && d3){ s = (s2 + s3) / 2; d = (d2 + d3) / 2; } else if(s2 && d2){ s = s2; d = d2; } else if(s1 && d1){ s = s1; d = d1; } else if(s3 && d3){ s = s3; d = d3; }
+    var tp = /^\s*(\d+)\s*\/\s*(\d+)/.exec(e.ta_promedio || '');
+    if(tp){ s = +tp[1]; d = +tp[2]; } else if(s2 && d2 && s3 && d3){ s = (s2 + s3) / 2; d = (d2 + d3) / 2; } else if(s2 && d2){ s = s2; d = d2; } else if(s1 && d1){ s = s1; d = d1; } else if(s3 && d3){ s = s3; d = d3; }
     if(s) ta[e.dni_paciente] = { s: s, d: d };
   });
   var prev = pacienteActual;
@@ -34290,5 +34361,203 @@ details.t1-q:not([disabled]) summary .t1-q-t::after{content:' ▾';color:var(--b
 .t1-sig{font-weight:800;color:#b91c1c}
 .t1-nota{font-size:11px;color:var(--text-soft);margin-top:10px;line-height:1.45}
 </style>
+
+<script>
+// ═══ TA: tomas 4 y 5 (opcionales) y brazo derecho / izquierdo por toma ═══
+(function(){
+  function hid(){ return document.getElementById('evol_ta_brazos'); }
+  window.taBrazos = function(){ var v = (hid() || {}).value || ''; var a = v.split(','); for(var i = 0; i < 5; i++) a[i] = a[i] === 'I' ? 'I' : 'D'; return a; };
+  function guardarBrazos(a){ var h = hid(); if(!h) return; h.value = a.indexOf('I') >= 0 ? a.join(',') : ''; }
+  window.taSincronizarUI = function(){
+    var a = taBrazos();
+    document.querySelectorAll('.ta-brazo').forEach(function(b){
+      var k = +b.dataset.toma, izq = a[k - 1] === 'I';
+      b.textContent = izq ? 'I' : 'D'; b.classList.toggle('izq', izq);
+      b.title = izq ? 'Brazo izquierdo (tocá para cambiar)' : 'Brazo derecho (tocá para cambiar)';
+    });
+    var hay = function(k){ return ['s','d'].some(function(x){ var e = document.getElementById('evol_ta' + k + x); return e && e.value; }) || ((document.getElementById('evol_fc' + k) || {}).value); };
+    var f4 = document.getElementById('ta_fila_4'), f5 = document.getElementById('ta_fila_5'), btn = document.getElementById('btn_ta_mas');
+    if(f4 && hay(4)) f4.style.display = '';
+    if(f5 && hay(5)) f5.style.display = '';
+    if(f4 && f5 && !hay(4) && !hay(5) && !f4._abierta) { f4.style.display = 'none'; f5.style.display = 'none'; }
+    if(btn){ var v4 = f4 && f4.style.display !== 'none', v5 = f5 && f5.style.display !== 'none'; btn.style.display = v5 ? 'none' : ''; btn.textContent = v4 ? '+ Toma 5' : '+ Toma 4'; }
+  };
+  window.taAgregarToma = function(){
+    var f4 = document.getElementById('ta_fila_4'), f5 = document.getElementById('ta_fila_5');
+    var f = f4.style.display === 'none' ? f4 : f5; f.style.display = ''; f4._abierta = true;
+    taSincronizarUI();
+    var k = f === f4 ? 4 : 5; var i = document.getElementById('evol_ta' + k + 's'); if(i) i.focus();
+  };
+  // Diferencia entre brazos (≥10 mmHg de sistólica): compara el promedio de las tomas de cada brazo
+  window.taDifInterbrazo = function(){
+    var a = taBrazos(), D = [], I = [];
+    for(var k = 1; k <= 5; k++){ var s = parseFloat((document.getElementById('evol_ta' + k + 's') || {}).value); if(s) (a[k - 1] === 'I' ? I : D).push(s); }
+    if(!D.length || !I.length) return null;
+    var m = function(l){ return l.reduce(function(x, y){ return x + y; }, 0) / l.length; };
+    var dif = Math.round(Math.abs(m(D) - m(I)));
+    if(dif < 10) return null;
+    return { dif: dif, txt: 'Diferencia interbrazo de ' + dif + ' mmHg de sistólica (mayor en brazo ' + (m(D) > m(I) ? 'derecho' : 'izquierdo') + ')' };
+  };
+  document.addEventListener('click', function(ev){
+    var b = ev.target.closest && ev.target.closest('.ta-brazo'); if(!b) return;
+    var a = taBrazos(), k = +b.dataset.toma; a[k - 1] = a[k - 1] === 'I' ? 'D' : 'I'; guardarBrazos(a);
+    taSincronizarUI(); if(typeof actualizarPromedios === 'function') actualizarPromedios();
+  });
+  // Al restaurar el borrador o cambiar de paciente, ajustar filas y botones
+  setInterval(function(){ var h = hid(); if(!h) return; var f = h.value + '|' + [4,5].map(function(k){ return ((document.getElementById('evol_ta' + k + 's') || {}).value || '') + ((document.getElementById('evol_fc' + k) || {}).value || ''); }).join(); if(h._f !== f){ h._f = f; taSincronizarUI(); } }, 700);
+  if(document.readyState !== 'loading') taSincronizarUI(); else document.addEventListener('DOMContentLoaded', taSincronizarUI);
+})();
+</script>
+<style>
+.ta-brazo{min-width:26px;height:26px;border:1.5px solid var(--border);background:white;border-radius:6px;font-weight:700;font-size:12px;cursor:pointer;color:var(--text-soft);font-family:var(--font-main)}
+.ta-brazo.izq{background:#fff4e5;border-color:#f0a43a;color:#a35a00}
+.ta-mas{margin-top:6px;border:1.5px dashed var(--border);background:transparent;border-radius:8px;padding:4px 10px;font-size:12px;font-weight:600;color:var(--text-soft);cursor:pointer;font-family:var(--font-main)}
+.ta-mas:hover{border-color:var(--blue);color:var(--blue)}
+</style>
+
+<script>
+// ═══════════════════════════════════════════════════════════════════════
+// RESUMEN DE HISTORIA CLÍNICA
+// Documento con las evoluciones del paciente (orden cronológico), con los datos del
+// profesional que lo emite y su firma. Se imprime / guarda como PDF o se manda por mail
+// (sale desde el Gmail del profesional, con el PDF adjunto).
+// ═══════════════════════════════════════════════════════════════════════
+(function(){
+  function fmtF(iso){ if(!iso) return ''; var d = String(iso).slice(0, 10).split('-'); return d.length === 3 ? d[2] + '/' + d[1] + '/' + d[0] : iso; }
+  function esDe(med, prof){ med = String(med || '').toLowerCase();
+    if(prof === 'barbara') return med.indexOf('árbara') >= 0 || med.indexOf('barbara') >= 0;
+    if(prof === 'omar') return med.indexOf('bertani') >= 0 || med.indexOf('omar') >= 0;
+    return true; }
+  // Limpia el HTML de la evolución: saca scripts, botones, campos y atributos de eventos
+  function limpiar(html){
+    var d = document.createElement('div'); d.innerHTML = html || '';
+    d.querySelectorAll('script,style,button,input,select,textarea,iframe,object,embed').forEach(function(x){ x.remove(); });
+    d.querySelectorAll('*').forEach(function(el){
+      Array.prototype.slice.call(el.attributes).forEach(function(a){ if(/^on/i.test(a.name) || a.name === 'contenteditable') el.removeAttribute(a.name); });
+    });
+    return d.innerHTML;
+  }
+  function edadDe(fn){ if(!fn) return ''; var n = new Date(fn + 'T12:00:00'), h = new Date(); var e = h.getFullYear() - n.getFullYear(); if(h.getMonth() < n.getMonth() || (h.getMonth() === n.getMonth() && h.getDate() < n.getDate())) e--; return isNaN(e) ? '' : e + ' años'; }
+
+  async function traerEvoluciones(dni, o){
+    var r = await sb.from('evoluciones').select('*').eq('dni_paciente', dni).order('fecha_hora', { ascending: true });
+    if(r.error) throw new Error(r.error.message || 'no se pudieron leer las evoluciones');
+    return (r.data || []).filter(function(e){
+      var f = String(e.fecha_hora || '').slice(0, 10);
+      if(o.desde && f < o.desde) return false;
+      if(o.hasta && f > o.hasta) return false;
+      return esDe(e.medico, o.prof);
+    });
+  }
+
+  function armarHTML(p, evols, o){
+    var u = users[selectedUser] || {};
+    var col = (typeof _colorProfesionalOtro === 'function') ? _colorProfesionalOtro(u) : [31, 106, 171];
+    var rgb = 'rgb(' + col.join(',') + ')';
+    var firmaKey = { barbara:'barbara', omar:'omar' }[String(selectedUser || '').toLowerCase()] || '';
+    var firma = (!o.firma || !firmaKey) ? '' : (firmaKey === 'omar' ? (typeof firmaOmarB64 !== 'undefined' ? firmaOmarB64 : '') : (typeof firmaBarbaraB64 !== 'undefined' ? firmaBarbaraB64 : ''));
+    var ahora = new Date();
+    var emitido = ahora.toLocaleDateString('es-AR', { day:'2-digit', month:'2-digit', year:'numeric' }) + ' ' + ahora.toLocaleTimeString('es-AR', { hour:'2-digit', minute:'2-digit', hour12:false }) + ' h';
+    var periodo = (o.desde || o.hasta) ? ((o.desde ? 'desde el ' + fmtF(o.desde) : 'desde el inicio') + (o.hasta ? ' hasta el ' + fmtF(o.hasta) : ' hasta la fecha')) : 'todas las consultas registradas';
+    var afil = p.numero_afiliado || p.afiliado || '';
+    var dato = function(l, v){ return v ? '<div><span class="lb">' + l + '</span> ' + _esc(v) + '</div>' : ''; };
+    var entradas = evols.map(function(e){
+      var fh = new Date(e.fecha_hora);
+      var vit = [];
+      if(e.ta_promedio) vit.push('TA ' + _esc(e.ta_promedio) + ' mmHg');
+      if(e.fc_promedio) vit.push('FC ' + _esc(e.fc_promedio) + ' lpm');
+      if(e.peso) vit.push('Peso ' + _esc(e.peso) + ' kg');
+      return '<div class="ev">'
+        + '<div class="ev-h"><b>' + fh.toLocaleDateString('es-AR', { day:'2-digit', month:'2-digit', year:'numeric' }) + '</b> · ' + fh.toLocaleTimeString('es-AR', { hour:'2-digit', minute:'2-digit', hour12:false }) + ' h'
+        + (e.medico ? ' · ' + _esc(e.medico) : '') + (vit.length ? '<span class="vit">' + vit.join(' · ') + '</span>' : '') + '</div>'
+        + '<div class="ev-c">' + (limpiar(e.contenido_html) || '<i style="color:#94a3b8">Sin texto</i>') + '</div></div>';
+    }).join('');
+    return '<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><title>Resumen de historia clínica · ' + _esc((p.apellido || '') + ', ' + (p.nombre || '')) + '</title>'
+      + '<style>'
+      + ':root{--red:#dc2626;--blue:#1f6aab;--teal:#0f8f91;--text:#1e293b;--text-soft:#64748b;--border:#e2e8f0;--gray:#f1f5f9;--green:#16a34a;--orange:#ea580c;}'
+      + '@page{size:A4;margin:14mm 13mm 16mm}'
+      + 'body{font-family:Arial,Helvetica,sans-serif;font-size:10.5pt;color:#1e293b;margin:0;-webkit-print-color-adjust:exact;print-color-adjust:exact}'
+      + '.hdr{border-bottom:3px solid ' + rgb + ';padding-bottom:10px;margin-bottom:12px;display:flex;justify-content:space-between;gap:16px;align-items:flex-end}'
+      + '.prof{font-size:14pt;font-weight:700;color:' + rgb + '}.esp{font-size:9pt;color:#475569;margin-top:2px}.inst{font-size:8.5pt;color:#64748b;text-align:right;line-height:1.5;flex-shrink:0;max-width:230px}'
+      + 'h1{font-size:15pt;margin:14px 0 4px;color:#0f172a;letter-spacing:.01em}.per{font-size:9.5pt;color:#64748b;margin-bottom:12px}'
+      + '.pac{display:grid;grid-template-columns:1fr 1fr;gap:3px 18px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:9px 12px;font-size:10pt;margin-bottom:14px}.lb{color:#64748b;font-size:8.5pt;text-transform:uppercase;letter-spacing:.05em;margin-right:4px}'
+      + '.ev{border-top:1px solid #e2e8f0;padding:9px 0 6px}.ev-h{font-size:10pt;color:#0f172a;margin-bottom:5px}.vit{float:right;font-size:9pt;color:#475569}'
+      + '.ev-c{line-height:1.55}.ev-c img{max-width:100%}.ev-c .bloque-alterados,.ev-c .bloque-ta,.ev-c .bloque-clinico{break-inside:avoid}'
+      + '.fin{margin-top:22px;break-inside:avoid;display:flex;justify-content:space-between;align-items:flex-end;gap:20px;border-top:2px solid ' + rgb + ';padding-top:10px}'
+      + '.cert{font-size:9pt;color:#475569;line-height:1.6;max-width:60%}.fir{text-align:center;font-size:9.5pt}.fir img{display:block;margin:0 auto 2px;max-height:95px;max-width:170px}'
+      + '@media screen{body{max-width:820px;margin:20px auto;padding:0 20px}}'
+      + '</style></head><body>'
+      + '<div class="hdr"><div><div class="prof">' + _esc(u.titulo || u.name || '') + '</div><div class="esp">' + _esc((u.especialidades || []).join(' · ')) + (u.mp ? ' · <span style="white-space:nowrap">' + _esc(u.mp) + '</span>' : '') + '</div></div>'
+      + '<div class="inst">URCyM · Unidad de Riesgo Cardiovascular y Metabólico' + (u.email ? '<br>' + _esc(u.email) : '') + '<br>urcym.com.ar</div></div>'
+      + '<h1>Resumen de historia clínica</h1><div class="per">Período: ' + periodo + ' · ' + evols.length + ' evolucion' + (evols.length === 1 ? '' : 'es') + (o.prof ? ' · ' + (o.prof === 'omar' ? 'Dr. Omar Bertani' : 'Dra. Bárbara Guerrero') : '') + '</div>'
+      + '<div class="pac">' + dato('Paciente', (p.apellido || '') + ', ' + (p.nombre || '')) + dato('DNI', p.dni)
+      + dato('Fecha de nacimiento', p.fecha_nacimiento ? fmtF(p.fecha_nacimiento) + (edadDe(p.fecha_nacimiento) ? ' (' + edadDe(p.fecha_nacimiento) + ')' : '') : '')
+      + dato('Sexo', p.sexo) + dato('Obra social', p.obra_social) + dato('N.º de afiliado', afil) + '</div>'
+      + (entradas || '<p style="color:#64748b">No hay evoluciones en el período elegido.</p>')
+      + '<div class="fin"><div class="cert">Resumen emitido el ' + emitido + ' a partir de los registros de la historia clínica del paciente. Contiene ' + evols.length + ' evolucion' + (evols.length === 1 ? '' : 'es') + ' (' + periodo + ').</div>'
+      + '<div class="fir">' + (firma ? '<img src="' + firma + '" alt="Firma">' : '<div style="height:60px"></div>') + '<b>' + _esc(u.titulo || u.name || '') + '</b>' + (u.mp ? '<br>' + _esc(u.mp) : '') + '</div></div>'
+      + '</body></html>';
+  }
+  window._hcResumenHTML = async function(o){
+    var p = pacienteActual; if(!p) throw new Error('no hay paciente abierto');
+    var ev = await traerEvoluciones(p.dni, o);
+    return { html: armarHTML(p, ev, o), n: ev.length };
+  };
+
+  window.hcResumenAbrir = function(){
+    var p = pacienteActual; if(!p) { alert('Abrí primero un paciente.'); return; }
+    if(['barbara','omar'].indexOf(String(selectedUser || '').toLowerCase()) < 0) { alert('El resumen de historia clínica lo emite un profesional (entrá con tu usuario).'); return; }
+    var g = function(id){ var e = document.getElementById(id); return e ? e.value : ''; };
+    var inp = 'padding:7px 9px;border:1.5px solid #e5e7eb;border-radius:9px;font:inherit;font-size:13px';
+    var m = _uiModal('🖨 Resumen de historia clínica',
+      '<div style="font-size:13px;color:#64748b;margin-bottom:12px">Solo las evoluciones de <b>' + _esc((p.apellido || '') + ', ' + (p.nombre || '')) + '</b>, en orden cronológico, con tus datos y tu firma al final.</div>'
+      + '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:10px">'
+      + '<label style="display:flex;flex-direction:column;gap:3px;font-size:11px;font-weight:700;color:#64748b">DESDE<input type="date" class="r-desde" value="' + g('hc_filtro_desde') + '" style="' + inp + '"></label>'
+      + '<label style="display:flex;flex-direction:column;gap:3px;font-size:11px;font-weight:700;color:#64748b">HASTA<input type="date" class="r-hasta" value="' + g('hc_filtro_hasta') + '" style="' + inp + '"></label>'
+      + '<label style="display:flex;flex-direction:column;gap:3px;font-size:11px;font-weight:700;color:#64748b">PROFESIONAL<select class="r-prof" style="' + inp + '"><option value="">Todos</option><option value="barbara">Dra. Bárbara Guerrero</option><option value="omar">Dr. Omar Bertani</option></select></label></div>'
+      + '<div style="font-size:12px;color:#64748b;margin:-4px 0 10px">Sin fechas = toda la historia clínica.</div>'
+      + '<label style="display:flex;align-items:center;gap:8px;font-size:13.5px;margin-bottom:6px;cursor:pointer"><input type="checkbox" class="r-firma" checked style="width:16px;height:16px;accent-color:var(--teal)"> Incluir mi firma</label>'
+      + '<div class="r-msg" style="font-size:12.5px;color:#0f766e;min-height:18px;margin-top:6px"></div>'
+      + '<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:10px;flex-wrap:wrap">'
+      + '<button type="button" class="r-no" style="padding:8px 14px;border-radius:9px;border:1.5px solid #e5e7eb;background:#fff;cursor:pointer">Cancelar</button>'
+      + '<button type="button" class="r-mail" style="padding:8px 14px;border-radius:9px;border:none;background:#00b894;color:#fff;font-weight:700;cursor:pointer">✉ Enviar por mail</button>'
+      + '<button type="button" class="r-imp" style="padding:8px 16px;border-radius:9px;border:none;background:var(--teal);color:#fff;font-weight:700;cursor:pointer">🖨 Imprimir / guardar PDF</button></div>');
+    m.box.querySelector('.r-prof').value = g('hc_filtro_prof');
+    var opts = function(){ return { desde: m.box.querySelector('.r-desde').value, hasta: m.box.querySelector('.r-hasta').value, prof: m.box.querySelector('.r-prof').value, firma: m.box.querySelector('.r-firma').checked }; };
+    var msg = function(t){ m.box.querySelector('.r-msg').textContent = t || ''; };
+    m.box.querySelector('.r-no').onclick = m.cerrar;
+    m.box.querySelector('.r-imp').onclick = async function(){
+      var w = window.open('', '_blank'); if(!w) { alert('El navegador bloqueó la ventana. Permití las ventanas emergentes para urcym.com.ar.'); return; }
+      w.document.write('<p style="font-family:Arial;padding:30px;color:#64748b">Armando el resumen…</p>');
+      try {
+        msg('⏳ Armando el resumen…');
+        var r = await _hcResumenHTML(opts());
+        if(!r.n && !confirm('No hay evoluciones en ese período. ¿Imprimir igual?')) { w.close(); msg(''); return; }
+        w.document.open(); w.document.write(r.html.replace('</body>', '<script>setTimeout(function(){window.print();},400)<\/script></body>')); w.document.close();
+        msg(''); m.cerrar();
+      } catch(e) { w.close(); msg(''); alert('No se pudo armar el resumen: ' + e.message); }
+    };
+    m.box.querySelector('.r-mail').onclick = async function(){
+      var b = this, o = opts();
+      try {
+        var email = await _mailPacienteAsegurado(p); if(!email) return;
+        b.disabled = true; msg('⏳ Armando el resumen…');
+        var r = await _hcResumenHTML(o);
+        if(!r.n) { b.disabled = false; msg(''); alert('No hay evoluciones en ese período.'); return; }
+        if(!confirm('¿Enviar el resumen de historia clínica (' + r.n + ' evolucion' + (r.n === 1 ? '' : 'es') + ') a ' + email + '?\n\nSale desde tu Gmail, con el PDF adjunto.')) { b.disabled = false; msg(''); return; }
+        msg('⏳ Pasando a PDF…');
+        var file = await _informeAPdf({ archivo: 'Resumen_HC', fn: function(){ return r.html; } });
+        msg('⏳ Enviando…');
+        await _enviarDocPorMail({ tipo:'material', p:p, texto:'', doc:null, filename:'', materiales:[], extras:[file], resumen:['Resumen de historia clínica (' + r.n + ' evoluciones)'], btn:b, okTxt:'Resumen de historia clínica enviado con el PDF adjunto' });
+        msg(''); m.cerrar();
+      } catch(e) { b.disabled = false; msg(''); alert('No se pudo enviar: ' + e.message); }
+    };
+  };
+
+  // También se puede elegir desde "✉ Enviar por mail" (planillas e informes del paciente): toda la HC, con firma
+  if(typeof _INFORMES_MAIL !== 'undefined') _INFORMES_MAIL.push({ k:'hcres', nombre:'Resumen de historia clínica', archivo:'Resumen_HC',
+    fn: async function(){ var r = await _hcResumenHTML({ desde:'', hasta:'', prof:'', firma:true }); if(!r.n) throw new Error('no tiene evoluciones guardadas'); return r.html; } });
+})();
+</script>
 </body>
 </html>
