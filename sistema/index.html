@@ -2,6 +2,7 @@
 <html lang="es-AR">
 <head>
   <meta charset="UTF-8" />
+  <script>var URCYM_BUILD = '2026-11-07-2130';</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Evaluaciones cardiometabólicas — Sistema de Historia Clínica</title>
 
@@ -1597,6 +1598,7 @@
       <span class="topbar-user" id="topbarUser"></span>
       <button id="btn-cambiar-pwd" onclick="abrirCambiarPassword()" style="padding:6px 12px;border-radius:8px;border:1.5px solid var(--border);background:transparent;font-size:11px;font-weight:500;color:var(--text-soft);cursor:pointer" title="Cambiar contraseña">🔑</button>
       <button onclick="cambiarUsuario()" style="padding:6px 12px;border-radius:8px;border:1.5px solid var(--border);background:transparent;font-size:11px;font-weight:500;color:var(--text-soft);cursor:pointer" title="Cambiar usuario">👤 Cambiar</button>
+      <button id="btn-backup" onclick="urcymBackup()" style="display:none;padding:6px 12px;border-radius:8px;border:1.5px solid var(--border);background:transparent;font-size:11px;font-weight:500;color:var(--text-soft);cursor:pointer" title="Descargar una copia de seguridad de toda la base">💾 Copia</button>
       <button class="btn-logout" onclick="logout()">Salir</button>
     </div>
   </div>
@@ -9940,6 +9942,15 @@ async function guardarClinica() {
     quirurg_notas: document.getElementById('quirurg_notas')?.value||null,
     actualizado_en:new Date().toISOString()
   };
+  // PROTECCIÓN: lo que no tiene casillero en pantalla NO se pisa con vacío.
+  // (Ej.: "Nota de actividad física" y "Nota de alimentación" de pacientes viejos se borraban
+  //  en cada guardado porque esos recuadros ya no existen en la ventana.)
+  Object.keys(clinicaData).forEach(function(k){
+    let id = null;
+    if(/^(dx_|fam_|gpac_)/.test(k) && !/_eventos$/.test(k)) id = k;
+    else if(/_notas$/.test(k) && k !== 'quirurg_notas') id = k.replace(/_notas$/, '_notas_generales');
+    if(id && !document.getElementById(id)) delete clinicaData[k];
+  });
   // ── Filtrar solo las columnas que existen en la tabla (evita errores por columnas nuevas no migradas) ──
   async function upsertSafe(tabla, data, opts) {
     // Intentamos el upsert completo primero
@@ -9961,8 +9972,8 @@ async function guardarClinica() {
   try {
     const {error:upsertErr} = await upsertSafe('paciente_clinica', clinicaData, {onConflict:'dni_paciente'});
     if(upsertErr) throw upsertErr;
-    const {error:medErr} = await sb.from('medicacion').update({activo:false}).eq('dni_paciente',dni);
-    if(medErr) throw medErr;
+    // (Antes se desactivaba TODA la medicación y después se reactivaba fila por fila: si algo
+    //  fallaba en el medio, el paciente quedaba sin medicación activa. Ahora solo se toca lo que cambió.)
     // Medicación con historial: lo suspendido y las dosis anteriores quedan con fecha de fin y motivo
     const meds = await medGuardarFilas(dni);
     // Si mientras se guardaba (varias escrituras a la base) el usuario cambió de pestaña,
@@ -14089,11 +14100,13 @@ async function _medPatch(filtro, patch){
 }
 /** Guarda la tabla de medicación con historial. Devuelve la lista de lo que queda ACTIVO. */
 async function medGuardarFilas(dni){
-  const hoy = fechaHoy(), meds = [];
+  const hoy = fechaHoy(), meds = [], vistos = new Set();
+
   for (const fila of document.querySelectorAll('#med_filas > .med-row, #otros_med_filas > .med-row')) {
     const farmaco = (fila.querySelector('.med-farmaco')?.value || '').trim();
     const mid = fila.dataset.medId;
-    if (!farmaco) continue;
+    if (mid) vistos.add(String(mid));
+    if (!farmaco) { if (mid) await _medPatch({ id: mid }, { activo: false, fecha_fin: hoy, motivo_fin: 'quitada' }); continue; }
     let grupo = fila.dataset.otros === '1' ? 'otros' : (fila.querySelector('.med-grupo')?.value || '');
     if (!grupo) grupo = _medGrupoDe(farmaco) || 'Otro';
     if (fila.dataset.susp === '1') {
@@ -14116,6 +14129,9 @@ async function medGuardarFilas(dni){
     }
     meds.push(medData);
   }
+  // Lo que está activo en la base y NO figura en la pantalla NO se toca: las filas guardadas solo se
+  // dan de baja con ⏸ Suspender. (Si la medicación no llegó a cargarse en pantalla por un problema de
+  // conexión, guardar no la borra.)
   return meds;
 }
 
@@ -32195,7 +32211,7 @@ function invRenderFiltrosPanel() {
   h += invBlockOpen('flt-vida', '🚬 Estilo de vida', nVida||null, false);
   h += '<select onchange="invFiltros.tabaquismo=this.value;invActualizarBadge()" style="width:100%;padding:7px 9px;border:1.5px solid var(--border);border-radius:9px;font-size:12.5px;font-family:var(--font-main);background:var(--gray)">';
   h += '<option value="">Tabaquismo: todos</option>';
-  ['Fumador activo','Exfumador','No fumador'].forEach(function(op){ h += '<option value="'+op+'"'+(f.tabaquismo===op?' selected':'')+'>'+op+'</option>'; });
+  [['actual','Fumador actual'],['social','Fumador social'],['ex','Ex fumador'],['nunca','Nunca fumó']].forEach(function(op){ h += '<option value="'+op[0]+'"'+(f.tabaquismo===op[0]?' selected':'')+'>'+op[1]+'</option>'; });
   h += '</select>';
   h += invBlockClose();
 
@@ -32606,7 +32622,7 @@ function invCalcularASCVDPaciente(p, clinica, meds, lab, tas) {
   const ct = parseFloat(ctR.valor), hdl = parseFloat(hdlR.valor);
   if(isNaN(ct) || isNaN(hdl)) return null;
   const tto = meds.some(function(m){ return m.grupo==='Antihipertensivo'; });
-  const tabaco = clinica.tabaquismo === 'Fumador activo';
+  const tabaco = clinica.tabaquismo === 'actual' || clinica.tabaquismo === 'Fumador activo';
   const dm = !!(clinica.dx_dbt1 || clinica.dx_dbt2 || clinica.dx_dbt_otro);
   // Raza no es un dato registrado en el sistema: se asume "blanca/otra", igual que la opción
   // por defecto de la calculadora ASCVD individual del paciente.
@@ -32715,7 +32731,7 @@ function invRiesgoHeuristico(p, c) {
   if(c.dx_erc) score += 1.5;
   if(c.dx_icc) score += 2;
   if(c.dx_fa) score += 1;
-  if(c.tabaquismo === 'Fumador activo') score += 1.5;
+  if(c.tabaquismo === 'actual' || c.tabaquismo === 'Fumador activo') score += 1.5;
   if(edad >= 75) score += 2; else if(edad >= 65) score += 1;
   if(score >= 6) return 'muyalto';
   if(score >= 3.5) return 'alto';
@@ -33610,6 +33626,461 @@ textarea.nota-chica{min-height:34px;resize:vertical;line-height:1.4}
 .est-pills button{border:1.5px solid var(--border);background:white;border-radius:999px;padding:5px 12px;font-size:12.5px;font-weight:600;cursor:pointer;font-family:var(--font-main);color:var(--text)}
 .est-pills button:focus{outline:2px solid rgba(37,99,235,.35);outline-offset:1px}
 .est-pills button.sel{background:var(--blue);border-color:var(--blue);color:white}
+</style>
+
+<script>
+// ═══════════════════════════════════════════════════════════════════════
+// SEGURIDAD DE LOS DATOS
+//  1) Aviso de versión nueva: si se subió una versión nueva del sistema y esta
+//     pantalla quedó con la vieja, aparece un aviso para recargar (así nadie
+//     guarda con una versión desactualizada).
+//  2) Copia de seguridad: descarga TODA la base en un archivo (.json).
+// ═══════════════════════════════════════════════════════════════════════
+(function(){
+  var avisado = false;
+  async function revisarVersion(){
+    if(avisado || !window.URCYM_BUILD) return;
+    try {
+      var url = location.pathname + '?v=' + Date.now();
+      var r = await fetch(url, { cache:'no-store', headers:{ Range:'bytes=0-2000' } });
+      var t = await r.text();
+      var m = /URCYM_BUILD\s*=\s*'([^']+)'/.exec(t);
+      if(m && m[1] !== URCYM_BUILD){
+        avisado = true;
+        var b = document.createElement('div'); b.id = 'aviso-version';
+        b.innerHTML = '⚠️ <b>Hay una versión nueva del sistema.</b> Guardá lo que estás haciendo y recargá para no trabajar con la vieja. <button type="button">Recargar ahora</button>';
+        b.querySelector('button').onclick = function(){ location.reload(); };
+        document.body.appendChild(b);
+      }
+    } catch(e) {}
+  }
+  setTimeout(revisarVersion, 20000);
+  setInterval(revisarVersion, 10 * 60 * 1000);
+  document.addEventListener('visibilitychange', function(){ if(document.visibilityState === 'visible') revisarVersion(); });
+
+  var TABLAS = ['pacientes','paciente_clinica','medicacion','evoluciones','paciente_tablas','paciente_tablas_historial','paciente_profesionales','paciente_pendientes','mdpa_estudios','mdpa_estudios_historial','adiposidad_tratamientos','adiposidad_efca','urcym_agenda_config','urcym_recetas','urcym_ingresos','urcym_gastos','urcym_personal','online_pedidos','video_reservas'];
+  window.urcymBackup = async function(){
+    var btn = document.getElementById('btn-backup'); var txt = btn ? btn.textContent : '';
+    var out = { generado: new Date().toISOString(), version: window.URCYM_BUILD || '', tablas: {} }, errores = [];
+    for(var i = 0; i < TABLAS.length; i++){
+      var t = TABLAS[i]; if(btn) btn.textContent = '💾 ' + (i + 1) + '/' + TABLAS.length + '…';
+      var filas = [];
+      for(var desde = 0; ; desde += 1000){
+        var r = await sb.from(t).select('*').range(desde, desde + 999);
+        if(r.error){ errores.push(t + ': ' + r.error.message); break; }
+        filas = filas.concat(r.data || []);
+        if(!r.data || r.data.length < 1000) break;
+      }
+      out.tablas[t] = filas;
+    }
+    var blob = new Blob([JSON.stringify(out)], { type:'application/json' });
+    var a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+    a.download = 'urcym-copia-' + new Date().toISOString().slice(0, 10) + '.json';
+    document.body.appendChild(a); a.click(); a.remove();
+    if(btn) btn.textContent = txt;
+    var total = Object.keys(out.tablas).reduce(function(s, k){ return s + out.tablas[k].length; }, 0);
+    if(window._atajoToast) _atajoToast('Copia descargada: ' + total + ' registros' + (errores.length ? ' · ' + errores.length + ' tablas con error' : ''));
+    if(errores.length) console.warn('Copia de seguridad, tablas con error:', errores);
+  };
+  // El botón de copia solo para los profesionales
+  setInterval(function(){ var b = document.getElementById('btn-backup'); if(b) b.style.display = (typeof currentUser !== 'undefined' && currentUser && !currentUser.secretaria) ? '' : 'none'; }, 2000);
+})();
+</script>
+<style>
+#aviso-version{position:fixed;left:50%;top:12px;transform:translateX(-50%);z-index:100000;background:#fff7ed;border:2px solid #f97316;color:#9a3412;padding:10px 16px;border-radius:12px;font-size:13.5px;box-shadow:0 10px 30px rgba(0,0,0,.15);max-width:92vw}
+#aviso-version button{margin-left:10px;background:#f97316;color:white;border:0;border-radius:8px;padding:6px 12px;font-weight:700;cursor:pointer}
+</style>
+
+<script>
+// ═══════════════════════════════════════════════════════════════════════
+// INVESTIGACIÓN · TABLA 1 (panorama epidemiológico)
+//  · Por defecto: TODOS los pacientes. Desde una cohorte filtrada: esa cohorte.
+//  · "Cruzar por": sexo, grupo etario, IMC, tabaquismo, cualquier diagnóstico o
+//    grupo de medicación → columnas por grupo + p-valor.
+//  · Continuas: media ± DE (t de Welch / ANOVA) o mediana [RIC] (Mann-Whitney /
+//    Kruskal-Wallis). Categóricas: n (%) (chi² de Pearson; Fisher si 2×2 con
+//    esperados < 5). Cada variable se calcula con los pacientes que tienen el dato.
+// ═══════════════════════════════════════════════════════════════════════
+var T1 = { cache: null, cacheAt: 0, poblacion: null, titulo: '', estrato: '', filas: null, pacientes: null };
+
+// ───────────── Estadística ─────────────
+function _t1LnGamma(z){ var g = 7, c = [0.99999999999980993, 676.5203681218851, -1259.1392167224028, 771.32342877765313, -176.61502916214059, 12.507343278686905, -0.13857109526572012, 9.9843695780195716e-6, 1.5056327351493116e-7];
+  if(z < 0.5) return Math.log(Math.PI / Math.sin(Math.PI * z)) - _t1LnGamma(1 - z);
+  z -= 1; var x = c[0]; for(var i = 1; i < g + 2; i++) x += c[i] / (z + i); var t = z + g + 0.5;
+  return 0.5 * Math.log(2 * Math.PI) + (z + 0.5) * Math.log(t) - t + Math.log(x); }
+function _t1BetaCF(a, b, x){ var MAXIT = 300, EPS = 3e-14, FPMIN = 1e-300, qab = a + b, qap = a + 1, qam = a - 1, c = 1, d = 1 - qab * x / qap;
+  if(Math.abs(d) < FPMIN) d = FPMIN; d = 1 / d; var h = d;
+  for(var m = 1; m <= MAXIT; m++){ var m2 = 2 * m, aa = m * (b - m) * x / ((qam + m2) * (a + m2));
+    d = 1 + aa * d; if(Math.abs(d) < FPMIN) d = FPMIN; c = 1 + aa / c; if(Math.abs(c) < FPMIN) c = FPMIN; d = 1 / d; h *= d * c;
+    aa = -(a + m) * (qab + m) * x / ((a + m2) * (qap + m2));
+    d = 1 + aa * d; if(Math.abs(d) < FPMIN) d = FPMIN; c = 1 + aa / c; if(Math.abs(c) < FPMIN) c = FPMIN; d = 1 / d; var del = d * c; h *= del;
+    if(Math.abs(del - 1) < EPS) break; }
+  return h; }
+function _t1IncBeta(x, a, b){ if(x <= 0) return 0; if(x >= 1) return 1;
+  var bt = Math.exp(_t1LnGamma(a + b) - _t1LnGamma(a) - _t1LnGamma(b) + a * Math.log(x) + b * Math.log(1 - x));
+  return x < (a + 1) / (a + b + 2) ? bt * _t1BetaCF(a, b, x) / a : 1 - bt * _t1BetaCF(b, a, 1 - x) / b; }
+function _t1GammaP(a, x){ if(x <= 0) return 0; var gln = _t1LnGamma(a);
+  if(x < a + 1){ var ap = a, sum = 1 / a, del = sum; for(var n = 0; n < 500; n++){ ap++; del *= x / ap; sum += del; if(Math.abs(del) < Math.abs(sum) * 1e-14) break; } return sum * Math.exp(-x + a * Math.log(x) - gln); }
+  var b = x + 1 - a, c = 1e300, d = 1 / b, h = d; for(var i = 1; i < 500; i++){ var an = -i * (i - a); b += 2; d = an * d + b; if(Math.abs(d) < 1e-300) d = 1e-300; c = b + an / c; if(Math.abs(c) < 1e-300) c = 1e-300; d = 1 / d; var dl = d * c; h *= dl; if(Math.abs(dl - 1) < 1e-14) break; }
+  return 1 - Math.exp(-x + a * Math.log(x) - gln) * h; }
+function _t1PChi2(x, df){ return df > 0 ? 1 - _t1GammaP(df / 2, x / 2) : NaN; }
+function _t1PNorm2(z){ z = Math.abs(z); return 1 - _t1GammaP(0.5, z * z / 2); } // bilateral
+function _t1PT(t, df){ return _t1IncBeta(df / (df + t * t), df / 2, 0.5); } // bilateral
+function _t1PF(F, d1, d2){ return F > 0 ? _t1IncBeta(d2 / (d2 + d1 * F), d2 / 2, d1 / 2) : 1; }
+function _t1Media(v){ return v.reduce(function(a, b){ return a + b; }, 0) / v.length; }
+function _t1Var(v){ var m = _t1Media(v); return v.length > 1 ? v.reduce(function(a, b){ return a + (b - m) * (b - m); }, 0) / (v.length - 1) : 0; }
+function _t1Cuantil(s, q){ var pos = (s.length - 1) * q, b = Math.floor(pos), r = pos - b; return s[b + 1] !== undefined ? s[b] + r * (s[b + 1] - s[b]) : s[b]; }
+function _t1Rangos(todos){ // todos: [{v, g}] → rangos con empates promediados; devuelve suma de t³-t para corrección
+  var o = todos.map(function(x, i){ return { v: x.v, i: i }; }).sort(function(a, b){ return a.v - b.v; }), r = new Array(todos.length), tc = 0;
+  for(var i = 0; i < o.length;){ var j = i; while(j + 1 < o.length && o[j + 1].v === o[i].v) j++; var rk = (i + j) / 2 + 1; for(var k = i; k <= j; k++) r[o[k].i] = rk; var t = j - i + 1; tc += t * t * t - t; i = j + 1; }
+  return { r: r, tc: tc }; }
+function _t1TestCont(grupos, noParam){
+  grupos = grupos.filter(function(g){ return g.length > 0; });
+  if(grupos.length < 2 || grupos.some(function(g){ return g.length < 2; })) return null;
+  var k = grupos.length, N = grupos.reduce(function(a, g){ return a + g.length; }, 0);
+  if(noParam){
+    var todos = []; grupos.forEach(function(g, gi){ g.forEach(function(v){ todos.push({ v: v, g: gi }); }); });
+    var R = _t1Rangos(todos), sumR = new Array(k).fill(0); todos.forEach(function(x, i){ sumR[x.g] += R.r[i]; });
+    if(k === 2){ var n1 = grupos[0].length, n2 = grupos[1].length, U = sumR[0] - n1 * (n1 + 1) / 2, mu = n1 * n2 / 2;
+      var sd = Math.sqrt(n1 * n2 / 12 * ((N + 1) - R.tc / (N * (N - 1)))); if(!sd) return null;
+      return { p: _t1PNorm2((U - mu) / sd), test: 'Mann-Whitney' }; }
+    var H = 12 / (N * (N + 1)) * sumR.reduce(function(a, s, i){ return a + s * s / grupos[i].length; }, 0) - 3 * (N + 1);
+    var corr = 1 - R.tc / (N * N * N - N); if(corr > 0) H /= corr;
+    return { p: _t1PChi2(H, k - 1), test: 'Kruskal-Wallis' };
+  }
+  if(k === 2){ var a = grupos[0], b = grupos[1], va = _t1Var(a) / a.length, vb = _t1Var(b) / b.length; if(!(va + vb)) return null;
+    var t = (_t1Media(a) - _t1Media(b)) / Math.sqrt(va + vb), df = (va + vb) * (va + vb) / (va * va / (a.length - 1) + vb * vb / (b.length - 1));
+    return { p: _t1PT(t, df), test: 't de Welch' }; }
+  var gm = _t1Media([].concat.apply([], grupos)), ssb = 0, ssw = 0;
+  grupos.forEach(function(g){ var m = _t1Media(g); ssb += g.length * (m - gm) * (m - gm); g.forEach(function(v){ ssw += (v - m) * (v - m); }); });
+  if(!ssw) return null; var F = (ssb / (k - 1)) / (ssw / (N - k));
+  return { p: _t1PF(F, k - 1, N - k), test: 'ANOVA' };
+}
+function _t1Fisher(a, b, c, d){
+  var lf = function(n){ return _t1LnGamma(n + 1); }, n = a + b + c + d, r1 = a + b, r2 = c + d, c1 = a + c;
+  var lp = function(x){ return lf(r1) + lf(r2) + lf(c1) + lf(n - c1) - lf(n) - lf(x) - lf(r1 - x) - lf(c1 - x) - lf(r2 - c1 + x); };
+  var p0 = lp(a), p = 0; for(var x = Math.max(0, c1 - r2); x <= Math.min(r1, c1); x++){ var px = lp(x); if(px <= p0 + 1e-7) p += Math.exp(px); }
+  return Math.min(1, p); }
+function _t1TestCat(tabla){ // tabla[fila(categoría)][columna(grupo)] = n
+  tabla = tabla.filter(function(f){ return f.some(function(x){ return x > 0; }); });
+  if(tabla.length < 2) return null;
+  var cols = tabla[0].length, totC = new Array(cols).fill(0), totF = tabla.map(function(f){ return f.reduce(function(a, b){ return a + b; }, 0); });
+  tabla.forEach(function(f){ f.forEach(function(x, j){ totC[j] += x; }); });
+  var keep = totC.map(function(t, j){ return t > 0 ? j : -1; }).filter(function(j){ return j >= 0; });
+  if(keep.length < 2) return null;
+  tabla = tabla.map(function(f){ return keep.map(function(j){ return f[j]; }); }); totC = keep.map(function(j){ return totC[j]; });
+  var N = totF.reduce(function(a, b){ return a + b; }, 0), chi = 0, minE = Infinity;
+  tabla.forEach(function(f, i){ f.forEach(function(o, j){ var e = totF[i] * totC[j] / N; minE = Math.min(minE, e); if(e > 0) chi += (o - e) * (o - e) / e; }); });
+  if(tabla.length === 2 && totC.length === 2 && minE < 5) return { p: _t1Fisher(tabla[0][0], tabla[0][1], tabla[1][0], tabla[1][1]), test: 'Fisher' };
+  return { p: _t1PChi2(chi, (tabla.length - 1) * (totC.length - 1)), test: 'chi²' };
+}
+
+// ───────────── Datos ─────────────
+async function _t1TraerTodo(tabla, cols, filtro){
+  var out = [];
+  for(var desde = 0; ; desde += 1000){
+    var q = sb.from(tabla).select(cols); if(filtro) q = filtro(q);
+    var r = await q.range(desde, desde + 999);
+    if(r.error) throw r.error; out = out.concat(r.data || []);
+    if(!r.data || r.data.length < 1000) break;
+  }
+  return out;
+}
+async function _t1Cargar(forzar){
+  if(T1.cache && !forzar && Date.now() - T1.cacheAt < 5 * 60 * 1000) return T1.cache;
+  if(!pacientesData || !pacientesData.length) await cargarPacientes();
+  var res = await Promise.all([
+    _t1TraerTodo('paciente_clinica', '*'),
+    _t1TraerTodo('medicacion', 'dni_paciente,grupo,farmaco', function(q){ return q.eq('activo', true); }),
+    _t1TraerTodo('paciente_tablas', 'dni_paciente,tipo,datos', function(q){ return q.in('tipo', ['lab', 'ant']); }),
+    _t1TraerTodo('evoluciones', 'dni_paciente,fecha_hora,ta1s,ta1d,ta2s,ta2d,ta3s,ta3d', function(q){ return q.order('fecha_hora', { ascending: false }); })
+  ]);
+  var cli = {}, meds = {}, lab = {}, ant = {}, ta = {};
+  res[0].forEach(function(c){ cli[c.dni_paciente] = c; });
+  res[1].forEach(function(m){ (meds[m.dni_paciente] = meds[m.dni_paciente] || []).push(m); });
+  res[2].forEach(function(r){ var d = invParseTablaJSON(r.datos); if(r.tipo === 'lab') lab[r.dni_paciente] = d; else ant[r.dni_paciente] = d; });
+  res[3].forEach(function(e){
+    if(ta[e.dni_paciente]) return;
+    var n = function(x){ var v = parseFloat(x); return isNaN(v) ? null : v; };
+    var s2 = n(e.ta2s), d2 = n(e.ta2d), s3 = n(e.ta3s), d3 = n(e.ta3d), s1 = n(e.ta1s), d1 = n(e.ta1d), s = null, d = null;
+    if(s2 && d2 && s3 && d3){ s = (s2 + s3) / 2; d = (d2 + d3) / 2; } else if(s2 && d2){ s = s2; d = d2; } else if(s1 && d1){ s = s1; d = d1; } else if(s3 && d3){ s = s3; d = d3; }
+    if(s) ta[e.dni_paciente] = { s: s, d: d };
+  });
+  var prev = pacienteActual;
+  pacientesData.forEach(function(p){
+    pacienteActual = p;
+    try { if(lab[p.dni] && (lab[p.dni].columnas || []).length) calcLabValues(lab[p.dni], LAB_FILAS); if(ant[p.dni] && (ant[p.dni].columnas || []).length) calcAntValues(ant[p.dni], ANT_FILAS); } catch(e) {}
+  });
+  pacienteActual = prev;
+  T1.cache = { cli: cli, meds: meds, lab: lab, ant: ant, ta: ta }; T1.cacheAt = Date.now();
+  return T1.cache;
+}
+function _t1Num(x){ if(x == null) return null; var v = parseFloat(String(x).replace(',', '.')); return isNaN(v) ? null : v; }
+function _t1Fila(p, D){
+  var c = D.cli[p.dni] || null, ms = D.meds[p.dni] || [];
+  var gl = function(k){ var r = invUltimoValor(D.lab[p.dni], LAB_FILAS, k); return r ? _t1Num(r.valor) : null; };
+  var ga = function(k){ var r = invUltimoValor(D.ant[p.dni], ANT_FILAS, k); return r ? _t1Num(r.valor) : null; };
+  var edad = edadDesde(p.fecha_nacimiento); edad = (edad == null || isNaN(edad) || edad < 0 || edad > 120) ? null : edad;
+  var sx = String(p.sexo || '').toLowerCase(), fem = /^f/.test(sx) ? true : /^m/.test(sx) ? false : null;
+  var imc = ga('IMC');
+  var f = { dni: p.dni, edad: edad, fem: fem, imc: imc, cintura: ga('Cintura'), peso: ga('Peso'),
+    tas: D.ta[p.dni] ? D.ta[p.dni].s : null, tad: D.ta[p.dni] ? D.ta[p.dni].d : null, cli: !!c };
+  f.grupoEdad = edad == null ? null : edad < 40 ? '<40' : edad < 60 ? '40-59' : edad < 75 ? '60-74' : '≥75';
+  f.imcCat = imc == null ? null : imc < 18.5 ? 'Bajo peso (<18,5)' : imc < 25 ? 'Normopeso (18,5-24,9)' : imc < 30 ? 'Sobrepeso (25-29,9)' : imc < 35 ? 'Obesidad I (30-34,9)' : imc < 40 ? 'Obesidad II (35-39,9)' : 'Obesidad III (≥40)';
+  f.dx = {}; Object.keys(INV_DX_LABELS).forEach(function(k){ f.dx[k] = c ? !!c['dx_' + k] : null; });
+  f.gin = {}; Object.keys(INV_DX_GINECO_LABELS || {}).forEach(function(k){ f.gin[k] = (c && fem) ? !!c['dx_' + k] : null; });
+  f.fam = {}; ['hta','dbt','obe','dis','iam','acv','erc','ms'].forEach(function(k){ f.fam[k] = c ? !!c['fam_' + k] : null; });
+  var tb = c ? String(c.tabaquismo || '') : '';
+  f.tab = !c || !tb ? null : /actual|activo/i.test(tb) ? 'Fumador actual' : /social/i.test(tb) ? 'Fumador social' : /^ex/i.test(tb) ? 'Ex fumador' : /nunca|no fum/i.test(tb) ? 'Nunca fumó' : null;
+  f.alcohol = c ? !!c.alcohol : null;
+  f.actOMS = null;
+  if(c && c.hab_actividad_json){ try { var aj = _safeJ(c.hab_actividad_json, null); if(aj && Array.isArray(aj.actividades)){ var mm = 0; aj.actividades.forEach(function(it){ var ms_ = (Number(it.minutos) || 0) * (Number(it.dias) || 0); if(it.intensidad === 'moderada') mm += ms_; else if(it.intensidad === 'intensa') mm += 2 * ms_; }); f.actOMS = mm >= 150; } } catch(e) {} }
+  f.lab = {}; T1_LAB.forEach(function(l){ f.lab[l[0]] = gl(l[0]); });
+  if(f.lab.MDRD == null && f.lab.Creatinina && edad){ var cr = f.lab.Creatinina > 20 ? f.lab.Creatinina / 88.4 : f.lab.Creatinina; f.lab.MDRD = 175 * Math.pow(cr, -1.154) * Math.pow(edad, -0.203) * (fem ? 0.742 : 1); }
+  f.med = {}; T1_MEDS.forEach(function(g){ f.med[g] = ms.some(function(m){ return String(m.grupo || '').toLowerCase().indexOf(g.toLowerCase().slice(0, 9)) === 0; }); });
+  f.nMedsCM = ms.filter(function(m){ return m.grupo && m.grupo !== 'otros'; }).length;
+  return f;
+}
+var T1_LAB = [ ['Glucemia','Glucemia (mg/dL)',0], ['HbA1c','HbA1c (%)',0], ['CT','Colesterol total (mg/dL)',0], ['LDL_MH','LDL-C (mg/dL)',0], ['HDL','HDL-C (mg/dL)',0],
+  ['TG','Triglicéridos (mg/dL)',1], ['noHDL','No-HDL (mg/dL)',0], ['ApoB','ApoB (mg/dL)',0], ['Creatinina','Creatinina (mg/dL)',0], ['MDRD','eGFR MDRD (mL/min/1,73 m²)',0],
+  ['AcidoUrico','Ácido úrico (mg/dL)',0], ['RAC','RAC (mg/g)',1], ['TGO','AST/TGO (U/L)',1], ['TGP','ALT/TGP (U/L)',1], ['GGT','GGT (U/L)',1], ['TSH','TSH (µUI/mL)',1], ['D3','Vitamina D (ng/mL)',0] ];
+var T1_MEDS = ['Antihipertensivo','Hipolipemiante','Antidiabético','Antiobesidad','Antiagregante','Anticoagulante','Antiarrítmico'];
+
+// Variables de la tabla (t: cont | cat | bin; np = no paramétrica → mediana [RIC])
+function _t1Variables(){
+  var v = [];
+  v.push({ sec: 'Demografía' });
+  v.push({ l: 'Edad (años)', t: 'cont', g: function(f){ return f.edad; } });
+  v.push({ id: 'sexo', l: 'Sexo femenino', t: 'bin', g: function(f){ return f.fem; } });
+  v.push({ id: 'edad', l: 'Grupo etario', t: 'cat', g: function(f){ return f.grupoEdad; }, cats: ['<40','40-59','60-74','≥75'] });
+  v.push({ sec: 'Antropometría y presión arterial' });
+  v.push({ l: 'Peso (kg)', t: 'cont', g: function(f){ return f.peso; } });
+  v.push({ l: 'IMC (kg/m²)', t: 'cont', g: function(f){ return f.imc; } });
+  v.push({ id: 'imc', l: 'Categoría de IMC', t: 'cat', g: function(f){ return f.imcCat; }, cats: ['Bajo peso (<18,5)','Normopeso (18,5-24,9)','Sobrepeso (25-29,9)','Obesidad I (30-34,9)','Obesidad II (35-39,9)','Obesidad III (≥40)'] });
+  v.push({ l: 'Cintura (cm)', t: 'cont', g: function(f){ return f.cintura; } });
+  v.push({ l: 'TA sistólica (mmHg)', t: 'cont', g: function(f){ return f.tas; } });
+  v.push({ l: 'TA diastólica (mmHg)', t: 'cont', g: function(f){ return f.tad; } });
+  v.push({ l: 'TA < 130/80 mmHg', t: 'bin', g: function(f){ return f.tas == null || f.tad == null ? null : (f.tas < 130 && f.tad < 80); } });
+  v.push({ sec: 'Diagnósticos' });
+  Object.keys(INV_DX_LABELS).sort(function(a, b){ return INV_DX_LABELS[a].localeCompare(INV_DX_LABELS[b], 'es'); }).forEach(function(k){ v.push({ id: 'dx:' + k, l: INV_DX_LABELS[k], t: 'bin', g: function(f){ return f.dx[k]; }, ocultarSi0: true }); });
+  if(typeof INV_DX_GINECO_LABELS !== 'undefined'){ v.push({ sec: 'Antecedentes ginecoobstétricos (mujeres)' });
+    Object.keys(INV_DX_GINECO_LABELS).forEach(function(k){ v.push({ l: INV_DX_GINECO_LABELS[k], t: 'bin', g: function(f){ return f.gin[k]; }, ocultarSi0: true }); }); }
+  v.push({ sec: 'Antecedentes familiares' });
+  var FAM = { hta:'HTA', dbt:'Diabetes', obe:'Obesidad', dis:'Dislipemia', iam:'IAM', acv:'ACV', erc:'ERC', ms:'Muerte súbita' };
+  Object.keys(FAM).forEach(function(k){ v.push({ l: FAM[k], t: 'bin', g: function(f){ return f.fam[k]; }, ocultarSi0: true }); });
+  v.push({ sec: 'Hábitos' });
+  v.push({ id: 'tab', l: 'Tabaquismo', t: 'cat', g: function(f){ return f.tab; }, cats: ['Fumador actual','Fumador social','Ex fumador','Nunca fumó'] });
+  v.push({ l: 'Consume alcohol', t: 'bin', g: function(f){ return f.alcohol; } });
+  v.push({ l: 'Actividad física ≥150 min/sem (OMS)', t: 'bin', g: function(f){ return f.actOMS; } });
+  v.push({ sec: 'Laboratorio (último valor)' });
+  T1_LAB.forEach(function(l){ v.push({ l: l[1], t: 'cont', np: !!l[2], g: function(f){ return f.lab[l[0]]; } }); });
+  v.push({ sec: 'Medicación cardiometabólica actual' });
+  T1_MEDS.forEach(function(g){ v.push({ id: 'med:' + g, l: g, t: 'bin', g: function(f){ return f.med[g]; }, ocultarSi0: true }); });
+  v.push({ l: 'N.º de fármacos cardiometabólicos', t: 'cont', np: true, dec: 0, g: function(f){ return f.nMedsCM; } });
+  return v;
+}
+function _t1Estratos(){
+  var e = [ ['', 'Sin cruzar (solo total)'], ['sexo', 'Sexo'], ['edad', 'Grupo etario'], ['imc', 'Categoría de IMC'], ['tab', 'Tabaquismo'] ];
+  Object.keys(INV_DX_LABELS).sort(function(a, b){ return INV_DX_LABELS[a].localeCompare(INV_DX_LABELS[b], 'es'); }).forEach(function(k){ e.push(['dx:' + k, 'Con / sin ' + INV_DX_LABELS[k]]); });
+  T1_MEDS.forEach(function(g){ e.push(['med:' + g, 'Con / sin ' + g]); });
+  return e;
+}
+function _t1GrupoDe(f, est){
+  if(!est) return null;
+  if(est === 'sexo') return f.fem == null ? null : f.fem ? 'Mujeres' : 'Varones';
+  if(est === 'edad') return f.grupoEdad;
+  if(est === 'imc') return f.imcCat ? f.imcCat.replace(/ \(.*/, '') : null;
+  if(est === 'tab') return f.tab;
+  if(est.indexOf('dx:') === 0){ var v = f.dx[est.slice(3)]; return v == null ? null : v ? 'Con' : 'Sin'; }
+  if(est.indexOf('med:') === 0){ var w = f.med[est.slice(4)]; return w == null ? null : w ? 'Con' : 'Sin'; }
+  return null;
+}
+function _t1OrdenGrupos(est, presentes){
+  var orden = est === 'sexo' ? ['Mujeres','Varones'] : est === 'edad' ? ['<40','40-59','60-74','≥75'] : est === 'imc' ? ['Bajo peso','Normopeso','Sobrepeso','Obesidad I','Obesidad II','Obesidad III'] : est === 'tab' ? ['Fumador actual','Fumador social','Ex fumador','Nunca fumó'] : ['Con','Sin'];
+  return orden.filter(function(g){ return presentes.indexOf(g) >= 0; });
+}
+
+// ───────────── Cálculo y armado de la tabla ─────────────
+function _t1Fmt(x, d){ return x == null || isNaN(x) ? '—' : Number(x).toLocaleString('es-AR', { minimumFractionDigits: d, maximumFractionDigits: d }); }
+function _t1Dec(vals){ var m = Math.abs(_t1Media(vals)); return m >= 100 ? 0 : m >= 10 ? 1 : m >= 1 ? 1 : 2; }
+function _t1Desc(vals, np, d){
+  if(!vals.length) return '—';
+  if(d == null) d = _t1Dec(vals);
+  if(np){ var s = vals.slice().sort(function(a, b){ return a - b; }); return _t1Fmt(_t1Cuantil(s, .5), d) + ' [' + _t1Fmt(_t1Cuantil(s, .25), d) + '–' + _t1Fmt(_t1Cuantil(s, .75), d) + ']'; }
+  return _t1Fmt(_t1Media(vals), d) + ' ± ' + _t1Fmt(Math.sqrt(_t1Var(vals)), d);
+}
+function _t1Pct(n, N){ return N ? n + ' (' + _t1Fmt(100 * n / N, 1) + '%)' : '—'; }
+function _t1FmtP(p){ if(p == null || isNaN(p)) return ''; return p < 0.001 ? '<0,001' : _t1Fmt(p, 3); }
+function _t1Calcular(filas, est){
+  var grupos = [];
+  if(est){ var pres = []; filas.forEach(function(f){ var g = _t1GrupoDe(f, est); if(g != null && pres.indexOf(g) < 0) pres.push(g); }); grupos = _t1OrdenGrupos(est, pres); }
+  var porG = grupos.map(function(g){ return filas.filter(function(f){ return _t1GrupoDe(f, est) === g; }); });
+  var N = filas.length, salida = [], tests = {};
+  _t1Variables().forEach(function(v){
+    if(v.sec){ salida.push({ sec: v.sec }); return; }
+    if(v.id && v.id === est) return; // la variable por la que se cruza no se repite como fila
+    var conDato = filas.filter(function(f){ var x = v.g(f); return x != null && x !== ''; });
+    if(!conDato.length) return;
+    var faltan = N - conDato.length;
+    if(v.t === 'cont'){
+      var vals = conDato.map(v.g).map(Number).filter(function(x){ return !isNaN(x); });
+      var gv = porG.map(function(gf){ return gf.map(v.g).filter(function(x){ return x != null && x !== '' && !isNaN(Number(x)); }).map(Number); });
+      var tst = grupos.length ? _t1TestCont(gv, v.np) : null; if(tst) tests[tst.test] = 1;
+      var dec = v.dec != null ? v.dec : _t1Dec(vals); // mismos decimales en toda la fila
+      salida.push({ l: v.l + (v.np ? ', mediana [RIC]' : ', media ± DE'), n: conDato.length, faltan: faltan, tot: _t1Desc(vals, v.np, dec), gs: gv.map(function(x){ return _t1Desc(x, v.np, dec); }), p: tst ? tst.p : null });
+    } else if(v.t === 'bin'){
+      var si = conDato.filter(function(f){ return v.g(f) === true; }).length;
+      if(v.ocultarSi0 && !si) return;
+      var tabla = [[], []], gs = porG.map(function(gf){ var cd = gf.filter(function(f){ var x = v.g(f); return x != null; }); var s = cd.filter(function(f){ return v.g(f) === true; }).length; tabla[0].push(s); tabla[1].push(cd.length - s); return _t1Pct(s, cd.length); });
+      var tb = grupos.length ? _t1TestCat(tabla) : null; if(tb) tests[tb.test] = 1;
+      salida.push({ l: v.l + ', n (%)', n: conDato.length, faltan: faltan, tot: _t1Pct(si, conDato.length), gs: gs, p: tb ? tb.p : null });
+    } else {
+      var cats = (v.cats || []).filter(function(cn){ return conDato.some(function(f){ return v.g(f) === cn; }); });
+      var tabla2 = cats.map(function(cn){ return porG.map(function(gf){ return gf.filter(function(f){ return v.g(f) === cn; }).length; }); });
+      var tc = grupos.length ? _t1TestCat(tabla2) : null; if(tc) tests[tc.test] = 1;
+      salida.push({ l: v.l + ', n (%)', n: conDato.length, faltan: faltan, tot: '', gs: grupos.map(function(){ return ''; }), p: tc ? tc.p : null });
+      cats.forEach(function(cn){
+        salida.push({ l: cn, sub: true, tot: _t1Pct(conDato.filter(function(f){ return v.g(f) === cn; }).length, conDato.length),
+          gs: porG.map(function(gf){ var cd = gf.filter(function(f){ return v.g(f) != null; }); return _t1Pct(cd.filter(function(f){ return v.g(f) === cn; }).length, cd.length); }) });
+      });
+    }
+  });
+  salida = salida.filter(function(f, i){ return !f.sec || (salida[i + 1] && !salida[i + 1].sec); }); // sin títulos vacíos
+  return { grupos: grupos, nGrupos: porG.map(function(g){ return g.length; }), N: N, filas: salida, tests: Object.keys(tests) };
+}
+
+// ───────────── Pantalla ─────────────
+function _t1KPIs(filas){
+  var N = filas.length, pct = function(fn){ var cd = filas.filter(function(f){ return fn(f) != null; }); return cd.length ? Math.round(100 * cd.filter(function(f){ return fn(f) === true; }).length / cd.length) + '%' : '—'; };
+  var ed = filas.map(function(f){ return f.edad; }).filter(function(x){ return x != null; });
+  var k = [ ['Pacientes', N], ['Mujeres', pct(function(f){ return f.fem; })], ['Edad media', ed.length ? _t1Fmt(_t1Media(ed), 1) : '—'],
+    ['HTA', pct(function(f){ return f.dx.hta; })], ['Diabetes 2', pct(function(f){ return f.dx.dbt2; })], ['Obesidad (IMC ≥30)', pct(function(f){ return f.imc != null ? f.imc >= 30 : f.dx.obe; })],
+    ['Dislipemia', pct(function(f){ return f.dx.dis; })], ['Fuma', pct(function(f){ return f.tab == null ? null : /actual|social/i.test(f.tab); })],
+    ['TA en meta', pct(function(f){ return f.tas == null || f.tad == null ? null : (f.tas < 130 && f.tad < 80); })] ];
+  return '<div class="t1-kpis">' + k.map(function(x){ return '<div class="t1-kpi"><div class="v">' + x[1] + '</div><div class="l">' + x[0] + '</div></div>'; }).join('') + '</div>';
+}
+function _t1HtmlTabla(R, paraCopiar){
+  var st = paraCopiar ? ' style="font-family:Arial,sans-serif;font-size:10pt;border-collapse:collapse"' : ' class="t1-tabla"';
+  var th = function(t, extra){ return '<th' + (paraCopiar ? ' style="border-top:1.5px solid #000;border-bottom:1px solid #000;padding:4px 8px;text-align:' + (extra || 'center') + '"' : '') + '>' + t + '</th>'; };
+  var td = function(t, al, cls){ return '<td' + (paraCopiar ? ' style="padding:3px 8px;text-align:' + (al || 'center') + '"' : (cls ? ' class="' + cls + '"' : '')) + '>' + t + '</td>'; };
+  var h = '<table' + st + '><thead><tr>' + th('Variable', 'left') + th('Total<br>(n = ' + R.N + ')');
+  R.grupos.forEach(function(g, i){ h += th(escHtml(g) + '<br>(n = ' + R.nGrupos[i] + ')'); });
+  if(R.grupos.length) h += th('p');
+  h += '</tr></thead><tbody>';
+  var cols = 2 + R.grupos.length + (R.grupos.length ? 1 : 0);
+  R.filas.forEach(function(f){
+    if(f.sec){ h += '<tr' + (paraCopiar ? '' : ' class="t1-sec"') + '><td colspan="' + cols + '"' + (paraCopiar ? ' style="padding:6px 8px 2px;font-weight:bold"' : '') + '>' + escHtml(f.sec) + '</td></tr>'; return; }
+    var lbl = escHtml(f.l) + (f.faltan ? (paraCopiar ? ' [n = ' + f.n + ']' : ' <span class="t1-n">n = ' + f.n + '</span>') : '');
+    h += '<tr' + (f.sub && !paraCopiar ? ' class="t1-sub"' : '') + '>' + td((f.sub && paraCopiar ? '&nbsp;&nbsp;&nbsp;' : '') + lbl, 'left') + td(f.tot);
+    f.gs.forEach(function(x){ h += td(x); });
+    if(R.grupos.length){ var sig = f.p != null && f.p < 0.05; h += td(paraCopiar ? (sig ? '<b>' + _t1FmtP(f.p) + '</b>' : _t1FmtP(f.p)) : _t1FmtP(f.p), 'center', sig ? 't1-sig' : ''); }
+    h += '</tr>';
+  });
+  h += '</tbody></table>';
+  var nota = 'Continuas: media ± DE o mediana [RIC]; categóricas: n (%). Cada variable se calculó con los pacientes que tienen el dato (n indicado cuando faltan datos). Laboratorio y antropometría: último valor registrado; TA: última consulta.';
+  if(R.tests.length) nota += ' Pruebas: ' + R.tests.join(', ') + '. p < 0,05 en negrita.';
+  return h + (paraCopiar ? '<p style="font-family:Arial,sans-serif;font-size:8.5pt;margin-top:4px">' + nota + '</p>' : '<div class="t1-nota">' + nota + '</div>');
+}
+function t1Pintar(){
+  var cont = document.getElementById('inv-resultado'); if(!cont || !T1.filas) return;
+  var R = _t1Calcular(T1.filas, T1.estrato); T1.ultimo = R;
+  var opts = _t1Estratos().map(function(e){ return '<option value="' + e[0] + '"' + (e[0] === T1.estrato ? ' selected' : '') + '>' + escHtml(e[1]) + '</option>'; }).join('');
+  cont.innerHTML = (T1.desdeCohorte ? '<div class="inv-cohort-back" onclick="invRenderCohorte()">← Volver a la cohorte</div>' : '')
+    + '<div class="t1-head"><div><div class="t1-tit">📊 Tabla 1 · ' + escHtml(T1.titulo) + '</div><div class="t1-subt">Panorama epidemiológico de los pacientes cargados en el sistema' + (T1.desdeCohorte ? ' que cumplen los filtros' : '') + '.</div></div>'
+    + '<div class="t1-acc"><label>Cruzar por <select id="t1-estrato">' + opts + '</select></label>'
+    + '<button class="inv-btn-ghost" id="t1-copiar">📋 Copiar para Word</button><button class="inv-btn-ghost" id="t1-csv">⬇️ CSV</button><button class="inv-btn-ghost" id="t1-recargar" title="Volver a leer los datos">↻</button></div></div>'
+    + _t1KPIs(T1.filas) + '<div class="t1-wrap" id="t1-wrap">' + _t1HtmlTabla(R) + '</div>';
+  document.getElementById('t1-estrato').onchange = function(){ T1.estrato = this.value; t1Pintar(); };
+  document.getElementById('t1-recargar').onclick = function(){ t1Abrir(T1.desdeCohorte ? T1.pacientes : null, true); };
+  document.getElementById('t1-csv').onclick = t1CSV;
+  document.getElementById('t1-copiar').onclick = t1Copiar;
+}
+async function t1Abrir(pacientes, forzar){
+  var cont = document.getElementById('inv-resultado'); if(!cont) return;
+  cont.innerHTML = '<div class="inv-empty"><div>⏳</div><p>Calculando la Tabla 1…</p></div>';
+  try {
+    var D = await _t1Cargar(forzar);
+    var base = pacientes && pacientes.length ? pacientes : (pacientesData || []);
+    T1.desdeCohorte = !!(pacientes && pacientes.length); T1.pacientes = T1.desdeCohorte ? base : null;
+    T1.titulo = T1.desdeCohorte ? 'Cohorte filtrada (' + base.length + ' pacientes)' : 'Todos los pacientes';
+    T1.filas = base.map(function(p){ return _t1Fila(p, D); });
+    t1Pintar();
+  } catch(e){ console.error('Tabla 1', e); cont.innerHTML = '<div class="inv-empty"><div>⚠️</div><p>No se pudo calcular: ' + escHtml(e.message || String(e)) + '</p></div>'; }
+}
+window.t1Abrir = t1Abrir;
+function t1Copiar(){
+  var html = _t1HtmlTabla(T1.ultimo, true), txt = document.getElementById('t1-wrap').innerText;
+  var ok = function(){ if(window._atajoToast) _atajoToast('Tabla copiada: pegala en Word (Ctrl+V)'); };
+  try {
+    if(navigator.clipboard && window.ClipboardItem){ navigator.clipboard.write([new ClipboardItem({ 'text/html': new Blob([html], { type: 'text/html' }), 'text/plain': new Blob([txt], { type: 'text/plain' }) })]).then(ok, fallback); return; }
+  } catch(e) {}
+  fallback();
+  function fallback(){ var d = document.createElement('div'); d.innerHTML = html; d.style.cssText = 'position:fixed;left:-9999px'; document.body.appendChild(d);
+    var r = document.createRange(); r.selectNodeContents(d); var s = window.getSelection(); s.removeAllRanges(); s.addRange(r); try { document.execCommand('copy'); ok(); } catch(e) {} s.removeAllRanges(); d.remove(); }
+}
+function t1CSV(){
+  var R = T1.ultimo, q = function(x){ x = String(x == null ? '' : x).replace(/<[^>]+>/g, ''); return /[";\n]/.test(x) ? '"' + x.replace(/"/g, '""') + '"' : x; };
+  var lineas = [['Variable', 'Total (n=' + R.N + ')'].concat(R.grupos.map(function(g, i){ return g + ' (n=' + R.nGrupos[i] + ')'; })).concat(R.grupos.length ? ['p'] : []).map(q).join(';')];
+  R.filas.forEach(function(f){ if(f.sec){ lineas.push(q(f.sec)); return; }
+    lineas.push([(f.sub ? '   ' : '') + f.l + (f.faltan ? ' [n=' + f.n + ']' : ''), f.tot].concat(f.gs).concat(R.grupos.length ? [_t1FmtP(f.p)] : []).map(q).join(';')); });
+  var blob = new Blob(['﻿' + lineas.join('\n')], { type: 'text/csv;charset=utf-8' });
+  var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'tabla1-' + new Date().toISOString().slice(0, 10) + '.csv'; document.body.appendChild(a); a.click(); a.remove();
+}
+
+// ───────────── Enganches en la página de Investigación ─────────────
+(function(){
+  function pestaña(){
+    var tabs = document.querySelector('#page-investigacion .inv-mode-tabs'); if(!tabs || document.getElementById('inv-mode-tab-tabla1')) return;
+    var b = document.createElement('button'); b.className = 'inv-mode-tab'; b.id = 'inv-mode-tab-tabla1'; b.textContent = '📊 Tabla 1 · panorama';
+    b.onclick = function(){ invSetModoPagina('tabla1'); }; tabs.appendChild(b);
+  }
+  if(typeof invSetModoPagina === 'function'){
+    var o = invSetModoPagina;
+    window.invSetModoPagina = function(modo){
+      if(modo !== 'tabla1'){ var t = document.getElementById('inv-mode-tab-tabla1'); if(t) t.classList.remove('active'); return o.apply(this, arguments); }
+      document.querySelectorAll('#page-investigacion .inv-mode-tab').forEach(function(x){ x.classList.toggle('active', x.id === 'inv-mode-tab-tabla1'); });
+      ['inv-panel-individual','inv-panel-cohorte'].forEach(function(id){ var e = document.getElementById(id); if(e) e.style.display = 'none'; });
+      t1Abrir(null);
+    };
+  }
+  // Botón en la barra de la cohorte filtrada
+  if(typeof invRenderCohorte === 'function'){
+    var orc = invRenderCohorte;
+    window.invRenderCohorte = function(){
+      var r = orc.apply(this, arguments);
+      var acc = document.querySelector('#inv-resultado .inv-cohort-actions');
+      if(acc && !acc.querySelector('.t1-btn')){ var b = document.createElement('button'); b.className = 'inv-btn-ghost t1-btn'; b.textContent = '📊 Tabla 1 de esta cohorte';
+        b.onclick = function(){ var dn = invCohortResults.map(function(x){ return String(x.dni); }); t1Abrir((pacientesData || []).filter(function(p){ return dn.indexOf(String(p.dni)) >= 0; })); };
+        acc.insertBefore(b, acc.firstChild); }
+      return r;
+    };
+  }
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', pestaña); else pestaña();
+})();
+</script>
+<style>
+.t1-head{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap;margin-bottom:14px}
+.t1-tit{font-family:var(--font-display);font-size:18px;font-weight:700;color:var(--text)}
+.t1-subt{font-size:12px;color:var(--text-soft);margin-top:3px}
+.t1-acc{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.t1-acc label{font-size:12px;font-weight:600;color:var(--text-soft);display:flex;align-items:center;gap:6px}
+.t1-acc select{padding:7px 10px;border:1.5px solid var(--border);border-radius:9px;font-family:var(--font-main);font-size:12.5px;max-width:280px}
+.t1-kpis{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px;margin-bottom:14px}
+.t1-kpi{background:white;border:1px solid var(--border);border-radius:12px;padding:10px 12px}
+.t1-kpi .v{font-size:20px;font-weight:800;color:var(--blue)}
+.t1-kpi .l{font-size:10.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--text-soft)}
+.t1-wrap{background:white;border:1px solid var(--border);border-radius:14px;padding:14px 16px;overflow-x:auto}
+.t1-tabla{border-collapse:collapse;width:100%;font-size:12.5px}
+.t1-tabla th{border-top:2px solid #1f2937;border-bottom:1px solid #1f2937;padding:6px 10px;text-align:center;font-size:11.5px;white-space:nowrap}
+.t1-tabla th:first-child{text-align:left}
+.t1-tabla td{padding:4px 10px;text-align:center;border-bottom:1px solid #f1f4f8;white-space:nowrap}
+.t1-tabla td:first-child{text-align:left;white-space:normal;min-width:220px}
+.t1-tabla tr.t1-sec td{font-weight:700;color:var(--blue);background:#f6f9fd;padding-top:9px;text-transform:uppercase;font-size:11px;letter-spacing:.04em}
+.t1-tabla tr.t1-sub td:first-child{padding-left:26px;color:#475569}
+.t1-tabla tbody tr:last-child td{border-bottom:2px solid #1f2937}
+.t1-n{font-size:10.5px;color:var(--text-soft);margin-left:4px}
+.t1-sig{font-weight:800;color:#b91c1c}
+.t1-nota{font-size:11px;color:var(--text-soft);margin-top:10px;line-height:1.45}
 </style>
 </body>
 </html>
