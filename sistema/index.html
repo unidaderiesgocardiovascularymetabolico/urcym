@@ -2,7 +2,7 @@
 <html lang="es-AR">
 <head>
   <meta charset="UTF-8" />
-  <script>var URCYM_BUILD = '2026-11-08-2330';</script>
+  <script>var URCYM_BUILD = '2026-11-08-2350';</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Evaluaciones cardiometabólicas — Sistema de Historia Clínica</title>
 
@@ -8173,9 +8173,9 @@ function renderTabla(data, soloAlfabetico, q) {
       const esNuevo = p.dni === ultimoDniCargado;
       return '<tr class="' + (esNuevo?'fila-nuevo':'') + '">' +
         '<td><strong>' + p.apellido + ', ' + p.nombre + '</strong>' + (esNuevo?'&nbsp;<span style="font-size:10px;background:var(--teal);color:white;padding:2px 7px;border-radius:10px;vertical-align:middle">nuevo</span>':'') + '</td>' +
-        '<td>' + p.dni + '</td>' +
-        '<td>' + edadDesde(p.fecha_nacimiento) + ' años</td>' +
-        '<td>' + (p.obra_social?'<span class="badge badge-blue">'+p.obra_social+'</span>':'-') + '</td>' +
+        '<td>' + _chipCopiar(p.dni, 'DNI') + '</td>' +
+        '<td>' + edadDesde(p.fecha_nacimiento) + ' años' + (p.fecha_nacimiento ? '<div>' + _chipCopiar(String(p.fecha_nacimiento).slice(0,10).split('-').reverse().join('/'), 'fecha de nacimiento', true) + '</div>' : '') + '</td>' +
+        '<td>' + (p.obra_social?'<span class="badge badge-blue">'+p.obra_social+'</span>':'-') + (p.numero_afiliado ? '<div>' + _chipCopiar(p.numero_afiliado, 'n.º de afiliado', true) + '</div>' : '') + '</td>' +
         '<td id="uc-' + p.dni + '" style="font-size:12px;color:var(--text-soft)">cargando...</td>' +
         '<td><div class="acciones">' +
           '<button class="btn-accion evolucionar" onclick="abrirEvolucion(\'' + p.dni + '\')">✚ Evolucionar</button>' +
@@ -8189,6 +8189,19 @@ function renderTabla(data, soloAlfabetico, q) {
     }).join('') + '</tbody></table>';
   // Cargar fecha de última evolución para cada paciente de forma asíncrona
   cargarUltimasEvoluciones(sorted);
+}
+
+// Dato que se copia con un clic (DNI, fecha de nacimiento, n.º de afiliado)
+function _chipCopiar(valor, que, chico) {
+  const v = String(valor == null ? '' : valor).trim(); if(!v) return '';
+  const e = v.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  return '<span class="dato-copiar' + (chico ? ' chico' : '') + '" data-v="' + e + '" title="Copiar ' + que + '" onclick="event.stopPropagation();copiarDato(this)">' + e + '</span>';
+}
+function copiarDato(el) {
+  const v = el.dataset.v; if(!v || el.classList.contains('ok')) return;
+  const ok = function(){ el.classList.add('ok'); const t = el.textContent; el.textContent = '✓ copiado'; setTimeout(function(){ el.classList.remove('ok'); el.textContent = t; }, 1100); };
+  if(navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(v).then(ok, function(){ _copiarViejo(v); ok(); });
+  else { _copiarViejo(v); ok(); }
 }
 
 async function cargarUltimasEvoluciones(data) {
@@ -34559,5 +34572,12 @@ details.t1-q:not([disabled]) summary .t1-q-t::after{content:' ▾';color:var(--b
     fn: async function(){ var r = await _hcResumenHTML({ desde:'', hasta:'', prof:'', firma:true }); if(!r.n) throw new Error('no tiene evoluciones guardadas'); return r.html; } });
 })();
 </script>
+<style>
+.dato-copiar{cursor:copy;border-radius:6px;padding:1px 5px;margin-left:-5px;transition:background .15s}
+.dato-copiar:hover{background:var(--blue-light,#e8f1fb);color:var(--blue,#1f6aab)}
+.dato-copiar.chico{font-size:11.5px;color:var(--text-soft,#64748b);display:inline-block;margin-top:3px}
+.dato-copiar.chico:hover{color:var(--blue,#1f6aab)}
+.dato-copiar.ok{background:#dcfce7!important;color:#15803d!important}
+</style>
 </body>
 </html>
