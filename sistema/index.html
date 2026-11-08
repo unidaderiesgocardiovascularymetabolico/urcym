@@ -2,7 +2,7 @@
 <html lang="es-AR">
 <head>
   <meta charset="UTF-8" />
-  <script>var URCYM_BUILD = '2026-11-08-1900';</script>
+  <script>var URCYM_BUILD = '2026-11-08-1930';</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Evaluaciones cardiometabólicas — Sistema de Historia Clínica</title>
 
@@ -5784,7 +5784,35 @@ const LAB_FILAS = [
   {label:'ERS', key:'ERS', unidades:['mm/h'], defU:0, ref:null},
   {label:'Albúmina sérica', key:'Albumina', unidades:['g/dL'], defU:0,
     ref:(v)=>parseFloat(v)<3.5, refTxt:'<3.5 g/dL'},
+  // ── Obesidad / cirugía bariátrica (micronutrientes y endocrino)
+  {label:'Calcio', key:'Calcio', unidades:['mg/dL'], defU:0, ref:(v)=>parseFloat(v)<8.5||parseFloat(v)>10.5, refTxt:'8.5-10.5 mg/dL'},
+  {label:'Fósforo', key:'Fosforo', unidades:['mg/dL'], defU:0, ref:(v)=>parseFloat(v)<2.5||parseFloat(v)>4.5, refTxt:'2.5-4.5 mg/dL'},
+  {label:'Magnesio', key:'Magnesio', unidades:['mg/dL'], defU:0, ref:(v)=>parseFloat(v)<1.7||parseFloat(v)>2.4, refTxt:'1.7-2.4 mg/dL'},
+  {label:'Zinc', key:'Zinc', unidades:['µg/dL'], defU:0, ref:(v)=>parseFloat(v)<70, refTxt:'<70 µg/dL'},
+  {label:'Vitamina B12', key:'B12', unidades:['pg/mL'], defU:0, ref:(v)=>parseFloat(v)<200, refTxt:'<200 pg/mL'},
+  {label:'Ferremia', key:'Ferremia', unidades:['µg/dL'], defU:0, ref:(v)=>parseFloat(v)<60, refTxt:'<60 µg/dL'},
+  {label:'Ferritina', key:'Ferritina', unidades:['ng/mL'], defU:0, ref:(v)=>parseFloat(v)<30, refTxt:'<30 ng/mL'},
+  {label:'Saturación de transferrina', key:'SatTransf', unidades:['%'], defU:0, ref:(v)=>parseFloat(v)<20, refTxt:'<20%'},
+  {label:'Cortisol plasmático', key:'CortisolPl', unidades:['µg/dL'], defU:0, ref:null},
+  {label:'Cortisol libre urinario', key:'CortisolUr', unidades:['µg/24 h'], defU:0, ref:null},
+  {label:'ACTH', key:'ACTH', unidades:['pg/mL'], defU:0, ref:null},
+  {label:'FSH', key:'FSH', unidades:['mUI/mL'], defU:0, ref:null},
+  {label:'Testosterona', key:'Testosterona', unidades:['ng/dL','ng/mL'], defU:0, ref:null},
 ];
+// Igual que en estudios: la tabla guarda sus claves (labKeys) y al abrirla se reacomoda,
+// así las filas nuevas no corren de lugar las filas extra que cada paciente agregó.
+const LAB_KEYS_V1 = ["Hb", "Rto_plaquetas", "Glucemia", "Creatinina", "MDRD", "AcidoUrico", "TGO", "TGP", "BT", "FAL", "GGT", "PeptidoC", "CT", "HDL", "TG", "LDL_MH", "LDL_S", "noHDL", "ApoB", "HbA1c", "PTOG", "AlbUr", "CrUr", "RAC", "PRCus", "Renina", "Aldosterona", "RAR", "Sodio", "Potasio", "D3", "TSH", "ERS", "Albumina"];
+function migrarLabDatos(d){
+  if(!d || typeof d !== 'object') return d;
+  const cur = LAB_FILAS.map(f => f.key);
+  if(!Array.isArray(d.filas) || !d.filas.length){ d.labKeys = cur; return d; }
+  const old = Array.isArray(d.labKeys) && d.labKeys.length ? d.labKeys : LAB_KEYS_V1;
+  if(old.length === cur.length && old.every((k, i) => k === cur[i])){ d.labKeys = cur; return d; }
+  const base = cur.map(k => { const oi = old.indexOf(k); return oi >= 0 ? (d.filas[oi] || []) : []; });
+  d.filas = base.concat(d.filas.slice(old.length));
+  d.labKeys = cur;
+  return d;
+}
 
 
 // NOTA: el orden FÍSICO de este array no se toca (cada fila ya tiene datos guardados
@@ -6869,6 +6897,7 @@ async function guardarDatosPac(wrapId) {
   const tipo = ['lab_tabla_wrap','evlab_wrap'].includes(wrapId)?'lab':['est_tabla_wrap','evest_wrap'].includes(wrapId)?'est':'ant';
   const datos = tipo==='lab'?labDatos:tipo==='est'?estDatos:antDatos;
   if(tipo==='est' && datos) datos.estKeys = EST_FILAS.map(_estKeyDe); // la tabla se guarda con su orden de filas
+  if(tipo==='lab' && datos) datos.labKeys = LAB_FILAS.map(f => f.key);
   // Guardar en historial la versión que está por ser sobreescrita
   await _archivarPacienteTabla(dni, tipo);
   const { error } = await sb.from('paciente_tablas').upsert(
@@ -7537,7 +7566,7 @@ function _restaurarDraftLocal(dni) {
       if(typeof val === 'boolean') el.checked = val;
       else el.value = val;
     });
-    if(draft.lab && labDatos) { Object.assign(labDatos, draft.lab); renderTablaGenerica(labDatos, LAB_FILAS, 'lab_tabla_wrap'); marcarDirty('lab'); }
+    if(draft.lab && labDatos) { Object.assign(labDatos, migrarLabDatos(draft.lab)); renderTablaGenerica(labDatos, LAB_FILAS, 'lab_tabla_wrap'); marcarDirty('lab'); }
     if(draft.ant && antDatos) { Object.assign(antDatos, draft.ant); renderTablaGenerica(antDatos, ANT_FILAS, 'ant_tabla_wrap'); marcarDirty('ant'); }
     if(draft.est && estDatos) { Object.assign(estDatos, migrarEstDatos(draft.est)); renderTablaGenerica(estDatos, EST_FILAS, 'est_tabla_wrap'); marcarDirty('est'); }
     if(draft.vac && vacDatos) { Object.assign(vacDatos, draft.vac); marcarDirty('vac'); }
@@ -9347,13 +9376,30 @@ async function _migrarDniEnAgenda(dniViejo, dniNuevo) {
   } catch(e) { console.warn('_migrarDniEnAgenda:', e); }
 }
 
+// "medina giselle" / "MEDINA" → "Medina Giselle" / "Medina"; respeta "de", "del", "la"… en el medio
+// y apellidos con mayúsculas internas escritos a mano (ej. "McDonald").
+function _capNombrePropio(t){
+  const part = ['de','del','la','las','los','y','e','da','di','do','dos','van','von'];
+  return String(t || '').split(' ').map((w, i) => w.split('-').map(x => {
+    if(!x) return x;
+    const lo = x.toLowerCase();
+    if(i > 0 && part.indexOf(lo) >= 0) return lo;
+    const resto = (x.slice(1) === x.slice(1).toLowerCase() || x.slice(1) === x.slice(1).toUpperCase()) ? x.slice(1).toLowerCase() : x.slice(1);
+    return x.charAt(0).toUpperCase() + resto;
+  }).join('-')).join(' ');
+}
 async function guardarPaciente() {
   // Limpiar DNI automáticamente: quitar puntos, espacios, guiones
   const dniRaw = document.getElementById('f_dni').value.replace(/[\.\s\-]/g,'').trim();
   document.getElementById('f_dni').value = dniRaw;
   const dni = dniRaw;
-  const apellido = document.getElementById('f_apellido').value.trim();
-  const nombre = document.getElementById('f_nombre').value.trim();
+  let apellido = document.getElementById('f_apellido').value.trim().replace(/\s+/g, ' ');
+  let nombre = document.getElementById('f_nombre').value.trim().replace(/\s+/g, ' ');
+  // Mayúscula inicial automática: siempre al dar de alta, y al editar si quedó todo en minúscula o todo en mayúscula
+  const _todoIgual = t => t === t.toLowerCase() || t === t.toUpperCase();
+  if(!modoEdicion || _todoIgual(apellido)) apellido = _capNombrePropio(apellido);
+  if(!modoEdicion || _todoIgual(nombre)) nombre = _capNombrePropio(nombre);
+  document.getElementById('f_apellido').value = apellido; document.getElementById('f_nombre').value = nombre;
   const fecha = document.getElementById('f_fecha').value;
   const errEl = document.getElementById('formError');
   if(!dni||!apellido||!nombre||!fecha) {
@@ -13606,7 +13652,7 @@ async function cargarDatosTablasEvol(dni) {
       if(!d.unidades) d.unidades = {};
       if(!d.columnas) d.columnas = [];
       if(!d.filas) d.filas = [];
-      if(row.tipo==='lab') labDatos = d;
+      if(row.tipo==='lab') labDatos = migrarLabDatos(d);
       else if(row.tipo==='est') estDatos = migrarEstDatos(d);
       else if(row.tipo==='ant') antDatos = d;
       else if(row.tipo==='vac') vacDatos = d;
@@ -13650,7 +13696,7 @@ async function abrirHistoriaPaciente(dni) {
       const d = (typeof row.datos === 'string' ? JSON.parse(row.datos) : row.datos);
       if(!d.extraFilas) d.extraFilas = [];
       if(!d.unidades) d.unidades = {};
-      if(row.tipo==='lab') Object.assign(tmpLab, d);
+      if(row.tipo==='lab') Object.assign(tmpLab, migrarLabDatos(d));
       else if(row.tipo==='est') Object.assign(tmpEst, migrarEstDatos(d));
       else if(row.tipo==='ant') Object.assign(tmpAnt, d);
     } catch(e){}
@@ -26449,11 +26495,9 @@ loadLocal();  // async, carga en background y llama renderGrid al final
             });
             var pctOms = Math.min(100, Math.round(minMod / 150 * 100));
             // Siempre se ve QUÉ hace (tipo, días y minutos); en rojo si no alcanza el objetivo OMS
-            var hace = actJ.actividades.filter(function (it) { return it.tipo && it.tipo !== 'No realiza actividad física'; }).map(function (it) {
-              return esc(it.tipo) + (it.dias ? ' ' + it.dias + 'x' : '') + (it.minutos ? it.minutos + '′' : '');
-            });
-            var totSem = actJ.actividades.reduce(function (s2, it) { return s2 + ((Number(it.minutos) || 0) * (Number(it.dias) || 0)); }, 0);
-            var txtAct = hace.length ? hace.join(', ') + (totSem ? ' · ' + totSem + ' min/sem' : '') : 'No realiza actividad física';
+            var hace = [];
+            actJ.actividades.forEach(function (it) { if (it.tipo && it.tipo !== 'No realiza actividad física' && hace.indexOf(esc(it.tipo)) < 0) hace.push(esc(it.tipo)); });
+            var txtAct = hace.length ? hace.join(', ') : 'No realiza actividad física';
             act = pctOms >= 100 ? '<span class="evh-habito-bien">' + txtAct + ' ✅</span>'
                 : '<span class="evh-habito-malo" title="No alcanza el objetivo OMS (' + pctOms + '%)">' + txtAct + ' — insuficiente</span>';
           }
@@ -31906,7 +31950,7 @@ async function invCargarFicha(dni) {
     if(!r || !r.data || !r.data.datos) return {columnas:[],filas:[],unidades:{}};
     try { return typeof r.data.datos === 'string' ? JSON.parse(r.data.datos) : r.data.datos; } catch(e){ return {columnas:[],filas:[],unidades:{}}; }
   };
-  const lab = parseDatos(labR);
+  const lab = migrarLabDatos(parseDatos(labR));
   const ant = parseDatos(antR);
   const est = migrarEstDatos(parseDatos(estR));
 
@@ -32550,7 +32594,7 @@ async function invAplicarFiltros() {
     labMap={}; antMap={};
     (data||[]).forEach(function(row){
       const parsed = invParseTablaJSON(row.datos);
-      if(row.tipo==='lab') labMap[row.dni_paciente]=parsed; else antMap[row.dni_paciente]=parsed;
+      if(row.tipo==='lab') labMap[row.dni_paciente]=migrarLabDatos(parsed); else antMap[row.dni_paciente]=parsed;
     });
     const prevPac = pacienteActual;
     candidatos.forEach(function(p){
@@ -32732,7 +32776,7 @@ async function invFetchYArmarCohorte(patients) {
   const labMap={}, antMap={};
   (tablasR.data||[]).forEach(function(row){
     const parsed = invParseTablaJSON(row.datos);
-    if(row.tipo==='lab') labMap[row.dni_paciente]=parsed; else antMap[row.dni_paciente]=parsed;
+    if(row.tipo==='lab') labMap[row.dni_paciente]=migrarLabDatos(parsed); else antMap[row.dni_paciente]=parsed;
   });
   // Motivo(s) de consulta: agregados desde todos los turnos agendados de cada paciente
   const motivosMap = {};
@@ -33556,6 +33600,7 @@ textarea.nota-chica{min-height:34px;resize:vertical;line-height:1.4}
     // eGFR: el MDRD de la tabla de laboratorio, o calculado con la última creatinina
     var g = ultimo('MDRD');
     if(g == null){ var cr = ultimo('Creatinina'); if(cr && edad){ if(cr > 20) cr = cr / 88.4; g = 175 * Math.pow(cr, -1.154) * Math.pow(edad, -0.203) * (fem ? 0.742 : 1); } }
+    window._egfrHeader = (g != null && isFinite(g)) ? Math.round(g) : null;
     if(g != null && isFinite(g)){
       g = Math.round(g);
       var est = g >= 90 ? 'G1' : g >= 60 ? 'G2' : g >= 45 ? 'G3a' : g >= 30 ? 'G3b' : g >= 15 ? 'G4' : 'G5';
@@ -33574,8 +33619,24 @@ textarea.nota-chica{min-height:34px;resize:vertical;line-height:1.4}
   setInterval(function(){
     try {
       var p = (typeof pacienteActual !== 'undefined' && pacienteActual) ? pacienteActual.dni : '';
-      var f = p + '|' + (typeof labDatos !== 'undefined' && labDatos ? JSON.stringify(labDatos.filas || []).length + ':' + (labDatos.columnas || []).length : '');
-      if(f !== firma){ firma = f; calcular(); }
+      var snap = (typeof evolClinicaSnapshot !== 'undefined' && evolClinicaSnapshot) ? (evolClinicaSnapshot.dni || '') + ':' + ((evolClinicaSnapshot.medicacion || []).length) + ':' + (evolClinicaSnapshot.clinica ? 1 : 0) : '';
+      var f = p + '|' + (typeof labDatos !== 'undefined' && labDatos ? JSON.stringify(labDatos.filas || []).length + ':' + (labDatos.columnas || []).length : '') + '|' + snap;
+      if(f !== firma){
+        firma = f; calcular();
+        // PREVENT: antes solo se calculaba al entrar a "Calculadoras"; ahora sale solo en el encabezado
+        if(p && typeof precargarPREVENT === 'function' && document.getElementById('prev_edad')){
+          Promise.resolve(typeof _ultimaTAHistPromise !== 'undefined' ? _ultimaTAHistPromise : null).catch(function(){}).then(function(){
+            try {
+              if(pacienteActual && String(pacienteActual.dni) === String(p)){
+                precargarPREVENT();
+                // si no hay MDRD en la tabla, se usa el calculado con la creatinina
+                var eg = document.getElementById('prev_egfr');
+                if(eg && !eg.value && window._egfrHeader){ eg.value = window._egfrHeader; calcularPREVENT(); }
+              }
+            } catch(e) {}
+          });
+        }
+      }
     } catch(e) {}
   }, 1500);
 })();
@@ -33900,7 +33961,7 @@ async function _t1Cargar(forzar){
   var cli = {}, meds = {}, lab = {}, ant = {}, ta = {}, est = {}, nEvol = {};
   res[0].forEach(function(c){ cli[c.dni_paciente] = c; });
   res[1].forEach(function(m){ (meds[m.dni_paciente] = meds[m.dni_paciente] || []).push(m); });
-  res[2].forEach(function(r){ var d = invParseTablaJSON(r.datos); if(r.tipo === 'lab') lab[r.dni_paciente] = d; else if(r.tipo === 'est') est[r.dni_paciente] = d; else ant[r.dni_paciente] = d; });
+  res[2].forEach(function(r){ var d = invParseTablaJSON(r.datos); if(r.tipo === 'lab') lab[r.dni_paciente] = migrarLabDatos(d); else if(r.tipo === 'est') est[r.dni_paciente] = d; else ant[r.dni_paciente] = d; });
   res[3].forEach(function(e){ nEvol[e.dni_paciente] = (nEvol[e.dni_paciente] || 0) + 1; });
   res[3].forEach(function(e){
     if(ta[e.dni_paciente]) return;
