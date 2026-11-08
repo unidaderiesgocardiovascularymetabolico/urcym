@@ -2,7 +2,7 @@
 <html lang="es-AR">
 <head>
   <meta charset="UTF-8" />
-  <script>var URCYM_BUILD = '2026-11-07-2130';</script>
+  <script>var URCYM_BUILD = '2026-11-07-2140';</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Evaluaciones cardiometabólicas — Sistema de Historia Clínica</title>
 
@@ -33792,13 +33792,14 @@ async function _t1Cargar(forzar){
   var res = await Promise.all([
     _t1TraerTodo('paciente_clinica', '*'),
     _t1TraerTodo('medicacion', 'dni_paciente,grupo,farmaco', function(q){ return q.eq('activo', true); }),
-    _t1TraerTodo('paciente_tablas', 'dni_paciente,tipo,datos', function(q){ return q.in('tipo', ['lab', 'ant']); }),
+    _t1TraerTodo('paciente_tablas', 'dni_paciente,tipo,datos', function(q){ return q.in('tipo', ['lab', 'ant', 'est']); }),
     _t1TraerTodo('evoluciones', 'dni_paciente,fecha_hora,ta1s,ta1d,ta2s,ta2d,ta3s,ta3d', function(q){ return q.order('fecha_hora', { ascending: false }); })
   ]);
-  var cli = {}, meds = {}, lab = {}, ant = {}, ta = {};
+  var cli = {}, meds = {}, lab = {}, ant = {}, ta = {}, est = {}, nEvol = {};
   res[0].forEach(function(c){ cli[c.dni_paciente] = c; });
   res[1].forEach(function(m){ (meds[m.dni_paciente] = meds[m.dni_paciente] || []).push(m); });
-  res[2].forEach(function(r){ var d = invParseTablaJSON(r.datos); if(r.tipo === 'lab') lab[r.dni_paciente] = d; else ant[r.dni_paciente] = d; });
+  res[2].forEach(function(r){ var d = invParseTablaJSON(r.datos); if(r.tipo === 'lab') lab[r.dni_paciente] = d; else if(r.tipo === 'est') est[r.dni_paciente] = d; else ant[r.dni_paciente] = d; });
+  res[3].forEach(function(e){ nEvol[e.dni_paciente] = (nEvol[e.dni_paciente] || 0) + 1; });
   res[3].forEach(function(e){
     if(ta[e.dni_paciente]) return;
     var n = function(x){ var v = parseFloat(x); return isNaN(v) ? null : v; };
@@ -33812,7 +33813,7 @@ async function _t1Cargar(forzar){
     try { if(lab[p.dni] && (lab[p.dni].columnas || []).length) calcLabValues(lab[p.dni], LAB_FILAS); if(ant[p.dni] && (ant[p.dni].columnas || []).length) calcAntValues(ant[p.dni], ANT_FILAS); } catch(e) {}
   });
   pacienteActual = prev;
-  T1.cache = { cli: cli, meds: meds, lab: lab, ant: ant, ta: ta }; T1.cacheAt = Date.now();
+  T1.cache = { cli: cli, meds: meds, lab: lab, ant: ant, ta: ta, est: est, nEvol: nEvol }; T1.cacheAt = Date.now();
   return T1.cache;
 }
 function _t1Num(x){ if(x == null) return null; var v = parseFloat(String(x).replace(',', '.')); return isNaN(v) ? null : v; }
@@ -33839,6 +33840,13 @@ function _t1Fila(p, D){
   if(f.lab.MDRD == null && f.lab.Creatinina && edad){ var cr = f.lab.Creatinina > 20 ? f.lab.Creatinina / 88.4 : f.lab.Creatinina; f.lab.MDRD = 175 * Math.pow(cr, -1.154) * Math.pow(edad, -0.203) * (fem ? 0.742 : 1); }
   f.med = {}; T1_MEDS.forEach(function(g){ f.med[g] = ms.some(function(m){ return String(m.grupo || '').toLowerCase().indexOf(g.toLowerCase().slice(0, 9)) === 0; }); });
   f.nMedsCM = ms.filter(function(m){ return m.grupo && m.grupo !== 'otros'; }).length;
+  // Calidad de carga: diagnósticos, estudios (laboratorio o estudios complementarios) y tratamiento CM
+  var tieneValor = function(t){ return !!(t && Array.isArray(t.filas) && t.filas.some(function(r){ return Array.isArray(r) && r.some(function(x){ return x != null && String(x).trim() !== ''; }); })); };
+  f.nombre = (p.apellido || '') + ', ' + (p.nombre || '');
+  f.vistos = (D.nEvol || {})[p.dni] || 0;
+  f.cargaDx = !!(c && (Object.keys(INV_DX_LABELS).some(function(k){ return c['dx_' + k]; }) || String(c.otras_enfermedades || '').trim()));
+  f.cargaEst = tieneValor(D.lab[p.dni]) || tieneValor((D.est || {})[p.dni]);
+  f.cargaTto = f.nMedsCM > 0;
   return f;
 }
 var T1_LAB = [ ['Glucemia','Glucemia (mg/dL)',0], ['HbA1c','HbA1c (%)',0], ['CT','Colesterol total (mg/dL)',0], ['LDL_MH','LDL-C (mg/dL)',0], ['HDL','HDL-C (mg/dL)',0],
@@ -33981,6 +33989,26 @@ function _t1HtmlTabla(R, paraCopiar){
   if(R.tests.length) nota += ' Pruebas: ' + R.tests.join(', ') + '. p < 0,05 en negrita.';
   return h + (paraCopiar ? '<p style="font-family:Arial,sans-serif;font-size:8.5pt;margin-top:4px">' + nota + '</p>' : '<div class="t1-nota">' + nota + '</div>');
 }
+function _t1Calidad(filas){
+  var nunca = [], incomp = [], sin = [], ok = 0;
+  filas.forEach(function(f){
+    if(!f.vistos){ nunca.push(f); return; }
+    var n = (f.cargaDx ? 1 : 0) + (f.cargaEst ? 1 : 0) + (f.cargaTto ? 1 : 0);
+    if(n === 3) ok++; else if(n === 0) sin.push(f); else incomp.push(f);
+  });
+  var orden = function(a, b){ return a.nombre.localeCompare(b.nombre, 'es'); };
+  var item = function(f, faltas){ return '<a class="t1-q-pac" data-dni="' + escHtml(String(f.dni)) + '" title="Abrir la HC">' + escHtml(f.nombre) + (faltas ? ' <span>falta: ' + faltas + '</span>' : '') + '</a>'; };
+  var faltan = function(f){ return [!f.cargaDx && 'diagnósticos', !f.cargaEst && 'estudios', !f.cargaTto && 'tto CM'].filter(Boolean).join(', '); };
+  var caja = function(cls, ico, n, tit, desc, lista, conFaltas){
+    return '<details class="t1-q ' + cls + '"' + (n ? '' : ' disabled') + '><summary><div class="t1-q-n">' + ico + ' ' + n + '</div><div class="t1-q-t">' + tit + '</div><div class="t1-q-d">' + desc + '</div></summary>'
+      + (n ? '<div class="t1-q-lista">' + lista.sort(orden).map(function(f){ return item(f, conFaltas ? faltan(f) : ''); }).join('') + '</div>' : '') + '</details>';
+  };
+  return '<div class="t1-q-tit">Calidad de la carga <span>· con datos = diagnósticos, estudios (laboratorio o complementarios) y tratamiento cardiometabólico</span></div><div class="t1-q-grid">'
+    + caja('gris', '🗂️', nunca.length, 'Nunca vistos', 'Están en el sistema pero no tienen ninguna evolución', nunca, false)
+    + caja('amb', '⚠️', incomp.length, 'Vistos, carga incompleta', 'Tienen alguno de los tres datos, no todos', incomp, true)
+    + caja('roj', '❌', sin.length, 'Vistos, sin datos', 'Tienen evolución pero ningún diagnóstico, estudio ni tto CM', sin, false)
+    + '<div class="t1-q verde"><div class="t1-q-n">✅ ' + ok + '</div><div class="t1-q-t">Vistos, carga completa</div><div class="t1-q-d">Diagnósticos, estudios y tratamiento</div></div></div>';
+}
 function t1Pintar(){
   var cont = document.getElementById('inv-resultado'); if(!cont || !T1.filas) return;
   var R = _t1Calcular(T1.filas, T1.estrato); T1.ultimo = R;
@@ -33989,7 +34017,8 @@ function t1Pintar(){
     + '<div class="t1-head"><div><div class="t1-tit">📊 Tabla 1 · ' + escHtml(T1.titulo) + '</div><div class="t1-subt">Panorama epidemiológico de los pacientes cargados en el sistema' + (T1.desdeCohorte ? ' que cumplen los filtros' : '') + '.</div></div>'
     + '<div class="t1-acc"><label>Cruzar por <select id="t1-estrato">' + opts + '</select></label>'
     + '<button class="inv-btn-ghost" id="t1-copiar">📋 Copiar para Word</button><button class="inv-btn-ghost" id="t1-csv">⬇️ CSV</button><button class="inv-btn-ghost" id="t1-recargar" title="Volver a leer los datos">↻</button></div></div>'
-    + _t1KPIs(T1.filas) + '<div class="t1-wrap" id="t1-wrap">' + _t1HtmlTabla(R) + '</div>';
+    + _t1Calidad(T1.filas) + _t1KPIs(T1.filas) + '<div class="t1-wrap" id="t1-wrap">' + _t1HtmlTabla(R) + '</div>';
+  cont.querySelectorAll('.t1-q-pac').forEach(function(a){ a.onclick = function(){ if(typeof _abrirEvolDesdeAgenda === 'function') _abrirEvolDesdeAgenda(a.dataset.dni); else abrirEvolucion(a.dataset.dni); }; });
   document.getElementById('t1-estrato').onchange = function(){ T1.estrato = this.value; t1Pintar(); };
   document.getElementById('t1-recargar').onclick = function(){ t1Abrir(T1.desdeCohorte ? T1.pacientes : null, true); };
   document.getElementById('t1-csv').onclick = t1CSV;
@@ -34059,6 +34088,22 @@ function t1CSV(){
 })();
 </script>
 <style>
+.t1-q-tit{font-size:12px;font-weight:700;color:var(--text);margin:0 0 8px;text-transform:uppercase;letter-spacing:.04em}
+.t1-q-tit span{text-transform:none;letter-spacing:0;font-weight:500;color:var(--text-soft)}
+.t1-q-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px;margin-bottom:16px;align-items:start}
+.t1-q{background:white;border:1px solid var(--border);border-left:4px solid #94a3b8;border-radius:12px;padding:10px 12px}
+.t1-q summary{cursor:pointer;list-style:none}
+.t1-q summary::-webkit-details-marker{display:none}
+.t1-q[disabled] summary{cursor:default}
+.t1-q.amb{border-left-color:#f59e0b}.t1-q.roj{border-left-color:#dc2626}.t1-q.verde{border-left-color:#16a34a}
+.t1-q-n{font-size:20px;font-weight:800;color:var(--text)}
+.t1-q-t{font-size:12.5px;font-weight:700;color:var(--text)}
+.t1-q-d{font-size:11px;color:var(--text-soft);margin-top:2px}
+details.t1-q:not([disabled]) summary .t1-q-t::after{content:' ▾';color:var(--blue)}
+.t1-q-lista{margin-top:8px;max-height:260px;overflow:auto;display:flex;flex-direction:column;border-top:1px solid var(--border);padding-top:6px}
+.t1-q-pac{font-size:12.5px;color:var(--blue);cursor:pointer;padding:3px 0;text-decoration:none}
+.t1-q-pac:hover{text-decoration:underline}
+.t1-q-pac span{color:var(--text-soft);font-size:11px}
 .t1-head{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap;margin-bottom:14px}
 .t1-tit{font-family:var(--font-display);font-size:18px;font-weight:700;color:var(--text)}
 .t1-subt{font-size:12px;color:var(--text-soft);margin-top:3px}
