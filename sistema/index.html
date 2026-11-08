@@ -2,7 +2,7 @@
 <html lang="es-AR">
 <head>
   <meta charset="UTF-8" />
-  <script>var URCYM_BUILD = '2026-11-07-2140';</script>
+  <script>var URCYM_BUILD = '2026-11-08-1800';</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Evaluaciones cardiometabólicas — Sistema de Historia Clínica</title>
 
@@ -5408,12 +5408,20 @@ function _profIniciales(){
   if(partes.length >= 2) return (partes[0][0] + partes[partes.length-1][0]).toUpperCase();
   return partes[0] ? partes[0].slice(0,2).toUpperCase() : '·';
 }
+window._fetchOriginal = window._fetchOriginal || window.fetch.bind(window);
 var sb = createClient(
   'https://qdjzetylyojfjdottjrk.supabase.co',
   'sb_publishable_qe6L1Uc7mRwsen7lzZlllw_DzOXonwL',
   // Login real con Supabase: la sesión vive solo en esta pestaña (sessionStorage) y se renueva sola.
   // Sin sesión iniciada, la base no devuelve nada (está protegida con RLS).
-  { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false, storage: window.sessionStorage, storageKey: 'urcym-auth' } }
+  { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false, storage: window.sessionStorage, storageKey: 'urcym-auth' },
+    // Si la base no responde en 40 s, la consulta se corta con error (en vez de quedar "Cargando…" para siempre)
+    global: { fetch: function(url, init){
+      init = init || {};
+      var ctrl = new AbortController(), t = setTimeout(function(){ ctrl.abort(); if(window._avisoConexion) window._avisoConexion(); }, 40000);
+      if(init.signal){ if(init.signal.aborted) ctrl.abort(); else init.signal.addEventListener('abort', function(){ ctrl.abort(); }); }
+      return window._fetchOriginal(url, Object.assign({}, init, { signal: ctrl.signal })).finally(function(){ clearTimeout(t); });
+    } } }
 );
 window.sb = sb;
 // Las llamadas a la función del servidor (acciones del equipo) van con la sesión iniciada
@@ -33654,6 +33662,20 @@ textarea.nota-chica{min-height:34px;resize:vertical;line-height:1.4}
       }
     } catch(e) {}
   }
+  // Aviso si la conexión con la base se trabó
+  window._avisoConexion = function(){
+    if(document.getElementById('aviso-conexion')) return;
+    var b = document.createElement('div'); b.id = 'aviso-conexion';
+    b.innerHTML = '⚠️ <b>La base de datos no está respondiendo.</b> Recargá la página (F5). Si pide, volvé a iniciar sesión: no se pierde nada de lo guardado. <button type="button">Recargar</button> <button type="button" class="x">✕</button>';
+    b.querySelector('button').onclick = function(){ location.reload(); }; b.querySelector('.x').onclick = function(){ b.remove(); };
+    document.body.appendChild(b);
+  };
+  var cargandoDesde = 0;
+  setInterval(function(){
+    var l = Array.prototype.some.call(document.querySelectorAll('.loading'), function(x){ return x.offsetParent !== null && /Cargando/i.test(x.textContent); });
+    if(!l){ cargandoDesde = 0; return; }
+    if(!cargandoDesde) cargandoDesde = Date.now(); else if(Date.now() - cargandoDesde > 30000) window._avisoConexion();
+  }, 3000);
   setTimeout(revisarVersion, 20000);
   setInterval(revisarVersion, 10 * 60 * 1000);
   document.addEventListener('visibilitychange', function(){ if(document.visibilityState === 'visible') revisarVersion(); });
@@ -33663,11 +33685,11 @@ textarea.nota-chica{min-height:34px;resize:vertical;line-height:1.4}
     var btn = document.getElementById('btn-backup'); var txt = btn ? btn.textContent : '';
     var out = { generado: new Date().toISOString(), version: window.URCYM_BUILD || '', tablas: {} }, errores = [];
     for(var i = 0; i < TABLAS.length; i++){
-      var t = TABLAS[i]; if(btn) btn.textContent = '💾 ' + (i + 1) + '/' + TABLAS.length + '…';
+      var t = TABLAS[i]; if(btn) btn.textContent = '💾 Copiando ' + Math.round(100 * i / TABLAS.length) + '%';
       var filas = [];
       for(var desde = 0; ; desde += 1000){
-        var r = await sb.from(t).select('*').range(desde, desde + 999);
-        if(r.error){ errores.push(t + ': ' + r.error.message); break; }
+        var r; try { r = await sb.from(t).select('*').range(desde, desde + 999); } catch(e) { r = { error: e }; }
+        if(r.error){ errores.push(t + ': ' + (r.error.message || r.error)); break; }
         filas = filas.concat(r.data || []);
         if(!r.data || r.data.length < 1000) break;
       }
@@ -33679,7 +33701,10 @@ textarea.nota-chica{min-height:34px;resize:vertical;line-height:1.4}
     document.body.appendChild(a); a.click(); a.remove();
     if(btn) btn.textContent = txt;
     var total = Object.keys(out.tablas).reduce(function(s, k){ return s + out.tablas[k].length; }, 0);
-    if(window._atajoToast) _atajoToast('Copia descargada: ' + total + ' registros' + (errores.length ? ' · ' + errores.length + ' tablas con error' : ''));
+    var msj = errores.length ? '⚠️ La copia se bajó INCOMPLETA (' + errores.length + ' tablas no respondieron). Recargá la página (F5) y volvé a intentar.'
+      : '✓ Copia completa: ' + total + ' registros. Quedó en tu carpeta Descargas como ' + a.download;
+    var box = document.createElement('div'); box.id = 'aviso-copia'; box.innerHTML = msj + ' <button type="button">OK</button>'; box.querySelector('button').onclick = function(){ box.remove(); };
+    var viejo = document.getElementById('aviso-copia'); if(viejo) viejo.remove(); document.body.appendChild(box);
     if(errores.length) console.warn('Copia de seguridad, tablas con error:', errores);
   };
   // El botón de copia solo para los profesionales
@@ -33688,6 +33713,11 @@ textarea.nota-chica{min-height:34px;resize:vertical;line-height:1.4}
 </script>
 <style>
 #aviso-version{position:fixed;left:50%;top:12px;transform:translateX(-50%);z-index:100000;background:#fff7ed;border:2px solid #f97316;color:#9a3412;padding:10px 16px;border-radius:12px;font-size:13.5px;box-shadow:0 10px 30px rgba(0,0,0,.15);max-width:92vw}
+#aviso-conexion,#aviso-copia{position:fixed;left:50%;top:12px;transform:translateX(-50%);z-index:100001;background:#fef2f2;border:2px solid #dc2626;color:#991b1b;padding:10px 16px;border-radius:12px;font-size:13.5px;box-shadow:0 10px 30px rgba(0,0,0,.15);max-width:92vw}
+#aviso-copia{background:#f0fdf4;border-color:#16a34a;color:#14532d}
+#aviso-conexion button,#aviso-copia button{margin-left:8px;background:#dc2626;color:white;border:0;border-radius:8px;padding:6px 12px;font-weight:700;cursor:pointer}
+#aviso-copia button{background:#16a34a}
+#aviso-conexion button.x{background:transparent;color:#991b1b}
 #aviso-version button{margin-left:10px;background:#f97316;color:white;border:0;border-radius:8px;padding:6px 12px;font-weight:700;cursor:pointer}
 </style>
 
