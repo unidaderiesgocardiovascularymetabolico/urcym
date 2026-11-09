@@ -2,7 +2,7 @@
 <html lang="es-AR">
 <head>
   <meta charset="UTF-8" />
-  <script>var URCYM_BUILD = '2026-11-10-0000';</script>
+  <script>var URCYM_BUILD = '2026-11-10-0030';</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Evaluaciones cardiometabólicas — Sistema de Historia Clínica</title>
 
@@ -35319,8 +35319,29 @@ function _cargaEstPrec(p){
     return t.replace(',', '.');
   }
   function fila(k){ return LAB_FILAS.find(function(f){ return f.key === k; }); }
+  // ── Nombres aprendidos: cuando un laboratorio escribe un parámetro de otra forma, se elige una vez
+  //    a qué fila corresponde y queda guardado para siempre (compartido entre profesionales).
+  var APRENDIDOS = [], IGNORAR = {};
+  function regNombre(n){ return new RegExp('^[\\s.:/()\\-]*' + n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '[\\s.:/()\\-]+') + '(?![a-z])'); }
+  function aplicarSinonimos(o){
+    APRENDIDOS = []; IGNORAR = {};
+    Object.keys(o || {}).forEach(function(n){ if(o[n] === '-') IGNORAR[n] = 1; else if(LAB_FILAS.some(function(f){ return f.key === o[n]; })) APRENDIDOS.push([regNombre(n), o[n]]); });
+    APRENDIDOS.sort(function(a, b){ return b[0].source.length - a[0].source.length; });
+  }
+  async function leerSinonimos(){
+    try { var r = await (window._sbFromOriginal || sb.from.bind(sb))('urcym_agenda_config').select('value').eq('key', 'lab_sinonimos').maybeSingle();
+      var v = r && r.data && r.data.value; return (typeof v === 'string' ? JSON.parse(v || '{}') : v) || {}; } catch(e) { return null; }
+  }
+  window._labSinonimosCargar = async function(){ var o = await leerSinonimos(); if(o) aplicarSinonimos(o); return o; };
+  window._labSinonimoGuardar = async function(nombre, key){
+    var o = (await leerSinonimos()) || {}; o[nombre] = key; aplicarSinonimos(o);
+    var r = await (window._sbFromOriginal || sb.from.bind(sb))('urcym_agenda_config').upsert({ key:'lab_sinonimos', value:JSON.stringify(o) }, { onConflict:'key' });
+    return !r.error;
+  };
+  var NO_PARAM_LINEA = /(protocolo|paciente|documento|obra social|dr\.?\s*\/\s*dra|fecha\s*:|matricula|\bm\.?\s?p\.?\s*\d)/;
+  var NO_PARAM = /^(colesterol ldl|ldl|directa|indirecta|mp|tel|whatsapp|documento|dni|protocolo|fecha|paciente|dr|dra|medico|metodo|v\.? ?ref|valor(es)? de ref|ref|hombres?|mujer(es)?|ninos|adultos|en adultos|riesgo (ecv|grado)|ayuno|verano|invierno|obra social|avda|av|calle|contador|formula|aspecto|edad|sexo|pagina|hoja|\d)/;
   function analizar(texto){
-    var out = [], usadas = {}, fecha = '';
+    var out = [], usadas = {}, fecha = '', otros = [];
     var mf = texto.match(/\b(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})\b/);
     if(mf){ var y = mf[3].length === 2 ? '20' + mf[3] : mf[3]; fecha = y + '-' + String(mf[2]).padStart(2, '0') + '-' + String(mf[1]).padStart(2, '0'); if(isNaN(new Date(fecha + 'T12:00:00'))) fecha = ''; }
     var seccion = '', desdeSeccion = 99;
@@ -35332,19 +35353,30 @@ function _cargaEstPrec(p){
      if(seccion === 'bili' && desdeSeccion <= 4 && /^total\b/.test(ls)) lineaEntera = 'Bilirrubina total ' + lineaEntera.replace(/^\s*total/i, '');
      var origen = lineaEntera.replace(/(\s*\.){3,}\s*/g, ' … ').replace(/\s{2,}/g, ' ').trim();
      // una línea puede traer más de un parámetro ("Sodio 140 mEq/L   Potasio 4.3 mEq/L")
-     var linea = lineaEntera, vueltas = 0;
+     var linea = lineaEntera, vueltas = 0, LISTA = APRENDIDOS.concat(SIN);
      while(linea && vueltas++ < 6){
       var l = sinAc(linea).replace(/\t/g, ' ');
       if(!/\d/.test(l)) return;
       var mejor = null;
-      for(var i = 0; i < SIN.length; i++){
-        var mm = SIN[i][0].exec(l); if(!mm) continue;
-        var kk = SIN[i][1];
+      for(var i = 0; i < LISTA.length; i++){
+        var mm = LISTA[i][0].exec(l); if(!mm) continue;
+        var kk = LISTA[i][1];
         if(['Glucemia','Creatinina','Hb','Albumina','CortisolPl'].indexOf(kk) >= 0 && /orina|urinari/.test(l)) continue;
         if(!mejor || mm.index < mejor.m.index) mejor = { m:mm, key:kk };
         if(mm.index === 0) break;
       }
-      if(!mejor) return;
+      if(!mejor){
+        // renglón con nombre y número que no es de la tabla conocida: se ofrece para enseñarlo
+        if(vueltas === 1){
+          var lc = l.replace(/(\s*\.){3,}\s*/g, ' : ');
+          var dp = lc.indexOf(':'), pn = lc.search(/\d/);
+          var nombre = (dp > 0 && dp < pn ? lc.slice(0, dp) : lc.slice(0, pn)).replace(/[.:%\-–_/()]+/g, ' ').replace(/\s+/g, ' ').trim();
+          var mv = (dp > 0 && dp < pn ? lc.slice(dp + 1) : lc.slice(pn)).match(/-?\d[\d.,]*/);
+          if(nombre && nombre.length >= 2 && nombre.length <= 45 && /^[a-z]/.test(nombre) && !NO_PARAM.test(nombre) && !NO_PARAM_LINEA.test(lc) && !IGNORAR[nombre] && mv && !otros.some(function(o){ return o.nombre === nombre; }))
+            otros.push({ nombre:nombre, val:numero(mv[0]), origen:origen });
+        }
+        return;
+      }
       linea = (function(){
         var m = mejor.m, key = mejor.key;
         var corte = '';
@@ -35373,9 +35405,10 @@ function _cargaEstPrec(p){
       })();
      }
     });
-    return { items: out, fecha: fecha };
+    return { items: out, fecha: fecha, otros: otros };
   }
   window._labAnalizarTexto = analizar;
+  setTimeout(function(){ if(typeof sb !== 'undefined') window._labSinonimosCargar(); }, 5000);
 
   window.labPegarAbrir = function(){
     if(typeof labDatos === 'undefined' || !pacienteActual) return;
@@ -35417,12 +35450,38 @@ function _cargaEstPrec(p){
           + '<td style="padding:5px 6px;font-weight:600">' + _esc(it.label) + '</td><td style="padding:3px 6px;white-space:nowrap"><input class="lp-val" data-i="' + i + '" value="' + _esc(it.val) + '" style="width:72px;padding:3px 6px;border:1.5px solid #e5e7eb;border-radius:6px;font:inherit"> <span style="color:#64748b;font-size:11.5px">' + _esc(it.unidad || '') + '</span></td>'
           + '<td style="padding:5px 6px;font:11.5px/1.35 monospace;color:#475569">' + _esc(it.origen || '') + (aviso ? '<div style="font:600 11.5px var(--font-main);color:#b45309;margin-top:2px">⚠ ' + _esc(aviso) + '</div>' : '') + '</td></tr>';
       });
-      prev.innerHTML = html + '</table>';
+      html += '</table>';
+      var otros = (res.otros || []);
+      if(otros.length){
+        var opts = '<option value="">— no cargar —</option><option value="-">⛔ No es de mi tabla (no preguntar más)</option>'
+          + LAB_FILAS.filter(function(f){ return !f.cat && (!f.calc || f.calcAuto); }).map(function(f){ return '<option value="' + f.key + '">' + _esc(f.label) + '</option>'; }).join('');
+        html += '<div style="margin-top:12px;padding:10px;border:1.5px dashed #cbd5e1;border-radius:10px;background:#f8fafc">'
+          + '<div style="font-weight:700;font-size:12.5px;margin-bottom:6px">🤔 No reconocí estos renglones (' + otros.length + ')</div>'
+          + '<div style="font-size:11.5px;color:#64748b;margin-bottom:6px">Si alguno es un parámetro de tu tabla, elegí cuál: se carga y el sistema lo aprende para la próxima vez (con este y otros laboratorios). <button type="button" class="lp-ign-todos" style="margin-left:4px;border:1.5px solid #cbd5e1;background:white;border-radius:7px;padding:2px 8px;font:600 11.5px var(--font-main);cursor:pointer">⛔ Ninguno es de mi tabla</button></div>'
+          + otros.map(function(o, i){ return '<div style="display:grid;grid-template-columns:minmax(0,1fr) 190px;gap:8px;align-items:center;padding:3px 0;border-top:1px solid #eef2f7"><span style="font:11.5px/1.35 monospace;color:#475569">' + _esc(o.origen) + '</span><select class="lp-ens" data-i="' + i + '" style="padding:4px 6px;border:1.5px solid #e5e7eb;border-radius:7px;font:12px var(--font-main)">' + opts + '</select></div>'; }).join('')
+          + '</div>';
+      }
+      prev.innerHTML = html;
+      prev.querySelectorAll('.lp-ens').forEach(function(sl){ sl.onchange = async function(){
+        var o = otros[+sl.dataset.i]; if(!sl.value) return; sl.disabled = true;
+        var ok = await window._labSinonimoGuardar(o.nombre, sl.value);
+        if(!ok && typeof showToast === 'function') showToast('No se pudo guardar lo aprendido (se usa solo esta vez).', 'warning', 4000);
+        pintar();
+      }; });
+      var ign = prev.querySelector('.lp-ign-todos');
+      if(ign) ign.onclick = async function(){
+        ign.disabled = true;
+        var o = {}; try { o = (await window._labSinonimosCargar()) || {}; } catch(_) {}
+        otros.forEach(function(x){ if(!o[x.nombre]) o[x.nombre] = '-'; });
+        for(var k in o){ if(o[k] === '-' && otros.some(function(x){ return x.nombre === k; })) { await window._labSinonimoGuardar(k, '-'); } }
+        pintar();
+      };
       prev.querySelector('.lp-fecha').onchange = pintar;
       btn.disabled = false; btn.style.opacity = 1;
       m.box.querySelector('.lp-msg').textContent = res.items.length + ' parámetro' + (res.items.length === 1 ? '' : 's') + ' reconocido' + (res.items.length === 1 ? '' : 's') + '. Revisá antes de cargar.';
     }
     var tmr; ta.addEventListener('input', function(){ clearTimeout(tmr); tmr = setTimeout(pintar, 250); });
+    window._labSinonimosCargar().then(function(){ if(ta.value.trim()) pintar(); });
     m.box.querySelector('.lp-no').onclick = m.cerrar;
     btn.onclick = function(){
       if(!res || !res.items.length) return;
