@@ -2,7 +2,7 @@
 <html lang="es-AR">
 <head>
   <meta charset="UTF-8" />
-  <script>var URCYM_BUILD = '2026-11-09-2245';</script>
+  <script>var URCYM_BUILD = '2026-11-09-2300';</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Evaluaciones cardiometabólicas — Sistema de Historia Clínica</title>
 
@@ -35303,9 +35303,10 @@ function _cargaEstPrec(p){
   ];
   var sinAc = function(t){ return String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase(); };
   var normU = function(u){ return sinAc(u).replace(/µ|μ/g, 'u').replace(/\s/g, ''); };
-  function numero(t){
+  function numero(t, key){
     t = t.trim().replace(/[.,]$/, '');
-    if(/^\d{1,3}(\.\d{3})+$/.test(t)) return t.replace(/\./g, '');            // 250.000
+    // "250.000" es miles solo en plaquetas; en el resto el punto es decimal ("0.929")
+    if(key === 'Rto_plaquetas' && /^\d{1,3}(\.\d{3})+$/.test(t)) return t.replace(/\./g, '');
     if(/^\d{1,3}(\.\d{3})+,\d+$/.test(t)) return t.replace(/\./g, '').replace(',', '.');
     return t.replace(',', '.');
   }
@@ -35339,7 +35340,7 @@ function _cargaEstPrec(p){
         var mn = resto.match(/(?:^|[^\w(\[])\s*[<>]?\s*(\d[\d.,]*)\s*([a-zA-Zµμ%\/\d.³²]*(?:\/[a-zA-Zµμ\d.,²³]+)?)/);
         if(!mn) return '';
         var siguiente = resto0.slice(mn.index + mn[0].length);
-        var val = numero(mn[1]); if(isNaN(parseFloat(val))) return siguiente;
+        var val = numero(mn[1], key); if(isNaN(parseFloat(val))) return siguiente;
         var uTxt = (mn[2] || '').trim();
         if(key === 'LPA'){ out.push({ key:'LPA', label:'Lp(a)', val:val, unidad: /nmol/i.test(uTxt) ? 'nmol/L' : 'mg/dL' }); usadas[key] = 1; return siguiente; }
         var f = fila(key); if(!f || (f.calc && !f.calcAuto)) return siguiente;
@@ -35689,8 +35690,24 @@ function _cargaEstPrec(p){
 // ═══════════════════════════════════════════════════════════════════════
 (function(){
   var MESES = { enero:1, febrero:2, marzo:3, abril:4, mayo:5, junio:6, julio:7, agosto:8, septiembre:9, setiembre:9, octubre:10, noviembre:11, diciembre:12 };
+  // Siglas y palabras que el dictado suele escribir "como suenan"
+  var FONETICA = [
+    [/\bte\s*ge\s*o\b|\bteg[ieé]?o\b|\btejeo\b|\bteje\s*o\b|\bt\.\s*g\.\s*o\.?/gi, 'TGO'],
+    [/\bte\s*ge\s*p[eé]\b|\btegep[eé]\b|\btegp[eé]?\b|\btejep[eé]\b|\bt\.\s*g\.\s*p\.?/gi, 'TGP'],
+    [/\bge\s*o\s*te\b|\bgeot[eé]\b/gi, 'GOT'], [/\bge\s*pe\s*te\b|\bgepet[eé]\b/gi, 'GPT'],
+    [/\bge\s*ge\s*te\b|\bgeget[eé]\b|\bgamma?\s*glutamil\w*|\bgama\b/gi, 'GGT'],
+    [/\bache\s*de\s*ele\b|\bachedeele\b|\bh\s*d\s*l\b/gi, 'HDL'], [/\bele\s*de\s*ele\b|\bl\s*d\s*l\b/gi, 'LDL'],
+    [/\bte\s*ese\s*ache\b|\bteseache\b/gi, 'TSH'], [/\bpe\s*ce\s*erre\b|\bpecerre\b/gi, 'PCR'],
+    [/\bbe\s*doce\b|\bvitamina\s*b\s*doce\b/gi, 'B12'], [/\befe\s*a\s*ele\b/gi, 'FAL'], [/\bbe\s*te\b/gi, 'BT'],
+    [/\ba\s*uno\s*c[eé]?\b|\ba\s*1\s*c\b|\ba1\s*c[eé]\b/gi, 'A1c'], [/\bglic\w*ada\b|\bglucosilada\b/gi, 'glicosilada'],
+    [/\b(?:[aá]cido|asi|aci|ase|a)\s*[uú]rico\b|\basi[uú]rico\b|\b[aá]cid[uú]rico\b/gi, 'ácido úrico'],
+    [/\btri[a-záéíóúñ]{2,10}[rl]idos(?![a-záéíóúñ])/gi, 'triglicéridos'], [/\bcoles\w{0,4}rol\b/gi, 'colesterol'],
+    [/\bglu[sc]+emia\b/gi, 'glucemia'], [/\bcrea\w{0,4}nina\b/gi, 'creatinina'], [/\bplaque\w*\b/gi, 'plaquetas'],
+    [/\bferri\w*na\b/gi, 'ferritina'], [/\bapo\s*be\b/gi, 'ApoB'], [/\blp\s*a\b|\bele\s*pe\s*a\b/gi, 'Lp(a)']
+  ];
   window._normalizarDictado = function(t){
     t = String(t || '');
+    FONETICA.forEach(function(f){ t = t.replace(f[0], f[1]); });
     t = t.replace(/(\d+)\s+coma\s+(\d+)/gi, '$1,$2').replace(/(\d+)\s+punto\s+(\d+)/gi, '$1.$2');
     t = t.replace(/\bmenos\s+(\d)/gi, '-$1');
     t = t.replace(/(\d+)\s*(sobre|\/)\s*(\d+)/gi, '$1/$3');
