@@ -2,7 +2,7 @@
 <html lang="es-AR">
 <head>
   <meta charset="UTF-8" />
-  <script>var URCYM_BUILD = '2026-11-09-2230';</script>
+  <script>var URCYM_BUILD = '2026-11-09-2245';</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Evaluaciones cardiometabólicas — Sistema de Historia Clínica</title>
 
@@ -35968,5 +35968,45 @@ function _cargaEstPrec(p){
 <style>
 .dict-auto{background:#fef9c3;border-radius:8px;box-shadow:0 0 0 4px #fef9c3}
 </style>
+<script>
+// ═══ "🧪 Pasar a tablas": lo dictado o escrito en la evolución (seleccionado, o todo) se lleva al
+//     laboratorio o a estudios con la misma revisión de siempre ═══
+(function(){
+  function textoEvolucion(){
+    var ed = document.getElementById('evol_editor'); if(!ed) return '';
+    var sel = window.getSelection && window.getSelection();
+    if(sel && sel.rangeCount && !sel.isCollapsed && ed.contains(sel.anchorNode)) return sel.toString();
+    // sin selección: todo lo escrito, sin los bloques que volcó el sistema
+    var c = ed.cloneNode(true);
+    c.querySelectorAll('[class^="bloque-"], [class*=" bloque-"]').forEach(function(b){ b.remove(); });
+    return c.innerText || '';
+  }
+  window.pasarATablas = function(){
+    var t = textoEvolucion().trim();
+    if(!t){ alert('Escribí o dictá en la evolución (o seleccioná el texto) y después tocá "Pasar a tablas".'); return; }
+    var est = window._estAnalizarTexto ? window._estAnalizarTexto(t) : { cat:'' };
+    var lab = window._labAnalizarTexto ? window._labAnalizarTexto(t) : { items:[] };
+    var abrir = function(modo){
+      if(modo === 'est'){ estDictadoAbrir(est.cat); setTimeout(function(){ var ta = document.querySelector('.ed-txt'); if(ta){ ta.value = t; ta.dispatchEvent(new Event('input', { bubbles:true })); } }, 60); }
+      else { labPegarAbrir(); setTimeout(function(){ var ta = document.querySelector('.lp-txt'); if(ta){ ta.value = t; ta.dispatchEvent(new Event('input', { bubbles:true })); } }, 60); }
+    };
+    if(est.cat && !/^laboratorio/i.test(t.trim())) abrir('est');
+    else if(lab.items && lab.items.length) abrir('lab');
+    else if(est.cat) abrir('est');
+    else alert('No encontré valores de laboratorio ni un estudio en ese texto.\nTip: decí el nombre y después el valor ("glucemia 103"), o seleccioná solo la parte del laboratorio.');
+  };
+  function poner(){
+    var tb = document.querySelector('.evol-toolbar'); if(!tb || tb.querySelector('.atablas-btn')) return;
+    var b = document.createElement('button'); b.type = 'button'; b.className = 'atablas-btn';
+    b.title = 'Lleva el laboratorio o el estudio dictado en la evolución a su tabla (seleccioná el texto, o se usa todo lo escrito)';
+    b.textContent = '🧪 Pasar a tablas'; b.style.cssText = 'font-size:11px;width:auto;padding:0 8px;margin-left:auto';
+    b.onmousedown = function(e){ e.preventDefault(); };   // no perder la selección del editor
+    b.onclick = pasarATablas;
+    var fr = tb.querySelector('.fr-btn'); if(fr){ fr.style.marginLeft = '6px'; tb.insertBefore(b, fr); } else tb.appendChild(b);
+  }
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', poner); else poner();
+  setTimeout(poner, 1800); setTimeout(poner, 4000);
+})();
+</script>
 </body>
 </html>
