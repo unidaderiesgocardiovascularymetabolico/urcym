@@ -2,7 +2,7 @@
 <html lang="es-AR">
 <head>
   <meta charset="UTF-8" />
-  <script>var URCYM_BUILD = '2026-11-09-1850';</script>
+  <script>var URCYM_BUILD = '2026-11-09-2230';</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Evaluaciones cardiometabólicas — Sistema de Historia Clínica</title>
 
@@ -2143,6 +2143,7 @@
           <span id="hc_os" style="font-size:12px;background:var(--blue-light);color:var(--blue);padding:2px 8px;border-radius:10px"></span>
           <button type="button" id="hc_mail" class="mail-copiar" onclick="copiarMailPaciente(this)" style="display:none"></button>
         </div>
+        <button type="button" onclick="abrirAuditoria()" title="Quién cambió qué y cuándo" style="padding:6px 12px;border:1.5px solid var(--border);border-radius:8px;background:white;color:var(--text-soft);font-size:12.5px;font-weight:600;cursor:pointer;font-family:var(--font-main)">🕘 Cambios</button>
         <button type="button" id="btn_hc_resumen" onclick="hcResumenAbrir()" style="padding:6px 14px;border:none;border-radius:8px;background:var(--teal);color:white;font-size:12.5px;font-weight:700;cursor:pointer;font-family:var(--font-main)">🖨 Resumen de HC</button>
         <div style="font-size:12px;color:var(--text-soft);font-style:italic;background:var(--gray);padding:4px 10px;border-radius:20px">👁 Solo lectura</div>
       </div>
@@ -3430,10 +3431,12 @@
           <span id="evol_os" style="font-size:11px;background:var(--blue-light);color:var(--blue);padding:2px 8px;border-radius:10px"></span>
           <span id="evol_ocupacion" style="font-size:11px;color:var(--text-soft)"></span>
           <button type="button" id="evol_mail" class="mail-copiar" onclick="copiarMailPaciente(this)" style="display:none"></button>
+          <span id="evol_faltan" class="evol-faltan" style="display:none"></span>
         </div>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
           <button class="btn-previas" onclick="abrirCargaEvolucionHistorica()">📅 Cargar evolución histórica</button>
           <button class="btn-previas" onclick="abrirPrevias()">📋 Previas</button>
+          <button class="btn-previas" onclick="abrirAuditoria()" title="Quién cambió qué y cuándo">🕘 Cambios</button>
           <!-- Próxima consulta -->
           <div style="display:flex;align-items:center;gap:6px;background:#f0f4f9;border:1.5px solid var(--border);border-radius:12px;padding:6px 12px">
             <span style="font-size:11px;font-weight:600;color:var(--text-soft);white-space:nowrap">Próx. consulta en</span>
@@ -3802,7 +3805,8 @@
             style="padding:6px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;font-family:var(--font-main);width:220px;outline:none"/>
           <button onclick="limpiarFiltroLab()" id="lab_filtro_clear" style="display:none;padding:5px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;font-family:var(--font-main);background:white;cursor:pointer;color:var(--text-soft)">✕</button>
           <span id="lab_filtro_info" style="font-size:11px;color:var(--text-soft)"></span>
-          <button onclick="agregarColumnaManual('lab')" style="margin-left:auto;padding:5px 14px;border:1.5px solid var(--teal);border-radius:7px;background:var(--teal-light);color:var(--teal);font-size:12px;cursor:pointer;font-family:var(--font-main);font-weight:600">➕ Agregar columna</button>
+          <button onclick="labPegarAbrir()" title="Pegá el texto del informe del laboratorio y se cargan los valores solos" style="margin-left:auto;padding:5px 14px;border:1.5px solid var(--blue);border-radius:7px;background:var(--blue-light);color:var(--blue);font-size:12px;cursor:pointer;font-family:var(--font-main);font-weight:600">📋 Pegar laboratorio</button>
+          <button onclick="agregarColumnaManual('lab')" style="padding:5px 14px;border:1.5px solid var(--teal);border-radius:7px;background:var(--teal-light);color:var(--teal);font-size:12px;cursor:pointer;font-family:var(--font-main);font-weight:600">➕ Agregar columna</button>
         </div>
 
         <!-- Tabla -->
@@ -3867,6 +3871,7 @@
               <input type="text" id="est_tabla_buscador" placeholder="Buscar parámetro o estudio..." oninput="filtrarTablaEstudios(this.value)"/>
               <button type="button" class="est-buscador-clear" id="est_tabla_buscador_clear" onclick="_limpiarBuscadorEstudios()" title="Limpiar" style="display:none">✕</button>
             </div>
+            <button onclick="estDictadoAbrir()" title="Dictá, pegá o subí la foto/PDF del informe" style="padding:5px 14px;border:1.5px solid var(--blue);border-radius:7px;background:var(--blue-light);color:var(--blue);font-size:12px;cursor:pointer;font-family:var(--font-main);font-weight:600">🎙 Dictado / 📷 foto</button>
             <button onclick="agregarColumnaManual('est')" style="padding:5px 14px;border:1.5px solid var(--teal);border-radius:7px;background:var(--teal-light);color:var(--teal);font-size:12px;cursor:pointer;font-family:var(--font-main);font-weight:600;white-space:nowrap">➕ Agregar columna</button>
           </div>
         </div>
@@ -9403,12 +9408,18 @@ async function editarPaciente(dni) {
   document.getElementById('f_afiliado').value = p.numero_afiliado||'';
   document.getElementById('f_ocupacion').value = p.ocupacion||'';
   calcularEdad();
-  const { data } = await sb.from('paciente_profesionales').select('*').eq('dni_paciente', dni);
-  const profs = (data||[]).map(x=>x.profesional);
-  document.getElementById('prof_barbara').checked = profs.includes('Dra. Bárbara Guerrero');
-  document.getElementById('prof_omar').checked = profs.includes('Dr. Omar Bertani');
   document.getElementById('formError').style.display='none';
+  // Se abre ya con los datos; los profesionales a cargo se completan apenas llegan
+  const _pb = document.getElementById('prof_barbara'), _po = document.getElementById('prof_omar');
+  _pb.checked = false; _po.checked = false; _pb.disabled = true; _po.disabled = true;
   document.getElementById('modalPaciente').classList.add('open');
+  try {
+    const { data } = await sb.from('paciente_profesionales').select('*').eq('dni_paciente', dni);
+    if(dniEdicion !== dni) return;
+    const profs = (data||[]).map(x=>x.profesional);
+    _pb.checked = profs.includes('Dra. Bárbara Guerrero');
+    _po.checked = profs.includes('Dr. Omar Bertani');
+  } finally { _pb.disabled = false; _po.disabled = false; }
 }
 
 function editarPacienteDesdeEvolucion() {
@@ -9570,18 +9581,21 @@ async function guardarPaciente() {
         if(pViejo) _nombreViejoEnAgenda = (pViejo.apellido + ', ' + pViejo.nombre).trim();
       }
       if(_nombreViejoEnAgenda && _nombreViejoEnAgenda !== nombreNuevo) {
+        // En segundo plano: no hace esperar al guardado (antes demoraba la actualización de la pantalla)
+        const _nvAg = _nombreViejoEnAgenda, _deAg = dniEdicion;
+        (async () => {
         try {
           const cfgR = await sb.from('urcym_agenda_config').select('value').eq('key','turnos').maybeSingle();
           if(cfgR.data && cfgR.data.value) {
             const turnosObj = JSON.parse(cfgR.data.value);
             let huboCambios = false;
-            const dniActualizar = String(dniEdicion||'');
+            const dniActualizar = String(_deAg||'');
             Object.keys(turnosObj).forEach(function(k) {
               const t = turnosObj[k];
               if(!t) return;
               // Coincide por DNI (robusto) o por nombre exacto (compatibilidad turnos viejos)
               const matchDni = dniActualizar && String(t.dni_paciente||'') === dniActualizar;
-              const matchNombre = t.paciente === _nombreViejoEnAgenda;
+              const matchNombre = t.paciente === _nvAg;
               if(matchDni || matchNombre) {
                 turnosObj[k].paciente = nombreNuevo;
                 if(dniActualizar) turnosObj[k].dni_paciente = dniActualizar;
@@ -9596,7 +9610,7 @@ async function guardarPaciente() {
                   const t = turnos[k];
                   if(!t) return;
                   const matchDni = dniActualizar && String(t.dni_paciente||'') === dniActualizar;
-                  const matchNombre = t.paciente === _nombreViejoEnAgenda;
+                  const matchNombre = t.paciente === _nvAg;
                   if(matchDni || matchNombre) {
                     turnos[k].paciente = nombreNuevo;
                     if(dniActualizar) turnos[k].dni_paciente = dniActualizar;
@@ -9609,6 +9623,7 @@ async function guardarPaciente() {
         } catch(eAgenda) {
           console.warn('[URCyM] No se pudo actualizar nombre en agenda:', eAgenda);
         }
+        })();
       }
       _nombreViejoEnAgenda = null;
     }
@@ -9620,13 +9635,23 @@ async function guardarPaciente() {
     errEl.textContent = error.code==='23505' ? 'Ya existe un paciente con ese DNI.' : 'Error: '+error.message;
     errEl.style.display='block'; return;
   }
-  await sb.from('paciente_profesionales').delete().eq('dni_paciente', dni);
   const profs = [];
   if(document.getElementById('prof_barbara').checked) profs.push({dni_paciente:dni,profesional:'Dra. Bárbara Guerrero'});
   if(document.getElementById('prof_omar').checked) profs.push({dni_paciente:dni,profesional:'Dr. Omar Bertani'});
-  if(profs.length) await sb.from('paciente_profesionales').insert(profs);
+  // Profesionales a cargo: en segundo plano (la pantalla se actualiza enseguida).
+  // Si todavía no habían llegado al abrir (casillas deshabilitadas), no se tocan.
+  const _profsListos = !document.getElementById('prof_barbara').disabled;
+  if(_profsListos) (async () => {
+    try {
+      await sb.from('paciente_profesionales').delete().eq('dni_paciente', dni);
+      if(profs.length) await sb.from('paciente_profesionales').insert(profs);
+    } catch(eP) { console.warn('profesionales del paciente:', eP); }
+  })();
+  // (cerrarModal pone _editandoDesdeEvolucion en false: hay que leerlo ANTES; por eso el encabezado
+  //  de la evolución no se actualizaba y los datos aparecían recién al recargar)
+  const _desdeEvol = _editandoDesdeEvolucion;
   cerrarModal('modalPaciente');
-  if(_editandoDesdeEvolucion) {
+  if(_desdeEvol) {
     _editandoDesdeEvolucion = false;
     // Refrescar datos en memoria y actualizar el header de evolución sin salir de la pantalla
     const idx = pacientesData.findIndex(x => x.dni === dni);
@@ -9644,6 +9669,7 @@ async function guardarPaciente() {
     document.getElementById('evol_nombre').textContent = paciente.apellido + ', ' + paciente.nombre;
     const evhNombre = document.getElementById('evh_nombre_paciente');
     if(evhNombre) evhNombre.textContent = paciente.apellido + ', ' + paciente.nombre;
+    const _evDni = document.getElementById('evol_dni'); if(_evDni) _evDni.textContent = 'DNI: ' + dni;
     document.getElementById('evol_fnac').textContent = 'F. Nac: ' + formatFecha(paciente.fecha_nacimiento);
     document.getElementById('evol_edad').textContent = edadDesde(paciente.fecha_nacimiento) + ' años';
     document.getElementById('evol_os').textContent = paciente.obra_social || 'Sin obra social';
@@ -11283,7 +11309,7 @@ function volcarAlteradosAlEditor(tipo, columnaIdx) {
 
     // Texto corrido: "Hb 12,9 g/dL, FAL 163 U/L, …" (lo alterado en rojo)
     const lineas_html = tipo === 'est' ? _redactarEstudiosEnOraciones(items) : (items.map(a => {
-      const lbl = escHtml(String(a.label).replace(/\s*\([^)]*\)\s*$/, '').trim() || a.label);
+      const lbl = escHtml(/^(TGO|TGP) \(/.test(a.label) ? a.label.slice(0, 3) : a.label);
       const esNum = /^-?\d+([.,]\d+)?$/.test(String(a.val).trim());
       if(!esNum && a.tipo !== 'alterado') return lbl + ': ' + escHtml(a.val);
       let u = a.unidad;
@@ -33881,6 +33907,7 @@ textarea.nota-chica{min-height:34px;resize:vertical;line-height:1.4}
 (function(){
   function campos(){ return Array.prototype.slice.call(document.querySelectorAll('#carga_est_campos input[type=text], #carga_est_campos textarea, #carga_est_campos .est-pills')).filter(function(el){ var g = el.closest('.form-group'); return !g || g.style.display !== 'none'; }); }
   // Campos que dependen de otro ("cuáles", "grado"): se muestran solo si el anterior es "Sí"; si pasa a "No", se vacían
+  window._estCondicionales = function(){ condicionales(); };
   function condicionales(){
     var cont = document.getElementById('carga_est_campos'); if(!cont) return;
     EST_FILAS.forEach(function(f, fi){
@@ -35155,6 +35182,791 @@ function _cargaEstPrec(p){
 .col-prec{display:block;margin:3px auto 0;background:rgba(255,255,255,.12);color:white;border:1px solid rgba(255,255,255,.35);border-radius:5px;font-size:9.5px;padding:1px 2px;width:106px;cursor:pointer}
 .col-prec option{color:#1e293b}
 .carga-est-prec{padding:7px 9px;border:1.5px solid var(--border);border-radius:9px;font:inherit;font-size:12.5px;background:white;cursor:pointer}
+</style>
+
+<script>
+// ═══ Encabezado: qué falta cargar para completar scores y calculadoras (se va vaciando) ═══
+(function(){
+  function v(id){ var e = document.getElementById(id); return e ? String(e.value || '').trim() : ''; }
+  function lab(k){ try { var x = getUltimoValorLab(k); return x != null && x !== '' && !isNaN(parseFloat(x)); } catch(e) { return false; } }
+  function antUlt(k){
+    try { if(typeof antDatos === 'undefined' || !antDatos || !antDatos.filas) return false; var fi = ANT_FILAS.findIndex(function(f){ return f.key === k; }); if(fi < 0) return false;
+      return (antDatos.filas[fi] || []).some(function(x){ return x != null && String(x).trim() !== ''; }); } catch(e) { return false; }
+  }
+  function faltantes(){
+    var p = (typeof pacienteActual !== 'undefined' && pacienteActual) || null; if(!p) return [];
+    var out = [], edad = null; try { edad = calcEdadPaciente(); } catch(e) {}
+    var fn = !!p.fecha_nacimiento, sexo = !!p.sexo && p.sexo !== 'Otro';
+    var tas = null; try { tas = calcTASActual(); } catch(e) {}
+    var egfr = lab('MDRD') || (lab('Creatinina') && fn && sexo);
+    // PREVENT (30 a 79 años)
+    if(!edad || (edad >= 30 && edad <= 79)){
+      var f = [];
+      if(!fn) f.push('fecha de nac.'); if(!sexo) f.push('sexo'); if(!tas) f.push('TA');
+      if(!lab('CT')) f.push('CT'); if(!lab('HDL')) f.push('HDL'); if(!egfr) f.push(lab('Creatinina') ? 'fecha nac./sexo (eGFR)' : 'creatinina');
+      if(f.length) out.push(['PREVENT', f]);
+    }
+    // eGFR
+    if(!lab('MDRD')){ var g = []; if(!lab('Creatinina')) g.push('creatinina'); if(!fn) g.push('fecha de nac.'); if(!sexo) g.push('sexo'); if(g.length) out.push(['eGFR', g]); }
+    // FIB-4
+    var h = []; if(!lab('TGO')) h.push('TGO'); if(!lab('TGP')) h.push('TGP'); if(!lab('Rto_plaquetas')) h.push('plaquetas'); if(!fn) h.push('fecha de nac.');
+    if(h.length) out.push(['FIB-4', h]);
+    // LDL calculado
+    if(!lab('LDL_MH')){ var l = []; ['CT','HDL','TG'].forEach(function(k){ if(!lab(k)) l.push(k); }); if(l.length) out.push(['LDL', l]); }
+    // IMC e índice cintura/talla
+    var peso = v('evol_peso') || antUlt('peso') || antUlt('Peso'), talla = v('evol_talla') || antUlt('talla') || antUlt('Altura') || antUlt('altura'), cint = v('evol_cintura') || antUlt('cintura') || antUlt('Cintura');
+    var a = []; if(!peso) a.push('peso'); if(!talla) a.push('talla'); if(a.length) out.push(['IMC', a]);
+    if(!cint) out.push(['Cintura/talla', ['cintura']]);
+    // Glucémico
+    if(!lab('HbA1c') && !lab('Glucemia')) out.push(['estado glucémico', ['glucemia o HbA1c']]);
+    return out;
+  }
+  var ultimo = '';
+  function pintar(){
+    var el = document.getElementById('evol_faltan'); if(!el) return;
+    var f = faltantes();
+    // Cada dato una sola vez, con los scores que lo necesitan: "creatinina (PREVENT, eGFR)"
+    var por = {}, orden = [];
+    f.forEach(function(x){ x[1].forEach(function(d){ if(!por[d]){ por[d] = []; orden.push(d); } if(por[d].indexOf(x[0]) < 0) por[d].push(x[0]); }); });
+    var txt = orden.join(', ');
+    if(txt === ultimo) return; ultimo = txt;
+    if(!txt){ el.style.display = 'none'; el.innerHTML = ''; return; }
+    el.style.display = ''; el.innerHTML = '⚠ <b>Falta para completar los scores:</b> ' + _esc(txt) + '.';
+    el.title = 'Datos que faltan para completar scores y calculadoras:\n' + f.map(function(x){ return '• ' + x[0] + ': ' + x[1].join(', '); }).join('\n');
+  }
+  window._actualizarFaltantes = pintar;
+  setInterval(function(){ try { pintar(); } catch(e) {} }, 1500);
+  document.addEventListener('input', function(ev){ if(ev.target && /^evol_(ta|peso|talla|cintura)/.test(ev.target.id || '')) setTimeout(pintar, 50); }, true);
+})();
+</script>
+<style>
+.evol-faltan{flex:1 1 280px;max-width:640px;background:#fef9c3;color:#854d0e;border:1px solid #fde68a;border-radius:8px;padding:3px 9px;font-size:11px;line-height:1.45;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.evol-faltan b{font-weight:700}
+</style>
+<script>
+// ═══════════════════════════════════════════════════════════════════════
+// PEGAR LABORATORIO: se pega el texto del informe y se reconocen los parámetros, la fecha y las unidades.
+// Nada se carga sin revisar: hay una vista previa con casillas; lo que ya tenía otro valor viene destildado.
+// ═══════════════════════════════════════════════════════════════════════
+(function(){
+  // [expresión (sobre el texto sin acentos y en minúscula), clave]. El orden importa: lo más específico primero.
+  var SIN = [
+    [/hemoglobina\s+glic|glicosilada|hb\s*a1c|hba1c|\ba1c\b/, 'HbA1c'],
+    [/(indice|relacion|cociente)\s+alb\w*\s*(\/|-|y)?\s*creat|\brac\b|\bacr\b/, 'RAC'],
+    [/(micro)?albumin\w*\s+(en\s+)?orina|microalbuminuria|albuminuria/, 'AlbUr'],
+    [/creatinin\w*\s+(en\s+)?orina|creatininuria/, 'CrUr'],
+    [/creatinin/, 'Creatinina'],
+    [/(tolerancia|ptog|sobrecarga).*(120|2\s*h)|glucemia\s+(a\s+las\s+)?(2\s*h|120)/, 'PTOG'],
+    [/glucemia|glucosa/, 'Glucemia'],
+    [/hemoglobina|\bhb\b|\bhgb\b/, 'Hb'],
+    [/plaquetas|trombocitos/, 'Rto_plaquetas'],
+    [/acido\s+urico|uricemia/, 'AcidoUrico'],
+    [/\b(tgo|got|ast)\b|aspartato/, 'TGO'],
+    [/\b(tgp|gpt|alt)\b|alanina/, 'TGP'],
+    [/fosfatasa\s+alcalina|\bfal\b/, 'FAL'],
+    [/bilirrubina\s+total|\bbt\b/, 'BT'],
+    [/gamma\s*-?\s*g|\bggt\b/, 'GGT'],
+    [/peptido\s*c/, 'PeptidoC'],
+    [/no\s*-?\s*hdl/, 'noHDL'],
+    [/hdl/, 'HDL'],
+    [/colesterol\s+total|colesterolemia|^\s*colesterol\b(?!\s+(ldl|hdl|no))/, 'CT'],
+    [/triglic|trigliceridemia/, 'TG'],
+    [/apo\w*\s*-?\s*b\b|apob/, 'ApoB'],
+    [/lp\s*\(\s*a\s*\)|lipoproteina\s*\(\s*a\s*\)|\blpa\b/, 'LPA'],
+    [/\bpcr\b|proteina\s+c\s+reactiva/, 'PRCus'],
+    [/aldosterona/, 'Aldosterona'],
+    [/renina/, 'Renina'],
+    [/sodio|natremia/, 'Sodio'],
+    [/potasio|kalemia|potasemia/, 'Potasio'],
+    [/\btsh\b|tirotrofina/, 'TSH'],
+    [/eritrosedimentacion|\bvsg\b|\bers\b/, 'ERS'],
+    [/cortisol\s+(libre\s+)?(urinario|en\s+orina)/, 'CortisolUr'],
+    [/cortisol/, 'CortisolPl'],
+    [/\bacth\b|corticotrofina/, 'ACTH'],
+    [/\bfsh\b/, 'FSH'],
+    [/testosterona/, 'Testosterona'],
+    [/\bpth\b|parathormona|paratohormona/, 'PTH'],
+    [/acido\s+folico|folato/, 'AcFolico'],
+    [/saturacion|\bsat\b.*transf/, 'SatTransf'],
+    [/ferremia|hierro\s+serico|sideremia|^\s*hierro\b/, 'Ferremia'],
+    [/ferritina/, 'Ferritina'],
+    [/calcio|calcemia/, 'Calcio'],
+    [/fosforo|fosfatemia/, 'Fosforo'],
+    [/magnesio|magnesemia/, 'Magnesio'],
+    [/albumin/, 'Albumina'],
+    [/vitamina\s*a\b|retinol/, 'VitA'],
+    [/b\s*12|cianocobalamina|cobalamina/, 'B12'],
+    [/vitamina\s*d|25\s*-?\s*oh|hidroxi\s*-?\s*vitamina\s*d/, 'D3'],
+    [/vitamina\s*e\b|tocoferol/, 'VitE'],
+    [/vitamina\s*k\b/, 'VitK'],
+    [/zinc|\bzn\b/, 'Zinc']
+  ];
+  var sinAc = function(t){ return String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase(); };
+  var normU = function(u){ return sinAc(u).replace(/µ|μ/g, 'u').replace(/\s/g, ''); };
+  function numero(t){
+    t = t.trim().replace(/[.,]$/, '');
+    if(/^\d{1,3}(\.\d{3})+$/.test(t)) return t.replace(/\./g, '');            // 250.000
+    if(/^\d{1,3}(\.\d{3})+,\d+$/.test(t)) return t.replace(/\./g, '').replace(',', '.');
+    return t.replace(',', '.');
+  }
+  function fila(k){ return LAB_FILAS.find(function(f){ return f.key === k; }); }
+  function analizar(texto){
+    var out = [], usadas = {}, fecha = '';
+    var mf = texto.match(/\b(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})\b/);
+    if(mf){ var y = mf[3].length === 2 ? '20' + mf[3] : mf[3]; fecha = y + '-' + String(mf[2]).padStart(2, '0') + '-' + String(mf[1]).padStart(2, '0'); if(isNaN(new Date(fecha + 'T12:00:00'))) fecha = ''; }
+    texto.split(/\r?\n/).forEach(function(lineaEntera){
+     // una línea puede traer más de un parámetro ("Sodio 140 mEq/L   Potasio 4.3 mEq/L")
+     var linea = lineaEntera, vueltas = 0;
+     while(linea && vueltas++ < 6){
+      var l = sinAc(linea).replace(/\t/g, ' ');
+      if(!/\d/.test(l)) return;
+      var mejor = null;
+      for(var i = 0; i < SIN.length; i++){
+        var mm = SIN[i][0].exec(l); if(!mm) continue;
+        var kk = SIN[i][1];
+        if(['Glucemia','Creatinina','Hb','Albumina','CortisolPl'].indexOf(kk) >= 0 && /orina|urinari/.test(l)) continue;
+        if(!mejor || mm.index < mejor.m.index) mejor = { m:mm, key:kk };
+        if(mm.index === 0) break;
+      }
+      if(!mejor) return;
+      linea = (function(){
+        var m = mejor.m, key = mejor.key;
+        var corte = '';
+        if(usadas[key]) return linea.slice(m.index + m[0].length);
+        // primer número después del nombre (salteando fechas)
+        var resto0 = linea.slice(m.index + m[0].length);
+        var resto = resto0.replace(/\b\d{1,2}[\/\-.]\d{1,2}[\/\-.]\d{2,4}\b/g, function(x){ return ' '.repeat(x.length); });
+        var mn = resto.match(/(?:^|[^\w(\[])\s*[<>]?\s*(\d[\d.,]*)\s*([a-zA-Zµμ%\/\d.³²]*(?:\/[a-zA-Zµμ\d.,²³]+)?)/);
+        if(!mn) return '';
+        var siguiente = resto0.slice(mn.index + mn[0].length);
+        var val = numero(mn[1]); if(isNaN(parseFloat(val))) return siguiente;
+        var uTxt = (mn[2] || '').trim();
+        if(key === 'LPA'){ out.push({ key:'LPA', label:'Lp(a)', val:val, unidad: /nmol/i.test(uTxt) ? 'nmol/L' : 'mg/dL' }); usadas[key] = 1; return siguiente; }
+        var f = fila(key); if(!f || (f.calc && !f.calcAuto)) return siguiente;
+        var unidad = '';
+        (f.unidades || []).forEach(function(u){ if(u && uTxt && normU(uTxt).indexOf(normU(u)) === 0) unidad = u; });
+        if(key === 'Rto_plaquetas' && parseFloat(val) > 1000) val = String(Math.round(parseFloat(val) / 1000));
+        if(key === 'SatTransf') unidad = '%';
+        out.push({ key:key, label:f.label, val:val, unidad:unidad });
+        usadas[key] = 1;
+        return siguiente;
+      })();
+     }
+    });
+    return { items: out, fecha: fecha };
+  }
+  window._labAnalizarTexto = analizar;
+
+  window.labPegarAbrir = function(){
+    if(typeof labDatos === 'undefined' || !pacienteActual) return;
+    var m = _uiModal('📋 Pegar laboratorio',
+      '<div style="font-size:12.5px;color:#64748b;margin-bottom:8px">Copiá el texto del informe (del PDF o del mail del laboratorio) y pegalo acá. Después revisás lo reconocido antes de cargarlo.</div>'
+      + '<textarea class="lp-txt" rows="8" style="width:100%;padding:10px;border:1.5px solid #e5e7eb;border-radius:10px;font:12.5px/1.45 monospace;resize:vertical" placeholder="Glucemia ........ 98 mg/dl&#10;Colesterol total  215 mg/dl&#10;…"></textarea>'
+      + '<div class="lp-prev" style="margin-top:10px;max-height:46vh;overflow:auto"></div>'
+      + '<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:10px;align-items:center;flex-wrap:wrap"><span class="lp-msg" style="font-size:12px;color:#64748b;margin-right:auto"></span>'
+      + '<button type="button" class="lp-no" style="padding:8px 14px;border-radius:9px;border:1.5px solid #e5e7eb;background:#fff;cursor:pointer">Cancelar</button>'
+      + '<button type="button" class="lp-si" disabled style="padding:8px 16px;border-radius:9px;border:none;background:var(--teal);color:#fff;font-weight:700;cursor:pointer;opacity:.5">Cargar en la tabla</button></div>');
+    var ta = m.box.querySelector('.lp-txt'), prev = m.box.querySelector('.lp-prev'), btn = m.box.querySelector('.lp-si'), res = null;
+    ta.addEventListener('keydown', function(ev){ ev.stopPropagation(); });
+    setTimeout(function(){ ta.focus(); }, 50);
+    function columnaDe(fecha){ return (labDatos.columnas || []).indexOf(fecha); }
+    function pintar(){
+      var fechaPrev = (prev.querySelector('.lp-fecha') || {}).value;
+      res = (window._labAnalizarTexto || analizar)(ta.value);
+      if(!res.items.length){ prev.innerHTML = ta.value.trim() ? '<div style="color:#b45309;font-size:12.5px">No reconocí parámetros. Probá copiando el informe con los nombres y valores en la misma línea.</div>' : ''; btn.disabled = true; btn.style.opacity = .5; m.box.querySelector('.lp-msg').textContent = ''; return; }
+      var fecha = fechaPrev || res.fecha || fechaHoy();
+      var ci = columnaDe(fecha);
+      var html = '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:12.5px;flex-wrap:wrap"><b>Fecha del laboratorio</b> <input type="date" class="lp-fecha" value="' + fecha + '" style="padding:5px 8px;border:1.5px solid #e5e7eb;border-radius:8px;font:inherit">'
+        + (ci >= 0 ? '<span style="color:#64748b">ya hay una columna con esa fecha: se completa esa</span>' : '<span style="color:#64748b">se crea una columna nueva</span>') + '</div>'
+        + '<table style="width:100%;border-collapse:collapse;font-size:12.5px"><tr style="background:#f1f5f9"><th></th><th style="text-align:left;padding:4px 6px">Parámetro</th><th style="text-align:left;padding:4px 6px">Valor</th><th style="text-align:left;padding:4px 6px">Aviso</th></tr>';
+      res.items.forEach(function(it, i){
+        var aviso = '', marcar = true;
+        if(it.key === 'LPA'){
+          if((labDatos.lpa || []).some(function(x){ return x && x.fecha === fecha; })) { aviso = 'ya hay Lp(a) de esa fecha'; marcar = false; }
+        } else {
+          var fi = LAB_FILAS.findIndex(function(f){ return f.key === it.key; });
+          var actual = ci >= 0 && labDatos.filas[fi] ? labDatos.filas[fi][ci] : '';
+          if(actual && String(actual).trim() !== '' && String(actual) !== it.val){ aviso = 'reemplaza ' + actual; marcar = false; }
+          var uAct = (labDatos.unidades && labDatos.unidades[it.key]) || (fila(it.key).unidades || [''])[0];
+          var tieneDatos = (labDatos.filas[fi] || []).some(function(x){ return x != null && String(x).trim() !== ''; });
+          if(it.unidad && it.unidad !== uAct && tieneDatos){ aviso = (aviso ? aviso + ' · ' : '') + 'viene en ' + it.unidad + ' y la tabla usa ' + uAct; marcar = false; }
+        }
+        html += '<tr style="border-bottom:1px solid #f1f5f9"><td style="padding:3px 6px"><input type="checkbox" class="lp-ck" data-i="' + i + '"' + (marcar ? ' checked' : '') + '></td>'
+          + '<td style="padding:3px 6px">' + _esc(it.label) + '</td><td style="padding:3px 6px;white-space:nowrap"><input class="lp-val" data-i="' + i + '" value="' + _esc(it.val) + '" style="width:80px;padding:3px 6px;border:1.5px solid #e5e7eb;border-radius:6px;font:inherit"> ' + _esc(it.unidad || '') + '</td>'
+          + '<td style="padding:3px 6px;color:#b45309">' + _esc(aviso) + '</td></tr>';
+      });
+      prev.innerHTML = html + '</table>';
+      prev.querySelector('.lp-fecha').onchange = pintar;
+      btn.disabled = false; btn.style.opacity = 1;
+      m.box.querySelector('.lp-msg').textContent = res.items.length + ' parámetro' + (res.items.length === 1 ? '' : 's') + ' reconocido' + (res.items.length === 1 ? '' : 's') + '. Revisá antes de cargar.';
+    }
+    var tmr; ta.addEventListener('input', function(){ clearTimeout(tmr); tmr = setTimeout(pintar, 250); });
+    m.box.querySelector('.lp-no').onclick = m.cerrar;
+    btn.onclick = function(){
+      if(!res || !res.items.length) return;
+      var fecha = prev.querySelector('.lp-fecha').value; if(!fecha){ alert('Elegí la fecha del laboratorio.'); return; }
+      var elegidos = [];
+      prev.querySelectorAll('.lp-ck').forEach(function(c){ if(c.checked){ var it = res.items[+c.dataset.i]; var v = prev.querySelector('.lp-val[data-i="' + c.dataset.i + '"]').value.trim().replace(',', '.'); if(v) elegidos.push({ key:it.key, val:v, unidad:it.unidad }); } });
+      if(!elegidos.length){ alert('No hay nada tildado para cargar.'); return; }
+      var ci = columnaDe(fecha);
+      if(ci < 0) ci = insertarColumnaEnOrden(labDatos, fecha);
+      if(!labDatos.unidades) labDatos.unidades = {};
+      var lpaNueva = false;
+      elegidos.forEach(function(e){
+        if(e.key === 'LPA'){ if(!labDatos.lpa) labDatos.lpa = []; labDatos.lpa.push({ valor:e.val, unidad:e.unidad || 'mg/dL', fecha:fecha }); lpaNueva = true; return; }
+        var fi = LAB_FILAS.findIndex(function(f){ return f.key === e.key; }); if(fi < 0) return;
+        while(labDatos.filas.length <= fi) labDatos.filas.push([]);
+        if(!labDatos.filas[fi]) labDatos.filas[fi] = [];
+        while(labDatos.filas[fi].length < labDatos.columnas.length) labDatos.filas[fi].push('');
+        labDatos.filas[fi][ci] = e.val;
+        var tiene = labDatos.filas[fi].some(function(x, j){ return j !== ci && x != null && String(x).trim() !== ''; });
+        if(e.unidad && !tiene) labDatos.unidades[e.key] = e.unidad;
+      });
+      try { calcLabValues(labDatos, LAB_FILAS); } catch(_) {}
+      try { _colEditando = null; } catch(_) {}
+      renderTablaGenerica(labDatos, LAB_FILAS, 'evlab_wrap', ci);
+      try { sincronizarRO(); } catch(_) {}
+      guardarDatosPac('lab_tabla_wrap');
+      if(lpaNueva){ try { if(typeof renderLpa === 'function') renderLpa(); volcarLpaAlEditor(); } catch(_) {} }
+      m.cerrar();
+      if(typeof showToast === 'function') showToast('Laboratorio cargado: ' + elegidos.length + ' valores (' + _fmtFechaCol(fecha) + ')', 'success', 4000);
+    };
+  };
+})();
+</script>
+<script>
+// ═══════════════════════════════════════════════════════════════════════
+// GUARDADO A PRUEBA DE CORTES
+// 1) Cola de reintentos: si al guardar una evolución, laboratorio/estudios/antropometría o datos clínicos
+//    falla la CONEXIÓN (no un error de datos), el cambio queda guardado en esta compu y se sube solo
+//    apenas vuelve internet (cada 20 s y al reconectar). Nunca se descarta: si algo no entra, se puede
+//    descargar la copia.
+// 2) Borrador en la nube: el borrador de la evolución también se sube cada 30 s, así se recupera desde
+//    otra computadora o si se borra el navegador.
+// ═══════════════════════════════════════════════════════════════════════
+(function(){
+  if(typeof sb === 'undefined' || !sb || sb._colaInstalada) return;
+  sb._colaInstalada = true;
+  var CLAVE = 'urcym_cola_v1';
+  var TABLAS = ['evoluciones', 'paciente_tablas', 'paciente_clinica'];
+  var _from = sb.from.bind(sb);
+  window._sbFromOriginal = _from;
+
+  function leer(){ try { return JSON.parse(localStorage.getItem(CLAVE) || '[]') || []; } catch(e) { return []; } }
+  function escribir(c){ try { localStorage.setItem(CLAVE, JSON.stringify(c)); } catch(e) { console.error('cola: no se pudo escribir', e); } pintar(); }
+  function esRed(r){
+    if(!r || !r.error) return false;
+    var msg = String(r.error.message || '') + ' ' + String(r.error.details || '');
+    return r.status === 0 || r.status >= 500 || /Failed to fetch|NetworkError|AbortError|aborted|Load failed|timeout|ERR_|network/i.test(msg);
+  }
+  function encolar(item){
+    var c = leer();
+    item.ts = item.ts || Date.now(); item.id = item.ts + '-' + Math.random().toString(36).slice(2, 7); item.intentos = 0;
+    if(item.t === 'evoluciones' && item.op === 'insert'){
+      (Array.isArray(item.v) ? item.v : [item.v]).forEach(function(x){ if(x && !x.fecha_hora) x.fecha_hora = new Date(item.ts).toISOString(); });
+      c.push(item);
+    } else if(item.op === 'upsert' && !Array.isArray(item.v)){
+      // misma fila (paciente + tipo): la última versión reemplaza / se combina con la anterior
+      var k = item.t + '|' + item.v.dni_paciente + '|' + (item.v.tipo || '');
+      var i = c.findIndex(function(x){ return !x.error && x.op === 'upsert' && !Array.isArray(x.v) && (x.t + '|' + x.v.dni_paciente + '|' + (x.v.tipo || '')) === k; });
+      if(i >= 0){ if(item.t === 'paciente_clinica') item.v = Object.assign({}, c[i].v, item.v); c.splice(i, 1); }
+      c.push(item);
+    } else c.push(item);
+    escribir(c);
+    if(typeof showToast === 'function') showToast('Sin conexión: el cambio quedó guardado en esta compu y se sube solo cuando vuelva internet.', 'warning', 7000);
+  }
+  function envolver(qb, t){
+    ['insert', 'upsert'].forEach(function(op){
+      var orig = qb[op] && qb[op].bind(qb); if(!orig) return;
+      qb[op] = function(v, o){
+        var b = orig(v, o), thenOrig = b.then.bind(b);
+        var copia; try { copia = JSON.parse(JSON.stringify(v)); } catch(e) { copia = v; }
+        b.then = function(res, rej){
+          return thenOrig(function(r){
+            if(esRed(r)){ encolar({ t:t, op:op, v:copia, o:o || null }); return { data:null, error:null, status:202, statusText:'encolado', count:null, _encolado:true }; }
+            return r;
+          }, function(err){
+            encolar({ t:t, op:op, v:copia, o:o || null }); return { data:null, error:null, status:202, statusText:'encolado', count:null, _encolado:true };
+          }).then(res, rej);
+        };
+        return b;
+      };
+    });
+    return qb;
+  }
+  sb.from = function(t){ var qb = _from(t); return TABLAS.indexOf(t) >= 0 ? envolver(qb, t) : qb; };
+
+  var procesando = false;
+  async function procesar(){
+    if(procesando) return; var c = leer(); if(!c.length) return;
+    if(typeof currentUser === 'undefined' || !currentUser) return;
+    procesando = true;
+    try {
+      for(var i = 0; i < c.length; i++){
+        var it = c[i]; if(it.error && it.intentos > 50) continue;
+        try {
+          if(it.t === 'evoluciones' && it.op === 'insert'){
+            // ¿ya había entrado (se cortó la respuesta, no el envío)? → no duplicar
+            var fila = Array.isArray(it.v) ? it.v[0] : it.v;
+            var d0 = new Date(new Date(fila.fecha_hora).getTime() - 15 * 60000).toISOString(), d1 = new Date(new Date(fila.fecha_hora).getTime() + 15 * 60000).toISOString();
+            var ya = await _from('evoluciones').select('id,contenido_html').eq('dni_paciente', fila.dni_paciente).gte('fecha_hora', d0).lte('fecha_hora', d1);
+            if(ya.error && esRed(ya)) break;
+            if(ya.data && ya.data.some(function(x){ return x.contenido_html === fila.contenido_html; })){ it._ok = true; continue; }
+          }
+          var q = _from(it.t)[it.op](it.v, it.o || undefined);
+          var r = await q;
+          if(r.error){
+            if(esRed(r)) break;                       // sigue sin conexión: se reintenta más tarde
+            // columna que todavía no existe en la base: se quita y se reintenta (no se pierde el resto)
+            var falta = String(r.error.message || '').match(/Could not find the '(.+?)' column/);
+            if(falta){ (Array.isArray(it.v) ? it.v : [it.v]).forEach(function(x){ delete x[falta[1]]; }); it.intentos++; i--; continue; }
+            it.error = r.error.message || 'error'; it.intentos = (it.intentos || 0) + 1;
+          } else it._ok = true;
+        } catch(e) { break; }
+      }
+      var resto = c.filter(function(x){ return !x._ok; });
+      var subidos = c.length - resto.length;
+      escribir(resto);
+      if(subidos && typeof showToast === 'function') showToast('☁️ Se guardaron ' + subidos + ' cambio' + (subidos === 1 ? '' : 's') + ' pendiente' + (subidos === 1 ? '' : 's') + '.', 'success', 4000);
+    } finally { procesando = false; }
+  }
+  window._colaProcesar = procesar;
+  window._colaLeer = leer;
+
+  function pintar(){
+    var c = leer(), el = document.getElementById('cola-guardado');
+    if(!c.length){ if(el) el.remove(); return; }
+    if(!el){ el = document.createElement('div'); el.id = 'cola-guardado'; document.body.appendChild(el); }
+    var errores = c.filter(function(x){ return x.error; }).length;
+    el.className = errores ? 'cola-err' : '';
+    el.innerHTML = (errores ? '⚠️ ' + errores + ' cambio' + (errores === 1 ? '' : 's') + ' no se pudo guardar' : '☁️ ' + c.length + ' cambio' + (c.length === 1 ? '' : 's') + ' esperando conexión — se guardan solos')
+      + ' <button type="button" data-a="r">Reintentar</button> <button type="button" data-a="d">Descargar copia</button>';
+    el.querySelector('[data-a="r"]').onclick = procesar;
+    el.querySelector('[data-a="d"]').onclick = function(){
+      var blob = new Blob([JSON.stringify(leer(), null, 2)], { type:'application/json' });
+      var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'urcym_cambios_pendientes_' + new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-') + '.json'; a.click();
+    };
+  }
+  setInterval(procesar, 20000);
+  window.addEventListener('online', function(){ setTimeout(procesar, 1500); });
+  setTimeout(function(){ pintar(); procesar(); }, 4000);
+
+  // ── Borrador en la nube (paciente_tablas, tipo "borrador_<usuario>")
+  function tipoNube(){ return 'borrador_' + String((typeof selectedUser !== 'undefined' && selectedUser) || 'x'); }
+  var subido = {}, tSubir = null;
+  function subirBorrador(dni){
+    try {
+      var raw = localStorage.getItem('urcym_draft_' + dni); if(!raw) return;
+      var d = JSON.parse(raw); if(!d || !d.ts || subido[dni] === d.ts) return;
+      subido[dni] = d.ts;
+      _from('paciente_tablas').upsert({ dni_paciente:dni, tipo:tipoNube(), datos:raw }, { onConflict:'dni_paciente,tipo' }).then(function(r){ if(r.error) subido[dni] = 0; });
+    } catch(e) {}
+  }
+  if(typeof _guardarDraftLocal === 'function'){
+    var ogd = _guardarDraftLocal;
+    window._guardarDraftLocal = function(dni){
+      var r = ogd.apply(this, arguments);
+      if(dni){ clearTimeout(tSubir); tSubir = setTimeout(function(){ subirBorrador(dni); }, 3000); }
+      return r;
+    };
+  }
+  if(typeof _limpiarDraftLocal === 'function'){
+    var old = _limpiarDraftLocal;
+    window._limpiarDraftLocal = function(dni){
+      var r = old.apply(this, arguments);
+      if(dni){ delete subido[dni]; try { _from('paciente_tablas').delete().eq('dni_paciente', dni).eq('tipo', tipoNube()).then(function(){}); } catch(e) {} }
+      return r;
+    };
+  }
+  // Al abrir una evolución sin borrador en esta compu: si hay uno en la nube, se ofrece recuperarlo
+  if(typeof abrirEvolucion === 'function'){
+    var oae = abrirEvolucion;
+    window.abrirEvolucion = async function(dni){
+      var r = await oae.apply(this, arguments);
+      try {
+        if(!dni || localStorage.getItem('urcym_draft_' + dni) || sessionStorage.getItem('urcym_tab_' + dni)) return r;
+        var q = await _from('paciente_tablas').select('datos').eq('dni_paciente', dni).eq('tipo', tipoNube()).maybeSingle();
+        if(!q.data || !q.data.datos || !pacienteActual || String(pacienteActual.dni) !== String(dni)) return r;
+        var raw = typeof q.data.datos === 'string' ? q.data.datos : JSON.stringify(q.data.datos);
+        var d = JSON.parse(raw); if(!d || !d.ts) return r;
+        localStorage.setItem('urcym_draft_' + dni, raw); subido[dni] = d.ts;
+        var banner = document.getElementById('banner-recuperacion'), fechaEl = document.getElementById('banner-rec-fecha');
+        if(banner){
+          var f = new Date(d.ts);
+          if(fechaEl) fechaEl.textContent = '— guardado en la nube el ' + f.toLocaleDateString('es-AR', { day:'2-digit', month:'2-digit', year:'numeric' }) + ' ' + f.toLocaleTimeString('es-AR', { hour:'2-digit', minute:'2-digit' });
+          banner.style.display = 'flex';
+        }
+      } catch(e) { console.warn('borrador en la nube', e); }
+      return r;
+    };
+  }
+})();
+</script>
+<style>
+#cola-guardado{position:fixed;left:18px;bottom:18px;z-index:9500;background:#fffbeb;border:1.5px solid #f59e0b;color:#92400e;border-radius:12px;padding:9px 12px;font:600 12.5px var(--font-main);box-shadow:0 8px 24px rgba(0,0,0,.15);display:flex;align-items:center;gap:8px;flex-wrap:wrap;max-width:520px}
+#cola-guardado.cola-err{background:#fef2f2;border-color:#dc2626;color:#991b1b}
+#cola-guardado button{border:1.5px solid currentColor;background:white;color:inherit;border-radius:8px;padding:3px 9px;font:600 12px var(--font-main);cursor:pointer}
+</style>
+<script>
+// ═══ Historial de cambios (auditoría): quién cambió qué y cuándo, por paciente ═══
+(function(){
+  var NOM_T = { pacientes:'Datos del paciente', paciente_clinica:'Datos clínicos', medicacion:'Medicación', evoluciones:'Evolución', paciente_tablas:'Tablas' };
+  var NOM_TIPO = { lab:'Laboratorio', est:'Estudios', ant:'Antropometría', vac:'Vacunación', mdpa:'MDPA' };
+  var IGNORAR = /^(updated_at|created_at|creado_at|id)$/;
+  var fmtV = function(v){ if(v === null || v === undefined || v === '') return '—'; if(typeof v === 'boolean') return v ? 'sí' : 'no'; var s = typeof v === 'object' ? JSON.stringify(v) : String(v); s = s.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim(); return s.length > 60 ? s.slice(0, 57) + '…' : s; };
+  function parse(x){ if(!x) return null; if(typeof x === 'object') return x; try { return JSON.parse(x); } catch(e) { return null; } }
+  function cambiosTabla(a, b, tipo){
+    a = parse(a) || {}; b = parse(b) || {};
+    var filas = tipo === 'lab' ? LAB_FILAS : tipo === 'est' ? EST_FILAS : tipo === 'ant' ? ANT_FILAS : null; if(!filas) return [];
+    var keysDe = function(d){ return d.labKeys || d.estKeys || d.antKeys || filas.map(function(f){ return f.cat ? 'cat:' + f.label : f.key; }); };
+    var mapa = function(d){
+      var out = {}, ks = keysDe(d);
+      (d.filas || []).forEach(function(fila, fi){ var k = ks[fi]; if(!k || /^cat:/.test(k)) k = 'fila' + fi; (fila || []).forEach(function(v, ci){ var c = (d.columnas || [])[ci]; if(c != null && v != null && String(v) !== '') out[k + '|' + c] = String(v); }); });
+      return out;
+    };
+    var ma = mapa(a), mb = mapa(b), lista = [];
+    var lbl = function(k){ var f = filas.find(function(x){ return x.key === k; }); return f ? f.label : k; };
+    Object.keys(Object.assign({}, ma, mb)).forEach(function(k){
+      if(ma[k] === mb[k]) return;
+      var p = k.split('|');
+      lista.push(lbl(p[0]) + ' (' + _fmtFechaCol(p[1]) + '): ' + (ma[k] || '—') + ' → ' + (mb[k] || '—'));
+    });
+    var ca = (a.columnas || []).join(','), cb = (b.columnas || []).join(',');
+    if(!lista.length && ca !== cb) lista.push('fechas: ' + (ca || '—') + ' → ' + (cb || '—'));
+    return lista;
+  }
+  function resumen(r){
+    var a = r.antes || {}, b = r.despues || {};
+    if(r.tabla === 'evoluciones'){
+      var f = b.fecha_hora || a.fecha_hora; var fe = f ? new Date(f).toLocaleDateString('es-AR') : '';
+      if(r.accion === 'INSERT') return 'Nueva evolución' + (fe ? ' (' + fe + ')' : '') + ': ' + fmtV(b.contenido_html);
+      if(r.accion === 'DELETE') return 'Se borró la evolución del ' + fe + ': ' + fmtV(a.contenido_html);
+    }
+    if(r.tabla === 'medicacion'){
+      var m = function(x){ return [x.farmaco, x.dosis, x.frecuencia].filter(Boolean).join(' '); };
+      if(r.accion === 'INSERT') return 'Se agrega ' + m(b);
+      if(r.accion === 'DELETE') return 'Se borra ' + m(a);
+    }
+    if(r.tabla === 'paciente_tablas'){
+      var t = b.tipo || a.tipo, l = cambiosTabla(a.datos, b.datos, t);
+      return (NOM_TIPO[t] || t) + (l.length ? ': ' + l.slice(0, 8).join(' · ') + (l.length > 8 ? ' · y ' + (l.length - 8) + ' más' : '') : (r.accion === 'INSERT' ? ': primera carga' : ''));
+    }
+    if(r.accion === 'INSERT') return 'Alta';
+    if(r.accion === 'DELETE') return 'Borrado';
+    var cs = Object.keys(Object.assign({}, a, b)).filter(function(k){ return !IGNORAR.test(k) && JSON.stringify(a[k]) !== JSON.stringify(b[k]); });
+    return cs.slice(0, 8).map(function(k){ return k.replace(/^dx_/, 'dx ').replace(/_/g, ' ') + ': ' + fmtV(a[k]) + ' → ' + fmtV(b[k]); }).join(' · ') + (cs.length > 8 ? ' · y ' + (cs.length - 8) + ' más' : '');
+  }
+  window.abrirAuditoria = async function(){
+    var p = typeof pacienteActual !== 'undefined' && pacienteActual; if(!p) return;
+    var m = _uiModal('🕘 Historial de cambios — ' + _esc((p.apellido || '') + ', ' + (p.nombre || '')), '<div class="aud-cuerpo" style="font-size:12.5px;color:#64748b">Cargando…</div>');
+    var cont = m.box.querySelector('.aud-cuerpo');
+    try { m.box.style.maxWidth = '860px'; m.box.style.width = '92vw'; } catch(e) {}
+    var r = await sb.from('auditoria').select('*').eq('dni', String(p.dni)).order('ts', { ascending:false }).limit(400);
+    if(r.error){ cont.innerHTML = /auditoria/.test(r.error.message || '') ? 'Todavía no está activado: falta correr en Supabase el archivo <b>11_auditoria.sql</b>.' : 'No se pudo leer el historial: ' + _esc(r.error.message); return; }
+    var filas = (r.data || []).map(function(x){ return { x:x, txt:resumen(x) }; }).filter(function(f){ return f.txt; });
+    if(!filas.length){ cont.innerHTML = 'Sin cambios registrados todavía (se registran desde que se activó la auditoría).'; return; }
+    cont.innerHTML = '<div style="max-height:62vh;overflow:auto"><table style="width:100%;border-collapse:collapse;font-size:12px;color:#1e293b">'
+      + '<tr style="background:#f1f5f9;position:sticky;top:0"><th style="text-align:left;padding:6px">Cuándo</th><th style="text-align:left;padding:6px">Quién</th><th style="text-align:left;padding:6px">Qué</th><th style="text-align:left;padding:6px">Detalle</th></tr>'
+      + filas.map(function(f){
+          var d = new Date(f.x.ts), col = f.x.accion === 'DELETE' ? '#dc2626' : f.x.accion === 'INSERT' ? '#16a34a' : '#2563eb';
+          return '<tr style="border-bottom:1px solid #f1f5f9;vertical-align:top"><td style="padding:5px 6px;white-space:nowrap">' + d.toLocaleDateString('es-AR', { day:'2-digit', month:'2-digit', year:'2-digit' }) + ' ' + d.toLocaleTimeString('es-AR', { hour:'2-digit', minute:'2-digit' }) + '</td>'
+            + '<td style="padding:5px 6px;white-space:nowrap">' + _esc(String(f.x.usuario || '').split('@')[0]) + '</td>'
+            + '<td style="padding:5px 6px;white-space:nowrap"><span style="color:' + col + ';font-weight:700">' + ({ INSERT:'+', UPDATE:'✎', DELETE:'✕' }[f.x.accion] || '') + '</span> ' + _esc(NOM_T[f.x.tabla] || f.x.tabla) + '</td>'
+            + '<td style="padding:5px 6px">' + _esc(f.txt) + '</td></tr>';
+        }).join('') + '</table></div>'
+      + '<div style="margin-top:8px;font-size:11px;color:#94a3b8">Registro de solo lectura: no se puede modificar ni borrar.</div>';
+  };
+})();
+</script>
+<script>
+// ═══════════════════════════════════════════════════════════════════════
+// DICTADO Y FOTO para laboratorio y estudios
+// · Dictado: se usa cualquier dictado que escriba donde está el cursor (Handy, Win+H). El texto se
+//   normaliza ("130 sobre 80", "1 coma 2", "menos 2 coma 1", "5 de octubre").
+// · Foto o PDF del informe: se lee en esta misma computadora (no se sube a ningún lado).
+//   PDF con texto → se extrae directo; foto o PDF escaneado → reconocimiento de texto (OCR) en español.
+// Siempre se revisa antes de guardar.
+// ═══════════════════════════════════════════════════════════════════════
+(function(){
+  var MESES = { enero:1, febrero:2, marzo:3, abril:4, mayo:5, junio:6, julio:7, agosto:8, septiembre:9, setiembre:9, octubre:10, noviembre:11, diciembre:12 };
+  window._normalizarDictado = function(t){
+    t = String(t || '');
+    t = t.replace(/(\d+)\s+coma\s+(\d+)/gi, '$1,$2').replace(/(\d+)\s+punto\s+(\d+)/gi, '$1.$2');
+    t = t.replace(/\bmenos\s+(\d)/gi, '-$1');
+    t = t.replace(/(\d+)\s*(sobre|\/)\s*(\d+)/gi, '$1/$3');
+    t = t.replace(/\s+por\s*ciento/gi, '%');
+    // "5 de octubre de 2026" → 05/10/2026
+    t = t.replace(/\b(\d{1,2})\s+de\s+(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre)(?:\s+(?:de|del)\s+(\d{4}))?/gi, function(m, d, mes, y){
+      return String(d).padStart(2, '0') + '/' + String(MESES[mes.toLowerCase()]).padStart(2, '0') + '/' + (y || new Date().getFullYear());
+    });
+    return t;
+  };
+  // El reconocedor de laboratorio también entiende el texto dictado
+  if(typeof window._labAnalizarTexto === 'function'){
+    var oa = window._labAnalizarTexto;
+    window._labAnalizarTexto = function(t){ return oa(window._normalizarDictado(t).replace(/,\s+(?=[A-Za-zÁÉÍÓÚáéíóúñ])/g, '\n')); };
+  }
+
+  // ── Leer foto / PDF → texto (todo local)
+  var CDN = {
+    tess: 'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js',
+    tessWorker: 'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/worker.min.js',
+    tessCore: 'https://cdn.jsdelivr.net/npm/tesseract.js-core@5.1.1',
+    tessLang: 'https://cdn.jsdelivr.net/npm/@tesseract.js-data/spa@1.0.0/4.0.0_best_int',
+    pdf: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js',
+    pdfWorker: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'
+  };
+  var cargados = {};
+  function script(url){ if(cargados[url]) return cargados[url]; cargados[url] = new Promise(function(ok, mal){ var s = document.createElement('script'); s.src = url; s.onload = ok; s.onerror = function(){ delete cargados[url]; mal(new Error('No se pudo descargar el lector (¿sin internet?)')); }; document.head.appendChild(s); }); return cargados[url]; }
+  async function ocr(imagen, progreso){
+    await script(CDN.tess);
+    var worker = await Tesseract.createWorker('spa', 1, { workerPath:CDN.tessWorker, corePath:CDN.tessCore, langPath:CDN.tessLang,
+      logger:function(m){ if(m.status === 'recognizing text' && progreso) progreso(Math.round(m.progress * 100)); } });
+    try { var r = await worker.recognize(imagen); return r.data.text || ''; } finally { await worker.terminate(); }
+  }
+  async function leerPDF(file, progreso){
+    await script(CDN.pdf);
+    pdfjsLib.GlobalWorkerOptions.workerSrc = CDN.pdfWorker;
+    var doc = await pdfjsLib.getDocument({ data: await file.arrayBuffer() }).promise, out = [];
+    for(var i = 1; i <= Math.min(doc.numPages, 8); i++){
+      var pg = await doc.getPage(i), tc = await pg.getTextContent();
+      // reconstruir renglones por posición vertical
+      var lineas = {}, ys = [];
+      tc.items.forEach(function(it){ var y = Math.round(it.transform[5] / 3); if(!lineas[y]){ lineas[y] = []; ys.push(y); } lineas[y].push({ x:it.transform[4], s:it.str }); });
+      var txt = ys.sort(function(a, b){ return b - a; }).map(function(y){ return lineas[y].sort(function(a, b){ return a.x - b.x; }).map(function(o){ return o.s; }).join(' '); }).join('\n');
+      if(txt.replace(/\s/g, '').length < 20){
+        // PDF escaneado: se dibuja la página y se lee como foto
+        var vp = pg.getViewport({ scale:2 }), cv = document.createElement('canvas'); cv.width = vp.width; cv.height = vp.height;
+        await pg.render({ canvasContext:cv.getContext('2d'), viewport:vp }).promise;
+        txt = await ocr(cv, function(p){ if(progreso) progreso(p, 'página ' + i); });
+      }
+      out.push(txt);
+    }
+    return out.join('\n');
+  }
+  window._leerArchivoTexto = async function(file, progreso){
+    if(/pdf$/i.test(file.type) || /\.pdf$/i.test(file.name)) return leerPDF(file, progreso);
+    return ocr(file, progreso);
+  };
+  // Botón "📷 Foto o PDF" que vuelca el texto leído en un textarea
+  window._botonFotoTexto = function(textarea, alTerminar){
+    var w = document.createElement('div'); w.style.cssText = 'display:flex;gap:8px;align-items:center;margin:6px 0;flex-wrap:wrap';
+    w.innerHTML = '<label style="display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border:1.5px solid var(--blue);border-radius:9px;color:var(--blue);background:var(--blue-light);font-size:12.5px;font-weight:700;cursor:pointer">📷 Foto o PDF del informe<input type="file" accept="image/*,application/pdf" multiple style="display:none"></label>'
+      + '<span class="ft-est" style="font-size:12px;color:#64748b">También podés dictar: hacé clic en el recuadro y usá tu dictado (Handy o Win + H).</span>';
+    var inp = w.querySelector('input'), est = w.querySelector('.ft-est');
+    inp.onchange = async function(){
+      var files = Array.prototype.slice.call(inp.files || []); if(!files.length) return;
+      try {
+        for(var i = 0; i < files.length; i++){
+          est.textContent = '⏳ Leyendo ' + files[i].name + '…';
+          var t = await window._leerArchivoTexto(files[i], function(p, extra){ est.textContent = '⏳ Leyendo ' + (extra ? extra + ' ' : '') + p + '%…'; });
+          textarea.value = (textarea.value ? textarea.value + '\n' : '') + t;
+        }
+        est.textContent = '✓ Listo. Revisá lo reconocido abajo.';
+        textarea.dispatchEvent(new Event('input', { bubbles:true }));
+        if(alTerminar) alTerminar();
+      } catch(e) { est.textContent = '⚠ ' + e.message; }
+      inp.value = '';
+    };
+    textarea.parentNode.insertBefore(w, textarea);
+    return w;
+  };
+  // Agregar el botón al "Pegar laboratorio"
+  if(typeof window.labPegarAbrir === 'function'){
+    var olp = window.labPegarAbrir;
+    window.labPegarAbrir = function(){
+      var r = olp.apply(this, arguments);
+      setTimeout(function(){
+        var ta = document.querySelector('.lp-txt'); if(!ta || ta._foto) return; ta._foto = true;
+        _botonFotoTexto(ta);
+        var t = ta.closest('div[class], .modal-box, div'); var tit = ta.parentNode && ta.parentNode.parentNode && ta.parentNode.parentNode.querySelector('h3, .ui-modal-titulo');
+        var ayuda = ta.previousElementSibling && ta.previousElementSibling.previousElementSibling;
+        if(ayuda && /Copiá el texto/.test(ayuda.textContent)) ayuda.textContent = 'Pegá el texto del informe, dictalo, o subí la foto o el PDF. Después revisás lo reconocido antes de cargarlo.';
+      }, 0);
+      return r;
+    };
+  }
+
+  // ═══ Estudios: reconocimiento del informe (dictado, pegado, foto o PDF) ═══
+  var sinAc = function(t){ return String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase(); };
+  var CATS = [
+    ['ECOCARDIO', /ecocardiogra|eco\s*doppler\s*cardiaco|ecocardio|\bett\b/],
+    ['DOPPLER CAROTÍDEO, FEMORAL Y OTROS', /doppler|eco\s*doppler\s*(de\s*)?(vasos|carot|arter)|carotid|intima\s*media/],
+    ['MAPA', /\bmapa\b|monitoreo\s+ambulatorio|presion\s+arterial\s+ambulatoria/],
+    ['HOLTER', /holter/],
+    ['ERGOMETRÍA', /ergometr|prueba\s+(ergometrica|de\s+esfuerzo)|\bpeg\b/],
+    ['ECO ABDOMINAL', /ecografia\s+abdominal|eco\s+abdominal|ecografia\s+de\s+abdomen|higado|vesicula/],
+    ['DENSITOMETRÍA', /densitometr|\bdmo\b|t\s*-?\s*score/],
+    ['ECG', /electrocardiogra|\becg\b|\bekg\b/],
+    ['FONDO DE OJO', /fondo\s+de\s+ojo/], ['SCORE CALCIO CORONARIO', /score\s+de\s+calcio|calcio\s+coronario|agatston/],
+    ['VOP', /velocidad\s+de\s+(la\s+)?onda\s+de\s+pulso|\bvop\b/], ['SPECT CARDÍACO', /spect|perfusion\s+miocardica|camara\s+gamma/],
+    ['ECOSTRESS CARDÍACO', /eco\s*stress|ecoestres/], ['TC ENCÉFALO', /tomografia.*(cerebr|encef|craneo)|\btac\b/], ['RNM ENCÉFALO', /resonancia.*(cerebr|encef)|\brmn\b|\brnm\b/],
+    ['CARDIOGRAFÍA', /cardiografia/]
+  ];
+  function detectarCat(t){ var l = sinAc(t); for(var i = 0; i < CATS.length; i++) if(CATS[i][1].test(l)) return CATS[i][0]; return ''; }
+  var NUM = '(-?\\d+(?:[.,]\\d+)?)';
+  function numTras(l, re, ventana){
+    var m = re.exec(l); if(!m) return null;
+    var resto = l.slice(m.index + m[0].length, m.index + m[0].length + (ventana || 40));
+    var n = new RegExp('^[^\\d-]*?' + NUM).exec(resto); return n ? n[1].replace(',', '.') : null;
+  }
+  function par(l, re){ // "128/78" después de la etiqueta
+    var m = re.exec(l); if(!m) return null;
+    var n = /(\d{2,3})\s*\/\s*(\d{2,3})/.exec(l.slice(m.index, m.index + m[0].length + 40)); return n ? [n[1], n[2]] : null;
+  }
+  function negado(l, idx){ return /(sin|no se (observan?|evidencian?|detectan?|registran?)|ausencia de|niega|no presenta)\s+([\w\s,]{0,25})$/.test(l.slice(Math.max(0, idx - 45), idx)); }
+  function siNo(l, re){ var m = re.exec(l); if(!m) return null; return negado(l, m.index) ? 'No' : 'Sí'; }
+  function grado(s){ s = String(s || '').toLowerCase(); return /iii|\b3\b/.test(s) ? '3' : /ii|\b2\b/.test(s) ? '2' : /\bi\b|\b1\b|primer/.test(s) ? '1' : ''; }
+  function analizarEstudio(texto, cat){
+    var t = window._normalizarDictado(texto), l = sinAc(t).replace(/\s+/g, ' ');
+    cat = cat || detectarCat(t);
+    var v = {}, put = function(k, x){ if(x != null && x !== '') v[k] = String(x); };
+    var fecha = ''; var mf = t.match(/\b(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})\b/); if(mf){ var y = mf[3].length === 2 ? '20' + mf[3] : mf[3]; fecha = y + '-' + String(mf[2]).padStart(2, '0') + '-' + String(mf[1]).padStart(2, '0'); if(isNaN(new Date(fecha + 'T12:00:00'))) fecha = ''; }
+    if(cat === 'ECOCARDIO'){
+      put('eco_AI', numTras(l, /auricula izquierda|\bai\b/)); put('eco_DDVI', numTras(l, /\bddvi\b|diametro diastolico/));
+      put('eco_SIV', numTras(l, /\bsiv\b|septum|septo interventricular/)); put('eco_PP', numTras(l, /pared posterior|\bpp\b/));
+      put('eco_FE', numTras(l, /fraccion de eyeccion|\bfey?\b|\bfevi\b/)); put('eco_Ee', numTras(l, /e\s*\/\s*e'?\s*(promedio)?|relacion e sobre e/));
+      put('eco_GLS', numTras(l, /strain (longitudinal )?global|\bgls\b/)); put('eco_SAI', numTras(l, /strain (de |de la )?(auricula|ai)\b|reservorio/));
+      var vv = /valvulopatia|insuficiencia (mitral|aortica|tricuspidea)|estenosis (aortica|mitral)/.exec(l); if(vv) put('eco_Valv', negado(l, vv.index) ? 'No' : (/leve|trivial|minima/.test(l.slice(vv.index, vv.index + 40)) && /insuficiencia/.test(vv[0]) ? 'Sí' : 'Sí'));
+      var dd = /disfuncion diastolica\s*(de\s*)?(grado\s*)?(iii|ii|i|1|2|3)?/.exec(l);
+      if(dd) put('eco_DD', negado(l, dd.index) ? 'No' : (grado(dd[3]) || '1'));
+      else if(/funcion diastolica (conservada|normal)/.test(l)) put('eco_DD', 'No');
+    } else if(cat === 'ECG'){
+      if(/ritmo sinusal/.test(l)) put('ecg_RS', 'Sí'); else if(/fibrilacion auricular|aleteo|flutter/.test(l)) put('ecg_RS', 'No');
+      if(/eje (normal|conservado)/.test(l)) put('ecg_Eje', 'Conservado'); else if(/(desviado|desviacion)[\w\s]{0,15}izquierd|hemibloqueo anterior/.test(l)) put('ecg_Eje', 'Desv. I'); else if(/(desviado|desviacion)[\w\s]{0,15}derech/.test(l)) put('ecg_Eje', 'Desv. D');
+      var bav = /\bbav\b\s*(de\s*)?(1|2|3|primer|segundo|tercer)|bloqueo (a-?v|auriculoventricular)\s*(de\s*)?(1|2|3|primer|segundo|tercer)/.exec(l);
+      if(bav) put('ecg_BAV', negado(l, bav.index) ? 'No' : grado((bav[2] || bav[4] || '').replace('primer', '1').replace('segundo', '2').replace('tercer', '3')));
+      put('ecg_BRD', siNo(l, /bloqueo (completo |incompleto )?de rama derecha|\bbrd\b/)); put('ecg_BRI', siNo(l, /bloqueo (completo |incompleto )?de rama izquierda|\bbri\b/));
+      put('ecg_ESV', siNo(l, /extrasistoles? supraventricular|\besv\b/)); put('ecg_EV', siNo(l, /extrasistoles? ventricular|\bev\b/));
+      if(/sin extrasistoles|no se observan extrasistoles/.test(l)){ if(!v.ecg_ESV) put('ecg_ESV', 'No'); if(!v.ecg_EV) put('ecg_EV', 'No'); }
+      if(/sin bloqueos|sin trastornos de (la )?conduccion/.test(l)){ if(!v.ecg_BRD) put('ecg_BRD', 'No'); if(!v.ecg_BRI) put('ecg_BRI', 'No'); if(!v.ecg_BAV) put('ecg_BAV', 'No'); }
+    } else if(cat === 'HOLTER'){
+      if(/ritmo (de base )?sinusal/.test(l)) put('hol_Ritmo', 'Sinusal'); else if(/ritmo (de base )?(en )?fibrilacion auricular/.test(l)) put('hol_Ritmo', 'FA');
+      put('hol_FCmed', numTras(l, /(fc|frecuencia cardiaca) (media|promedio)/)); put('hol_FCmin', numTras(l, /(fc|frecuencia cardiaca) minima|minima/)); put('hol_FCmax', numTras(l, /(fc|frecuencia cardiaca) maxima|maxima/));
+      put('hol_ESV', numTras(l, /extrasistoles? supraventriculares?( aisladas)?( totales)?|\besv\b/)); put('hol_EV', numTras(l, /extrasistoles? ventriculares?( aisladas)?( totales)?|\bev\b/));
+      put('hol_TSV', siNo(l, /taquicardia(s)? supraventricular|\btsv\b|\btpsv\b/)); put('hol_TV', siNo(l, /taquicardia(s)? ventricular|\btv\b/));
+      put('hol_FAp', siNo(l, /fibrilacion auricular paroxistica|episodios? de fibrilacion auricular|\bfa paroxistica/)); put('hol_Pausas', siNo(l, /pausas?/));
+    } else if(cat === 'DOPPLER CAROTÍDEO, FEMORAL Y OTROS'){
+      put('dop_EIM', numTras(l, /espesor (intima[- ]media|miointimal)|\beim\b|\bimt\b/));
+      var est = /estenosis[^.]{0,40}?(\d{1,2})\s*%/.exec(l); if(est) put('dop_Esten', est[1]);
+      var re = /(placas?|ateroma\w*)/g, m, terr = { car:['dop_PlacaACID','dop_PlacaACII'], fem:['dop_PlacaFemD','dop_PlacaFemI'], sub:['dop_PlacaSubD','dop_PlacaSubI'] };
+      while((m = re.exec(l))){
+        // ventana = la misma oración, hasta la próxima mención de placa
+        var ini = Math.max(l.lastIndexOf('.', m.index) + 1, m.index - 30), fin = l.indexOf('.', m.index); if(fin < 0) fin = l.length;
+        re.lastIndex = m.index + m[0].length; var sig = /(placas?|ateroma\w*)/g; sig.lastIndex = m.index + m[0].length; var ms = sig.exec(l); if(ms && ms.index < fin) fin = ms.index;
+        var win = l.slice(ini, Math.min(fin, m.index + 110)), neg = negado(l, m.index), val = neg ? 'No' : 'Sí';
+        var tipos = []; if(/carot/.test(win)) tipos.push('car'); if(/femoral/.test(win)) tipos.push('fem'); if(/subclavi/.test(win)) tipos.push('sub');
+        if(/aort/.test(win)) put('dop_PlacaAorta', val);
+        tipos.forEach(function(tp){
+          var ambos = /ambas|bilateral|ambos/.test(win), der = /derech/.test(win), izq = /izquierd/.test(win);
+          if(ambos || (!der && !izq) || neg){ if(!(v[terr[tp][0]] === 'Sí' && neg)) put(terr[tp][0], val); if(!(v[terr[tp][1]] === 'Sí' && neg)) put(terr[tp][1], val); }
+          else { if(der) put(terr[tp][0], val); if(izq) put(terr[tp][1], val); }
+        });
+      }
+    } else if(cat === 'MAPA'){
+      var tom = /(\d{1,3})\s*(lecturas|tomas|mediciones|registros)/.exec(l); put('mapa_Tomas', tom ? tom[1] : numTras(l, /(lecturas|tomas|mediciones|registros)( validas| totales| efectivas)?/));
+      var p24 = par(l, /(24 ?h(oras)?|global|total|promedio general)/), pd = par(l, /(diurn\w*|actividad|vigilia)/), pn = par(l, /(nocturn\w*|descanso|sueno)/);
+      if(p24){ put('mapa_TAS24', p24[0]); put('mapa_TAD24', p24[1]); } if(pd){ put('mapa_TASd', pd[0]); put('mapa_TADd', pd[1]); } if(pn){ put('mapa_TASn', pn[0]); put('mapa_TADn', pn[1]); }
+      put('mapa_FC24', numTras(l, /(fc|frecuencia cardiaca) (media|promedio)/)); put('mapa_DETASd', numTras(l, /(desvio estandar|\bde\b)[\w\s]{0,20}(sistolica )?diurn\w*/)); put('mapa_PP24', numTras(l, /presion de pulso|\bpp\b/));
+      if(/riser|reverse dipper|patron invertido|ascenso nocturno/.test(l)) put('mapa_Patron', 'Riser (reverse dipper)'); else if(/(non|no)[ -]?dipper/.test(l)) put('mapa_Patron', 'Non dipper'); else if(/dipper extremo|extreme dipper/.test(l)) put('mapa_Patron', 'Dipper extremo'); else if(/dipper/.test(l)) put('mapa_Patron', 'Dipper');
+      put('mapa_HTAn', siNo(l, /hipertension (arterial )?nocturna|hta nocturna/)); put('mapa_Var', siNo(l, /variabilidad (aumentada|elevada)/));
+    } else if(cat === 'ECO ABDOMINAL'){
+      var es = /esteatosis|higado graso|infiltracion grasa/.exec(l);
+      if(es){ put('ecoabd_Est', negado(l, es.index) ? 'No' : 'Sí'); var g = /(leve|moderada|severa|grado\s*(i{1,3}|[123]))/.exec(l.slice(es.index - 20, es.index + 60)); if(g && v.ecoabd_Est === 'Sí') put('ecoabd_EstG', /leve|grado\s*(i|1)\b/.test(g[0]) ? 'Leve' : /moderad|ii|2/.test(g[0]) ? 'Moderada' : 'Severa'); }
+      var lit = /(micro)?litiasis|calculos? (vesicular|biliar)|colelitiasis/.exec(l);
+      if(lit){ put('ecoabd_Lit', negado(l, lit.index) ? 'No' : 'Sí'); if(v.ecoabd_Lit === 'Sí') put('ecoabd_LitT', /microlitiasis|barro biliar/.test(l) ? 'Micro' : (/litiasis|calculo/.test(lit[0]) ? 'Macro' : '')); }
+      if(/colecistectom/.test(l)) put('ecoabd_Colecis', 'Sí');
+      var otras = []; if(/pancrea\w*[^.]{0,40}(esteatosis|lipomatosis|infiltracion grasa)|(esteatosis|lipomatosis)[^.]{0,30}pancrea/.test(l)) otras.push('Pancreática'); if(/(esteatosis|infiltracion grasa)[^.]{0,30}renal/.test(l)) otras.push('Renal'); if(/(esteatosis|infiltracion grasa)[^.]{0,30}(bazo|esplen)/.test(l)) otras.push('Esplénica');
+      if(otras.length) put('ecoabd_EstOtras', otras.join(', '));
+    } else if(cat === 'ERGOMETRÍA'){
+      var mets = /(\d{1,2}(?:[.,]\d)?)\s*mets?\b/.exec(l); put('ergo_METS', mets ? mets[1].replace(',', '.') : numTras(l, /\bmets?\b/)); put('ergo_FCbas', numTras(l, /(fc|frecuencia cardiaca) (basal|de reposo|inicial)/));
+      put('ergo_FCmax', numTras(l, /(fc|frecuencia cardiaca) maxima( alcanzada)?/)); var pc = /(\d{2,3})\s*%[^.]{0,30}(teoric|maxim|predich)/.exec(l); if(pc) put('ergo_FCpct', pc[1]);
+      var pam = par(l, /(presion|tension|ta|pa) (arterial )?maxima/); if(pam) put('ergo_PAmax', pam[0]);
+      if(/respuesta (presora|tensional|hipertensiva)[^.]{0,20}(hipertensiva|exagerada)|respuesta hipertensiva/.test(l)) put('ergo_RespPA', 'Hipertensiva'); else if(/respuesta (presora|tensional)[^.]{0,20}(hipotensiva|plana|aplanada)/.test(l)) put('ergo_RespPA', 'Hipotensiva / plana'); else if(/respuesta (presora|tensional)[^.]{0,20}(normal|adecuada|fisiologica)/.test(l)) put('ergo_RespPA', 'Normal');
+      var sint = []; [['angor','Angor'],['angina','Angor'],['dolor precordial','Angor'],['disnea','Disnea'],['mareo','Mareo'],['palpitacion','Palpitaciones'],['claudicacion','Claudicación']].forEach(function(s){ var i = l.indexOf(s[0]); if(i >= 0 && !negado(l, i) && sint.indexOf(s[1]) < 0) sint.push(s[1]); });
+      if(sint.length){ put('ergo_Sint', 'Sí'); put('ergo_SintCual', sint.join(', ')); } else if(/asintomatic|sin sintomas/.test(l)) put('ergo_Sint', 'No');
+      var ecg = []; [['infradesnivel','Infradesnivel ST'],['depresion del st','Infradesnivel ST'],['supradesnivel','Supradesnivel ST'],['elevacion del st','Supradesnivel ST'],['inversion de (la )?onda t','Inversión de onda T'],['bloqueo de rama','Bloqueo de rama']].forEach(function(s){ var mm = new RegExp(s[0]).exec(l); if(mm && !negado(l, mm.index) && ecg.indexOf(s[1]) < 0) ecg.push(s[1]); });
+      if(ecg.length){ put('ergo_ECG', 'Sí'); put('ergo_ECGCual', ecg.join(', ')); } else if(/sin (cambios|alteraciones|modificaciones) (electrocardiograficos|del st|isquemicos|en el ecg)|sin cambios del segmento st/.test(l)) put('ergo_ECG', 'No');
+      var ar = []; [['extrasistoles? supraventricular|\\besv\\b','ESV aisladas'],['extrasistoles? ventricular(es)? (frecuentes|complejas|en duplas|bigemin)','EV frecuentes / complejas'],['extrasistoles? ventricular|\\bev\\b','EV aisladas'],['taquicardia supraventricular|\\btsv\\b','TSV'],['taquicardia ventricular|\\btv\\b','TV'],['fibrilacion auricular','FA']].forEach(function(s){ var mm = new RegExp(s[0]).exec(l); if(mm && !negado(l, mm.index) && ar.indexOf(s[1]) < 0 && !(s[1] === 'EV aisladas' && ar.indexOf('EV frecuentes / complejas') >= 0)) ar.push(s[1]); });
+      if(ar.length){ put('ergo_Arrit', 'Sí'); put('ergo_ArritCual', ar.join(', ')); } else if(/sin arritmias/.test(l)) put('ergo_Arrit', 'No');
+      if(/no concluyente|no valorable|insuficiente|submaxima no diagnostica/.test(l)) put('ergo_Res', 'No concluyente'); else if(/positiva (para isquemia)?|isquemia (inducible|positiva)/.test(l) && !/negativa/.test(l)) put('ergo_Res', 'Positiva para isquemia'); else if(/negativa|sin evidencia de isquemia/.test(l)) put('ergo_Res', 'Negativa para isquemia');
+    } else if(cat === 'DENSITOMETRÍA'){
+      if(/osteoporosis/.test(l) && !/sin osteoporosis/.test(l)) put('dmo_Res', 'Osteoporosis'); else if(/osteopenia|baja masa osea/.test(l)) put('dmo_Res', 'Osteopenia'); else if(/(densidad|masa) osea normal|dentro de (los )?(limites|parametros) normales/.test(l)) put('dmo_Res', 'Normal');
+      var tAfter = function(re){ var mm = re.exec(l); if(!mm) return null; var w = l.slice(mm.index, mm.index + 80); var n = /t[ -]?score[^\d-]{0,12}(-?\d+(?:[.,]\d+)?)/.exec(w) || /(-\d+(?:[.,]\d+)?)/.exec(w); return n ? n[1].replace(',', '.') : null; };
+      put('dmo_TCol', tAfter(/columna|lumbar|l1\s*-\s*l4/)); put('dmo_TCue', tAfter(/cuello (femoral|de femur)/)); put('dmo_TCad', tAfter(/cadera total|femur total/));
+      put('dmo_Z', numTras(l, /z[ -]?score/));
+    }
+    return { cat:cat, fecha:fecha, valores:v, texto:t };
+  }
+  window._estAnalizarTexto = analizarEstudio;
+
+  function rangoCat(cat){ var s = EST_FILAS.findIndex(function(f){ return f.cat && f.label === cat; }); if(s < 0) return null; var e = s + 1; while(e < EST_FILAS.length && !EST_FILAS[e].cat) e++; return [s, e]; }
+  function lbl(k){ var f = EST_FILAS.find(function(x){ return x.key === k; }); return f ? f.label : k; }
+
+  window.estDictadoAbrir = function(catInicial){
+    if(typeof estDatos === 'undefined' || !pacienteActual) return;
+    var opts = CATS.map(function(c){ return '<option value="' + _esc(c[0]) + '">' + _esc(c[0]) + '</option>'; }).join('');
+    var m = _uiModal('🎙 Estudio por dictado o foto',
+      '<div style="font-size:12.5px;color:#64748b;margin-bottom:6px">Dictá el informe, pegalo, o subí la foto o el PDF. Se reconocen los datos y se abre la carga del estudio ya completa para que la revises y guardes.</div>'
+      + '<textarea class="ed-txt" rows="7" style="width:100%;padding:10px;border:1.5px solid #e5e7eb;border-radius:10px;font:13px/1.5 var(--font-main);resize:vertical" placeholder="Ej.: Ecocardiograma del 5 de octubre: DDVI 48, septum 12, pared posterior 11, fracción de eyección 62%, disfunción diastólica grado 1…"></textarea>'
+      + '<div style="display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap;font-size:12.5px"><b>Estudio</b> <select class="ed-cat" style="padding:6px 8px;border:1.5px solid #e5e7eb;border-radius:8px;font:inherit"><option value="">— elegí —</option>' + opts + '</select><span class="ed-det" style="color:#64748b"></span></div>'
+      + '<div class="ed-prev" style="margin-top:8px;font-size:12.5px;max-height:38vh;overflow:auto"></div>'
+      + '<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:10px"><button type="button" class="ed-no" style="padding:8px 14px;border-radius:9px;border:1.5px solid #e5e7eb;background:#fff;cursor:pointer">Cancelar</button>'
+      + '<button type="button" class="ed-si" disabled style="padding:8px 16px;border-radius:9px;border:none;background:var(--teal);color:#fff;font-weight:700;cursor:pointer;opacity:.5">Revisar y guardar →</button></div>');
+    var ta = m.box.querySelector('.ed-txt'), sel = m.box.querySelector('.ed-cat'), prev = m.box.querySelector('.ed-prev'), btn = m.box.querySelector('.ed-si'), det = m.box.querySelector('.ed-det'), elegidaAMano = false, res = null;
+    ta.addEventListener('keydown', function(ev){ ev.stopPropagation(); });
+    _botonFotoTexto(ta);
+    if(catInicial){ sel.value = catInicial; elegidaAMano = true; }
+    sel.onchange = function(){ elegidaAMano = true; pintar(); };
+    setTimeout(function(){ ta.focus(); }, 50);
+    function pintar(){
+      var auto = detectarCat(ta.value);
+      if(!elegidaAMano && auto) sel.value = auto;
+      det.textContent = (!elegidaAMano && auto) ? '(detectado solo — podés cambiarlo)' : '';
+      if(!sel.value || !ta.value.trim()){ prev.innerHTML = ''; btn.disabled = true; btn.style.opacity = .5; return; }
+      res = analizarEstudio(ta.value, sel.value);
+      var ks = Object.keys(res.valores);
+      prev.innerHTML = (res.fecha ? '<div style="margin-bottom:4px"><b>Fecha:</b> ' + _fmtFechaCol(res.fecha) + '</div>' : '<div style="margin-bottom:4px;color:#64748b">Sin fecha en el texto: se usa la de hoy (la cambiás en la carga).</div>')
+        + (ks.length ? '<div style="display:flex;flex-wrap:wrap;gap:5px">' + ks.map(function(k){ return '<span style="background:#eef6ff;border:1px solid #cfe3fb;border-radius:999px;padding:3px 9px"><b>' + _esc(lbl(k)) + ':</b> ' + _esc(res.valores[k]) + '</span>'; }).join('') + '</div>' : '<div style="color:#b45309">No reconocí datos estructurados: el texto va a Comentarios.</div>')
+        + '<label style="display:flex;gap:6px;align-items:center;margin-top:8px;cursor:pointer"><input type="checkbox" class="ed-com"' + (ks.length ? '' : ' checked') + '> Guardar también el texto completo en Comentarios</label>';
+      btn.disabled = false; btn.style.opacity = 1;
+    }
+    var tmr; ta.addEventListener('input', function(){ clearTimeout(tmr); tmr = setTimeout(pintar, 250); });
+    m.box.querySelector('.ed-no').onclick = m.cerrar;
+    btn.onclick = function(){
+      if(!res || !sel.value) return;
+      var cat = sel.value, r = rangoCat(cat); if(!r) return;
+      var conTexto = !!(m.box.querySelector('.ed-com') || {}).checked;
+      m.cerrar();
+      abrirCargaRapidaEstudio(cat);
+      setTimeout(function(){
+        if(res.fecha){ var fi = document.getElementById('carga_est_fecha'); fi.value = res.fecha; _renderCargaEstCampos(); }
+        setTimeout(function(){
+          var vals = Object.assign({}, res.valores);
+          // texto completo a Comentarios / Nota
+          var kc = null; if(conTexto) for(var i = r[0] + 1; i < r[1]; i++){ var f = EST_FILAS[i]; if(f.nota && /Com|Nota$/.test(f.key)) kc = f.key; }
+          if(kc){ var fiC = EST_FILAS.findIndex(function(x){ return x.key === kc; }), elC = document.getElementById('carga_est_f_' + fiC); var tx = res.texto.trim(); if(elC) vals[kc] = (elC.value ? elC.value + '\n' : '') + tx; }
+          Object.keys(vals).forEach(function(k){
+            var fi = EST_FILAS.findIndex(function(x){ return x.key === k; }), el = document.getElementById('carga_est_f_' + fi); if(!el) return;
+            el.value = vals[k];
+            var w = el.nextElementSibling;
+            if(w && w.classList.contains('est-pills')){
+              var lista = String(vals[k]).split(/\s*,\s*/);
+              w.querySelectorAll('button').forEach(function(b){ b.classList.toggle('sel', el.tagName === 'SELECT' ? b.dataset.v === vals[k] : lista.indexOf(b.textContent) >= 0); });
+            }
+            if(el.tagName === 'TEXTAREA'){ el.style.height = 'auto'; el.style.height = Math.min(el.scrollHeight + 2, 200) + 'px'; }
+            var g = el.closest('.form-group'); if(g){ g.style.display = ''; g.classList.add('dict-auto'); }
+          });
+          if(window._estCondicionales) window._estCondicionales();
+          if(typeof showToast === 'function') showToast('Revisá lo marcado en amarillo y tocá Guardar.', 'info', 5000);
+        }, 120);
+      }, 80);
+    };
+  };
+})();
+</script>
+<style>
+.dict-auto{background:#fef9c3;border-radius:8px;box-shadow:0 0 0 4px #fef9c3}
 </style>
 </body>
 </html>
