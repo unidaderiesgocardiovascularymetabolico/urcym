@@ -329,7 +329,7 @@ function engancharArchivo(id, alCambiar){
     var ic = $('#'+id+'-ic');
     if(/^image\//.test(f.type) && window.URL){ ic.innerHTML = '<img class="prev" alt="" src="'+URL.createObjectURL(f)+'">'; }
     else ic.textContent = '📄';
-    alCambiar(f);
+    alCambiar(f); guardarBorrador();
   });
 }
 document.addEventListener('click', function(e){
@@ -345,7 +345,7 @@ S.onDatos = function(d){
 };
 
 function iniciarReserva(cfg, profId){
-  AYUDA = 'video';
+  AYUDA = 'video'; FLUJO = 'video';
   S.cfg = Object.assign({}, cfg, { profs: cfg.profs.filter(function(p){ return p.video; }) });
   S.prof = null; S.fecha = S.hora = null; S.dniOk = null; S.motivos = []; S.acepto = false; S.editMotivos = false;
   $('#titulo').textContent = 'Videoconsulta';
@@ -368,7 +368,7 @@ function render(){
   if(paso === 4){
     // Antes de pagar: todo lo elegido en un resumen, con opción de cambiar cada cosa
     $('#app').innerHTML = barraVolver() + htmlProgreso(variosV ? 4 : 3, variosV ? ['Profesional','Día y horario','Tus datos','Pago'] : ['Día y horario','Tus datos','Pago']) + htmlResumenTurno(variosV) + htmlSena(variosV ? 2 : 1);
-    enganchar(4); engancharResumen();
+    enganchar(4); engancharResumen(); guardarBorrador();
     return;
   }
   if(variosV){
@@ -404,7 +404,7 @@ function render(){
   if(paso < 4) html += cardBloqueada(nro+3, 'Seña');
   else html += htmlSena(nro+3);
   $('#app').innerHTML = barraVolver() + htmlProgreso(variosV ? paso : paso - 1, variosV ? ['Profesional','Día y horario','Tus datos','Pago'] : ['Día y horario','Tus datos','Pago']) + html;
-  enganchar(paso);
+  enganchar(paso); guardarBorrador();
 }
 function cap(s){ return s ? s.charAt(0).toUpperCase() + s.slice(1) : ''; }
 function htmlProgreso(actual, nombres){
@@ -665,7 +665,7 @@ function htmlSena(n){
   if(P.mp) metodos.push(['mercadopago','Mercado Pago']);
   x += '<div class="tabs'+(metodos.length===1?' uno':'')+'">' + metodos.map(function(m){ return '<button class="tab'+(S.metodo===m[0]?' sel':'')+'" data-metodo="'+m[0]+'">'+m[1]+'</button>'; }).join('') + '</div>';
   if(S.metodo === 'comprobante'){
-    x += '<p style="font-size:14.5px;margin-bottom:10px">Transferí <b>'+pesos(monto)+'</b> a:</p>' + htmlTransferencia(P.transferencia) + htmlArchivo('f-comp')
+    x += '<p style="font-size:14.5px;margin-bottom:10px">Transferí <b>'+pesos(monto)+'</b> a:<br><span class="nota" style="font-size:12.5px">Podés ir a la app de tu banco y volver: lo que cargaste queda guardado en este celular.</span></p>' + htmlTransferencia(P.transferencia) + htmlArchivo('f-comp')
       + htmlAviso('video', S) + '<div class="falta" id="falta-sena"></div><div class="error" id="e-sena"></div><button class="btn" id="b-confirmar" disabled>Confirmar turno</button>'
       + '<p class="nota centro">Al confirmar, el turno queda reservado y te llega un mail.</p>';
   } else {
@@ -714,7 +714,7 @@ async function enviarReserva(){
     if(S.total && S.prof.saldo > 0) fd.append('total', '1');
     Object.keys(S.dniOk).forEach(function(k){ if(k !== 'resumen' && S.dniOk[k]) fd.append(k, S.dniOk[k]); });
     if(S.metodo === 'comprobante') fd.append('comprobante', await prepararArchivo(S.archivo));
-    var r = await apiForm(fd);
+    var r = await apiForm(fd); await borrarBorrador();
     try{ localStorage.setItem('urcym_video_ultimo', r.token); }catch(_){}
     if(r.pagar_url){ location.href = r.pagar_url; return; }
     history.replaceState(null, '', '?t=' + encodeURIComponent(r.token));
@@ -825,7 +825,7 @@ function mostrarPerfil(id){
   document.querySelectorAll('[data-ir]').forEach(function(b){ b.onclick = function(){ irA(b.dataset.ir, p.id); }; });
 }
 function mostrarMenu(){
-  AYUDA = 'menu';
+  AYUDA = 'menu'; FLUJO = null;
   var l = serviciosDisponibles();
   $('#titulo').textContent = 'Turnos y consultas';
   $('#subtitulo').textContent = 'Elegí cómo querés atenderte o con quién.';
@@ -990,7 +990,7 @@ function engancharCancelarSinPago(que, token){
       return;
     }
     clearTimeout(tmr);
-    if(!token){ location.href = location.pathname; return; }
+    if(!token){ await borrarBorrador(); location.href = location.pathname; return; }
     var e = $('#e-cancelar-sp'); limpiarError(e); b.disabled = true; b.textContent = 'Cancelando…';
     try{
       await api({ accion:'cancelar_sin_pago', tipo: que === 'pedido' ? 'pedido' : 'turno', token: token });
@@ -1027,9 +1027,84 @@ function mostrarCrono(){
 
 /* ═══════════════════ Recetas y consultas por mensaje ═══════════════════ */
 var Q = {};
+/* ═══════════ Borrador: si el celular cierra la página (por ejemplo al ir a la app del banco
+   a transferir), al volver se retoma exactamente donde estaba, con el comprobante y las fotos.
+   Se guarda solo en este dispositivo (IndexedDB) y se borra al enviar o cancelar. ═══════════ */
+var FLUJO = null;
+function _idb(){ return new Promise(function(res, rej){ try { var r = indexedDB.open('urcym', 1); r.onupgradeneeded = function(){ r.result.createObjectStore('kv'); }; r.onsuccess = function(){ res(r.result); }; r.onerror = function(){ rej(r.error); }; } catch(e){ rej(e); } }); }
+async function _idbSet(k, v){ var db = await _idb(); return new Promise(function(res, rej){ var t = db.transaction('kv', 'readwrite'); t.objectStore('kv').put(v, k); t.oncomplete = function(){ res(); }; t.onerror = function(){ rej(t.error); }; }); }
+async function _idbGet(k){ var db = await _idb(); return new Promise(function(res){ var g = db.transaction('kv', 'readonly').objectStore('kv').get(k); g.onsuccess = function(){ res(g.result || null); }; g.onerror = function(){ res(null); }; }); }
+async function borrarBorrador(){ try { var db = await _idb(); db.transaction('kv', 'readwrite').objectStore('kv').delete('borrador'); } catch(e) {} }
+var _NO_GUARDAR = { render:1, onDatos:1, profs:1, cfg:1, enviando:1, _busqN:1, archivo:1, adjuntos:1 };
+function _plano(o){
+  var out = {};
+  Object.keys(o || {}).forEach(function(k){
+    var v = o[k]; if(_NO_GUARDAR[k] || typeof v === 'function') return;
+    if(k === 'prof'){ out.profId = v ? v.id : null; return; }
+    try { out[k] = JSON.parse(JSON.stringify(v)); } catch(e) {}
+  });
+  return out;
+}
+var _bTimer = null;
+function guardarBorrador(){ clearTimeout(_bTimer); _bTimer = setTimeout(guardarBorradorYa, 250); }
+async function guardarBorradorYa(){
+  try {
+    var b = null;
+    if(FLUJO === 'pedido' && Q && Q.datos && Q.detalleOk && !Q.enviando)   // solo al llegar al pago (cuando se va al banco)
+      b = { flujo:'pedido', tipo:Q.tipo, d:_plano(Q), archivo:Q.archivo || null, adjuntos:(Q.adjuntos || []).slice(), at:Date.now(),
+            resumen:(Q.tipo === 'receta' ? 'pedido de receta' : 'consulta por mensaje') + (Q.prof ? ' · ' + Q.prof.nombre : '') };
+    else if(FLUJO === 'video' && S && S.hora && S.dniOk && !S.enviando)
+      b = { flujo:'video', d:_plano(S), archivo:S.archivo || null, at:Date.now(),
+            resumen:'videoconsulta' + (S.prof ? ' con ' + S.prof.nombre : '') + ' · ' + (S.diaEtiqueta || S.fecha) + ' ' + S.hora + ' h' };
+    if(b) await _idbSet('borrador', b);
+  } catch(e) {}
+}
+document.addEventListener('visibilitychange', function(){ if(document.visibilityState === 'hidden') guardarBorradorYa(); });
+window.addEventListener('pagehide', function(){ guardarBorradorYa(); });
+function _marcarArchivo(id, f){
+  var box = $('#' + id + '-box'); if(!box || !f) return;
+  box.classList.add('lleno'); $('#' + id + '-t').textContent = 'Comprobante listo ✓'; $('#' + id + '-s').textContent = (f.name || 'comprobante') + ' · tocá para cambiarlo';
+  var ic = $('#' + id + '-ic'); if(ic){ if(/^image\//.test(f.type) && window.URL) ic.innerHTML = '<img class="prev" alt="" src="' + URL.createObjectURL(f) + '">'; else ic.textContent = '📄'; }
+}
+function retomarBorrador(b){
+  if(b.flujo === 'pedido'){
+    iniciarPedido(b.tipo, b.d.profId);
+    var p = Q.profs.find(function(x){ return x.id === b.d.profId; }) || Q.prof;
+    Object.assign(Q, b.d); delete Q.profId; Q.prof = p; Q.archivo = b.archivo || null; Q.adjuntos = b.adjuntos || []; Q.enviando = false;
+    renderPedido(); _marcarArchivo('f-qcomp', Q.archivo);
+    if(Q.archivo){ var bc = $('#b-qenviar'); if(bc) bc.disabled = !Q.acepto; avisoFalta('falta-q', Q, 'pago'); }
+  } else {
+    iniciarReserva(CFG, b.d.profId);
+    var pr = S.cfg.profs.find(function(x){ return x.id === b.d.profId; }) || S.prof;
+    Object.assign(S, b.d); delete S.profId; S.prof = pr; S.archivo = b.archivo || null; S.enviando = false;
+    render(); _marcarArchivo('f-comp', S.archivo);
+    if(S.archivo){ var bs = $('#b-confirmar'); if(bs) bs.disabled = !S.acepto || !!S.editMotivos; avisoFalta('falta-sena', S, 'la seña'); }
+  }
+  var dest = $('#seccion-pago') || $('#seccion-sena') || $('#seccion-detalle');
+  var aviso = document.createElement('div'); aviso.className = 'aviso verde'; aviso.style.margin = '0 0 12px';
+  aviso.innerHTML = '👍 <b>Retomamos tu ' + h(b.resumen.split(' · ')[0]) + ' donde lo dejaste.</b>' + (b.archivo ? ' El comprobante ya está adjunto.' : ' Si ya transferiste, adjuntá el comprobante y listo.');
+  if(dest){ dest.insertBefore(aviso, dest.children[1] || null); setTimeout(function(){ dest.scrollIntoView({ behavior:'smooth', block:'start' }); }, 120); }
+}
+// Al abrir la página: si quedó algo sin terminar (últimas 24 h), se retoma solo o se ofrece
+async function revisarBorrador(s){
+  var b = null; try { b = await _idbGet('borrador'); } catch(e) {}
+  if(!b || Date.now() - b.at > 24 * 3600e3){ if(b) borrarBorrador(); return false; }
+  var mismo = (b.flujo === 'video' && s === 'video') || (b.flujo === 'pedido' && (s === b.tipo || (s === 'repetir' && b.tipo === 'receta')));
+  if(mismo){ retomarBorrador(b); return true; }
+  if(!s){
+    var app = $('#app'); if(!app) return false;
+    var c = document.createElement('section'); c.className = 'card'; c.id = 'borrador-card'; c.style.borderColor = '#86efac';
+    c.innerHTML = '<p style="margin:0 0 10px;font-size:15px">📝 Tenés un <b>' + h(b.resumen) + '</b> sin terminar.</p>'
+      + '<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" id="b-borr-si" style="flex:1;margin:0">Continuar donde lo dejé</button><button class="btn sec" id="b-borr-no" style="flex:0 0 auto;margin:0;width:auto;padding:0 16px">Descartar</button></div>';
+    app.insertBefore(c, app.firstChild);
+    $('#b-borr-si').onclick = function(){ history.replaceState(null, '', '?s=' + (b.flujo === 'video' ? 'video' : b.tipo)); window.scrollTo(0, 0); retomarBorrador(b); };
+    $('#b-borr-no').onclick = function(){ borrarBorrador(); c.remove(); };
+  }
+  return false;
+}
 var OS_COMUNES = ['OSDE','Swiss Medical','Galeno','Medifé','OMINT','Sancor Salud','Hospital Italiano','Hospital Alemán','IOMA','PAMI','OSECAC','Accord Salud','Particular / sin cobertura'];
 function iniciarPedido(tipo, profId, opt){
-  AYUDA = tipo; opt = opt || {};
+  AYUDA = tipo; opt = opt || {}; FLUJO = 'pedido';
   var profs = CFG.profs.filter(function(p){ return tipo === 'receta' ? p.recetas : p.consultas; });
   var elegido = profId ? profs.find(function(p){ return p.id === profId; }) : null;
   Q = { tipo:tipo, profs:profs, prof: elegido || (profs.length === 1 ? profs[0] : null), pac:null, otroMail:false, datos:null,
@@ -1138,6 +1213,7 @@ function renderPedido(){
   if(paso === 2) engancharDatos(Q);
   if(paso === 3) (Q.tipo === 'receta' ? engancharReceta : engancharConsulta)();
   if(paso === 4) engancharPagoPedido();
+  guardarBorrador();
 }
 
 /* ── Receta ── */
@@ -1492,7 +1568,7 @@ function htmlPagoPedido(n){
   x += '<div class="tabs'+(metodos.length===1?' uno':'')+'">' + metodos.map(function(m){ return '<button class="tab'+(Q.metodo===m[0]?' sel':'')+'" data-qmetodo="'+m[0]+'">'+m[1]+'</button>'; }).join('') + '</div>';
   var accion = Q.tipo === 'receta' ? 'Enviar pedido' : 'Enviar consulta';
   if(Q.metodo === 'comprobante'){
-    x += '<p style="font-size:14.5px;margin-bottom:10px">Transferí <b>'+pesos(monto)+'</b> a:</p>' + htmlTransferencia(P.transferencia) + htmlArchivo('f-qcomp')
+    x += '<p style="font-size:14.5px;margin-bottom:10px">Transferí <b>'+pesos(monto)+'</b> a:<br><span class="nota" style="font-size:12.5px">Podés ir a la app de tu banco y volver: lo que cargaste queda guardado en este celular.</span></p>' + htmlTransferencia(P.transferencia) + htmlArchivo('f-qcomp')
       + aviso() + '<div class="falta" id="falta-q"></div><div class="error" id="e-qpago"></div><button class="btn" id="b-qenviar" disabled>'+accion+'</button>';
   } else {
     x += '<p style="font-size:14.5px">Vas a pagar <b>'+pesos(monto)+'</b> con Mercado Pago. Cuando se acredite, el pedido nos llega solo y te avisamos por mail.</p>'
@@ -1532,7 +1608,7 @@ async function enviarPedido(){
       for(var i = 0; i < Q.adjuntos.length; i++) fd.append('adjuntos', await prepararArchivo(Q.adjuntos[i]));
     }
     if(Q.metodo === 'comprobante') fd.append('comprobante', await prepararArchivo(Q.archivo));
-    var r = await apiForm(fd);
+    var r = await apiForm(fd); await borrarBorrador();
     if(r.pagar_url){ location.href = r.pagar_url; return; }
     history.replaceState(null, '', '?p=' + encodeURIComponent(r.token));
     verPedido(r.token, { recien:true });
@@ -1862,6 +1938,7 @@ $('#b-ayuda').onclick = abrirAyuda;
     CFG = cfg;
     var s = q.get('s');
     var pp = q.get('pr') || undefined;
+    if(['video','receta','consulta','repetir'].indexOf(s) >= 0 || !s){ revisarBorrador(s || '').then(function(ok){ if(!ok && s) irA(s === 'repetir' ? 'repetir' : s, pp); }); if(s) return; }
     if(s === 'prof' && pp) irA('prof', pp);
     else if(s === 'mis') irA('mis');
     else if(s === 'repetir' && serviciosDisponibles().some(function(x){ return x.id === 'receta'; })) irA('repetir', pp);
