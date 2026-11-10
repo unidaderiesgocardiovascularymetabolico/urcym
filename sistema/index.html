@@ -2,7 +2,7 @@
 <html lang="es-AR">
 <head>
   <meta charset="UTF-8" />
-  <script>var URCYM_BUILD = '2026-11-10-0115';</script>
+  <script>var URCYM_BUILD = '2026-11-10-0145';</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Evaluaciones cardiometabólicas — Sistema de Historia Clínica</title>
 
@@ -9932,6 +9932,7 @@ function generarTextoClinico(c, meds) {
   const gpac = [c.gpac_g,c.gpac_p,c.gpac_a,c.gpac_c].filter(v=>v!=null&&v!=='');
   if(gpac.length===4) ginList.push('G'+c.gpac_g+'P'+c.gpac_p+'A'+c.gpac_a+'C'+c.gpac_c);
   if(ginList.length) lines.push('<b>Ant. Ginecológicos:</b> '+ginList.join(' · '));
+  if(window.macTexto && macTexto(c)) lines.push('<b>MAC:</b> '+macTexto(c));
   const _famDet = (window._famDetalleTexto ? window._famDetalleTexto(c.fam_detalle) : {});
   const famList = Object.keys(FAM_NAMES).filter(d=>c['fam_'+d]).map(d=>FAM_NAMES[d] + (_famDet[d] ? ' (' + _famDet[d] + ')' : ''));
   if(famList.length) lines.push('<b>Ant. Familiares:</b> '+famList.join(' · '));
@@ -10135,6 +10136,7 @@ function generarTextoCambiosClinicos(nuevo, anterior, medsNuevo, medsAnterior) {
   NOTAS.forEach(function(n){
     if(cambio(nuevo[n.key], anterior[n.key]) && txt(nuevo[n.key])) lines.push(n.label+': '+txt(nuevo[n.key]));
   });
+  if(window.macTexto){ const macN = macTexto(nuevo||{}), macA = macTexto(anterior||{}); if(macN && macN !== macA) lines.push('Método anticonceptivo (MAC): '+macN); }
 
   if(!lines.length) return '';
   return '<div class="bloque-clinico" data-modo="cambios" style="font-family:Arial,sans-serif;font-size:10pt;color:#333;border:1px solid #e0e0e0;padding:4px 10px;border-radius:6px;margin-bottom:6px;line-height:1.5">'+
@@ -10212,6 +10214,9 @@ async function guardarClinica() {
     otras_enfermedades:document.getElementById('dx_otras_enfermedades')?.value?.trim()||null,
     cardio_notas:document.getElementById('cardio_notas_generales')?.value||null,
     gineco_notas:document.getElementById('gineco_notas_generales')?.value||null,
+    mac_metodo:document.getElementById('mac_metodo')?.value||null,
+    mac_compuesto:document.getElementById('mac_compuesto')?.value||null,
+    mac_marca:(document.getElementById('mac_marca')?.value||'').trim()||null,
     fam_notas:document.getElementById('fam_notas_generales')?.value||null,
     med_notas:document.getElementById('med_notas_generales')?.value||null,
     act_notas:document.getElementById('act_notas_generales')?.value||null,
@@ -10377,6 +10382,7 @@ async function cargarDatosClinica(dni) {
   {const otrasEnf=document.getElementById('dx_otras_enfermedades');if(otrasEnf)otrasEnf.value='';}
   {const cardioNotes=document.getElementById('cardio_notas_generales');if(cardioNotes)cardioNotes.value='';}
   {const ginecoNotes=document.getElementById('gineco_notas_generales');if(ginecoNotes)ginecoNotes.value='';}
+  ['mac_metodo','mac_compuesto','mac_marca'].forEach(function(id){const el=document.getElementById(id);if(el)el.value='';}); if(window.macActualizarUI) macActualizarUI();
   {const famNotes=document.getElementById('fam_notas_generales');if(famNotes)famNotes.value='';}
   {const medNotes=document.getElementById('med_notas_generales');if(medNotes)medNotes.value='';}
   {const actNotes=document.getElementById('act_notas_generales');if(actNotes)actNotes.value='';}
@@ -10471,6 +10477,11 @@ async function cargarDatosClinica(dni) {
   if(cardioNotes) cardioNotes.value = data.cardio_notas || '';
   const ginecoNotes = document.getElementById('gineco_notas_generales');
   if(ginecoNotes) ginecoNotes.value = data.gineco_notas || '';
+  { const mm = document.getElementById('mac_metodo'); if(mm){ if(data.mac_metodo && !Array.prototype.some.call(mm.options, function(o){ return o.value === data.mac_metodo; })) mm.add(new Option(data.mac_metodo, data.mac_metodo)); mm.value = data.mac_metodo || ''; }
+    if(window.macActualizarUI) macActualizarUI();
+    const mc = document.getElementById('mac_compuesto'); if(mc && data.mac_compuesto){ if(!Array.prototype.some.call(mc.options, function(o){ return o.value === data.mac_compuesto; })) mc.add(new Option(data.mac_compuesto, data.mac_compuesto)); mc.value = data.mac_compuesto; }
+    const mb = document.getElementById('mac_marca'); if(mb) mb.value = data.mac_marca || '';
+    if(window.macActualizarUI) macActualizarUI(); }
   const famNotes = document.getElementById('fam_notas_generales');
   if(famNotes) famNotes.value = data.fam_notas || '';
   const medNotes = document.getElementById('med_notas_generales');
@@ -15961,6 +15972,7 @@ function renderAlertasPaciente() {
       if(!tieneDxGineco && !tieneGpac && !tieneNotasGineco) {
         alertas.push('Sin antecedentes ginecoobstétricos registrados — completalos en la pestaña Ginecológicos.');
       }
+      if(!c.mac_metodo && !c.dx_menopausia) alertas.push('Sin método anticonceptivo (MAC) registrado — completalo en la pestaña Ginecológicos.');
     }
   } catch(e) {
     console.error('renderAlertasPaciente:', e);
@@ -21190,6 +21202,14 @@ function _obeGenerarHTMLInforme(opts) {
 
     <!-- TAB GINECO -->
     <div id="tab_gineco" class="ctab-content" style="display:none">
+      <div class="mac-box">
+        <div class="mac-tit">💊 MAC — Método anticonceptivo <span class="mac-falta" id="mac_falta" style="display:none">⚠ Falta registrar</span></div>
+        <div class="mac-grid">
+          <div><label for="mac_metodo">Método</label><select id="mac_metodo" onchange="macActualizarUI()"><option value="">— Sin registrar —</option></select></div>
+          <div id="mac_comp_wrap" style="display:none"><label for="mac_compuesto">Combinación</label><select id="mac_compuesto" onchange="macActualizarUI()"></select></div>
+          <div id="mac_marca_wrap" style="display:none"><label for="mac_marca">Marca</label><input id="mac_marca" list="mac_marcas_dl" placeholder="Escribí o elegí la marca" autocomplete="off" onchange="macMarcaEscrita()"><datalist id="mac_marcas_dl"></datalist></div>
+        </div>
+      </div>
       <div class="dx-grid3">
         <label class="dx-item dx-pink"><input type="checkbox" id="dx_dbtg"> DBT Gestacional</label>
         <label class="dx-item dx-pink"><input type="checkbox" id="dx_htag"> HTA Gestacional</label>
@@ -36146,5 +36166,100 @@ function _cargaEstPrec(p){
   window._tablasCargando = function(){ return cargando > 0; };
 })();
 </script>
+<script>
+/* ════════ MAC — método anticonceptivo (Ginecológicos) ════════
+   Columnas: paciente_clinica.mac_metodo / mac_compuesto / mac_marca (SQL 14).
+   Marcas: vademécums de anticonceptivos de obras sociales argentinas (SSS 2023). */
+(function(){
+  var M = {
+    'ACO combinado (pastillas)': {
+      'Etinilestradiol + levonorgestrel': ['Afrodita','Anubis','April','Elektra','Evelea MD','Femexin','Forlady','Microgynon','Microvlar','Miranova','Neogynon','Nicolle','Nordette','Norfen','Norgestrel Minor','Norgestrel Plus','Tridestan N','Triquilar'],
+      'Etinilestradiol + gestodeno': ['Aleli','Biofem','Cuidafem','Femiane','Ginelea','Gynovin','Haneda','Harmonet','Livianne','Minesse','Mirelle','Secret 28','Venisse'],
+      'Etinilestradiol + desogestrel': ['Marvelon','Mercilon'],
+      'Etinilestradiol + drospirenona': ['Damsel','Damsella','Diva','Divina','Isis','Isis Fe','Isis Mini','Isis Mini 24','Isis Mini Fe','Jade','Kala','Kir','Kirum','Kirumelle','Máxima','Yasmin','Yasminelle','Yaz','Yaz Metafolin'],
+      'Etinilestradiol + ciproterona': ['Avancel','Diane 35','Mileva 35','Zinnia'],
+      'Etinilestradiol + dienogest': ['Dienopil','Florence'],
+      'Etinilestradiol + norgestimato': ['Cilest','Tridette'],
+      'Etinilestradiol + clormadinona': [],
+      'Valerato de estradiol + dienogest': ['Azucena','Qlaira','Rubí'],
+      'Estradiol + nomegestrol': ['Amapoli','Femiden','Miranda','Signorina','Suanel','Zoely'],
+      'Estetrol + drospirenona': []
+    },
+    'Pastillas solo progestágeno': {
+      'Desogestrel': ['Camelia','Carmín','Cerazette','Lumilac','Pink'],
+      'Levonorgestrel': ['Microlut','Norgestrel Continuo'],
+      'Linestrenol': ['Exluton'],
+      'Drospirenona': []
+    },
+    'Inyectable mensual': {
+      'Valerato de estradiol + enantato de noretisterona': ['Mesigyna'],
+      'Enantato de estradiol + algestona': ['Atrimon']
+    },
+    'Inyectable trimestral': { 'Medroxiprogesterona': [] },
+    'Implante subdérmico': { 'Etonogestrel': ['Implanon NXT'] },
+    'DIU con levonorgestrel (SIU)': { 'Levonorgestrel': ['Kyleena','Mirena'] },
+    'DIU de cobre': {},
+    'Parche transdérmico': { 'Etinilestradiol + norelgestromina': ['Evra'] },
+    'Anillo vaginal': { 'Etinilestradiol + etonogestrel': ['Circlet','Ellering','NuvaRing'] },
+    'Preservativo': {}, 'Diafragma': {},
+    'Métodos de conocimiento de la fertilidad': {}, 'Lactancia (MELA)': {},
+    'Ligadura tubaria': {}, 'Vasectomía de la pareja': {},
+    'Ninguno': {}, 'No corresponde (menopausia / histerectomía)': {}, 'Otro': {}
+  };
+  window.MAC_DATOS = M;
+  function llenarMetodos(){ var sel = document.getElementById('mac_metodo'); if(!sel || sel.dataset.ok) return; sel.dataset.ok = '1'; Object.keys(M).forEach(function(m){ sel.add(new Option(m, m)); }); }
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', llenarMetodos); else llenarMetodos();
+  var BRAND = {}; Object.keys(M).forEach(function(m){ Object.keys(M[m]).forEach(function(c){ M[m][c].forEach(function(b){ BRAND[b.toLowerCase()] = [m, c, b]; }); }); });
+  var $ = function(id){ return document.getElementById(id); };
+  var esc = function(s){ return String(s == null ? '' : s).replace(/[&<>"]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); };
+
+  function opts(list, val, vacio){ return '<option value="">' + vacio + '</option>' + list.map(function(x){ return '<option' + (x === val ? ' selected' : '') + '>' + esc(x) + '</option>'; }).join('') + (val && list.indexOf(val) < 0 ? '<option selected>' + esc(val) + '</option>' : ''); }
+
+  window.macActualizarUI = function(){
+    var met = $('mac_metodo'), comp = $('mac_compuesto'), marca = $('mac_marca'); if(!met) return;
+    var m = met.value, comps = M[m] ? Object.keys(M[m]) : [];
+    var wc = $('mac_comp_wrap'), wm = $('mac_marca_wrap');
+    if(wc) wc.style.display = comps.length ? '' : 'none';
+    if(wm) wm.style.display = (comps.length || m === 'Otro' || !m) ? '' : 'none';
+    if(comp){ var cv = comp.value; if(cv && comps.indexOf(cv) < 0 && comps.length) cv = ''; comp.innerHTML = opts(comps, cv, comps.length > 1 ? '— Elegí la combinación —' : '—'); if(comps.length === 1) comp.value = comps[0]; if(!comps.length) comp.value = ''; }
+    var dl = $('mac_marcas_dl');
+    if(dl && !m){ dl.innerHTML = Object.keys(BRAND).map(function(k){ return '<option value="' + esc(BRAND[k][2]) + '">'; }).join(''); }
+    else if(dl){ var marcas = (M[m] && comp && comp.value) ? (M[m][comp.value] || []) : []; if(M[m] && comp && !comp.value) marcas = [].concat.apply([], comps.map(function(c){ return M[m][c]; })); dl.innerHTML = marcas.map(function(b){ return '<option value="' + esc(b) + '">'; }).join(''); }
+    if(m && !comps.length && m !== 'Otro' && marca) marca.value = '';
+    macMarcarAviso();
+  };
+  window.macMarcaEscrita = function(){
+    var marca = $('mac_marca'); if(!marca) return;
+    var k = BRAND[marca.value.trim().toLowerCase()];
+    if(k){ $('mac_metodo').value = k[0]; macActualizarUI(); $('mac_compuesto').value = k[1]; marca.value = k[2]; macActualizarUI(); }
+  };
+  window.macTexto = function(c){
+    c = c || {}; if(!c.mac_metodo) return '';
+    var t = c.mac_metodo; var det = [c.mac_compuesto, c.mac_marca].filter(Boolean).join(' · ');
+    return t + (det ? ' (' + det + ')' : '');
+  };
+  function esMujerFertil(){
+    var s = (typeof calcSexoPaciente === 'function') ? calcSexoPaciente() : null;
+    var meno = $('dx_menopausia'); return s === 'F' && !(meno && meno.checked);
+  }
+  window.macMarcarAviso = function(){
+    var falta = esMujerFertil() && !($('mac_metodo') || {}).value;
+    var b = $('mac_falta'); if(b) b.style.display = falta ? '' : 'none';
+    var tab = $('ctab_gineco');
+    if(tab){ var d = tab.querySelector('.mac-dot'); if(falta && !d){ d = document.createElement('span'); d.className = 'mac-dot'; d.textContent = 'MAC'; d.title = 'Falta registrar el método anticonceptivo'; tab.appendChild(d); } if(!falta && d) d.remove(); }
+  };
+  document.addEventListener('change', function(e){ if(e.target && e.target.id === 'dx_menopausia') macMarcarAviso(); });
+})();
+</script>
+<style>
+.mac-box{margin:0 0 14px;border:2px dashed #7c3aed;background:#f6f1ff;border-radius:12px;padding:12px 14px;font-size:12px}
+.mac-box .mac-tit{display:flex;align-items:center;gap:8px;font-weight:700;color:#6d28d9;font-size:13px;margin-bottom:8px}
+.mac-box select,.mac-box input{width:100%;padding:6px 9px;border:1.5px solid #c4b5fd;border-radius:8px;font-size:12.5px;background:#fff;box-sizing:border-box}
+.mac-box label{display:block;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#7c6aa8;margin-bottom:3px}
+.mac-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:8px}
+.mac-falta{background:#7c3aed;color:#fff;border-radius:999px;padding:2px 9px;font-size:10.5px;font-weight:700}
+.mac-dot{margin-left:6px;background:#7c3aed;color:#fff;border-radius:999px;padding:1px 6px;font-size:9.5px;font-weight:800;vertical-align:middle}
+</style>
+
 </body>
 </html>
