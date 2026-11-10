@@ -594,11 +594,14 @@ var AVISO_VERSION = 'v2-2026-10';
 var URGENCIA = '<b>No es un servicio de urgencias.</b> Si tenés <b>dolor de pecho, falta de aire, mareos o desmayos</b>, no esperes: andá <b>inmediatamente a la guardia</b> más cercana o llamá al <b>107</b>.';
 // Texto definido por URCyM (el mismo para los tres servicios)
 function textosAviso(tipo){
-  return [
+  return (tipo === 'video' ? [
+    'Con la seña tu turno queda <b>confirmado</b>. El resto lo podés pagar cuando quieras, hasta el momento de la consulta.',
+    '<b>Cancelación:</b> podés cancelar desde el link de tu turno hasta <b>24 h antes</b>, eligiendo reprogramar (lo abonado queda a cuenta) o la devolución (dejás tu alias o CBU y te lo devolvemos dentro de las 24 h). <b>Pasado ese plazo no se puede cancelar ni reprogramar, y lo abonado no se devuelve.</b>'
+  ] : []).concat([
     'Las videoconsultas son <b>turnos programados</b> para la atención de patologías cardiometabólicas. ' + URGENCIA,
     'Pedir una receta, hacer una consulta por mensaje o solicitar que se complete una planilla o un apto es un <b>acto médico</b>: el profesional revisa tu historia clínica y tu tratamiento antes de emitir la indicación y asume la responsabilidad médico-legal. <b>Por eso tiene honorarios.</b>',
     'Toda consulta queda registrada en tu <b>historia clínica</b>, con la misma confidencialidad y secreto profesional que una consulta presencial (Ley 26.529 de Derechos del Paciente y Ley 25.326 de Protección de Datos Personales).'
-  ];
+  ]);
 }
 function htmlAviso(tipo, st){
   return '<div class="aviso-legal"><b class="aviso-tit">Antes de confirmar</b><ul>' + textosAviso(tipo).map(function(t){ return '<li>'+t+'</li>'; }).join('') + '</ul>'
@@ -621,6 +624,7 @@ function htmlSena(n){
     ? '<div class="montos"><div><small>Consulta completa</small><div class="grande">'+pesos(P.arancel)+'</div></div><div style="text-align:right"><small>Seña '+pesos(P.sena)+' + saldo '+pesos(P.saldo)+'</small><small>No pagás nada después ✓</small></div></div>'
     : '<div class="montos"><div><small>Seña ('+S.cfg.sena_pct+'%)</small><div class="grande">'+pesos(P.sena)+'</div></div>'
       + '<div style="text-align:right"><small>Consulta '+pesos(P.arancel)+'</small><small>'+(P.saldo>0 ? 'El resto ('+pesos(P.saldo)+') cuando quieras, antes de la consulta' : '')+'</small></div></div>';
+  x += '<p class="nota" style="font-size:13.5px;margin:-4px 0 12px">✓ Con '+(total ? 'el pago' : 'la seña')+' tu turno queda <b>confirmado</b>.'+(total ? '' : ' El resto lo pagás cuando quieras, hasta el momento de la consulta.')+'</p>';
   var metodos = [];
   if(P.comprobante) metodos.push(['comprobante','🏦 Transferencia']);
   if(P.mp) metodos.push(['mercadopago','Mercado Pago']);
@@ -1613,7 +1617,10 @@ function pintarReserva(opt){
       + (d.pago.mp ? '<div class="error" id="e-mp"></div><button class="btn mp" id="b-mp-sena">Ir a pagar la seña</button>' : '');
   }
   if(d.estado === 'vencida') x += '<div class="aviso amber">No recibimos el pago a tiempo y el horario se liberó. Si pagaste y ves este mensaje, escribinos y lo resolvemos.</div><a class="btn" href="'+location.pathname+'">Sacar un turno nuevo</a>';
-  if(d.estado === 'cancelada') x += '<div class="aviso amber">Este turno fue cancelado. Si tenés dudas, comunicate con el consultorio.</div><a class="btn sec" href="'+location.pathname+'">Sacar un turno nuevo</a>';
+  if(d.estado === 'cancelada') x += (d.cancelo_paciente
+      ? '<div class="aviso amber">Cancelaste este turno. ' + (/DEVOLUCI/.test(d.cancelo_paciente) ? 'Te devolvemos lo abonado dentro de las 24 h a la cuenta que nos dejaste.' : 'Lo abonado queda a cuenta: te vamos a escribir para coordinar el nuevo día.') + '</div>'
+      : '<div class="aviso amber">Este turno fue cancelado. Si tenés dudas, comunicate con el consultorio.</div>')
+    + '<a class="btn sec" href="'+location.pathname+'">Sacar un turno nuevo</a>';
   if(d.estado === 'confirmada'){
     if(d.meet_link && !d.pasada) x += '<a class="btn meet" href="'+h(d.meet_link)+'" target="_blank" rel="noopener">🎥 Entrar a la videollamada</a><p class="nota centro">Usá este botón el día del turno'+(d.meet_invitacion?'. También te llegó una invitación de Google Calendar.':' y esperá a que te admitan.')+'</p>';
     else if(!d.pasada && d.meet_tras_saldo && !d.saldo_pagado) x += '<div class="aviso azul">El link de la videollamada aparece acá (y te llega por mail) cuando se acredite el saldo.</div>';
@@ -1623,6 +1630,7 @@ function pintarReserva(opt){
   if(d.estado === 'confirmada' && !d.pasada && d.fecha) x += '<section class="card"><h2 style="margin:0;font-size:16px">📅 Que no se te pase</h2><p class="nota" style="margin:4px 0 0">Agendalo con un aviso 1 hora antes.</p>'
     + '<div class="cal-btns"><a href="'+linkGoogleCal(d)+'" target="_blank" rel="noopener">Google Calendar</a><button type="button" id="b-ics">iPhone / otro</button></div></section>';
   if(d.estado === 'confirmada' && !d.saldo_pagado && !d.pasada) x += htmlSaldo(d);
+  if(d.estado === 'confirmada' && !d.pasada) x += htmlCancelarTurno(d);
   x += btnInicio();
   if(d.estado === 'pendiente_pago') x += htmlCancelarSinPago('turno');
   $('#app').innerHTML = x;
@@ -1630,6 +1638,40 @@ function pintarReserva(opt){
   var bm = $('#b-mp-sena'); if(bm) bm.onclick = function(){ irAMP('sena', bm, $('#e-mp')); };
   var bi = $('#b-ics'); if(bi) bi.onclick = function(){ bajarICS(d); };
   if(d.estado === 'confirmada' && !d.saldo_pagado && !d.pasada) engancharSaldo(d);
+  if(d.estado === 'confirmada' && !d.pasada) engancharCancelarTurno(d);
+}
+/* Cancelar un turno ya pagado: hasta 24 h antes, reprogramar o devolución */
+var RC = { abierto:false, opcion:null, cuenta:'' };
+function htmlCancelarTurno(d){
+  if(!d.puede_cancelar) return '<p class="nota centro" style="margin-top:14px">Faltan menos de 24 h para tu turno: ya no se puede cancelar ni reprogramar, y lo abonado no se devuelve.</p>';
+  if(!RC.abierto) return '<p class="centro" style="margin:14px 0 0"><button type="button" class="arrep-link" id="b-cancelar-t">Cancelar turno</button></p>'
+    + '<p class="nota centro" style="margin:4px 0 0">Podés cancelar hasta el '+h(d.limite_cancelar)+'.</p>';
+  var x = '<section class="card"><div class="paso"><div class="n">✕</div><h2>Cancelar turno</h2></div>'
+    + '<p style="font-size:14.5px;margin:0 0 10px">Podés cancelar hasta el <b>'+h(d.limite_cancelar)+'</b>. Pasado ese plazo no se puede cancelar ni reprogramar, y lo abonado no se devuelve.</p>'
+    + (d.pagado > 0 ? '<p style="font-size:14.5px;margin:0 0 10px">Abonaste <b>'+pesos(d.pagado)+'</b>. ¿Qué preferís?</p>' : '')
+    + '<div class="tabs"><button class="tab'+(RC.opcion==='reprogramar'?' sel':'')+'" data-copc="reprogramar">Reprogramar</button><button class="tab'+(RC.opcion==='devolucion'?' sel':'')+'" data-copc="devolucion">Devolución</button></div>';
+  if(RC.opcion === 'reprogramar') x += '<p class="nota" style="font-size:14px">Lo abonado queda a cuenta y te escribimos para coordinar el nuevo día.</p>';
+  if(RC.opcion === 'devolucion') x += '<label for="f-cuenta">Tu alias o CBU/CVU para la devolución</label><input type="text" id="f-cuenta" autocomplete="off" placeholder="Ej.: mi.alias.mp" value="'+h(RC.cuenta)+'">'
+    + '<p class="nota" style="font-size:14px">Te devolvemos '+pesos(d.pagado)+' dentro de las 24 h.</p>';
+  x += '<div class="error" id="e-cancelar-t"></div><button class="btn" id="b-cancelar-ok" style="background:#b42318"'+(RC.opcion?'':' disabled')+'>Confirmar cancelación</button>'
+    + '<p class="centro" style="margin:8px 0 0"><button type="button" class="arrep-link" id="b-cancelar-no">No, mantener mi turno</button></p></section>';
+  return x;
+}
+function engancharCancelarTurno(d){
+  var b = $('#b-cancelar-t'); if(b) b.onclick = function(){ RC.abierto = true; pintarReserva({}); var s = $('#b-cancelar-ok'); if(s) s.scrollIntoView({ behavior:'smooth', block:'center' }); };
+  var no = $('#b-cancelar-no'); if(no) no.onclick = function(){ RC.abierto = false; RC.opcion = null; pintarReserva({}); };
+  document.querySelectorAll('[data-copc]').forEach(function(t){ t.onclick = function(){ RC.opcion = t.dataset.copc; pintarReserva({}); }; });
+  var c = $('#f-cuenta'); if(c) c.oninput = function(){ RC.cuenta = c.value; limpiarError($('#e-cancelar-t')); };
+  var ok = $('#b-cancelar-ok'), e = $('#e-cancelar-t'); if(!ok) return;
+  ok.onclick = async function(){
+    limpiarError(e);
+    if(RC.opcion === 'devolucion' && !String(RC.cuenta).trim()){ mostrarError(e, new Error('Escribí tu alias o CBU para la devolución.')); return; }
+    ok.disabled = true; ok.textContent = 'Cancelando…';
+    try{
+      await api({ accion:'cancelar_paciente', token:R.token, opcion:RC.opcion, cuenta:RC.cuenta });
+      RC.abierto = false; RC.opcion = null; R.datos = null; verReserva(R.token);
+    }catch(err){ ok.disabled = false; ok.textContent = 'Confirmar cancelación'; mostrarError(e, err); }
+  };
 }
 // Turno en el calendario: Argentina es UTC-3 todo el año
 function _calFechas(d){
@@ -1663,7 +1705,7 @@ function htmlSaldo(d){
   if(d.pago.mp) metodos.push(['mercadopago','Mercado Pago']);
   if(!R.metodo || !metodos.some(function(m){ return m[0] === R.metodo; })) R.metodo = metodos.length ? metodos[0][0] : null;
   var x = '<section class="card"><div class="paso"><div class="n">$</div><h2>Pagar el saldo</h2></div>'
-    + '<div class="montos"><div><small>Saldo de la consulta</small><div class="grande">'+pesos(d.saldo)+'</div></div><div style="text-align:right"><small>Podés pagarlo cuando quieras, antes del turno</small></div></div>';
+    + '<div class="montos"><div><small>Saldo de la consulta</small><div class="grande">'+pesos(d.saldo)+'</div></div><div style="text-align:right"><small>Podés pagarlo cuando quieras, hasta el momento de la consulta</small></div></div>';
   if(!metodos.length) return x + '<p class="nota">Coordiná el pago con el consultorio.</p></section>';
   x += '<div class="tabs'+(metodos.length===1?' uno':'')+'">' + metodos.map(function(m){ return '<button class="tab'+(R.metodo===m[0]?' sel':'')+'" data-smetodo="'+m[0]+'">'+m[1]+'</button>'; }).join('') + '</div>';
   if(R.metodo === 'comprobante') x += '<p style="font-size:14.5px;margin-bottom:10px">Transferí <b>'+pesos(d.saldo)+'</b> a:</p>' + htmlTransferencia(d.pago.transferencia) + htmlArchivo('f-saldo') + '<div class="falta on" id="falta-saldo">⚠️ Para continuar falta adjuntar el <b>comprobante del saldo</b>.</div><div class="error" id="e-saldo"></div><button class="btn" id="b-saldo" disabled>Enviar comprobante</button>';
@@ -1711,8 +1753,9 @@ function textosAyuda(){
     video: { t:'Cómo sacar una videoconsulta', p:[
       'Elegí el profesional.', 'Elegí el día (deslizá para ver más días) y el horario. Todos los horarios son de Argentina.',
       dni + ' Marcá el motivo de la consulta (al menos 1, hasta 3).',
-      'Pagá la <b>seña</b> para reservar. ' + pago,
-      'Te llega un mail con la confirmación y el link de Google Meet. El resto de la consulta lo pagás antes del turno desde el link del mail.',
+      'Pagá la <b>seña</b>: con eso tu turno queda confirmado (si querés, pagás todo junto). ' + pago,
+      'Te llega un mail con la confirmación y el link de Google Meet. El resto de la consulta lo pagás cuando quieras, hasta el momento del turno, desde el link del mail.',
+      'Podés cancelar hasta 24 h antes desde ese mismo link. Pasado ese plazo no se puede cancelar ni se devuelve lo abonado.',
       'El día del turno entrá al link de Meet unos minutos antes.'],
       n:'Con Mercado Pago tenés un rato para pagar; si no, el horario se libera.' },
     receta: { t:'Cómo pedir una receta', p:[
@@ -1728,7 +1771,8 @@ function textosAyuda(){
       n:'No es para urgencias: ante una urgencia llamá al 107 o acudí a una guardia.' },
     reserva: { t:'Tu turno', p:[
       'Acá ves el estado de tu turno, la seña y el saldo.',
-      'Si falta pagar el saldo, podés hacerlo desde acá antes de la consulta (transferencia con comprobante o Mercado Pago).',
+      'Si falta pagar el saldo, podés hacerlo desde acá hasta el momento de la consulta (transferencia con comprobante o Mercado Pago).',
+      'Si necesitás cancelar, tocá <b>Cancelar turno</b> hasta 24 h antes: elegís reprogramar o la devolución (con tu alias o CBU, te lo devolvemos dentro de las 24 h). Pasado ese plazo no se puede cancelar ni se devuelve lo abonado.',
       'El día del turno tocá <b>Entrar a la videollamada</b> unos minutos antes.'] },
     pedido: { t:'Tu pedido', p:[
       'Acá ves el estado de tu pedido.',
