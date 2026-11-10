@@ -1143,7 +1143,7 @@ function renderPedido(){
    4) 'hc'       tildar de la medicación registrada en la historia clínica · requiere código por mail
    Siempre hay una vista previa ("Revisá tu pedido") antes de pasar al pago. */
 var MODOS_REC = {
-  ultima:   { ico:'🔁', tit:'Repetir mi última receta', sub:'La cargamos tal cual y podés cambiar lo que necesites' },
+  ultima:   { ico:'🔁', tit:'Repetir mi receta anterior', sub:'La cargamos, cambiás lo que haga falta y la mandás' },
   fotos:    { ico:'📷', tit:'Mandar fotos', sub:'De la caja del remedio o de una receta anterior · hasta 3' },
   escribir: { ico:'✍️', tit:'Escribir el medicamento', sub:'Droga, dosis y cuántas veces por día' },
   hc:       { ico:'📋', tit:'Elegir de mi medicación registrada', sub:'La que figura en tu historia clínica' }
@@ -1152,7 +1152,7 @@ function modosRecDisponibles(){
   var p = Q.pac || {};
   var verif = !!(p.existe && ((p.tiene_email && !Q.datos.email) || Q.mis));
   var l = [];
-  if(verif && (p.tiene_recetas || (Q.mis && Q.mis.ultima) || Q.desdeReceta)) l.push('ultima');
+  if(verif || Q.desdeReceta) l.push('ultima');   // siempre: si no hay receta anterior pedida por acá, se carga la medicación registrada
   l.push('fotos', 'escribir');
   if(verif && p.tiene_medicacion !== false) l.push('hc');
   return l;
@@ -1290,10 +1290,14 @@ function htmlReceta(n){
       if(Q.mis && Q.mis.ultima && Q.mis.ultima.items.length){
         Q.items = Q.mis.ultima.items.map(function(it){ return { farmaco:it.farmaco, dosis:it.dosis, frecuencia:it.frecuencia||'', marca:it.marca||'', repetir:true }; });
         Q.desdeReceta = fechaCorta(Q.mis.ultima.fecha);
-      } else if(!Q.desdeReceta) Q.items = [];
+      } else if(!Q.desdeReceta){
+        // sin receta anterior pedida online: se carga la medicación de la historia clínica para repetirla
+        Q.items = ((Q.mis && Q.mis.medicacion) || []).filter(function(m){ return m.farmaco; }).map(function(m){ return { farmaco:m.farmaco, dosis:m.dosis||'', frecuencia:frecDesdeHC(m.frecuencia), marca:'', repetir:true }; });
+        Q._desdeHC = Q.items.length > 0;
+      }
     }
     x += Q.items.length || Q.desdeReceta
-      ? '<div class="aviso verde" style="margin:0 0 12px">🔁 Cargamos tu receta'+(Q.desdeReceta ? ' del <b>'+h(Q.desdeReceta)+'</b>' : '')+'. <b>Revisá cada medicamento</b>: podés cambiar la dosis o la frecuencia, sacar alguno (✕) o agregar otro.</div>'
+      ? '<div class="aviso verde" style="margin:0 0 12px">🔁 Cargamos '+(Q._desdeHC ? 'la medicación de tu historia clínica' : 'tu receta'+(Q.desdeReceta ? ' del <b>'+h(Q.desdeReceta)+'</b>' : ''))+'. <b>Revisá cada medicamento</b>: podés cambiar la dosis o la frecuencia, sacar alguno (✕) o agregar otro.</div>'
       : '<div class="aviso amber" style="margin:0 0 12px">No encontramos una receta anterior pedida por acá. Escribí el medicamento abajo, mandá fotos o <button class="link" data-modo="'+(disp.indexOf('hc') >= 0 ? 'hc' : 'fotos')+'" style="font-size:inherit">'+(disp.indexOf('hc') >= 0 ? 'elegí de tu medicación registrada' : 'mandá fotos')+'</button>.</div>';
     if(!Q.items.length) Q.items.push({ farmaco:'', dosis:'', frecuencia:'', marca:'', nuevo:true });
   }
@@ -1318,7 +1322,6 @@ function htmlReceta(n){
   x += htmlItemsRec();
   x += htmlCobertura();
   x += '<label for="f-nota">Aclaración <span style="text-transform:none;letter-spacing:0;font-weight:400">(opcional)</span></label><textarea id="f-nota" maxlength="400" placeholder="Ej.: 2 cajas, genérico está bien…">'+h(Q.nota||'')+'</textarea>'
-    + (Q.modoRec === 'fotos' ? '' : htmlCajaFotos(false))
     + '<div class="error" id="e-rec"></div><button class="btn" id="b-rec">Ver resumen del pedido</button></section>';
   return x;
 }
@@ -1462,12 +1465,18 @@ function engancharConsulta(){
 }
 
 /* ── Pago del pedido ── */
+function htmlNotaReceta(){
+  Q.acepto = true;
+  return '<p class="nota" style="font-size:12.5px;margin:12px 2px 6px;color:#64748b">Tiene honorarios porque es un acto médico: el profesional revisa tu historia clínica antes de hacer la receta. No es para urgencias (guardia o 107). '
+    + '<details class="aviso-mas" style="display:inline"><summary style="display:inline;font-size:12.5px">Condiciones</summary><ul>' + textosAviso('receta').map(function(t){ return '<li>'+t+'</li>'; }).join('') + '</ul></details></p>';
+}
 function htmlPagoPedido(n){
   var P = Q.prof, monto = precioPedido();
+  var aviso = function(){ return Q.tipo === 'receta' ? htmlNotaReceta() : htmlAviso(Q.tipo, Q); };
   if(Q.metodo === 'osde'){
     return '<section class="card" id="seccion-pago"><div class="paso"><div class="n">'+n+'</div><h2>Enviar pedido</h2></div>'
       + '<div class="montos"><div><small>Receta</small><div class="grande" style="font-size:22px">Por tu cobertura de OSDE</div><small>No abonás honorarios.</small></div></div>'
-      + htmlAviso('receta', Q) + '<div class="falta" id="falta-q"></div><div class="error" id="e-qpago"></div><button class="btn" id="b-qenviar" disabled>Enviar pedido</button>'
+      + aviso() + '<div class="falta" id="falta-q"></div><div class="error" id="e-qpago"></div><button class="btn" id="b-qenviar" disabled>Enviar pedido</button>'
       + '<p class="nota centro">Te llega un mail de confirmación.</p>' + htmlCancelarSinPago('nuevo-pedido') + '</section>';
   }
   var x = '<section class="card" id="seccion-pago"><div class="paso"><div class="n">'+n+'</div><h2>Pago</h2></div>'
@@ -1479,10 +1488,10 @@ function htmlPagoPedido(n){
   var accion = Q.tipo === 'receta' ? 'Enviar pedido' : 'Enviar consulta';
   if(Q.metodo === 'comprobante'){
     x += '<p style="font-size:14.5px;margin-bottom:10px">Transferí <b>'+pesos(monto)+'</b> a:</p>' + htmlTransferencia(P.transferencia) + htmlArchivo('f-qcomp')
-      + htmlAviso(Q.tipo, Q) + '<div class="falta" id="falta-q"></div><div class="error" id="e-qpago"></div><button class="btn" id="b-qenviar" disabled>'+accion+'</button>';
+      + aviso() + '<div class="falta" id="falta-q"></div><div class="error" id="e-qpago"></div><button class="btn" id="b-qenviar" disabled>'+accion+'</button>';
   } else {
     x += '<p style="font-size:14.5px">Vas a pagar <b>'+pesos(monto)+'</b> con Mercado Pago. Cuando se acredite, el pedido nos llega solo y te avisamos por mail.</p>'
-      + htmlAviso(Q.tipo, Q) + '<div class="falta" id="falta-q"></div><div class="error" id="e-qpago"></div><button class="btn mp" id="b-qenviar">Pagar con Mercado Pago</button>';
+      + aviso() + '<div class="falta" id="falta-q"></div><div class="error" id="e-qpago"></div><button class="btn mp" id="b-qenviar">Pagar con Mercado Pago</button>';
   }
   return x + htmlCancelarSinPago('nuevo-pedido') + '</section>';
 }
