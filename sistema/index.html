@@ -2,7 +2,7 @@
 <html lang="es-AR">
 <head>
   <meta charset="UTF-8" />
-  <script>var URCYM_BUILD = '2026-11-10-2000';</script>
+  <script>var URCYM_BUILD = '2026-11-10-2100';</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Evaluaciones cardiometabólicas — Sistema de Historia Clínica</title>
 
@@ -36829,7 +36829,34 @@ function _cargaEstPrec(p){
     sel.parentElement.appendChild(d);
     d.querySelectorAll('button').forEach(function(b){ b.onclick = function(){ sel.value = b.dataset.v; fire(sel, 'change'); sincronizar(); }; });
   }
-  ['ag-f-sena-medio','ag-f-sena-receptor','ag-f-saldo-medio','ag-f-saldo-receptor'].forEach(pastillas);
+  // Medio y quién lo recibió en UN grupo: Efectivo · Transf. al profesional · Transf. al consultorio
+  function medioUnico(medioId, recId){
+    var m = $(medioId), r = $(recId); if(!m || !r || m.dataset.pills) return; m.dataset.pills = '1';
+    var row = m.closest('.ag-form-row-2'); var wrapM = m.closest('.ag-form-row'), wrapR = r.closest('.ag-form-row');
+    if(wrapR) wrapR.style.setProperty('display', 'none', 'important'); m.style.display = 'none';
+    var d = document.createElement('div'); d.className = 'ag-pills ag-medio'; d.dataset.medio = medioId; d.dataset.rec = recId;
+    d.innerHTML = '<button type="button" data-mv="efectivo">💵 Efectivo</button><button type="button" data-mv="profesional">🏦 Transf. al profesional</button><button type="button" data-mv="consultorio">🏦 Transf. al consultorio</button>';
+    wrapM.appendChild(d); if(row) row.classList.add('ag-medio-row');
+    d.querySelectorAll('button').forEach(function(b){ b.onclick = function(){ var v = b.dataset.mv;
+      if(v === 'efectivo'){ m.value = 'efectivo'; } else { m.value = 'transferencia'; r.value = v; fire(r, 'change'); }
+      fire(m, 'change'); if(wrapR) wrapR.style.setProperty('display', 'none', 'important'); sincronizar(); }; });
+  }
+  medioUnico('ag-f-sena-medio', 'ag-f-sena-receptor'); medioUnico('ag-f-saldo-medio', 'ag-f-saldo-receptor');
+  // Turno nuevo: por defecto, transferencia al profesional (se cambia con un toque)
+  function defaultsNuevo(){
+    [['ag-f-sena-medio','ag-f-sena-receptor'],['ag-f-saldo-medio','ag-f-saldo-receptor']].forEach(function(x){ var m = $(x[0]), r = $(x[1]); if(!m || !r) return; m.value = 'transferencia'; r.value = 'profesional'; fire(m, 'change'); fire(r, 'change'); });
+  }
+  // Dos columnas: turno y paciente a la izquierda, pago a la derecha; asistencia y motivos abajo
+  (function(){
+    var body = document.querySelector('#ag-modal-bg .ag-modal-body'); if(!body || body.querySelector('.ag-2col')) return;
+    var fila = function(id){ var e = $(id); return e ? (e.classList.contains('ag-form-row') || e.classList.contains('ag-form-row-2') ? e : e.closest('.ag-form-row, .ag-form-row-2')) : null; };
+    var izq = [fila('ag-f-date'), fila('ag-f-paciente'), fila('ag-f-osde')], der = [pb, $('ag-pago-row'), $('ag-sena-medio-row'), $('ag-monto-row'), $('ag-saldo-medio-row')];
+    var g = document.createElement('div'); g.className = 'ag-2col';
+    var ci = document.createElement('div'), cd = document.createElement('div'); ci.className = 'ag-col'; cd.className = 'ag-col ag-col-pago';
+    g.appendChild(ci); g.appendChild(cd);
+    var ancla = izq[0]; ancla.parentElement.insertBefore(g, ancla);
+    izq.forEach(function(e){ if(e) ci.appendChild(e); }); der.forEach(function(e){ if(e) cd.appendChild(e); });
+  })();
 
   // ── 4. Motivos agrupados (los turnos viejos se muestran en su grupo)
   var GRUPOS = [
@@ -36868,11 +36895,17 @@ function _cargaEstPrec(p){
     var nota = $('ag-pago-nota'), prof = $('ag-f-prof').value;
     var ar = (typeof getArancel === 'function') ? getArancel(prof, $('ag-f-date').value) : 0;
     nota.textContent = osde ? '' : (p === 'señado' && sena.dataset.auto === '1' && sv ? '50% del arancel vigente · si pagó otra seña, cambiá el monto' : p === 'pagado' ? 'Total de la consulta abajo (arancel vigente) · editable' : '');
-    document.querySelectorAll('#ag-modal-bg .ag-pills[data-for]').forEach(function(d){ var s = $(d.dataset.for); d.querySelectorAll('button').forEach(function(b){ b.classList.toggle('sel', b.dataset.v === s.value); }); });
+    document.querySelectorAll('#ag-modal-bg .ag-medio').forEach(function(d){ var m = $(d.dataset.medio), r = $(d.dataset.rec); var v = m.value === 'efectivo' ? 'efectivo' : (r.value || 'consultorio');
+      d.querySelectorAll('button').forEach(function(b){ b.classList.toggle('sel', b.dataset.mv === v); }); });
+    ['ag-sena-receptor-wrap','ag-saldo-receptor-wrap'].forEach(function(id){ var w = $(id); if(w) w.style.setProperty('display', 'none', 'important'); });
     pintarXV();
   }
   ['change','input','click'].forEach(function(ev){ $('ag-modal-bg').addEventListener(ev, function(){ setTimeout(sincronizar, 0); }); });
-  new MutationObserver(function(){ if($('ag-modal-bg').style.display !== 'none') setTimeout(sincronizar, 30); }).observe($('ag-modal-bg'), { attributes:true, attributeFilter:['style'] });
+  var _visible = false;
+  new MutationObserver(function(){ var vis = $('ag-modal-bg').style.display !== 'none';
+    if(vis && !_visible){ var nuevo = /nuevo/i.test(($('ag-modal-title') || {}).textContent || ''); setTimeout(function(){ if(nuevo) defaultsNuevo(); sincronizar(); }, 30); }
+    else if(vis) setTimeout(sincronizar, 30);
+    _visible = vis; }).observe($('ag-modal-bg'), { attributes:true, attributeFilter:['style'] });
 })();
 </script>
 <style>
@@ -36895,6 +36928,15 @@ function _cargaEstPrec(p){
 .ag-pills button.sel{background:#185FA5;border-color:#185FA5;color:#fff}
 #ag-pago-btns [data-p="señado"].sel{background:#0f766e;border-color:#0f766e}#ag-pago-btns [data-p=pagado].sel{background:#1D9E75;border-color:#1D9E75}#ag-pago-btns [data-p="sin-seña"].sel{background:#64748b;border-color:#64748b}
 .ag-pago-nota{font-size:11px;color:#6b7280;margin-top:4px;min-height:0}
+#ag-modal-bg .ag-modal{width:780px}
+.ag-2col{display:grid;grid-template-columns:1fr 1fr;gap:4px 26px;align-items:start}
+.ag-col-pago{border-left:1px solid #eef2f7;padding-left:22px}
+.ag-col-pago .ag-form-row-2{grid-template-columns:1fr!important}
+.ag-medio{gap:5px}.ag-medio button{font-size:12px;padding:5px 10px}
+#ag-modal-bg .ag-pills button{padding:5px 11px;font-size:12px}
+.ag-mot2{padding:4px 10px!important;font-size:11.5px!important}
+#ag-f-motivos{gap:5px!important}
+@media (max-width:760px){.ag-2col{grid-template-columns:1fr}.ag-col-pago{border-left:none;padding-left:0}}
 .ag-mot2{border:1.5px solid #d1d5db!important;border-radius:999px!important;padding:6px 12px!important;background:#fff!important;cursor:pointer;font-size:12px!important;text-transform:none!important;letter-spacing:0!important;color:#4b5563!important;font-weight:600!important}
 .ag-mot2 input{display:none}
 .ag-mot2:has(input:checked){background:#e0f2f1!important;border-color:#0f766e!important;color:#0f766e!important}
