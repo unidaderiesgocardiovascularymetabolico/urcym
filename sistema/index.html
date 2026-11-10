@@ -2,7 +2,7 @@
 <html lang="es-AR">
 <head>
   <meta charset="UTF-8" />
-  <script>var URCYM_BUILD = '2026-11-10-0145';</script>
+  <script>var URCYM_BUILD = '2026-11-10-0815';</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Evaluaciones cardiometabólicas — Sistema de Historia Clínica</title>
 
@@ -35302,7 +35302,7 @@ function _cargaEstPrec(p){
     [/colesterol\s+total|colesterolemia|^\s*colesterol\b(?!\s+(ldl|hdl|no))/, 'CT'],
     [/triglic|trigliceridemia/, 'TG'],
     [/apo\w*\s*-?\s*b\b|apob/, 'ApoB'],
-    [/lp\s*\(\s*a\s*\)|lipoproteina\s*\(\s*a\s*\)|\blpa\b/, 'LPA'],
+    [/lp\s*\(\s*a\s*\)|lipoproteina\s*\(?\s*a\b\s*\)?|\blpa\b|\blp\s+a\b/, 'LPA'],
     [/\bpcr\b|proteina\s+c\s+reactiva/, 'PRCus'],
     [/aldosterona/, 'Aldosterona'],
     [/renina/, 'Renina'],
@@ -35376,7 +35376,7 @@ function _cargaEstPrec(p){
      var origen = lineaEntera.replace(/(\s*\.){3,}\s*/g, ' … ').replace(/\s{2,}/g, ' ').trim();
      // una línea puede traer más de un parámetro ("Sodio 140 mEq/L   Potasio 4.3 mEq/L")
      var linea = lineaEntera, vueltas = 0, LISTA = APRENDIDOS.concat(SIN);
-     while(linea && vueltas++ < 6){
+     while(linea && vueltas++ < 40){
       var l = sinAc(linea).replace(/\t/g, ' ');
       if(!/\d/.test(l)) return;
       var mejor = null;
@@ -35412,9 +35412,11 @@ function _cargaEstPrec(p){
         var resto = resto0.replace(/\b\d{1,2}[\/\-.]\d{1,2}[\/\-.]\d{2,4}\b/g, function(x){ return ' '.repeat(x.length); });
         var mn = resto.match(/(?:^|[^\w(\[])\s*[<>]?\s*(\d[\d.,]*)\s*([a-zA-Zµμ%\/\d.³²]*(?:\/[a-zA-Zµμ\d.,²³]+)?)/);
         if(!mn) return '';
-        var siguiente = resto0.slice(mn.index + mn[0].length);
-        var val = numero(mn[1], key); if(isNaN(parseFloat(val))) return siguiente;
         var uTxt = (mn[2] || '').trim();
+        var esUnidad = /^(%|[µμu]?(g|mg|ng|pg|ui|u|meq|mmol|nmol|umol|mui|uui|mil|mm|ml|l)(\b|\/|$)|mg\/|g\/|mm\/)/i.test(uTxt);
+        if(!esUnidad) uTxt = '';
+        var siguiente = esUnidad ? resto0.slice(mn.index + mn[0].length) : resto0.slice(mn.index + mn[0].indexOf(mn[1]) + mn[1].length);
+        var val = numero(mn[1], key); if(isNaN(parseFloat(val))) return siguiente;
         if(key === 'LPA'){ out.push({ key:'LPA', label:'Lp(a)', val:val, unidad: /nmol/i.test(uTxt) ? 'nmol/L' : 'mg/dL', origen:origen }); usadas[key] = 1; return siguiente; }
         var f = fila(key); if(!f || (f.calc && !f.calcAuto)) return siguiente;
         var unidad = '';
@@ -35824,7 +35826,7 @@ function _cargaEstPrec(p){
   // El reconocedor de laboratorio también entiende el texto dictado
   if(typeof window._labAnalizarTexto === 'function'){
     var oa = window._labAnalizarTexto;
-    window._labAnalizarTexto = function(t){ return oa(window._normalizarDictado(t).replace(/,\s+(?=[A-Za-zÁÉÍÓÚáéíóúñ])/g, '\n')); };
+    window._labAnalizarTexto = function(t){ return oa(window._normalizarDictado(t).replace(/[,;]\s+(?=[A-Za-zÁÉÍÓÚáéíóúñ])/g, '\n').replace(/\.\s+(?=[A-Za-zÁÉÍÓÚáéíóúñ])/g, '.\n').replace(/\s+y\s+(?=(un|una|el|la)?\s*[A-Za-zÁÉÍÓÚáéíóúñ]{2,}[^\n]{0,25}?\d)/g, '\n')); };
   }
 
   // ── Leer foto / PDF → texto (todo local)
@@ -36111,19 +36113,56 @@ function _cargaEstPrec(p){
     c.querySelectorAll('[class^="bloque-"], [class*=" bloque-"]').forEach(function(b){ b.remove(); });
     return c.innerText || '';
   }
+  // Una evolución dictada suele traer de todo: laboratorio, uno o más estudios y texto clínico.
+  // Se separa por frases: lo de laboratorio va al laboratorio y cada estudio a su carga, uno detrás del otro.
+  function separar(t){
+    var frases = String(t).replace(/\r/g, '').split(/(?<=[.;:])\s+(?=[A-ZÁÉÍÓÚÑa-záéíóúñ¿])|\n+/).map(function(x){ return x.trim(); }).filter(Boolean);
+    var lab = [], estudios = [], actual = null;
+    var FIN = /^(plan|indic|se\s+(indica|solicita|pide|inicia|suspende|ajusta|rota)|solicit|control|conducta|tratamiento|impresi[oó]n|diagn[oó]stico|refiere|paciente|al\s+examen|examen\s+f|contin[uú]a|toma\b|rota\b|suspend|inicia|aumenta|reduce|pr[oó]ximo|cita)/i;
+    var PEDIDO = /(solicit|se\s+pide|pedir|pedimos|a\s+realizar|realizar[aá]?\b|pendiente|programa|turno\s+para)/i;
+    frases.forEach(function(f){
+      var e = window._estAnalizarTexto ? window._estAnalizarTexto(f) : { cat:'' };
+      var l = window._labAnalizarTexto ? window._labAnalizarTexto(f) : { items:[] };
+      var esLab = (l.items || []).length > 0;
+      if(PEDIDO.test(f) && !/\d/.test(f.replace(/\b\d{1,2}[\/\-.]\d{1,2}[\/\-.]\d{2,4}\b/g, ''))) e = { cat:'' };   // 'se solicita ecocardiograma' es un pedido, no un resultado
+      if(e.cat && !(esLab && !actual && /laborator/i.test(f) && (l.items || []).length > 1)){
+        if(!actual || actual.cat !== e.cat || /^(eco|doppler|mapa|holter|ergo|ecg|electro|densito|placa|rx|radiograf|tac|tomograf|resonan|centello|spect|camara)/i.test(f)){
+          actual = { cat:e.cat, txt:[] }; estudios.push(actual);
+        }
+        actual.txt.push(f); return;
+      }
+      if(esLab){ lab.push(f); actual = null; return; }
+      if(actual && !FIN.test(f)) actual.txt.push(f); else actual = null;
+    });
+    // fecha del laboratorio dicha aparte ("Laboratorio del 3 de noviembre.")
+    if(lab.length) frases.forEach(function(f){ if(/laborator/i.test(f) && lab.indexOf(f) < 0 && /\d{1,2}[\/\-.]\d{1,2}[\/\-.]\d{2,4}|\d{1,2}\s+de\s+[a-z]+/i.test(f)) lab.unshift(f); });
+    return { lab: lab.join('\n'), estudios: estudios.map(function(x){ return { cat:x.cat, txt:x.txt.join(' ') }; }) };
+  }
+  window._pasarATablasSeparar = separar;
+  function abrirLab(t){ labPegarAbrir(); setTimeout(function(){ var ta = document.querySelector('.lp-txt'); if(ta){ ta.value = t; ta.dispatchEvent(new Event('input', { bubbles:true })); } }, 60); }
+  function abrirEst(x){ estDictadoAbrir(x.cat); setTimeout(function(){ var ta = document.querySelector('.ed-txt'); if(ta){ ta.value = x.txt; ta.dispatchEvent(new Event('input', { bubbles:true })); } }, 60); }
+  function enCola(pasos){
+    var i = 0;
+    (function siguiente(){
+      if(i >= pasos.length) return;
+      var p = pasos[i++]; p.abrir();
+      if(i < pasos.length && typeof showToast === 'function') setTimeout(function(){ showToast('Después sigue: ' + pasos[i].nombre, 'ok', 3500); }, 300);
+      var t0 = Date.now(), visto = false;
+      var iv = setInterval(function(){
+        var abierto = !!document.querySelector(p.sel);
+        if(abierto) visto = true;
+        if((visto && !abierto) || (!visto && Date.now() - t0 > 4000)){ clearInterval(iv); if(visto) setTimeout(siguiente, 350); }
+      }, 300);
+    })();
+  }
   window.pasarATablas = function(){
     var t = textoEvolucion().trim();
     if(!t){ alert('Escribí o dictá en la evolución (o seleccioná el texto) y después tocá "Pasar a tablas".'); return; }
-    var est = window._estAnalizarTexto ? window._estAnalizarTexto(t) : { cat:'' };
-    var lab = window._labAnalizarTexto ? window._labAnalizarTexto(t) : { items:[] };
-    var abrir = function(modo){
-      if(modo === 'est'){ estDictadoAbrir(est.cat); setTimeout(function(){ var ta = document.querySelector('.ed-txt'); if(ta){ ta.value = t; ta.dispatchEvent(new Event('input', { bubbles:true })); } }, 60); }
-      else { labPegarAbrir(); setTimeout(function(){ var ta = document.querySelector('.lp-txt'); if(ta){ ta.value = t; ta.dispatchEvent(new Event('input', { bubbles:true })); } }, 60); }
-    };
-    if(est.cat && !/^laboratorio/i.test(t.trim())) abrir('est');
-    else if(lab.items && lab.items.length) abrir('lab');
-    else if(est.cat) abrir('est');
-    else alert('No encontré valores de laboratorio ni un estudio en ese texto.\nTip: decí el nombre y después el valor ("glucemia 103"), o seleccioná solo la parte del laboratorio.');
+    var sp = separar(t), pasos = [];
+    if(sp.lab) pasos.push({ nombre:'Laboratorio', sel:'.lp-txt', abrir:function(){ abrirLab(sp.lab); } });
+    sp.estudios.forEach(function(x){ pasos.push({ nombre:x.cat, sel:'.ed-txt', abrir:function(){ abrirEst(x); } }); });
+    if(!pasos.length){ alert('No encontré valores de laboratorio ni un estudio en ese texto.\nTip: decí el nombre y después el valor ("glucemia 103"), o el nombre del estudio ("ecocardiograma: …").'); return; }
+    enCola(pasos);
   };
   function poner(){
     var tb = document.querySelector('.evol-toolbar'); if(!tb || tb.querySelector('.atablas-btn')) return;
