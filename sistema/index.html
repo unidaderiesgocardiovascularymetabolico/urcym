@@ -2,7 +2,7 @@
 <html lang="es-AR">
 <head>
   <meta charset="UTF-8" />
-  <script>var URCYM_BUILD = '2026-11-10-0815';</script>
+  <script>var URCYM_BUILD = '2026-11-10-1500';</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Evaluaciones cardiometabólicas — Sistema de Historia Clínica</title>
 
@@ -690,7 +690,7 @@
 .tto-acc-b{border:1.5px solid var(--border);background:white;border-radius:999px;padding:5px 12px;font-size:12px;font-weight:600;cursor:pointer;font-family:var(--font-main);color:var(--text)}
 .tto-acc-b.sel{border-color:var(--blue);background:var(--blue);color:white}
 .tto-sinc{margin-left:auto;color:#15803d;border-color:#bbe5c8;background:#f0fbf3}
-.tto-row{grid-template-columns:128px minmax(140px,1fr) 110px 150px 0}
+.tto-row{grid-template-columns:128px minmax(180px,360px) 120px 170px 0;justify-content:start}
 .tto-dosis-in{padding:7px 9px!important;border:1.5px solid var(--border);border-radius:8px;font-size:13px;font-family:var(--font-main);width:190px!important;flex:0 0 190px;outline:none}
 .tto-dosis-in:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(37,99,235,.12)}
 /* ── Medicación: carga rápida ── */
@@ -12123,6 +12123,7 @@ function initGruposUpd() {
     }; });
     const dn = document.getElementById('upd_tto_dosisnueva'), fn = document.getElementById('upd_tto_frecnueva');
     [dn, fn].forEach(function(inp){ inp.addEventListener('keydown', function(ev){ ev.stopPropagation(); if(ev.key === 'Enter'){ ev.preventDefault();
+      if(inp === dn && !dn.value.trim() && !fn.value.trim()) return;
       if(inp === dn && dn.value.trim()){ const far = (document.getElementById('upd_tto_medcambio').value||'').split('|')[0]; const l = _medDosisSug(far, dn.value); if(l.length && l.indexOf(dn.value) < 0) dn.value = l[0]; }
       if(inp === fn && fn.value.trim()){ const l = _medFrecSug(fn.value); if(l.length) fn.value = l[0]; }
       agregarTtoUpd(); } }); });
@@ -12156,7 +12157,7 @@ function _ttoPintarDosisCd(){
   const actual = (sel.value||'').split('|')[1] || '';
   const l = _medDosisSug(far, dn.value);
   cont.innerHTML = l.map(function(d){ return '<button type="button" class="med-chip'+(d === dn.value ? ' sel' : '')+(d === actual ? ' g' : '')+'" data-d="'+_medEsc(d)+'"'+(d === actual ? ' title="Dosis actual" style="--c:#94a3b8;--b:#f1f5f9"' : '')+'>'+_medEsc(d)+'</button>'; }).join('');
-  cont.querySelectorAll('[data-d]').forEach(function(b){ b.onclick = function(){ dn.value = b.dataset.d; agregarTtoUpd(); }; });
+  cont.querySelectorAll('[data-d]').forEach(function(b){ b.onclick = function(){ dn.value = b.dataset.d; _ttoPintarDosisCd(); checkPanelActivo(); const fn = document.getElementById('upd_tto_frecnueva'); if(fn) fn.focus(); }; });
 }
 function actualizarModoPanelTto() {
   const accion = document.getElementById('upd_tto_accion').value;
@@ -12207,7 +12208,9 @@ function _agregarTtoUpdOrig() {
     const parts = (selMed.value||'').split('|');
     farmaco = parts[0]; grupo = parts[2]||'Otro';
     dosis = selDosis.value;
-    if(!farmaco || !dosis) return;
+    const frN = (document.getElementById('upd_tto_frecnueva').value || '').trim();
+    if(!farmaco || (!dosis && !frN)) return;
+    if(!dosis) dosis = parts[1] || '';   // solo cambia la frecuencia: la dosis queda igual
     selMed.value = '';
     selDosis.innerHTML = '<option value="">Nueva dosis...</option>';
   } else {
@@ -12249,7 +12252,10 @@ function agregarTtoUpd() {
     const fn = document.getElementById('upd_tto_frecnueva');
     it.frecuencia = (fn && fn.value.trim()) || m.frecuencia || '';
     it.dosisAnterior = m.dosis || '';
-    it.texto = 'se cambia dosis de ' + it.farmaco + (m.dosis ? ' ' + m.dosis + ' →' : ' a') + ' ' + it.dosis + (fn && fn.value.trim() ? ' ' + it.frecuencia : '');
+    const soloFrec = it.dosis === (m.dosis || '') && fn && fn.value.trim();
+    it.texto = soloFrec
+      ? 'se cambia frecuencia de ' + it.farmaco + (it.dosis ? ' ' + it.dosis : '') + ': ' + (m.frecuencia ? m.frecuencia + ' → ' : '') + it.frecuencia
+      : 'se cambia dosis de ' + it.farmaco + (m.dosis ? ' ' + m.dosis + ' →' : ' a') + ' ' + it.dosis + (fn && fn.value.trim() ? ' ' + it.frecuencia : '');
     actualizarModoPanelTto();
   }
   renderTtoUpd(); checkPanelActivo(); volcarActualizacion();
@@ -12258,9 +12264,13 @@ function agregarTtoUpd() {
 function renderTtoUpd() {
   const lista = document.getElementById('upd_tto_lista');
   if(!lista) return;
-  lista.innerHTML = updTtoItems.map((item,i) =>
+  const _ap = (window._ttoAplicadosDe ? window._ttoAplicadosDe() : []);
+  lista.innerHTML = _ap.map(function(a){ return '<span class="tto-ap" style="display:inline-flex;align-items:center;gap:4px;background:#ecfdf5;color:#047857;border:1px solid #a7f3d0;padding:3px 8px;border-radius:10px;font-size:12px" title="Ya cargado en la medicación de esta consulta">✓ '+_medEsc(a.item.texto)
+      +'<button type="button" onclick="_ttoDeshacer('+a.n+',true)" title="Corregir (vuelve a la carga)" style="background:none;border:none;cursor:pointer;color:#047857;font-size:12px;padding:0 2px">✎</button>'
+      +'<button type="button" onclick="_ttoDeshacer('+a.n+',false)" title="Deshacer" style="background:none;border:none;cursor:pointer;color:#047857;font-size:13px;padding:0">×</button></span>'; }).join('')
+  + updTtoItems.map((item,i) =>
     '<span style="display:inline-flex;align-items:center;gap:4px;background:var(--blue-light);color:var(--blue);padding:3px 8px;border-radius:10px;font-size:12px">'
-    +(item.texto||item)+'<button onclick="quitarTtoUpd('+i+')" style="background:none;border:none;cursor:pointer;color:var(--blue);font-size:13px;line-height:1;padding:0">×</button></span>'
+    +(item.texto||item)+(item.accion && item.accion !== 'sin cambios' ? '<button onclick="corregirTtoUpd('+i+')" title="Corregir" style="background:none;border:none;cursor:pointer;color:var(--blue);font-size:12px;line-height:1;padding:0 2px">✎</button>' : '')+'<button onclick="quitarTtoUpd('+i+')" title="Quitar" style="background:none;border:none;cursor:pointer;color:var(--blue);font-size:13px;line-height:1;padding:0">×</button></span>'
   ).join('');
 }
 
@@ -12932,6 +12942,31 @@ function confirmarModalHabitos() {
 }
 
 function quitarTtoUpd(i) { updTtoItems.splice(i,1); renderTtoUpd(); checkPanelActivo(); }
+// ✎ Corregir: lo saca de la lista y lo vuelve a poner en la carga, para cambiar fármaco, dosis o frecuencia
+function corregirTtoUpd(i) {
+  const it = updTtoItems[i]; if(!it) return;
+  updTtoItems.splice(i, 1); renderTtoUpd();
+  document.getElementById('upd_tto_accion').value = it.accion; actualizarModoPanelTto();
+  if(it.accion === 'se agrega'){
+    document.getElementById('upd_tto_grupo').value = it.grupo || '';
+    document.getElementById('upd_tto_farmaco').value = it.farmaco || '';
+    document.getElementById('upd_tto_dosis').value = it.dosis || '';
+    document.getElementById('upd_tto_frecuencia').value = it.frecuencia || '';
+    try { _medPintarPill(document.getElementById('upd_modo_agrega')); } catch(e) {}
+    document.getElementById('upd_tto_dosis').focus();
+  } else {
+    const contId = it.accion === 'se suspende' ? 'tto_susp_meds' : 'tto_cd_meds';
+    const meds = _ttoMedsActuales(); const k = meds.findIndex(function(m){ return _medSinAc(m.farmaco) === _medSinAc(it.farmaco); });
+    const b = k >= 0 ? document.querySelector('#' + contId + ' [data-i="' + k + '"]') : null;
+    if(b) b.click();
+    if(it.accion === 'se cambia dosis'){
+      const dn = document.getElementById('upd_tto_dosisnueva'), fn = document.getElementById('upd_tto_frecnueva');
+      if(dn) dn.value = it.dosis || ''; if(fn && it.frecuencia && it.frecuencia !== ((meds[k] || {}).frecuencia || '')) fn.value = it.frecuencia;
+      if(typeof _ttoPintarDosisCd === 'function') _ttoPintarDosisCd(); if(dn) dn.focus();
+    }
+  }
+  checkPanelActivo();
+}
 
 // ── Detección de panel con cambios pendientes ──────────────────────────────
 function haySeleccionTto() {
@@ -23814,7 +23849,7 @@ function openReprog(key){
   }
 
   turnos[newKey]={
-    paciente:document.getElementById('ag-f-paciente').value.trim(),
+    paciente:(function(v){ v=v.trim().replace(/\s+/g,' '); return (v && (v===v.toLowerCase()||v===v.toUpperCase()) && typeof _capNombrePropio==='function') ? _capNombrePropio(v) : v; })(document.getElementById('ag-f-paciente').value),
     dni_paciente:_agPacDni||undefined,
     prof:profVal,
     estado:document.getElementById('ag-f-estado').value,
@@ -26338,8 +26373,9 @@ loadLocal();  // async, carga en background y llama renderGrid al final
   document.getElementById('np-save').onclick=async function(){
     var dni     =document.getElementById('np-dni').value.replace(/\D/g,'').trim();
     document.getElementById('np-dni').value = dni;
-    var apellido=document.getElementById('np-apellido').value.trim();
-    var nombre  =document.getElementById('np-nombre').value.trim();
+    var apellido=_capNombrePropio(document.getElementById('np-apellido').value.trim().replace(/\s+/g,' '));
+    var nombre  =_capNombrePropio(document.getElementById('np-nombre').value.trim().replace(/\s+/g,' '));
+    document.getElementById('np-apellido').value=apellido; document.getElementById('np-nombre').value=nombre;
     var fnac    =document.getElementById('np-fnac').value;
     var os      =document.getElementById('np-os').value.trim();
     var tel     =document.getElementById('np-tel').value.trim();
@@ -36299,6 +36335,67 @@ function _cargaEstPrec(p){
 .mac-falta{background:#7c3aed;color:#fff;border-radius:999px;padding:2px 9px;font-size:10.5px;font-weight:700}
 .mac-dot{margin-left:6px;background:#7c3aed;color:#fff;border-radius:999px;padding:1px 6px;font-size:9.5px;font-weight:800;vertical-align:middle}
 </style>
+
+<script>
+/* ════════ Corregir medicación cargada en esta consulta ════════
+   "+ Agregar" impacta enseguida en la medicación. Se recuerda qué filas tocó cada cambio,
+   así ✎ lo deshace y lo vuelve a poner en la carga para corregirlo, y × lo deshace. */
+(function(){
+  var AP = [], N = 0;
+  var dniAct = function(){ return (typeof pacienteActual !== 'undefined' && pacienteActual) ? String(pacienteActual.dni) : ''; };
+  var sinAc = function(t){ return String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim(); };
+  window._ttoAplicadosDe = function(){ var d = dniAct(); return AP.filter(function(a){ return a.dni === d; }); };
+  var orig = window.volcarActualizacion;
+  window.volcarActualizacion = async function(){
+    var dni = dniAct(), items = (typeof updTtoItems !== 'undefined' ? updTtoItems : []).filter(function(i){ return i && i.accion && i.accion !== 'sin cambios'; }).map(function(i){ return Object.assign({}, i); });
+    var antes = ((typeof evolClinicaSnapshot !== 'undefined' && evolClinicaSnapshot && evolClinicaSnapshot.medicacion) || []).slice();
+    var r = await orig.apply(this, arguments);
+    if(dni && items.length && dniAct() === dni){
+      var despues = ((evolClinicaSnapshot && evolClinicaSnapshot.medicacion) || []);
+      items.forEach(function(it){
+        var f = sinAc(it.farmaco);
+        var prev = antes.filter(function(m){ return sinAc(m.farmaco) === f && m.id != null; }).map(function(m){ return m.id; });
+        var nuevos = it.accion === 'se suspende' ? [] : despues.filter(function(m){ return sinAc(m.farmaco) === f && m.id != null && prev.indexOf(m.id) < 0; }).map(function(m){ return m.id; });
+        AP.push({ n: ++N, dni: dni, item: it, prevIds: prev, newIds: nuevos });
+      });
+      if(typeof renderTtoUpd === 'function') renderTtoUpd();
+    }
+    return r;
+  };
+  function sacarDelTexto(texto){
+    var ed = document.getElementById('evol_editor'), b = ed && ed.querySelector('.bloque-actualizacion'); if(!b) return;
+    var lista = []; try { lista = JSON.parse(b.dataset.tto || '[]'); } catch(e) {}
+    var k = lista.indexOf(texto); if(k >= 0) lista.splice(k, 1);
+    var otros = b.dataset.otros ? decodeURIComponent(b.dataset.otros) : '';
+    var lineas = []; if(lista.length) lineas.push('<strong>Tratamiento:</strong> ' + lista.join(' · ')); if(otros) lineas.push(otros);
+    if(!lineas.length){ b.remove(); }
+    else { b.dataset.tto = JSON.stringify(lista); b.innerHTML = lineas.join('<br>'); }
+    if(typeof marcarDirty === 'function') marcarDirty('evol');
+  }
+  window._ttoDeshacer = async function(n, reponer){
+    var k = AP.findIndex(function(a){ return a.n === n; }); if(k < 0) return;
+    var a = AP[k]; if(a.dni !== dniAct()) return;
+    try {
+      if(a.newIds.length){ var d = await sb.from('medicacion').delete().in('id', a.newIds); if(d.error) throw d.error; }
+      if(a.prevIds.length){
+        var u = await sb.from('medicacion').update({ activo:true, fecha_fin:null, motivo_fin:null }).in('id', a.prevIds);
+        if(u.error && /fecha_fin|motivo_fin/.test(u.error.message || '')) u = await sb.from('medicacion').update({ activo:true }).in('id', a.prevIds);
+        if(u.error) throw u.error;
+      }
+    } catch(e){ alert('No se pudo deshacer el cambio de medicación: ' + (e.message || e) + '\nNo se tocó nada más; probá de nuevo.'); return; }
+    AP.splice(k, 1);
+    sacarDelTexto(a.item.texto);
+    try {
+      var mr = await sb.from('medicacion').select('*').eq('dni_paciente', a.dni).eq('activo', true).order('grupo');
+      if(!mr.error && dniAct() === a.dni){ evolClinicaSnapshot = Object.assign({}, evolClinicaSnapshot || {}, { medicacion: mr.data || [] }); if(window.actualizarEncabezadoVariable) window.actualizarEncabezadoVariable(evolClinicaSnapshot); }
+    } catch(e) {}
+    if(reponer){ updTtoItems.push(a.item); corregirTtoUpd(updTtoItems.length - 1); }
+    else { renderTtoUpd(); if(typeof checkPanelActivo === 'function') checkPanelActivo(); }
+  };
+  // al cambiar de paciente no se ofrece corregir lo de otro
+  setInterval(function(){ var d = dniAct(); if(AP.length && AP.some(function(a){ return a.dni !== d; }) && !d) AP = []; }, 5000);
+})();
+</script>
 
 </body>
 </html>
