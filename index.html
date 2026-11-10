@@ -760,7 +760,12 @@ function irA(serv, profId, opt){
 var REC = null;
 try { REC = JSON.parse(localStorage.getItem('urcym_paciente') || 'null'); } catch(e) { REC = null; }
 function recordarPaciente(dni, nombre){ REC = { dni: dni, nombre: nombre || '' }; try { localStorage.setItem('urcym_paciente', JSON.stringify(REC)); } catch(e) {} }
-function olvidarPaciente(){ REC = null; try { localStorage.removeItem('urcym_paciente'); sessionStorage.removeItem('urcym_mis_sesion'); } catch(e) {} }
+function olvidarPaciente(){ REC = null; try { localStorage.removeItem('urcym_paciente'); } catch(e) {} borrarSes(); }
+// El código del mail se pide UNA vez por celular: después la sesión queda guardada en este dispositivo (6 meses).
+// "No soy yo" o "Salir" la borran.
+function guardarSes(ses, dni){ try { localStorage.setItem('urcym_sesion', JSON.stringify({ s: ses, dni: String(dni) })); sessionStorage.setItem('urcym_mis_sesion', ses); sessionStorage.setItem('urcym_mis_dni', String(dni)); } catch(e) {} }
+function leerSes(){ try { var o = JSON.parse(localStorage.getItem('urcym_sesion') || 'null'); if(o && o.s) return o; var s0 = sessionStorage.getItem('urcym_mis_sesion'); return s0 ? { s: s0, dni: sessionStorage.getItem('urcym_mis_dni') } : null; } catch(e) { return null; } }
+function borrarSes(){ try { localStorage.removeItem('urcym_sesion'); sessionStorage.removeItem('urcym_mis_sesion'); sessionStorage.removeItem('urcym_mis_dni'); } catch(e) {} }
 function htmlHolaRec(){
   return REC && REC.nombre ? '<div class="hola-rec"><span>Hola, <b>'+h(REC.nombre)+'</b> 👋</span><button class="link" id="b-nosoy">No soy yo</button></div>' : '';
 }
@@ -903,7 +908,7 @@ function mostrarMis(){
   AYUDA = 'menu';
   $('#titulo').textContent = 'Mis turnos y pedidos';
   $('#subtitulo').textContent = 'Tus videoconsultas, recetas y consultas, en un solo lugar.';
-  var ses = null; try { ses = sessionStorage.getItem('urcym_mis_sesion'); } catch(e) {}
+  var _o = leerSes(), ses = _o ? _o.s : null;
   if(ses) return cargarMis(ses);
   MIS.dni = MIS.dni || (REC && REC.dni) || '';
   var x = '<button class="link" style="margin:0 0 12px 4px;text-decoration:none" onclick="irA(\'\')">← Volver</button><section class="card">';
@@ -933,7 +938,7 @@ function mostrarMis(){
       limpiarError(e); ver.disabled = true;
       try {
         var r = await api({ accion:'codigo_verificar', dni:MIS.dni, codigo:$('#mis-cod').value });
-        try { sessionStorage.setItem('urcym_mis_sesion', r.sesion); sessionStorage.setItem('urcym_mis_dni', MIS.dni); } catch(_) {}
+        guardarSes(r.sesion, MIS.dni);
         MIS.codigo = false; cargarMis(r.sesion);
       } catch(err){ ver.disabled = false; mostrarError(e, err); }
     };
@@ -945,7 +950,7 @@ async function cargarMis(sesion){
   $('#app').innerHTML = '<div class="card"><div class="cargando"><div class="spin"></div>Buscando…</div></div>';
   var d;
   try { d = await api({ accion:'mis_cosas', sesion:sesion }); }
-  catch(err){ try { sessionStorage.removeItem('urcym_mis_sesion'); } catch(_) {} return mostrarMis(); }
+  catch(err){ borrarSes(); return mostrarMis(); }
   if(d.nombre && MIS.dni) recordarPaciente(MIS.dni, d.nombre);
   var est = { confirmada:['Confirmado','ok'], pendiente_pago:['Falta el pago','pend'], cancelada:['Cancelado',''], pendiente:['En curso','pend'], respondida:['Respondida','ok'], resuelta:['Lista','ok'], vencida:['Vencido',''] };
   var badge = function(k){ var e = est[k] || [k, '']; return '<span class="est '+e[1]+'">'+h(e[0])+'</span>'; };
@@ -964,7 +969,7 @@ async function cargarMis(sesion){
     var p = d.pedidos[+b.dataset.repI];
     irA('repetir', p.prof, { items: p.items, fechaReceta: p.fecha.split('-').reverse().join('/') });
   }; });
-  $('#mis-salir').onclick = function(){ try { sessionStorage.removeItem('urcym_mis_sesion'); } catch(_) {} irA(''); };
+  $('#mis-salir').onclick = function(){ borrarSes(); irA(''); };
 }
 
 /* ═══════════════════ Cancelar antes de pagar ═══════════════════
@@ -1038,7 +1043,7 @@ function iniciarPedido(tipo, profId, opt){
   }
   // Con la sesión de "Mis turnos" abierta, repetir la última receta no pide código (también desde "Recetas")
   if(tipo === 'receta'){
-    var ses = null, sesDni = null; try { ses = sessionStorage.getItem('urcym_mis_sesion'); sesDni = sessionStorage.getItem('urcym_mis_dni'); } catch(e) {}
+    var _o2 = leerSes(), ses = _o2 ? _o2.s : null, sesDni = _o2 ? _o2.dni : null;
     if(ses){ Q.sesion = ses; Q.misDni = sesDni; api({ accion:'mis_datos', sesion:ses }).then(function(m){ Q.mis = m; if(Q.datos && !Q.detalleOk) renderPedido(); }).catch(function(){ Q.sesion = null; }); }
   }
   $('#titulo').textContent = tipo === 'receta' ? (opt.repetir || opt.items ? 'Repetir receta' : 'Pedido de receta') : 'Consulta por mensaje';
@@ -1392,7 +1397,7 @@ function engancharReceta(){
       var e = $('#e-cod'); limpiarError(e); bv.disabled = true;
       try{
         var r = await api({ accion:'codigo_verificar', dni:Q.pac.dni, codigo:$('#f-cod').value });
-        Q.sesion = r.sesion; Q.misDni = Q.pac.dni; Q.mis = await api({ accion:'mis_datos', sesion:Q.sesion });
+        Q.sesion = r.sesion; Q.misDni = Q.pac.dni; guardarSes(r.sesion, Q.pac.dni); Q.mis = await api({ accion:'mis_datos', sesion:Q.sesion });
         renderPedido();
       }catch(err){ bv.disabled = false; mostrarError(e, err); }
     };
