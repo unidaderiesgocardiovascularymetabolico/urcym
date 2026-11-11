@@ -2,7 +2,7 @@
 <html lang="es-AR">
 <head>
   <meta charset="UTF-8" />
-  <script>var URCYM_BUILD = '2026-11-12-0400';</script>
+  <script>var URCYM_BUILD = '2026-11-12-0500';</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Evaluaciones cardiometabólicas — Sistema de Historia Clínica</title>
 
@@ -22492,6 +22492,8 @@ function openCtxMenu(e,key){
     var itH=mkItem('📝 &nbsp;Abrir la HC (evolucionar)','#0f766e',function(){ _abrirEvolDesdeAgenda(pacT.dni); });
     itH.style.fontWeight='700'; menu.appendChild(itH);
   })();
+  // Al final: copiar celular / copiar mail / WhatsApp
+  if(window._agMenuContacto) window._agMenuContacto(menu, key, mkItem);
 
   var x=e.clientX,y=e.clientY;
   menu.style.left=x+'px';menu.style.top=y+'px';
@@ -38397,6 +38399,52 @@ window._agWaNum = function(tel){
   if(d.length === 8) return '54911' + d;
   return d.length > 10 ? d : '';
 };
+</script>
+
+<script>
+/* ════════ Agenda: menú del turno → Copiar celular · Copiar mail · WhatsApp ════════ */
+(function(){
+  function toast(txt){
+    var t = document.getElementById('ag-copy-toast');
+    if(!t){ t = document.createElement('div'); t.id = 'ag-copy-toast'; t.style.cssText = 'position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#0f766e;color:#fff;padding:9px 16px;border-radius:10px;font:600 13px DM Sans,sans-serif;box-shadow:0 8px 22px rgba(0,0,0,.2);z-index:100000;transition:opacity .3s'; document.body.appendChild(t); }
+    t.textContent = txt; t.style.opacity = '1'; clearTimeout(t._h); t._h = setTimeout(function(){ t.style.opacity = '0'; }, 1600);
+  }
+  function copiar(v, que){
+    var ok = function(){ toast('✓ ' + que + ' copiado: ' + v); };
+    if(navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(v).then(ok, function(){ if(typeof _copiarViejo === 'function') _copiarViejo(v); ok(); });
+    else { if(typeof _copiarViejo === 'function') _copiarViejo(v); ok(); }
+  }
+  function datos(t){
+    var cache = window._agPacCache = window._agPacCache || {};
+    var p = (typeof _agPacienteDeTurno === 'function') ? _agPacienteDeTurno(t) : null;
+    if(!p && t.dni_paciente && cache[t.dni_paciente]) p = cache[t.dni_paciente];
+    return { p: p, tel: String((p && p.telefono) || t.telefono || t.tel || '').trim(), mail: String((p && p.email) || t.email || '').trim() };
+  }
+  window._agMenuContacto = function(menu, key, mkItem){
+    var t = (window.turnos || {})[key]; if(!t || !t.paciente) return;
+    var wrap = document.createElement('div'); menu.appendChild(wrap);
+    function pintar(){
+      var d = datos(t); wrap.innerHTML = '';
+      var sep = document.createElement('div'); sep.style.cssText = 'height:1px;background:#e5e7eb;margin:4px 0;'; wrap.appendChild(sep);
+      if(d.tel){
+        wrap.appendChild(mkItem('📋 &nbsp;Copiar celular <span style="color:#94a3b8;font-size:11px;margin-left:auto">' + d.tel.replace(/</g, '&lt;') + '</span>', '#1e3a5f', function(){ copiar(d.tel, 'Celular'); }));
+        var wa = window._agWaNum ? window._agWaNum(d.tel) : '';
+        if(wa) wrap.appendChild(mkItem('💬 &nbsp;WhatsApp', '#166534', function(){ window.open('https://wa.me/' + wa, '_blank', 'noopener'); }));
+      } else wrap.appendChild(mkItem('<span style="color:#cbd5e1;font-style:italic">📋 &nbsp;Sin celular cargado</span>', '#cbd5e1', function(){}));
+      if(d.mail) wrap.appendChild(mkItem('✉ &nbsp;Copiar mail <span style="color:#94a3b8;font-size:11px;margin-left:auto">' + d.mail.replace(/</g, '&lt;') + '</span>', '#1e3a5f', function(){ copiar(d.mail, 'Mail'); }));
+      else wrap.appendChild(mkItem('<span style="color:#cbd5e1;font-style:italic">✉ &nbsp;Sin mail cargado</span>', '#cbd5e1', function(){}));
+      // que el menú no se salga de la pantalla
+      var r = menu.getBoundingClientRect(); if(r.bottom > window.innerHeight) menu.style.top = Math.max(4, window.innerHeight - r.height - 6) + 'px';
+    }
+    pintar();
+    var d0 = datos(t), cache = window._agPacCache = window._agPacCache || {};
+    if(!d0.p && t.dni_paciente && cache[t.dni_paciente] === undefined && typeof sb !== 'undefined'){
+      cache[t.dni_paciente] = null;
+      sb.from('pacientes').select('dni,apellido,nombre,telefono,email,obra_social,numero_afiliado').eq('dni', t.dni_paciente).maybeSingle()
+        .then(function(r){ cache[t.dni_paciente] = (r && r.data) || null; if(document.body.contains(menu)) pintar(); }).catch(function(){});
+    }
+  };
+})();
 </script>
 </body>
 </html>
