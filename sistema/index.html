@@ -2,7 +2,7 @@
 <html lang="es-AR">
 <head>
   <meta charset="UTF-8" />
-  <script>var URCYM_BUILD = '2026-11-10-2100';</script>
+  <script>var URCYM_BUILD = '2026-11-11-0830';</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Evaluaciones cardiometabólicas — Sistema de Historia Clínica</title>
 
@@ -36259,8 +36259,9 @@ function _cargaEstPrec(p){
     w.innerHTML = '<label style="display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border:1.5px solid var(--blue);border-radius:9px;color:var(--blue);background:var(--blue-light);font-size:12.5px;font-weight:700;cursor:pointer">📷 Foto o PDF del informe<input type="file" accept="image/*,application/pdf" multiple style="display:none"></label>'
       + '<span class="ft-est" style="font-size:12px;color:#64748b">También podés dictar: hacé clic en el recuadro y usá tu dictado (Handy o Win + H).</span>';
     var inp = w.querySelector('input'), est = w.querySelector('.ft-est');
-    inp.onchange = async function(){
-      var files = Array.prototype.slice.call(inp.files || []); if(!files.length) return;
+    est.innerHTML = '📋 También podés <b>pegar una captura</b> (Ctrl + V) o arrastrar la foto acá, o dictar (Handy / Win + H).';
+    var leer = async function(files){
+      if(!files.length) return;
       try {
         for(var i = 0; i < files.length; i++){
           est.textContent = '⏳ Leyendo ' + files[i].name + '…';
@@ -36274,6 +36275,21 @@ function _cargaEstPrec(p){
       } catch(e) { est.textContent = '⚠ ' + e.message; }
       inp.value = '';
     };
+    inp.onchange = function(){ leer(Array.prototype.slice.call(inp.files || [])); };
+    // Pegar una captura (Ctrl+V) mientras está abierta la carga: se lee igual que una foto
+    var alPegar = function(ev){
+      if(!document.contains(textarea)){ document.removeEventListener('paste', alPegar, true); return; }
+      var items = Array.prototype.slice.call((ev.clipboardData && ev.clipboardData.items) || []);
+      var imgs = items.filter(function(it){ return it.kind === 'file' && /^image\/|^application\/pdf/.test(it.type); }).map(function(it, k){
+        var f = it.getAsFile(); return f && !f.name ? new File([f], 'captura-' + (k + 1) + '.png', { type: f.type }) : f; }).filter(Boolean);
+      if(!imgs.length) return;   // texto: se pega normal
+      ev.preventDefault(); ev.stopPropagation(); leer(imgs);
+    };
+    document.addEventListener('paste', alPegar, true);
+    // Arrastrar una foto o PDF al recuadro
+    textarea.addEventListener('dragover', function(ev){ if(ev.dataTransfer && Array.prototype.some.call(ev.dataTransfer.items || [], function(i){ return i.kind === 'file'; })){ ev.preventDefault(); textarea.style.outline = '2px dashed var(--blue)'; } });
+    textarea.addEventListener('dragleave', function(){ textarea.style.outline = ''; });
+    textarea.addEventListener('drop', function(ev){ var fs = Array.prototype.slice.call((ev.dataTransfer && ev.dataTransfer.files) || []).filter(function(f){ return /^image\/|pdf/.test(f.type); }); if(!fs.length) return; ev.preventDefault(); textarea.style.outline = ''; leer(fs); });
     textarea.parentNode.insertBefore(w, textarea);
     return w;
   };
