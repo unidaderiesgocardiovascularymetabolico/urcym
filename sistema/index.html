@@ -2,7 +2,7 @@
 <html lang="es-AR">
 <head>
   <meta charset="UTF-8" />
-  <script>var URCYM_BUILD = '2026-11-11-1215';</script>
+  <script>var URCYM_BUILD = '2026-11-11-1500';</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Evaluaciones cardiometabólicas — Sistema de Historia Clínica</title>
 
@@ -2242,6 +2242,14 @@
         .cierre-kpi-group .fin-kpi{background:white;box-shadow:0 1px 2px rgba(0,0,0,.03)}
         .cierre-kpi-group.grp-consultorio .fin-kpi{border-left:4px solid #7c3aed}
         .cierre-kpi-group.grp-profesional .fin-kpi{border-left:4px solid #14b8a6}
+        .ci-fecha-nav{display:flex;align-items:center;gap:4px}
+        .ci-fecha-nav button{border:1.5px solid var(--border);background:#fff;border-radius:10px;padding:7px 11px;font-size:15px;font-weight:700;cursor:pointer;color:var(--text)}
+        .ci-fecha-nav .ci-hoy{font-size:12.5px}
+        .ci-profs{display:flex;gap:6px;flex-wrap:wrap}
+        .ci-profs button{padding:8px 14px;border:1.5px solid var(--border);border-radius:999px;background:#fff;font-size:13px;font-weight:600;color:var(--text-soft);cursor:pointer}
+        .ci-profs button.sel{background:var(--blue);border-color:var(--blue);color:#fff}
+        .ci-titulo-dia{font-family:var(--font-display);font-size:19px;font-weight:700;color:var(--text);margin:4px 0 12px}
+        .ci-temporal{background:#eff6ff;border:1.5px solid #93c5fd;border-radius:12px;padding:10px 14px;margin-bottom:14px;font-size:13px;color:#1e3a8a;font-weight:600}
         .cierre-pacientes-card{display:flex;align-items:center;gap:16px;background:white;border:1.5px solid var(--border);border-radius:16px;padding:16px 22px;margin-bottom:16px}
         .cierre-pacientes-card .cierre-pac-num{font-family:var(--font-display);font-size:34px;font-weight:700;color:var(--text);line-height:1}
         .cierre-pacientes-card .cierre-pac-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-soft)}
@@ -2250,12 +2258,12 @@
       <div class="page-title">💰 Cierre diario</div>
       <div class="page-subtitle">Cierre de caja por profesional — particulares y OSDE juntos</div>
       <div class="cierre-toolbar">
-        <input type="date" id="cierre-fecha"/>
-        <select id="cierre-prof">
+        <div class="ci-fecha-nav"><button type="button" title="Día anterior" onclick="ciMoverDia(-1)">‹</button><input type="date" id="cierre-fecha" onchange="window.cierreCargarDia && cierreCargarDia()"/><button type="button" title="Día siguiente" onclick="ciMoverDia(1)">›</button><button type="button" class="ci-hoy" onclick="ciMoverDia(0)">Hoy</button></div>
+        <select id="cierre-prof" style="display:none" onchange="window.cierreCargarDia && cierreCargarDia()">
           <option value="BG">Dra. Bárbara Guerrero</option>
           <option value="OB">Dr. Omar Bertani</option>
         </select>
-        <button class="fin-btn-nuevo" onclick="window.cierreCargarDia && cierreCargarDia()">Ver cierre</button>
+        <div class="ci-profs" id="ci-profs"><button type="button" data-p="BG" onclick="ciElegirProf('BG')">Dra. Bárbara Guerrero</button><button type="button" data-p="OB" onclick="ciElegirProf('OB')">Dr. Omar Bertani</button></div>
         <button class="fin-btn-nuevo" style="background:#1a2335" onclick="window.cierreDescargarPDF && cierreDescargarPDF()">📄 Descargar PDF</button>
         <button class="fin-btn-nuevo teal" onclick="window.cierreAbrirConfig && cierreAbrirConfig()">⚙️ Configuración</button>
       </div>
@@ -2265,6 +2273,8 @@
       </div>
 
       <div id="cierre-panel-dia">
+        <div class="ci-titulo-dia" id="ci-titulo-dia"></div>
+        <div class="ci-temporal" id="ci-temporal" style="display:none"></div>
         <div id="ci-vigencia-notice" style="display:none;background:#fef3c7;border:1.5px solid #fde047;border-radius:12px;padding:12px 16px;margin-bottom:16px;font-size:12.5px;color:#713f12;font-weight:600"></div>
 
         <div class="cierre-pacientes-card">
@@ -5009,6 +5019,9 @@
 </div>
 
 <style>
+.otros-med-box{margin-top:18px;background:#f0fdf4;border:1.5px solid #86efac;border-left:5px solid #16a34a;border-radius:14px;padding:12px 14px 8px}
+.otros-med-box h4{color:#166534!important;font-size:13px!important}
+.evh-other-med-item{font-weight:600}
 #modalPaciente .modal{max-width:1000px;width:96vw;padding:22px 26px}
 #modalPaciente .modal-title{margin-bottom:12px}
 #modalPaciente .form-grid{grid-template-columns:repeat(4,1fr);gap:10px 14px}
@@ -5086,7 +5099,7 @@
         <label>Obra Social</label>
         <div style="position:relative">
           <input type="text" id="f_obra_social_input" placeholder="Escribí para buscar..." autocomplete="off"
-            oninput="filtrarObrasSociales(this.value)"
+            oninput="filtrarObrasSociales(this.value)" onfocus="filtrarObrasSociales(this.value)" onclick="filtrarObrasSociales(this.value)"
             onblur="setTimeout(()=>{document.getElementById('osDrop').style.display='none'},150)"
             style="width:100%;padding:11px 14px;border-radius:12px;border:1.5px solid var(--border);background:var(--gray);font-family:'DM Sans',sans-serif;font-size:14px;color:var(--text);outline:none"/>
           <input type="hidden" id="f_obra_social"/>
@@ -25192,7 +25205,7 @@ function _vidHtmlPedidoCab(p){
   return '<div style="display:flex;justify-content:space-between;gap:8px;align-items:center;flex-wrap:wrap;">'
     +'<b style="font-size:13.5px;">'+_vidEsc(p.paciente)+' <span style="font-weight:400;color:#6b7280;">· DNI '+_vidEsc(p.dni)+'</span></b>'
     +'<span class="rs-badge '+_vidEsc(p.prof)+'">'+_vidEsc(VID_PROFS[p.prof]||p.prof)+'</span></div>'
-    +'<div style="color:#6b7280;margin-top:2px;">'+_vidEsc(p.email)+(p.telefono?' · '+_vidEsc(p.telefono):'')+(p.paciente_nuevo?' · <b style="color:#7B3FC4">paciente nuevo</b>':'')
+    +'<div style="color:#6b7280;margin-top:2px;">✉️ '+_chipCopiar(p.email,'mail')+(p.telefono?' · '+_vidEsc(p.telefono):'')+(p.paciente_nuevo?' · <b style="color:#7B3FC4">paciente nuevo</b>':'')
     +' · pedido '+_vidFechaHora(p.created_at)+'</div>'
     +'<div style="margin-top:4px;display:flex;gap:6px;align-items:center;flex-wrap:wrap;">'
     +(_vidEsOsde(p)?'<span style="color:#0369a1;font-weight:700;">🏥 OSDE · no abona (por cobertura)</span>'
@@ -25480,7 +25493,7 @@ async function vidRecetaOnline(item, alTerminar){
   if(r.error||!r.data){alert('No se encontró el pedido online.');return;}
   var p=r.data;
   var html='<div style="font-size:13px;">'
-    +'<div><b>'+_vidEsc(p.paciente)+'</b> · DNI '+_vidEsc(p.dni)+' · '+_vidEsc(p.email)+'</div>'
+    +'<div><b>'+_vidEsc(p.paciente)+'</b> · DNI '+_chipCopiar(p.dni,'DNI')+' · ✉️ '+_chipCopiar(p.email,'mail')+'</div>'
     +'<div style="margin:6px 0 10px;">'+(p.items||[]).map(function(it){return '<div>💊 <b>'+_vidEsc(it.farmaco)+'</b> '+_vidEsc(it.dosis)+(it.frecuencia?' · '+_vidEsc(it.frecuencia):'')+(it.marca?' ('+_vidEsc(it.marca)+')':'')+'</div>';}).join('')
     +'<div style="color:#6b7280;margin-top:4px;">Cobertura: '+_vidEsc(p.obra_social||'—')+(p.afiliado?' · '+_vidEsc(p.afiliado):'')+'</div>'+(p.nota?'<div style="margin-top:4px;">Nota: '+_vidEsc(p.nota)+'</div>':'')+_vidHtmlFotos(p)+_vidHtmlOsde(p)+'</div>'
     +_htmlModoEnvioReceta()
@@ -26717,7 +26730,7 @@ loadLocal();  // async, carga en background y llama renderGrid al final
     }
     var med=document.getElementById('med_filas');
     if(med && !document.getElementById('otros_med_filas')){
-      med.parentElement.insertAdjacentHTML('beforeend', '<div style="margin-top:16px;border-top:1px dashed var(--border);padding-top:12px"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><h4 style="margin:0;font-family:var(--font-display);font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--text-soft)">Otros fármacos</h4><button type="button" onclick="agregarFilaOtroMed()" style="background:#16a34a;color:white;border:none;border-radius:8px;padding:5px 12px;font-size:12px;cursor:pointer">+ Agregar</button></div><div style="display:grid;grid-template-columns:1fr 90px 1fr 30px;gap:8px;padding:0 10px;margin-bottom:6px;font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--text-soft)"><div>Fármaco</div><div>Dosis</div><div>Frecuencia</div><div></div></div><div id="otros_med_filas"></div></div>');
+      med.parentElement.insertAdjacentHTML('beforeend', '<div class="otros-med-box"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><h4 style="margin:0;font-family:var(--font-display);font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--text-soft)">Otros fármacos</h4><button type="button" onclick="agregarFilaOtroMed()" style="background:#16a34a;color:white;border:none;border-radius:8px;padding:5px 12px;font-size:12px;cursor:pointer">+ Agregar</button></div><div style="display:grid;grid-template-columns:1fr 90px 1fr 30px;gap:8px;padding:0 10px;margin-bottom:6px;font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--text-soft)"><div>Fármaco</div><div>Dosis</div><div>Frecuencia</div><div></div></div><div id="otros_med_filas"></div></div>');
     }
   }
   document.addEventListener('DOMContentLoaded', asegurarUIClinica);
@@ -26845,7 +26858,7 @@ loadLocal();  // async, carga en background y llama renderGrid al final
         }).join('')
       : '<span style="font-size:11px;color:var(--text-soft)">Sin medicación cardiometabólica</span>';
     if (otros.length) {
-      medHtml += '<div style="width:100%;font-size:10px;color:#166534;margin-top:4px;font-weight:700">Otros fármacos:</div>' +
+      medHtml += '<div style="width:100%;font-size:11px;color:#166534;margin-top:6px;font-weight:800;text-transform:uppercase;letter-spacing:.04em">💊 Otros fármacos</div>' +
         otros.map(function (m) {
           return '<span class="evh-other-med-item" style="background:#dcfce7;color:#166534;border:1px solid #86efac">' +
                  esc(m.farmaco) + ' ' + esc(m.dosis || '') + (m.frecuencia ? ' ' + esc(m.frecuencia) : '') + '</span>';
@@ -29655,6 +29668,7 @@ window.cargarProxConsultas = cargarProxConsultas;
       return;
     }
     if(!Math.round(total)){ acc.innerHTML = ''; return; }
+    if(ciBloqueoTemporal(fecha, prof)){ acc.innerHTML = '<span style="font-size:12px;color:#1e3a8a;font-weight:600">🔒 Se cierra al terminar la atención</span>'; return; }
     acc.innerHTML = b('background:#15803d', '✅ Saldado hoy', "cierreLiqMarcar('saldado')", 'Se pagó la diferencia: el próximo cierre arranca de cero')
       + b('background:#d97706', '➡️ Pasar al próximo cierre', "cierreLiqMarcar('pasado')", 'No se paga hoy: la diferencia se suma sola al próximo cierre de este profesional');
     ciPintarArrastre._ctx = { fecha:fecha, prof:prof, total:total, dia:diaSettle };
@@ -29664,6 +29678,7 @@ window.cargarProxConsultas = cargarProxConsultas;
     if(ciBloqueadoPorLectura()) return;
     var fecha = ($c('cierre-fecha')||{}).value || ciHoy(), prof = ($c('cierre-prof')||{}).value || 'BG', k = prof+'|'+fecha;
     var ctx = ciPintarArrastre._ctx || {};
+    if(estado && ciBloqueoTemporal(fecha, prof)){ alert(ciBloqueoTemporal(fecha, prof)); return; }
     try {
       var obj = await ciLeerLiqEstado();   // siempre lo último guardado (puede haberlo tocado otra persona)
       if(estado){
@@ -29913,9 +29928,42 @@ window.cargarProxConsultas = cargarProxConsultas;
     return out;
   };
 
+  // ── Profesional en botones, fecha que se actualiza sola y bloqueo de días que todavía no terminaron
+  window.ciElegirProf = function(p){ var s = $c('cierre-prof'); if(s){ s.value = p; } cierreCargarDia(); };
+  window.ciMoverDia = function(n){
+    var i = $c('cierre-fecha'); if(!i) return;
+    if(!n){ i.value = ciHoy(); } else { var d = new Date((i.value || ciHoy()) + 'T12:00:00'); d.setDate(d.getDate() + n); i.value = d.toISOString().slice(0, 10); }
+    cierreCargarDia();
+  };
+  // Fin de la atención de ese día: el último turno del profesional + su duración (30 min si no tiene)
+  function ciFinAtencion(fecha, prof){
+    var T = (typeof turnos !== 'undefined' && turnos) || {}, fin = null;
+    Object.keys(T).forEach(function(k){ var p = k.split('_'); if(p[0] !== fecha || p[2] !== prof) return; var t = T[k] || {};
+      var hm = String(p[1] || '').split(':'), m = (+hm[0]) * 60 + (+hm[1] || 0) + (Number(t.dur || t.duracion) || 30);
+      if(fin == null || m > fin) fin = m; });
+    return fin;
+  }
+  // null = se puede cerrar; si no, el texto de por qué todavía no
+  function ciBloqueoTemporal(fecha, prof){
+    var hoy = ciHoy();
+    if(fecha > hoy) return 'Este día todavía no llegó: lo que ves es lo agendado hasta ahora. El cierre se hace cuando termine la atención.';
+    if(fecha < hoy) return null;
+    var fin = ciFinAtencion(fecha, prof); if(fin == null) return null;
+    var ahora = new Date(), min = ahora.getHours() * 60 + ahora.getMinutes();
+    if(min >= fin) return null;
+    var hh = String(Math.floor(fin / 60)).padStart(2, '0') + ':' + String(fin % 60).padStart(2, '0');
+    return 'La atención de hoy todavía no terminó (último turno hasta las ' + hh + ' h). El cierre se habilita a esa hora; mientras tanto los números son parciales.';
+  }
+  window.ciBloqueoTemporal = ciBloqueoTemporal;
   window.cierreCargarDia = async function(){
     var fecha = ($c('cierre-fecha')||{}).value || ciHoy();
     var prof = ($c('cierre-prof')||{}).value || 'BG';
+    if($c('cierre-fecha') && !$c('cierre-fecha').value) $c('cierre-fecha').value = fecha;
+    document.querySelectorAll('#ci-profs [data-p]').forEach(function(b){ b.classList.toggle('sel', b.dataset.p === prof); });
+    var _dt = new Date(fecha + 'T12:00:00'), _dias = ['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];
+    if($c('ci-titulo-dia')) $c('ci-titulo-dia').textContent = 'Cierre del ' + _dias[_dt.getDay()] + ' ' + ciFmtFecha(fecha) + (fecha === ciHoy() ? ' (hoy)' : '') + ' · ' + (PROF_FULL_CI[prof] || prof);
+    var _bloq = ciBloqueoTemporal(fecha, prof);
+    if($c('ci-temporal')){ $c('ci-temporal').style.display = _bloq ? '' : 'none'; $c('ci-temporal').textContent = _bloq ? '🔒 ' + _bloq : ''; }
 
     var noticeEl = $c('ci-vigencia-notice');
     var tabla = $c('ci-tabla-turnos');
@@ -33914,7 +33962,7 @@ var CIR_COMUNES = ['Colecistectomía','Cesárea','Cirugía bariátrica','Angiopl
     var cont = document.getElementById('otros_med_filas'); if(!cont) return null;
     var cab = cont.previousElementSibling; if(cab && !cab.classList.contains('med-cab-otros')){ cab.className = 'med-cab-otros'; cab.removeAttribute('style'); cab.innerHTML = '<div>Fármaco</div><div>Dosis</div><div>Frecuencia</div><div></div>'; }
     var bar = cab && cab.previousElementSibling; var b = bar && bar.querySelector('button');
-    if(b && !b._v2){ b._v2 = true; b.setAttribute('onclick', 'agregarFilaOtroMed()'); var h = bar.querySelector('h4'); if(h && !/no cardiometab/.test(h.textContent)) h.innerHTML = 'Otros fármacos <span style="text-transform:none;letter-spacing:0;font-weight:500">(no cardiometabólicos)</span>'; }
+    if(b && !b._v2){ b._v2 = true; b.setAttribute('onclick', 'agregarFilaOtroMed()'); var h = bar.querySelector('h4'); if(h && !/no cardiometab/.test(h.textContent)) h.innerHTML = '💊 Otros fármacos <span style="text-transform:none;letter-spacing:0;font-weight:500">(no cardiometabólicos)</span>'; }
     return cont;
   }
   window.agregarFilaOtroMed = function(data){
@@ -35341,11 +35389,12 @@ details.t1-q:not([disabled]) summary .t1-q-t::after{content:' ▾';color:var(--b
   if(typeof filtrarObrasSociales === 'function'){
     window.filtrarObrasSociales = function(q){
       var drop = document.getElementById('osDrop'); if(!drop) return;
-      var lista = q ? obrasSociales.filter(function(o){ return sinAc(o).indexOf(sinAc(q)) >= 0; }) : obrasSociales;
-      var exacta = q && obrasSociales.some(function(o){ return sinAc(o) === sinAc(q); });
+      var todas = (typeof _osTodas === 'function') ? _osTodas() : obrasSociales;
+      var lista = q ? todas.filter(function(o){ return sinAc(o).indexOf(sinAc(q)) >= 0; }) : todas;
+      var exacta = q && todas.some(function(o){ return sinAc(o) === sinAc(q); });
       var it = function(v, html){ return '<div class="os-it" data-v="' + v.replace(/"/g, '&quot;') + '" style="padding:10px 14px;font-size:13px;cursor:pointer;border-bottom:1px solid #f0f4f9" onmouseover="this.style.background=\'#e8f3fc\'" onmouseout="this.style.background=\'\'">' + html + '</div>'; };
       var esc = function(t){ return String(t).replace(/[&<>"]/g, function(c){ return { '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]; }); };
-      var html = (q && !exacta ? it(q.trim().toUpperCase(), '<span style="color:var(--teal);font-weight:700">＋ Agregar «' + esc(q.trim().toUpperCase()) + '» a la lista</span>') : '') + lista.map(function(o){ return it(o, esc(o)); }).join('');
+      var html = lista.map(function(o){ return it(o, esc(o)); }).join('') + (q && !exacta ? it(q.trim().toUpperCase(), '<span style="color:var(--teal);font-weight:700">＋ Agregar «' + esc(q.trim().toUpperCase()) + '» a la lista</span>') : '');
       if(!html){ drop.style.display = 'none'; return; }
       drop.innerHTML = html; drop.style.display = 'block';
       drop.querySelectorAll('.os-it').forEach(function(d){ d.onmousedown = function(e){ e.preventDefault(); }; d.onclick = function(){ elegirOS(d.dataset.v); }; });
