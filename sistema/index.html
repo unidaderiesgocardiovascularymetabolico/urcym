@@ -2,7 +2,7 @@
 <html lang="es-AR">
 <head>
   <meta charset="UTF-8" />
-  <script>var URCYM_BUILD = '2026-11-12-0100';</script>
+  <script>var URCYM_BUILD = '2026-11-12-0300';</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Evaluaciones cardiometabólicas — Sistema de Historia Clínica</title>
 
@@ -23266,6 +23266,7 @@ function makeTurnoEl(t,key,hPx){
     :(t.asistencia==='atendido'||t.asistencia==='asistio')?' asist-atendido'
     :t.asistencia==='ausente'?' asist-ausente':'';
   el.className='ag-turno '+pc+asistCls+(t.estado==='cancelado'?' cancelado':'')+(t.extra?' ag-turno-extra':'')+(t.video?' ag-turno-video':'')+(t.reserva_pendiente?' ag-turno-pend':'');
+  el.dataset.key=key;
   var dc=t.osde?'osde':(t.pago||'sin-seña');
 
   var nameColor='';
@@ -38212,7 +38213,7 @@ function _cargaEstPrec(p){
     var dj = (typeof _safeJ === 'function') ? _safeJ(data.desenlaces_json, []) : (data.desenlaces_json || []); S.desenlaces = Array.isArray(dj) ? dj.map(function(d){ return { tipo: d.tipo, fecha: d.fecha ? String(d.fecha).slice(0, 10) : '', detalle: d.detalle || '' }; }) : [];
     var set = function(id, v){ var e = $(id); if(e) e.value = v || ''; };
     set('iv_cfecha', String(S.inv_consent_fecha || '').slice(0, 10)); if(S.inv_consent_version) set('iv_cver', S.inv_consent_version);
-    set('iv_ingreso', String(S.inv_ingreso || '').slice(0, 10)); set('iv_segfecha', String(S.seguimiento_fecha || '').slice(0, 10)); set('iv_causa', S.causa_muerte); set('iv_ocup', S.ocupacion);
+    set('iv_ingreso', String(S.inv_ingreso || '').slice(0, 10)); set('iv_segfecha', String(S.seguimiento_fecha || '').slice(0, 10)); set('iv_causa', S.causa_muerte); set('iv_ocup', S.ocupacion || ((typeof pacienteActual !== 'undefined' && pacienteActual && pacienteActual.ocupacion) || ''));
     pintar(); pintarDes();
     primeraEvol = null;
     var dni = data.dni_paciente || (typeof pacienteActual !== 'undefined' && pacienteActual && pacienteActual.dni);
@@ -38263,7 +38264,7 @@ function _cargaEstPrec(p){
     cols.push(V('consent_version', 'Consentimiento: versión del formulario', '', function(f){ var c = C(f); return c ? (c.inv_consent_version || null) : null; }));
     codif(V, cols, 'nivel_educativo', 'Nivel educativo', EDU, function(f){ var c = C(f); return c ? c.nivel_educativo : null; });
     codif(V, cols, 'situacion_laboral', 'Situación laboral', LAB, function(f){ var c = C(f); return c ? c.situacion_laboral : null; });
-    cols.push(V('ocupacion', 'Ocupación (texto)', '', function(f){ var c = C(f); return c ? (c.ocupacion || null) : null; }));
+    cols.push(V('ocupacion', 'Ocupación (texto)', '', function(f){ var c = C(f); var p = (pacientesData || []).find(function(x){ return String(x.dni) === String(f.dni); }); return (c && c.ocupacion) || (p && p.ocupacion) || null; }));
     codif(V, cols, 'seguimiento_estado', 'Estado de seguimiento', SEG.map(function(x){ return x[1]; }), function(f){ var c = C(f); var e = c && (c.seguimiento_estado || 'activo'); var m = SEG.find(function(x){ return x[0] === e; }); return c ? (m ? m[1] : null) : null; });
     cols.push(V('seguimiento_fecha', 'Fecha del estado de seguimiento (pérdida, alta, derivación, muerte)', '', function(f){ var c = C(f); return c && c.seguimiento_fecha ? String(c.seguimiento_fecha).slice(0, 10) : null; }));
     cols.push(V('fallecido', 'Fallecido', SN, function(f){ var c = C(f); return c ? (c.seguimiento_estado === 'fallecido' || dj(c).some(function(d){ return /^muerte/.test(d.tipo); }) ? 1 : 0) : null; }));
@@ -38293,6 +38294,159 @@ function _cargaEstPrec(p){
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows.length ? rows : [{ id: '', tipo: '', descripcion: '', fecha: '', detalle: '' }]), 'Desenlaces');
   };
   if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', crear); else crear();
+})();
+</script>
+
+<style>
+#ag-pac-datos{display:none;margin-top:8px;background:#f8fafc;border:1.5px solid #e2e8f0;border-radius:10px;padding:8px 12px;font-size:12.5px}
+#ag-pac-datos .apd{display:flex;flex-wrap:wrap;gap:6px 16px;align-items:center}
+#ag-pac-datos .apd>div{display:flex;align-items:center;gap:5px;min-width:0}
+#ag-pac-datos .apd b{font-size:10px;font-weight:800;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em}
+#ag-pac-datos .dato-copiar{margin-left:0;background:#fff;border:1px solid #e2e8f0;padding:2px 7px;font-weight:600;color:#1e293b;word-break:break-all}
+#ag-pac-datos .dato-copiar:hover{background:#eef4fc;border-color:#93c5fd}
+#ag-pac-datos .falta{color:#cbd5e1;font-style:italic}
+#ag-pac-datos .apd-tip{font-size:10.5px;color:#94a3b8;margin-top:4px}
+</style>
+<script>
+/* ════════ Agenda › turno: datos de contacto del paciente para copiar ════════
+   Teléfono, mail, obra social, n.º de afiliado y DNI, cada uno se copia con un click.
+   Lo ven la secretaría y los profesionales. */
+(function(){
+  function $(id){ return document.getElementById(id); }
+  var cache = window._agPacCache = window._agPacCache || {}, ultimo = '';
+  function caja(){
+    var b = $('ag-pac-datos'); if(b) return b;
+    var dniH = $('ag-f-paciente-dni'); if(!dniH) return null;
+    b = document.createElement('div'); b.id = 'ag-pac-datos';
+    dniH.parentElement.appendChild(b); return b;
+  }
+  function norm(t){ return String(t || '').trim().toLowerCase().replace(/\s+/g, ' '); }
+  function turnoActual(){
+    var T = window.turnos || {}, nom = norm(($('ag-f-paciente') || {}).value), f = ($('ag-f-date') || {}).value, h = ($('ag-f-time') || {}).value;
+    var k = Object.keys(T).find(function(k){ var t = T[k]; return t && norm(t.paciente) === nom && (!f || k.indexOf(f) === 0) && (!h || k.indexOf(h) > 0); });
+    return k ? T[k] : null;
+  }
+  function chip(v, que){ return v ? _chipCopiar(v, que) : '<span class="falta">sin cargar</span>'; }
+  function pintar(p, t){
+    var b = caja(); if(!b) return;
+    var tel = (p && p.telefono) || (t && (t.telefono || t.tel)) || '', mail = (p && p.email) || (t && t.email) || '';
+    var os = (p && p.obra_social) || (t && t.obra_social) || '', af = (p && p.numero_afiliado) || '', dni = (p && p.dni) || (t && t.dni_paciente) || '';
+    if(!p && !t){ b.style.display = 'none'; return; }
+    b.innerHTML = '<div class="apd">'
+      + '<div><b>📞 Tel.</b>' + chip(tel, 'teléfono') + '</div>'
+      + '<div><b>✉ Mail</b>' + chip(mail, 'mail') + '</div>'
+      + '<div><b>🏥 OS</b>' + chip(os, 'obra social') + '</div>'
+      + '<div><b>N.º afiliado</b>' + chip(af, 'n.º de afiliado') + '</div>'
+      + (dni ? '<div><b>DNI</b>' + chip(dni, 'DNI') + '</div>' : '')
+      + '</div><div class="apd-tip">Tocá un dato para copiarlo.' + (p ? '' : ' Paciente sin ficha: se muestran los datos del turno.') + '</div>';
+    b.style.display = 'block';
+  }
+  async function actualizar(){
+    var b = caja(); if(!b) return;
+    var nom = norm(($('ag-f-paciente') || {}).value), dni = (($('ag-f-paciente-dni') || {}).value || '').trim();
+    if(!nom && !dni){ b.style.display = 'none'; ultimo = ''; return; }
+    var t = turnoActual();
+    if(!dni && t && t.dni_paciente) dni = String(t.dni_paciente);
+    var p = (typeof _agPacienteDeTurno === 'function') ? _agPacienteDeTurno({ dni_paciente: dni, paciente: ($('ag-f-paciente') || {}).value }) : null;
+    var clave = (dni || '') + '|' + nom;
+    if(!p && dni && typeof sb !== 'undefined'){
+      if(cache[dni] === undefined){ cache[dni] = null; try { var r = await sb.from('pacientes').select('dni,apellido,nombre,telefono,email,obra_social,numero_afiliado').eq('dni', dni).maybeSingle(); cache[dni] = (r && r.data) || null; } catch(e){} }
+      p = cache[dni];
+    }
+    ultimo = clave; pintar(p, t);
+  }
+  window._agPacDatosActualizar = actualizar;
+  function enganchar(){
+    var bg = $('ag-modal-bg'); if(!bg || bg._apd) return; bg._apd = true;
+    new MutationObserver(function(){ if(bg.style.display !== 'none') setTimeout(actualizar, 60); }).observe(bg, { attributes:true, attributeFilter:['style'] });
+    var inp = $('ag-f-paciente'); if(inp){ inp.addEventListener('change', function(){ setTimeout(actualizar, 50); }); inp.addEventListener('input', function(){ clearTimeout(inp._apdT); inp._apdT = setTimeout(actualizar, 400); }); }
+    var sug = $('ag-pac-suggestions'); if(sug) sug.addEventListener('click', function(){ setTimeout(actualizar, 80); });
+  }
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', enganchar); else enganchar();
+})();
+</script>
+
+<style>
+#ag-hover-acc{position:fixed;z-index:10050;display:none;gap:4px;background:#fff;border:1px solid #e2e8f0;border-radius:9px;padding:3px;box-shadow:0 4px 14px rgba(15,23,42,.18)}
+#ag-hover-acc button{border:none;border-radius:7px;padding:4px 8px;font-size:11.5px;font-weight:700;cursor:pointer;font-family:var(--font-main,inherit);white-space:nowrap}
+#ag-hover-acc .cp{background:#eef4fc;color:#1e3a5f}
+#ag-hover-acc .wa{background:#dcfce7;color:#166534}
+#ag-hover-acc .cp:hover{background:#dbeafe}#ag-hover-acc .wa:hover{background:#bbf7d0}
+#ag-hover-acc .sin{background:#f1f5f9;color:#94a3b8;cursor:default}
+</style>
+<script>
+/* ════════ Agenda: al pasar el mouse por un turno → Copiar celular / WhatsApp ════════ */
+(function(){
+  var box = null, hideT = null, actual = null;
+  var cache = window._agPacCache = window._agPacCache || {};
+  function telDe(t){
+    var p = (typeof _agPacienteDeTurno === 'function') ? _agPacienteDeTurno(t) : null;
+    if(!p && t.dni_paciente && cache[t.dni_paciente]) p = cache[t.dni_paciente];
+    return String((p && p.telefono) || t.telefono || t.tel || '').trim();
+  }
+  // Si el paciente no está en la lista cargada (p. ej. secretaría), se busca una vez por DNI
+  function traer(t, luego){
+    var dni = t.dni_paciente; if(!dni || cache[dni] !== undefined || typeof sb === 'undefined') return;
+    cache[dni] = null;
+    sb.from('pacientes').select('dni,apellido,nombre,telefono,email,obra_social,numero_afiliado').eq('dni', dni).maybeSingle().then(function(r){ cache[dni] = (r && r.data) || null; luego(); }).catch(function(){});
+  }
+  // Número para WhatsApp (Argentina): 54 9 + código de área + número, sin 0 ni 15
+  function waNum(tel){
+    var d = String(tel || '').replace(/\D/g, '');
+    if(!d) return '';
+    if(/^549\d{10}$/.test(d)) return d;
+    if(/^54\d{10}$/.test(d)) return '549' + d.slice(2);
+    if(d.indexOf('54') === 0 && d.length > 12) d = d.slice(2);
+    d = d.replace(/^0/, '');
+    if(d.length === 12){ for(var a = 2; a <= 4; a++){ if(d.substr(a, 2) === '15'){ d = d.slice(0, a) + d.slice(a + 2); break; } } }
+    if(d.length === 10) return '549' + d;
+    if(d.length === 8) return '54911' + d;           // sin código de área: se asume AMBA
+    return d.length > 10 ? d : '';
+  }
+  function crear(){
+    if(box) return box;
+    box = document.createElement('div'); box.id = 'ag-hover-acc';
+    document.body.appendChild(box);
+    box.addEventListener('mouseenter', function(){ clearTimeout(hideT); });
+    box.addEventListener('mouseleave', ocultar);
+    box.addEventListener('click', function(e){
+      var b = e.target.closest('button'); if(!b || !actual) return; e.stopPropagation(); e.preventDefault();
+      var tel = actual.tel;
+      if(b.classList.contains('cp')){
+        var ok = function(){ var t0 = b.textContent; b.textContent = '✓ Copiado'; setTimeout(function(){ b.textContent = t0; }, 1200); };
+        if(navigator.clipboard) navigator.clipboard.writeText(tel).then(ok).catch(function(){ prompt('Copiá el celular:', tel); }); else prompt('Copiá el celular:', tel);
+      } else if(b.classList.contains('wa')){
+        var n = waNum(tel); if(n) window.open('https://wa.me/' + n, '_blank', 'noopener');
+      }
+    });
+    return box;
+  }
+  function ocultar(){ clearTimeout(hideT); hideT = setTimeout(function(){ if(box) box.style.display = 'none'; actual = null; }, 250); }
+  document.addEventListener('mouseover', function(e){
+    var el = e.target.closest && e.target.closest('#agenda-app .ag-turno[data-key]'); if(!el) return;
+    var t = (window.turnos || {})[el.dataset.key]; if(!t || !t.paciente) return;
+    clearTimeout(hideT);
+    if(!telDe(t)) traer(t, function(){ if(actual && actual.key === el.dataset.key) mostrar(el, t); });
+    mostrar(el, t);
+  });
+  function mostrar(el, t){
+    var tel = telDe(t), b = crear();
+    actual = { tel: tel, key: el.dataset.key };
+    b.innerHTML = tel ? '<button type="button" class="cp" title="' + tel.replace(/"/g, '&quot;') + '">📋 Copiar celular</button>' + (waNum(tel) ? '<button type="button" class="wa">💬 WhatsApp</button>' : '')
+                      : '<button type="button" class="sin">Sin celular cargado</button>';
+    var r = el.getBoundingClientRect();
+    b.style.display = 'flex';
+    var w = b.offsetWidth, x = Math.min(window.innerWidth - w - 6, r.right - w), y = r.top - b.offsetHeight + 2;
+    if(y < 4) y = r.bottom - 2;
+    b.style.left = Math.max(4, x) + 'px'; b.style.top = y + 'px';
+  }
+  document.addEventListener('mouseout', function(e){
+    var el = e.target.closest && e.target.closest('#agenda-app .ag-turno[data-key]'); if(!el) return;
+    if(e.relatedTarget && (el.contains(e.relatedTarget) || (box && box.contains(e.relatedTarget)))) return;
+    ocultar();
+  });
+  window.addEventListener('scroll', function(){ if(box) box.style.display = 'none'; }, true);
+  window._agWaNum = waNum;
 })();
 </script>
 </body>
