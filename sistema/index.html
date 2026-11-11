@@ -2,7 +2,7 @@
 <html lang="es-AR">
 <head>
   <meta charset="UTF-8" />
-  <script>var URCYM_BUILD = '2026-11-11-2000';</script>
+  <script>var URCYM_BUILD = '2026-11-12-0100';</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Evaluaciones cardiometabólicas — Sistema de Historia Clínica</title>
 
@@ -6128,6 +6128,22 @@ const EST_FILAS = [
   // ── CARDIOGRAFÍA
   {cat:true, label:'CARDIOGRAFÍA'},
   {label:'Nota',               key:'cardio_Nota',  unidades:[''],     defU:0, ref:null, nota:true},
+  // ── POLISOMNOGRAFÍA (o poligrafía respiratoria)
+  {cat:true, label:'POLISOMNOGRAFÍA'},
+  {label:'Tipo de estudio',    key:'psg_Tipo',     unidades:[''],     defU:0, ref:null, opciones:['','Polisomnografía (laboratorio)','Poligrafía respiratoria domiciliaria']},
+  {label:'IAH (eventos/h)',    key:'psg_IAH',      unidades:['ev/h'], defU:0, ref:(v)=>parseFloat(v)>=5, refTxt:'≥5 ev/h'},
+  {label:'Severidad AOS',      key:'psg_Sev',      unidades:[''],     defU:0, ref:(v)=>{v=String(v).trim();return !!v && v!=='Sin AOS';}, refTxt:'AOS', opciones:['','Sin AOS','Leve (5–14)','Moderada (15–29)','Severa (≥30)']},
+  {label:'Apneas predominantes', key:'psg_TipoAp', unidades:[''],     defU:0, ref:null, opciones:['','Obstructivas','Centrales','Mixtas']},
+  {label:'IDO (desaturaciones/h)', key:'psg_IDO',  unidades:['ev/h'], defU:0, ref:(v)=>parseFloat(v)>=5, refTxt:'≥5 ev/h'},
+  {label:'SatO2 basal (%)',    key:'psg_SatB',     unidades:['%'],    defU:0, ref:(v)=>parseFloat(v)<94, refTxt:'<94%'},
+  {label:'SatO2 mínima (%)',   key:'psg_SatMin',   unidades:['%'],    defU:0, ref:(v)=>parseFloat(v)<90, refTxt:'<90%'},
+  {label:'T90 (% tiempo SatO2 <90%)', key:'psg_T90', unidades:['%'],  defU:0, ref:(v)=>parseFloat(v)>=10, refTxt:'≥10%'},
+  {label:'Tiempo total de sueño (min)', key:'psg_TTS', unidades:['min'], defU:0, ref:null},
+  {label:'Eficiencia del sueño (%)', key:'psg_Ef', unidades:['%'],    defU:0, ref:(v)=>parseFloat(v)<85, refTxt:'<85%'},
+  {label:'AOS posicional',     key:'psg_Pos',      unidades:[''],     defU:0, ref:null, opciones:['','Sí','No']},
+  {label:'Ronquido',           key:'psg_Ronq',     unidades:[''],     defU:0, ref:null, opciones:['','Ausente','Leve','Moderado','Intenso']},
+  {label:'Indicación de CPAP', key:'psg_CPAP',     unidades:[''],     defU:0, ref:(v)=>String(v).trim()==='Sí', refTxt:'indicada', opciones:['','Sí','No']},
+  {label:'Comentarios',        key:'psg_Com',      unidades:[''],     defU:0, ref:null, nota:true},
 ];
 // Las filas de estudios se guardan por POSICIÓN. Para poder agregar estudios/filas nuevas sin
 // desordenar lo ya cargado, cada tabla guarda la lista de claves (estKeys) con la que se escribió
@@ -9829,7 +9845,7 @@ async function guardarPaciente() {
 
 // ===== TABS CLINICA =====
 function switchTab(tab) {
-  ['cardio','gineco','fam','hab','actali'].forEach(function(t) {
+  ['cardio','gineco','fam','hab','actali','inv'].forEach(function(t) {
     var p = document.getElementById('tab_'+t); if(p) p.style.display = t===tab?'block':'none';
     var b = document.getElementById('ctab_'+t); if(b) b.classList.toggle('active', t===tab);
   });
@@ -9852,7 +9868,7 @@ function renderSnapshotCompacto(snapshotJson) {
   const c = snap.clinica;
   const meds = snap.medicacion || [];
   if(!c) return '';
-  const DX_L={dx_acv:'ACV',dx_albuminuria:'Albuminuria',dx_atero_subcl:'Atero Subcl.',dx_dbt1:'DBT 1',dx_dbt2:'DBT 2',dx_dbt_otro:'DBT Otro',dx_dis:'Dislipemia',dx_eap:'EAP',dx_epoc:'EPOC',dx_erc:'ERC',dx_fa:'FA',dx_hiperu:'HiperU',dx_hta:'HTA',dx_hta2:'HTA 2',dx_hvi:'HVI',dx_iam:'IAM',dx_icc:'ICC',dx_masld:'MASLD',dx_ms:'S. Met.',dx_neu_dbt:'Neu DBT',dx_obe:'Obesidad',dx_predbt:'PreDBT',dx_rp_dbt:'RP DBT',dx_sahos:'SAHOS',dx_sob:'Sobrepeso'};
+  const DX_L={dx_acv:'ACV',dx_albuminuria:'Albuminuria',dx_atero_subcl:'Atero Subcl.',dx_dbt1:'DBT 1',dx_dbt2:'DBT 2',dx_dbt_otro:'DBT Otro',dx_dis:'Dislipemia',dx_eap:'EAP',dx_epoc:'EPOC',dx_erc:'ERC',dx_fa:'FA',dx_hiperu:'HiperU',dx_hta:'HTA',dx_hta2:'HTA 2',dx_hvi:'HVI',dx_iam:'IAM',dx_icc:'ICC',dx_masld:'MASLD',dx_ms:'S. Met.',dx_neu_dbt:'Neu DBT',dx_obe:'Obesidad',dx_predbt:'PreDBT',dx_rp_dbt:'RP DBT',dx_sahos:'SAHOS',dx_sob:'Sobrepeso',dx_coron:'Enf. coronaria',dx_ait:'AIT',dx_aaa:'Aneurisma Ao',dx_valv:'Valvulopatía',dx_tev:'TVP/TEP',dx_hta_res:'HTA resistente',dx_hf:'HF',dx_lpa:'Lp(a) elevada',dx_htg:'HiperTG',dx_ir:'Insulinorresist.',dx_nef_dbt:'Nef DBT',dx_pie_dbt:'Pie DBT'};
   const GIN_L={dx_pe:'PE',dx_rciu:'RCIU',dx_ppt:'PPT',dx_sop:'SOP',dx_dbtg:'DBT-G',dx_htag:'HTA-G',dx_ms_gineco:'SM-G',dx_menopausia:'Menop.', dx_macrosomia:'RN>4kg'};
   const FAM_L={fam_hta:'HTA-F',fam_dbt:'DBT-F',fam_obe:'OBE-F',fam_dis:'DIS-F',fam_iam:'IAM-F',fam_acv:'ACV-F',fam_erc:'ERC-F',fam_ms:'SM-F'};
   let dxHtml = '';
@@ -10037,7 +10053,7 @@ async function eliminarPrevia(id, fechaStr) {
 // ===== VOLCADO CLINICO AL EDITOR =====
 function generarTextoClinico(c, meds) {
   const lines = [];
-  const DX_NAMES = {acv:'ACV',albuminuria:'Albuminuria',atero_subcl:'Atero Subcl.',dbt1:'DBT 1',dbt2:'DBT 2',dbt_otro:'DBT Otro',dis:'Dislipemia',eap:'EAP',epoc:'EPOC',erc:'ERC',fa:'FA',hiperu:'HiperU',hta:'HTA',hta2:'HTA 2',hvi:'HVI',iam:'IAM',icc:'ICC',masld:'MASLD',ms:'S. Metabólico',neu_dbt:'Neu DBT',obe:'Obesidad',predbt:'PreDBT',rp_dbt:'RP DBT',sahos:'SAHOS',sob:'Sobrepeso'};
+  const DX_NAMES = {acv:'ACV',albuminuria:'Albuminuria',atero_subcl:'Atero Subcl.',dbt1:'DBT 1',dbt2:'DBT 2',dbt_otro:'DBT Otro',dis:'Dislipemia',eap:'EAP',epoc:'EPOC',erc:'ERC',fa:'FA',hiperu:'HiperU',hta:'HTA',hta2:'HTA 2',hvi:'HVI',iam:'IAM',icc:'ICC',masld:'MASLD',ms:'S. Metabólico',neu_dbt:'Neu DBT',obe:'Obesidad',predbt:'PreDBT',rp_dbt:'RP DBT',sahos:'SAHOS',sob:'Sobrepeso',coron:'Enfermedad coronaria crónica / revascularización',ait:'AIT (accidente isquémico transitorio)',aaa:'Aneurisma de aorta',valv:'Valvulopatía',tev:'Enfermedad tromboembólica (TVP/TEP)',hta_res:'HTA resistente',hf:'Hipercolesterolemia familiar',lpa:'Lp(a) elevada',htg:'Hipertrigliceridemia',ir:'Insulinorresistencia',nef_dbt:'Nefropatía diabética',pie_dbt:'Pie diabético'};
   const GINECO_NAMES = {pe:'Preeclampsia',rciu:'RCIU',ppt:'Parto Pretérmino',sop:'SOP',dbtg:'DBT Gestacional',htag:'HTA Gestacional',ms_gineco:'S. Metabólico Gineco',menopausia:'Menopausia', macrosomia:'Recién nacido > 4 kg (macrosomía)'};
   const FAM_NAMES = {hta:'HTA',dbt:'DBT',obe:'Obesidad',dis:'Dislipemia',iam:'IAM',acv:'ACV',erc:'ERC',ms:'S. Metabólico'};
   const dxList = Object.keys(DX_NAMES).filter(d=>c['dx_'+d]).map(d=>{
@@ -10111,6 +10127,7 @@ function generarTextoClinico(c, meds) {
     try {
       var aliJ = _safeJ(c.hab_alimentacion_json,null);
       var aliParts = [];
+      if(aliJ.patron && aliJ.patron.length) aliParts.push(aliJ.patron.join(', '));
       if(aliJ.hiposodica)  aliParts.push('hiposódica '+aliJ.hiposodica);
       if(aliJ.edulc && aliJ.edulc!=='') aliParts.push('edulc: '+aliJ.edulc);
       var frecItems = ['frutas','verduras','lacteos','pescado','c_rojas','legumbres','huevo','frutos_secos','pollo','cerdo'];
@@ -10124,6 +10141,8 @@ function generarTextoClinico(c, meds) {
     habParts.push('Alimentación: '+c.alimentacion);
   }
   if(habParts.length) lines.push('<b>Hábitos:</b> '+habParts.join(' · '));
+  if(window._suenoTexto){ const _st = window._suenoTexto(c.sueno_json); if(_st) lines.push('<b>Sueño:</b> '+_st); }
+  if(window._invTexto) window._invTexto(c).forEach(function(l){ lines.push(l); });
   if(c.otras_enfermedades) lines.push('<b>Otras enfermedades:</b> '+c.otras_enfermedades);
   if(c.cardio_notas) lines.push('<b>Notas cardiometabólicas:</b> '+c.cardio_notas);
   if(c.gineco_notas) lines.push('<b>Notas ginecológicas:</b> '+c.gineco_notas);
@@ -10146,7 +10165,7 @@ function generarTextoClinico(c, meds) {
 // Actividad física/alimentación estructuradas (JSON) NO se tocan acá: eso ya lo resuelve
 // el panel "Actualización clínica de esta consulta" (confirmarModalHabitos/volcarActualizacion).
 function generarTextoCambiosClinicos(nuevo, anterior, medsNuevo, medsAnterior) {
-  const DX_NAMES = {acv:'ACV',albuminuria:'Albuminuria',atero_subcl:'Atero Subcl.',dbt1:'DBT 1',dbt2:'DBT 2',dbt_otro:'DBT Otro',dis:'Dislipemia',eap:'EAP',epoc:'EPOC',erc:'ERC',fa:'FA',hiperu:'HiperU',hta:'HTA',hta2:'HTA 2',hvi:'HVI',iam:'IAM',icc:'ICC',masld:'MASLD',ms:'S. Metabólico',neu_dbt:'Neu DBT',obe:'Obesidad',predbt:'PreDBT',rp_dbt:'RP DBT',sahos:'SAHOS',sob:'Sobrepeso'};
+  const DX_NAMES = {acv:'ACV',albuminuria:'Albuminuria',atero_subcl:'Atero Subcl.',dbt1:'DBT 1',dbt2:'DBT 2',dbt_otro:'DBT Otro',dis:'Dislipemia',eap:'EAP',epoc:'EPOC',erc:'ERC',fa:'FA',hiperu:'HiperU',hta:'HTA',hta2:'HTA 2',hvi:'HVI',iam:'IAM',icc:'ICC',masld:'MASLD',ms:'S. Metabólico',neu_dbt:'Neu DBT',obe:'Obesidad',predbt:'PreDBT',rp_dbt:'RP DBT',sahos:'SAHOS',sob:'Sobrepeso',coron:'Enfermedad coronaria crónica / revascularización',ait:'AIT (accidente isquémico transitorio)',aaa:'Aneurisma de aorta',valv:'Valvulopatía',tev:'Enfermedad tromboembólica (TVP/TEP)',hta_res:'HTA resistente',hf:'Hipercolesterolemia familiar',lpa:'Lp(a) elevada',htg:'Hipertrigliceridemia',ir:'Insulinorresistencia',nef_dbt:'Nefropatía diabética',pie_dbt:'Pie diabético'};
   const GINECO_NAMES = {pe:'Preeclampsia',rciu:'RCIU',ppt:'Parto Pretérmino',sop:'SOP',dbtg:'DBT Gestacional',htag:'HTA Gestacional',ms_gineco:'S. Metabólico Gineco',menopausia:'Menopausia', macrosomia:'Recién nacido > 4 kg (macrosomía)'};
   const DX_ALL_NAMES = Object.assign({}, DX_NAMES, GINECO_NAMES);
   const FAM_NAMES = {hta:'HTA',dbt:'DBT',obe:'Obesidad',dis:'Dislipemia',iam:'IAM',acv:'ACV',erc:'ERC',ms:'S. Metabólico'};
@@ -10277,6 +10296,8 @@ function generarTextoCambiosClinicos(nuevo, anterior, medsNuevo, medsAnterior) {
     if(nuevo.alcohol_estado && anterior.alcohol_estado !== undefined && cambio(nuevo.alcohol_estado, anterior.alcohol_estado || (anterior.alcohol ? 'si' : 'no'))) lines.push('Alcohol: '+(AE[nuevo.alcohol_estado]||nuevo.alcohol_estado)+'.');
     const VP = {no:'no vapea', si:'vapea (cigarrillo electrónico)', ex:'ex vapeador'};
     if(nuevo.vapeo && cambio(nuevo.vapeo, anterior.vapeo)) lines.push('Vapeo: '+(VP[nuevo.vapeo]||nuevo.vapeo)+'.'); }
+  if(window._invCambios) window._invCambios(nuevo, anterior).forEach(function(l){ lines.push(l); });
+  if(window._suenoTexto){ const _sn = window._suenoTexto(nuevo.sueno_json), _sa = window._suenoTexto(anterior.sueno_json); if(_sn && _sn !== _sa) lines.push('Sueño: '+_sn); }
   if(cambio(nuevo.tto_alternativos, anterior.tto_alternativos) && txt(nuevo.tto_alternativos)) lines.push('Tratamientos alternativos: '+txt(nuevo.tto_alternativos));
 
   if(!lines.length) return '';
@@ -10317,7 +10338,7 @@ async function guardarClinica() {
   // Asegurar que la UI del modal esté lista
   if(typeof window.asegurarUIClinica === 'function') window.asegurarUIClinica();
   const dni = pacienteActual.dni;
-  const dxAll = ['hta','hta2','dis','erc','obe','sob','masld','dbt2','dbt1','dbt_otro','predbt','hiperu','atero_subcl','eap','iam','acv','fa','sahos','epoc','icc','hvi','albuminuria','rp_dbt','neu_dbt','ms','pe','rciu','ppt','sop','dbtg','htag','ms_gineco','menopausia','macrosomia'];
+  const dxAll = ['hta','hta2','dis','erc','obe','sob','masld','dbt2','dbt1','dbt_otro','predbt','hiperu','atero_subcl','eap','iam','acv','fa','sahos','epoc','icc','hvi','albuminuria','rp_dbt','neu_dbt','ms','pe','rciu','ppt','sop','dbtg','htag','ms_gineco','menopausia','macrosomia','coron','ait','aaa','valv','tev','hta_res','hf','lpa','htg','ir','nef_dbt','pie_dbt'];
   const dxData = {}; dxAll.forEach(d=>{dxData['dx_'+d]=document.getElementById('dx_'+d)?.checked||false;});
   const famAll = ['hta','dbt','obe','dis','iam','acv','erc','ms'];
   famAll.forEach(d=>{dxData['fam_'+d]=document.getElementById('fam_'+d)?.checked||false;});
@@ -10363,6 +10384,8 @@ async function guardarClinica() {
     fam_notas:document.getElementById('fam_notas_generales')?.value||null,
     med_notas:document.getElementById('med_notas_generales')?.value||null,
     tto_alternativos:(document.getElementById('tto_alternativos')?.value||'').trim()||null,
+    sueno_json:(window._suenoLeer ? window._suenoLeer() : undefined),
+    ...(window._invLeer ? (window._invLeer() || {}) : {}),
     act_notas:document.getElementById('act_notas_generales')?.value||null,
     tox_notas:document.getElementById('tox_notas_generales')?.value||null,
     ali_notas:document.getElementById('ali_notas_generales')?.value||null,
@@ -10495,7 +10518,7 @@ async function cargarMedicacion(dni) {
 
 async function cargarDatosClinica(dni) {
   // ── Reset completo del formulario antes de cargar datos del nuevo paciente ──
-  ['hta','hta2','dis','erc','obe','sob','masld','dbt2','dbt1','dbt_otro','predbt','hiperu','atero_subcl','eap','iam','acv','fa','sahos','epoc','icc','hvi','albuminuria','rp_dbt','neu_dbt','ms','pe','rciu','ppt','sop','dbtg','htag','ms_gineco','menopausia','macrosomia'].forEach(d=>{const el=document.getElementById('dx_'+d);if(el)el.checked=false;});
+  ['hta','hta2','dis','erc','obe','sob','masld','dbt2','dbt1','dbt_otro','predbt','hiperu','atero_subcl','eap','iam','acv','fa','sahos','epoc','icc','hvi','albuminuria','rp_dbt','neu_dbt','ms','pe','rciu','ppt','sop','dbtg','htag','ms_gineco','menopausia','macrosomia','coron','ait','aaa','valv','tev','hta_res','hf','lpa','htg','ir','nef_dbt','pie_dbt'].forEach(d=>{const el=document.getElementById('dx_'+d);if(el)el.checked=false;});
   ['hta','dbt','obe','dis','iam','acv','erc','ms'].forEach(d=>{const el=document.getElementById('fam_'+d);if(el)el.checked=false;});
   if(window._famDetalleCargar) window._famDetalleCargar(null);
   ['g','p','a','c'].forEach(f=>{const el=document.getElementById('gpac_'+f);if(el)el.value='';});
@@ -10531,6 +10554,8 @@ async function cargarDatosClinica(dni) {
   {const famNotes=document.getElementById('fam_notas_generales');if(famNotes)famNotes.value='';}
   {const medNotes=document.getElementById('med_notas_generales');if(medNotes)medNotes.value='';}
   {const tAlt=document.getElementById('tto_alternativos');if(tAlt)tAlt.value='';}
+  if(window._suenoCargar) window._suenoCargar(null);
+  if(window._invCargar) window._invCargar(null);
   {const actNotes=document.getElementById('act_notas_generales');if(actNotes)actNotes.value='';}
   {const toxNotes=document.getElementById('tox_notas_generales');if(toxNotes)toxNotes.value='';}
   {const aliNotes=document.getElementById('ali_notas_generales');if(aliNotes)aliNotes.value='';}
@@ -10562,7 +10587,7 @@ async function cargarDatosClinica(dni) {
   // Actualizar evolClinicaSnapshot con los datos frescos de este paciente
   if(!evolClinicaSnapshot) evolClinicaSnapshot={clinica:{},medicacion:[]};
   evolClinicaSnapshot.clinica = data;
-  ['hta','hta2','dis','erc','obe','sob','masld','dbt2','dbt1','dbt_otro','predbt','hiperu','atero_subcl','eap','iam','acv','fa','sahos','epoc','icc','hvi','albuminuria','rp_dbt','neu_dbt','ms','pe','rciu','ppt','sop','dbtg','htag','ms_gineco','menopausia','macrosomia'].forEach(d=>{const el=document.getElementById('dx_'+d);if(el)el.checked=!!data['dx_'+d];});
+  ['hta','hta2','dis','erc','obe','sob','masld','dbt2','dbt1','dbt_otro','predbt','hiperu','atero_subcl','eap','iam','acv','fa','sahos','epoc','icc','hvi','albuminuria','rp_dbt','neu_dbt','ms','pe','rciu','ppt','sop','dbtg','htag','ms_gineco','menopausia','macrosomia','coron','ait','aaa','valv','tev','hta_res','hf','lpa','htg','ir','nef_dbt','pie_dbt'].forEach(d=>{const el=document.getElementById('dx_'+d);if(el)el.checked=!!data['dx_'+d];});
   ['hta','dbt','obe','dis','iam','acv','erc','ms'].forEach(d=>{const el=document.getElementById('fam_'+d);if(el)el.checked=!!data['fam_'+d];});
   if(window._famDetalleCargar) window._famDetalleCargar(data.fam_detalle);
   // GPAC
@@ -10634,6 +10659,8 @@ async function cargarDatosClinica(dni) {
   const medNotes = document.getElementById('med_notas_generales');
   if(medNotes) medNotes.value = data.med_notas || '';
   { const tAlt = document.getElementById('tto_alternativos'); if(tAlt) tAlt.value = data.tto_alternativos || ''; }
+  if(window._suenoCargar) window._suenoCargar(data.sueno_json || null);
+  if(window._invCargar) window._invCargar(data);
   const actNotes = document.getElementById('act_notas_generales');
   if(actNotes) actNotes.value = data.act_notas || '';
   const toxNotes = document.getElementById('tox_notas_generales');
@@ -10875,6 +10902,7 @@ const EST_CATS = [
   {label:'DENSITOMETRÍA',          icon:'🦴'},
   {label:'ECOSTRESS CARDÍACO',     icon:'💓'},
   {label:'FONDO DE OJO',           icon:'👁️'},
+  {label:'POLISOMNOGRAFÍA',        icon:'😴'},
   {label:'RNM ENCÉFALO',           icon:'🧠'},
   {label:'SCORE CALCIO CORONARIO', icon:'🦴'},
   {label:'SPECT CARDÍACO',         icon:'☢️'},
@@ -13353,7 +13381,7 @@ async function abrirHistorialDx() {
   // ascending:true para procesar cronológicamente: el primero es el estado inicial
   const { data } = await sb.from('evoluciones').select('fecha_hora,clinica_snapshot').eq('dni_paciente', pacienteActual.dni).order('fecha_hora', {ascending:true});
   if(!data || !data.length) { cont.innerHTML='<p style="color:var(--text-soft);font-size:13px">Sin historial registrado.</p>'; return; }
-  const DX_L={dx_acv:'ACV',dx_albuminuria:'Albuminuria',dx_atero_subcl:'Atero Subcl.',dx_dbt1:'DBT 1',dx_dbt2:'DBT 2',dx_dbt_otro:'DBT Otro',dx_dis:'Dislipemia',dx_eap:'EAP',dx_epoc:'EPOC',dx_erc:'ERC',dx_fa:'FA',dx_hiperu:'HiperU',dx_hta:'HTA',dx_hta2:'HTA 2',dx_hvi:'HVI',dx_iam:'IAM',dx_icc:'ICC',dx_masld:'MASLD',dx_ms:'S. Met.',dx_neu_dbt:'Neu DBT',dx_obe:'Obesidad',dx_predbt:'PreDBT',dx_rp_dbt:'RP DBT',dx_sahos:'SAHOS',dx_sob:'Sobrepeso',dx_pe:'PE',dx_rciu:'RCIU',dx_ppt:'PPT',dx_sop:'SOP',dx_dbtg:'DBT-G',dx_htag:'HTA-G',dx_ms_gineco:'SM-G',dx_menopausia:'Menop.', dx_macrosomia:'RN>4kg'};
+  const DX_L={dx_acv:'ACV',dx_albuminuria:'Albuminuria',dx_atero_subcl:'Atero Subcl.',dx_dbt1:'DBT 1',dx_dbt2:'DBT 2',dx_dbt_otro:'DBT Otro',dx_dis:'Dislipemia',dx_eap:'EAP',dx_epoc:'EPOC',dx_erc:'ERC',dx_fa:'FA',dx_hiperu:'HiperU',dx_hta:'HTA',dx_hta2:'HTA 2',dx_hvi:'HVI',dx_iam:'IAM',dx_icc:'ICC',dx_masld:'MASLD',dx_ms:'S. Met.',dx_neu_dbt:'Neu DBT',dx_obe:'Obesidad',dx_predbt:'PreDBT',dx_rp_dbt:'RP DBT',dx_sahos:'SAHOS',dx_sob:'Sobrepeso',dx_coron:'Enf. coronaria',dx_ait:'AIT',dx_aaa:'Aneurisma Ao',dx_valv:'Valvulopatía',dx_tev:'TVP/TEP',dx_hta_res:'HTA resistente',dx_hf:'HF',dx_lpa:'Lp(a) elevada',dx_htg:'HiperTG',dx_ir:'Insulinorresist.',dx_nef_dbt:'Nef DBT',dx_pie_dbt:'Pie DBT',dx_pe:'PE',dx_rciu:'RCIU',dx_ppt:'PPT',dx_sop:'SOP',dx_dbtg:'DBT-G',dx_htag:'HTA-G',dx_ms_gineco:'SM-G',dx_menopausia:'Menop.', dx_macrosomia:'RN>4kg'};
   let prevSet = null;
   const items = data.filter(e=>e.clinica_snapshot).map(e => {
     let snap; try{ snap=JSON.parse(e.clinica_snapshot); }catch(er){ return ''; }
@@ -15460,8 +15488,8 @@ function dbtClasificarRiesgoCV(d) {
   const c = evolClinicaSnapshot?.clinica || {};
   const egfr = d?.lab?.MDRD?.actual?.valor;
   const dbtDx = dbtEsDiabetico();
-  const danoOrgano = !!(c.dx_albuminuria || c.dx_rp_dbt || c.dx_neu_dbt || (egfr!=null && egfr<60));
-  const ecvEstablecida = !!(c.dx_iam || c.dx_acv || c.dx_eap || c.dx_icc);
+  const danoOrgano = !!(c.dx_albuminuria || c.dx_rp_dbt || c.dx_neu_dbt || c.dx_nef_dbt || (egfr!=null && egfr<60));
+  const ecvEstablecida = !!(c.dx_iam || c.dx_acv || c.dx_eap || c.dx_icc || c.dx_coron || c.dx_ait);
   const factoresMayores = ['dx_hta','dx_hta2','dx_dis','dx_hiperu','dx_sob','dx_obe'].filter(k=>c[k]).length;
 
   if(ecvEstablecida || (egfr!=null && egfr<30) || (dbtDx && danoOrgano) || (dbtDx && factoresMayores>=3))
@@ -16713,8 +16741,8 @@ function precargar_cha2ds2vasc() {
   if(c?.dx_hta) document.getElementById('c_cha_hta').checked = true;
   if(c?.dx_dbt1 || c?.dx_dbt2) document.getElementById('c_cha_dm').checked = true;
   if(c?.dx_icc) document.getElementById('c_cha_icc').checked = true;
-  if(c?.dx_acv) document.getElementById('c_cha_acv').checked = true;
-  if(c?.dx_iam || c?.dx_eap) document.getElementById('c_cha_vasc').checked = true;
+  if(c?.dx_acv || c?.dx_ait) document.getElementById('c_cha_acv').checked = true;
+  if(c?.dx_iam || c?.dx_eap || c?.dx_coron || c?.dx_aaa) document.getElementById('c_cha_vasc').checked = true;
 }
 function calc_cha2ds2vasc(interacted) {
   if(interacted === undefined) interacted = true;
@@ -17386,7 +17414,7 @@ function renderVacunacion() {
     if(c.dx_obe || c.dx_sob) autoAnt.add('obesidad');
     if(c.dx_epoc) autoAnt.add('epoc');
     if(c.dx_erc) autoAnt.add('renal_cronica');
-    if(c.dx_icc || c.dx_fa || c.dx_iam || c.dx_hvi) autoAnt.add('card_cronica');
+    if(c.dx_icc || c.dx_fa || c.dx_iam || c.dx_hvi || c.dx_coron || c.dx_valv) autoAnt.add('card_cronica');
     if(c.dx_masld) autoAnt.add('hepatica_cronica');
     if(c.tabaquismo === 'actual') autoAnt.add('tabaquismo');
     // embarazo — se mantiene manual
@@ -21323,7 +21351,8 @@ function _obeGenerarHTMLInforme(opts) {
       <button class="ctab ctab-pink" id="ctab_gineco" onclick="switchTab('gineco')">🩷 Ginecológicos</button>
       <button class="ctab ctab-green" id="ctab_fam" onclick="switchTab('fam')">🟢 Familiares</button>
       <button class="ctab ctab-gray" id="ctab_hab" onclick="switchTab('hab')">💊 Medicación y hábitos</button>
-      <button class="ctab" id="ctab_actali" onclick="switchTab('actali')" style="background:#e0f5f5;color:#2a9496;border-color:#2a9496">🏃 Act. &amp; Alimentación</button>
+      <button class="ctab" id="ctab_actali" onclick="switchTab('actali')" style="background:#e0f5f5;color:#2a9496;border-color:#2a9496">🏃 Act. · Alim. · Sueño</button>
+      <button class="ctab" id="ctab_inv" onclick="switchTab('inv')" style="background:#eef2ff;color:#4338ca;border-color:#a5b4fc">🔬 Investigación</button>
     </div>
 
     <!-- TAB CARDIO -->
@@ -21354,6 +21383,18 @@ function _obeGenerarHTMLInforme(opts) {
         <label class="dx-item"><input type="checkbox" id="dx_rp_dbt"> RP DBT</label>
         <label class="dx-item"><input type="checkbox" id="dx_sahos"> SAHOS</label>
         <label class="dx-item"><input type="checkbox" id="dx_sob"> Sobrepeso</label>
+        <label class="dx-item dx-nuevo" title="Enfermedad coronaria crónica / revascularización"><input type="checkbox" id="dx_coron"> Enf. coronaria</label>
+        <label class="dx-item dx-nuevo" title="AIT (accidente isquémico transitorio)"><input type="checkbox" id="dx_ait"> AIT</label>
+        <label class="dx-item dx-nuevo" title="Aneurisma de aorta"><input type="checkbox" id="dx_aaa"> Aneurisma de aorta</label>
+        <label class="dx-item dx-nuevo" title="Valvulopatía"><input type="checkbox" id="dx_valv"> Valvulopatía</label>
+        <label class="dx-item dx-nuevo" title="Enfermedad tromboembólica (TVP/TEP)"><input type="checkbox" id="dx_tev"> TVP/TEP</label>
+        <label class="dx-item dx-nuevo" title="HTA resistente"><input type="checkbox" id="dx_hta_res"> HTA resistente</label>
+        <label class="dx-item dx-nuevo" title="Hipercolesterolemia familiar"><input type="checkbox" id="dx_hf"> Hipercol. familiar</label>
+        <label class="dx-item dx-nuevo" title="Lp(a) elevada"><input type="checkbox" id="dx_lpa"> Lp(a) elevada</label>
+        <label class="dx-item dx-nuevo" title="Hipertrigliceridemia"><input type="checkbox" id="dx_htg"> Hipertrigliceridemia</label>
+        <label class="dx-item dx-nuevo" title="Insulinorresistencia"><input type="checkbox" id="dx_ir"> Insulinorresistencia</label>
+        <label class="dx-item dx-nuevo" title="Nefropatía diabética"><input type="checkbox" id="dx_nef_dbt"> Nefropatía diabética</label>
+        <label class="dx-item dx-nuevo" title="Pie diabético"><input type="checkbox" id="dx_pie_dbt"> Pie diabético</label>
       </div>
       <!-- Extras: ACV -->
       <div id="dx_extra_acv" style="display:none;background:#f0f4fa;border-radius:10px;padding:10px 14px;margin-top:10px;font-size:12px">
@@ -21573,11 +21614,14 @@ function _obeGenerarHTMLInforme(opts) {
 
 
     <!-- TAB ACT. & ALIMENTACIÓN -->
+    <div id="tab_inv" class="ctab-content" style="display:none"></div>
     <div id="tab_actali" class="ctab-content" style="display:none">
 
       <div style="display:flex;border-bottom:2px solid #e5eaf0;margin-bottom:16px">
         <button type="button" id="fhtab_act_btn" onclick="switchFHTab('act')"
           style="flex:1;padding:10px;font-size:12px;font-weight:600;border:none;border-bottom:3px solid #2a9496;color:#2a9496;background:transparent;cursor:pointer;font-family:var(--font-main)">🏃 Actividad física</button>
+        <button type="button" id="fhtab_sue_btn" onclick="switchFHTab('sue')"
+          style="flex:1;padding:10px;font-size:12px;font-weight:600;border:none;border-bottom:3px solid transparent;color:#888;background:transparent;cursor:pointer;font-family:var(--font-main)">😴 Sueño</button>
         <button type="button" id="fhtab_ali_btn" onclick="switchFHTab('ali')"
           style="flex:1;padding:10px;font-size:12px;font-weight:600;border:none;border-bottom:3px solid transparent;color:#888;background:transparent;cursor:pointer;font-family:var(--font-main)">🥗 Alimentación</button>
       </div>
@@ -26869,7 +26913,7 @@ loadLocal();  // async, carga en background y llama renderGrid al final
     dx_fa:'FA', dx_hiperu:'HiperU', dx_hta:'HTA', dx_hta2:'HTA 2',
     dx_hvi:'HVI', dx_iam:'IAM', dx_icc:'ICC', dx_masld:'MASLD',
     dx_ms:'S. Met.', dx_neu_dbt:'Neu DBT', dx_obe:'Obesidad',
-    dx_predbt:'PreDBT', dx_rp_dbt:'RP DBT', dx_sahos:'SAHOS', dx_sob:'Sobrepeso'
+    dx_predbt:'PreDBT', dx_rp_dbt:'RP DBT', dx_sahos:'SAHOS', dx_sob:'Sobrepeso', dx_coron:'Enf. coronaria', dx_ait:'AIT', dx_aaa:'Aneurisma Ao', dx_valv:'Valvulopatía', dx_tev:'TVP/TEP', dx_hta_res:'HTA resistente', dx_hf:'HF', dx_lpa:'Lp(a) elevada', dx_htg:'HiperTG', dx_ir:'Insulinorresist.', dx_nef_dbt:'Nef DBT', dx_pie_dbt:'Pie DBT'
   };
   var GIN = {
     dx_pe:'PE', dx_rciu:'RCIU', dx_ppt:'PPT', dx_sop:'SOP',
@@ -26926,8 +26970,9 @@ loadLocal();  // async, carga en background y llama renderGrid al final
         });
       }
     }
-    $h('evh_dx',    cardioHtml || '<span style="font-size:11px;color:var(--text-soft)">Sin diagnósticos</span>');
-    $h('hc_evh_dx', cardioHtml || '<span style="font-size:11px;color:var(--text-soft)">Sin diagnósticos</span>');
+    var _invC = window._invChips ? window._invChips(c) : '';
+    $h('evh_dx',    _invC + (cardioHtml || '<span style="font-size:11px;color:var(--text-soft)">Sin diagnósticos</span>'));
+    $h('hc_evh_dx', _invC + (cardioHtml || '<span style="font-size:11px;color:var(--text-soft)">Sin diagnósticos</span>'));
 
     // ── Diagnósticos ginecológicos ──
     var ginHtml = '';
@@ -27019,7 +27064,8 @@ loadLocal();  // async, carga en background y llama renderGrid al final
             ? '<span class="evh-habito-bien">' + esc(c.actividad_fisica) + '</span>'
             : '';
       }
-      hab = [t, a, act].filter(Boolean).join('<br>') || hab;
+      var sue = window._suenoCorto ? window._suenoCorto(c.sueno_json) : '';
+      hab = [t, a, act, sue].filter(Boolean).join('<br>') || hab;
     }
     $h('evh_habitos',    hab);
     $h('hc_evh_habitos', hab);
@@ -32462,6 +32508,18 @@ const INV_DX_LABELS = {
   sahos:'SAHOS', epoc:'EPOC', icc:'Insuficiencia cardíaca (ICC)',
   hvi:'Hipertrofia ventricular izquierda (HVI)', albuminuria:'Albuminuria',
   rp_dbt:'Retinopatía diabética', neu_dbt:'Neuropatía diabética', ms:'Síndrome metabólico',
+  coron:'Enfermedad coronaria crónica / revascularización',
+  ait:'AIT (accidente isquémico transitorio)',
+  aaa:'Aneurisma de aorta',
+  valv:'Valvulopatía',
+  tev:'Enfermedad tromboembólica (TVP/TEP)',
+  hta_res:'HTA resistente',
+  hf:'Hipercolesterolemia familiar',
+  lpa:'Lp(a) elevada',
+  htg:'Hipertrigliceridemia',
+  ir:'Insulinorresistencia',
+  nef_dbt:'Nefropatía diabética',
+  pie_dbt:'Pie diabético',
 };
 const INV_DX_GINECO_LABELS = {
   pe:'Preeclampsia', rciu:'Restricción del crecimiento intrauterino (RCIU)',
@@ -33436,7 +33494,7 @@ function invRiesgoHeuristico(p, c) {
   if(c.dx_hta) score += 1; if(c.dx_hta2) score += 1.5;
   if(c.dx_dbt2 || c.dx_dbt1 || c.dx_dbt_otro) score += 1.5;
   if(c.dx_dis) score += 1;
-  if(c.dx_iam || c.dx_acv || c.dx_eap || c.dx_atero_subcl) score += 3;
+  if(c.dx_iam || c.dx_acv || c.dx_eap || c.dx_atero_subcl || c.dx_coron || c.dx_ait) score += 3;
   if(c.dx_erc) score += 1.5;
   if(c.dx_icc) score += 2;
   if(c.dx_fa) score += 1;
@@ -34615,8 +34673,9 @@ async function _t1Cargar(forzar){
     if(s) (taSerie[e.dni_paciente] = taSerie[e.dni_paciente] || []).push({ f: String(e.fecha_hora || '').slice(0, 10), s: s, d: d });
   });
   Object.keys(taSerie).forEach(function(k){ taSerie[k].sort(function(a, b){ return a.f.localeCompare(b.f); }); });
-  res[2].forEach(function(r){ var d = invParseTablaJSON(r.datos); if(r.tipo === 'lab') lab[r.dni_paciente] = migrarLabDatos(d); else if(r.tipo === 'est') est[r.dni_paciente] = d; else ant[r.dni_paciente] = d; });
-  res[3].forEach(function(e){ nEvol[e.dni_paciente] = (nEvol[e.dni_paciente] || 0) + 1; });
+  res[2].forEach(function(r){ var d = invParseTablaJSON(r.datos); if(r.tipo === 'lab') lab[r.dni_paciente] = migrarLabDatos(d); else if(r.tipo === 'est') est[r.dni_paciente] = (typeof migrarEstDatos === 'function' ? migrarEstDatos(d) : d); else ant[r.dni_paciente] = d; });
+  var evFechas = {};
+  res[3].forEach(function(e){ nEvol[e.dni_paciente] = (nEvol[e.dni_paciente] || 0) + 1; var fh = String(e.fecha_hora || '').slice(0, 10); if(fh){ var x = evFechas[e.dni_paciente] = evFechas[e.dni_paciente] || { pri: fh, ult: fh }; if(fh < x.pri) x.pri = fh; if(fh > x.ult) x.ult = fh; } });
   res[3].forEach(function(e){
     if(ta[e.dni_paciente]) return;
     var n = function(x){ var v = parseFloat(x); return isNaN(v) ? null : v; };
@@ -34631,7 +34690,9 @@ async function _t1Cargar(forzar){
     try { if(lab[p.dni] && (lab[p.dni].columnas || []).length) calcLabValues(lab[p.dni], LAB_FILAS); if(ant[p.dni] && (ant[p.dni].columnas || []).length) calcAntValues(ant[p.dni], ANT_FILAS); } catch(e) {}
   });
   pacienteActual = prev;
-  T1.cache = { cli: cli, meds: meds, medsTodas: medsTodas, taSerie: taSerie, lab: lab, ant: ant, ta: ta, est: est, nEvol: nEvol }; T1.cacheAt = Date.now();
+  var extra = {};
+  try { var rx = await Promise.all([ sbGetAgendaConfig('turnos').catch(function(){ return null; }), _t1TraerTodo('adiposidad_tratamientos', '*').catch(function(){ return []; }) ]); extra.turnos = rx[0] || {}; extra.adip = rx[1] || []; } catch(e){ extra.turnos = {}; extra.adip = []; }
+  T1.cache = { cli: cli, meds: meds, medsTodas: medsTodas, taSerie: taSerie, lab: lab, ant: ant, ta: ta, est: est, nEvol: nEvol, evFechas: evFechas, extra: extra }; T1.cacheAt = Date.now();
   return T1.cache;
 }
 function _t1Num(x){ if(x == null) return null; var v = parseFloat(String(x).replace(',', '.')); return isNaN(v) ? null : v; }
@@ -35027,7 +35088,15 @@ function t1BaseSPSS(){
     + '<label style="display:flex;gap:8px;align-items:flex-start;font-size:13px;cursor:pointer"><input type="radio" name="t1sp" value="id"> <span><b>🔓 Con DNI y nombre</b> (uso interno).</span></label>'
     + '<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px"><button type="button" class="inv-btn-ghost t1sp-no">Cancelar</button><button type="button" class="inv-btn-primary t1sp-si">Descargar Excel</button></div>');
   m.box.querySelector('.t1sp-no').onclick = m.cerrar;
-  m.box.querySelector('.t1sp-si').onclick = function(){ var anon = m.box.querySelector('input[name=t1sp]:checked').value === 'anon'; m.cerrar(); _t1GenerarSPSS(anon); };
+  (function(){ var nC = 0, nN = 0, nT = 0; Object.keys((T1.cache || {}).cli || {}).forEach(function(k){ nT++; var v = T1.cache.cli[k].inv_consentimiento; if(v === 'si') nC++; else if(v === 'no' || v === 'revocado') nN++; });
+    var w = document.createElement('div'); w.style.cssText = 'font-size:13px;margin-top:12px;padding:10px 12px;background:#eef2ff;border-radius:10px';
+    var op = function(v, t, sub, chk){ return '<label style="display:flex;gap:8px;align-items:flex-start;margin-bottom:6px;cursor:pointer"><input type="radio" name="t1cons" value="' + v + '"' + (chk ? ' checked' : '') + '> <span><b>' + t + '</b><br><span style="color:#64748b;font-size:12px">' + sub + '</span></span></label>'; };
+    w.innerHTML = '<div style="font-weight:700;color:#4338ca;margin-bottom:8px">🔬 ¿Qué pacientes incluir?</div>'
+      + op('sinNegativa', 'Todos menos los que dijeron No o revocaron (no oposición)', (nT - nN) + ' de ' + nT + ' · requiere que el comité de ética apruebe la dispensa de consentimiento; usala con la base anónima', true)
+      + op('otorgado', 'Solo con consentimiento otorgado', nC + ' de ' + nT, false)
+      + op('todos', 'Todos (uso interno, no para publicar)', nT + ' de ' + nT, false);
+    var bt = m.box.querySelector('.t1sp-si'); bt.parentElement.parentElement.insertBefore(w, bt.parentElement); })();
+  m.box.querySelector('.t1sp-si').onclick = function(){ var anon = m.box.querySelector('input[name=t1sp]:checked').value === 'anon'; var fc = m.box.querySelector('input[name=t1cons]:checked'); T1.filtroConsent = fc ? fc.value : 'sinNegativa'; m.cerrar(); _t1GenerarSPSS(anon); };
 }
 function _t1GenerarSPSS(anon){
   var D = T1.cache, base = (T1.pacientes || pacientesData || []);
@@ -35036,6 +35105,8 @@ function _t1GenerarSPSS(anon){
   T1.modoValor = 'primero'; var bas = base.map(function(p){ return _t1Fila(p, D); });
   T1.modoValor = modo0;
   var idx = []; ult.forEach(function(f, i){ if(_t1ConDatos(f)) idx.push(i); });
+  if(T1.filtroConsent === 'otorgado') idx = idx.filter(function(i){ var c = D.cli[ult[i].dni]; return c && c.inv_consentimiento === 'si'; });
+  else if(T1.filtroConsent === 'sinNegativa') idx = idx.filter(function(i){ var c = D.cli[ult[i].dni]; return !c || (c.inv_consentimiento !== 'no' && c.inv_consentimiento !== 'revocado'); });
   var dic = [], vistas = {};
   var V = function(nombre, etiqueta, valores, fn){ var n = _t1Var(nombre); while(vistas[n]) n += '_'; vistas[n] = 1; dic.push({ Variable: n, Etiqueta: etiqueta, Valores: valores || '' }); return { n: n, fn: fn }; };
   var b01 = function(x){ return x == null ? null : x ? 1 : 0; }, num = function(x){ return x == null || isNaN(x) ? null : Math.round(Number(x) * 100) / 100; };
@@ -35073,6 +35144,7 @@ function _t1GenerarSPSS(anon){
   T1_MEDS.forEach(function(g){ cols.push(V('med_' + g, 'Medicación actual: ' + g, SN, function(f){ return b01(f.med[g]); })); });
   cols.push(V('n_farmacos_cm', 'N.º de fármacos cardiometabólicos actuales', '', function(f){ return f.nMedsCM; }));
   cols.push(V('n_consultas', 'N.º de consultas registradas', '', function(f){ return f.vistos; }));
+  if(window._t1SPSSExtra) window._t1SPSSExtra(V, num, b01, SN, cols, D);
   var filas = idx.map(function(i, k){ var o = {}; cols.forEach(function(c){ var v = c.fn(ult[i], k, bas[i]); o[c.n] = v == null ? null : v; }); return o; });
   // Mediciones (largo): todas las cargas
   var med = [], idDe = {}; idx.forEach(function(i, k){ idDe[ult[i].dni] = anon ? k + 1 : String(ult[i].dni); });
@@ -35085,7 +35157,10 @@ function _t1GenerarSPSS(anon){
   var wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(filas, { header: cols.map(function(c){ return c.n; }) }), 'Base');
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(dic), 'Diccionario');
+  if(window._t1SPSSMedExtra) window._t1SPSSMedExtra(med, idx, ult, idDe, D);
+  med.sort(function(a, b){ return String(a.id).localeCompare(String(b.id), 'es', { numeric: true }) || a.variable.localeCompare(b.variable) || a.fecha.localeCompare(b.fecha); });
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(med.length ? med : [{ id: '', fecha: '', variable: '', valor: '' }]), 'Mediciones');
+  if(window._t1SPSSHojas) window._t1SPSSHojas(wb, idx, ult, idDe, D);
   // Sintaxis SPSS: pegar en Archivo › Nuevo › Sintaxis y ejecutar (pone etiquetas de variables y de valores)
   var q = function(t){ return "'" + String(t).replace(/'/g, "''") + "'"; };
   var sx = ['* Etiquetas para la base URCyM (hoja Base). Pegar en una ventana de sintaxis y ejecutar todo.', 'VARIABLE LABELS'];
@@ -37572,6 +37647,652 @@ function _cargaEstPrec(p){
   });
   if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function(){ setTimeout(preparar, 30); }); else setTimeout(preparar, 30);
   document.addEventListener('click', function(){ setTimeout(preparar, 40); }, true);
+})();
+</script>
+
+<style>
+#fhpanel_sue .sue-card{background:#f8fbfe;border:1.5px solid #dde3ec;border-radius:12px;padding:12px 14px;margin-bottom:12px}
+#fhpanel_sue .sue-t{font-size:10.5px;font-weight:800;color:#4f46e5;text-transform:uppercase;letter-spacing:.07em;margin-bottom:8px;display:flex;align-items:center;gap:8px}
+#fhpanel_sue .sue-row{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:8px}
+#fhpanel_sue .sue-row>span{font-size:11.5px;color:#64748b;width:150px;flex-shrink:0}
+#fhpanel_sue .sb{border:1.5px solid #dde3ec;background:#fff;border-radius:999px;padding:4px 10px;font-size:12px;font-weight:600;cursor:pointer;font-family:var(--font-main);color:#334155}
+#fhpanel_sue .sb.sel{background:#4f46e5;border-color:#4f46e5;color:#fff}
+#fhpanel_sue .sb.mal.sel{background:#dc2626;border-color:#dc2626}
+#fhpanel_sue .sb.bien.sel{background:#16a34a;border-color:#16a34a}
+#fhpanel_sue .q{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px dashed #e2e8f0;font-size:12.5px}
+#fhpanel_sue .q:last-child{border-bottom:none}
+#fhpanel_sue .q .tx{flex:1}
+#fhpanel_sue .q .tx small{color:#94a3b8;font-size:10.5px}
+#fhpanel_sue .q .auto{font-size:9.5px;font-weight:800;color:#0891b2;background:#ecfeff;border-radius:6px;padding:1px 5px;margin-left:4px}
+#fhpanel_sue .yn button,#fhpanel_sue .ep button{border:1.5px solid #dde3ec;background:#fff;border-radius:8px;padding:3px 9px;font-size:12px;font-weight:700;cursor:pointer;font-family:var(--font-main);min-width:34px}
+#fhpanel_sue .yn button.sel{background:#4f46e5;border-color:#4f46e5;color:#fff}
+#fhpanel_sue .ep button.sel{background:#7c3aed;border-color:#7c3aed;color:#fff}
+#fhpanel_sue .score{margin-left:auto;font-size:12px;font-weight:800;border-radius:999px;padding:3px 10px;text-transform:none;letter-spacing:0}
+#fhpanel_sue .score.bajo{background:#dcfce7;color:#166534}#fhpanel_sue .score.med{background:#fef3c7;color:#92400e}#fhpanel_sue .score.alto{background:#fee2e2;color:#b91c1c}#fhpanel_sue .score.nd{background:#f1f5f9;color:#64748b}
+#fhpanel_sue textarea{min-height:0!important;height:56px;width:100%;padding:7px 9px;border:1.5px solid #dde3ec;border-radius:8px;font-size:12px;font-family:var(--font-main);resize:vertical;box-sizing:border-box}
+.ali-patron{background:#f0fdf4;border:1.5px solid #bbf7d0;border-radius:12px;padding:10px 14px;margin-bottom:14px}
+.ali-patron .t{font-size:10px;font-weight:700;color:#166534;text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px}
+.ali-patron .ch{display:flex;flex-wrap:wrap;gap:6px}
+.ali-patron button{border:1.5px solid #bbf7d0;background:#fff;border-radius:999px;padding:5px 11px;font-size:12px;font-weight:600;cursor:pointer;font-family:var(--font-main);color:#14532d}
+.ali-patron button.sel{background:#16a34a;border-color:#16a34a;color:#fff}
+</style>
+<script>
+/* ════════ SUEÑO: calidad + STOP-BANG + Epworth (Datos clínicos › Act. · Alim. · Sueño) ════════
+   Se guarda en paciente_clinica.sueno_json (SQL 18) y se vuelca a la evolución. */
+(function(){
+  function $(id){ return document.getElementById(id); }
+  function esc(v){ return String(v==null?'':v).replace(/[&<>"]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+  var HORAS = ['≤4','5','6','7','8','9','≥10'];
+  var PROB = ['Dificultad para conciliar','Despertares nocturnos','Despertar precoz','Sueño no reparador','Nicturia','Piernas inquietas','Bruxismo','Pesadillas'];
+  var SB = [
+    ['s','Ronca fuerte','(se escucha con la puerta cerrada o la pareja lo despierta)'],
+    ['t','Cansancio / somnolencia diurna frecuente',''],
+    ['o','Alguien observó que deja de respirar o se ahoga dormido',''],
+    ['p','Hipertensión arterial (tratada o no)',''],
+    ['b','IMC > 35 kg/m²',''],
+    ['a','Edad > 50 años',''],
+    ['n','Circunferencia de cuello > 40 cm',''],
+    ['g','Sexo masculino','']
+  ];
+  var EP = ['Sentado/a leyendo','Mirando televisión','Sentado/a inactivo/a en un lugar público (cine, reunión)','Como pasajero/a en un auto, 1 hora sin parar','Acostado/a a la tarde para descansar','Sentado/a conversando con alguien','Sentado/a tranquilo/a después de almorzar (sin alcohol)','En el auto, detenido/a unos minutos en el tránsito'];
+  var D = vacio();
+  function vacio(){ return { horas:'', calidad:'', problemas:[], ronquido:'', apneas:'', somnolencia:'', siesta:'', turnos:'', hipnoticos:'', cpap:'', notas:'', sb:{}, sbMan:{}, ep:[null,null,null,null,null,null,null,null] }; }
+
+  function grupo(campo, ops, clases){
+    return ops.map(function(o, i){ var v = Array.isArray(o) ? o[0] : o, t = Array.isArray(o) ? o[1] : o; return '<button type="button" class="sb '+((clases && clases[i]) || '')+'" data-c="'+campo+'" data-v="'+esc(v)+'">'+esc(t)+'</button>'; }).join('');
+  }
+  function html(){
+    return ''
+    + '<div class="sue-card"><div class="sue-t">😴 Calidad del sueño</div>'
+    + '<div class="sue-row"><span>Horas por noche</span>' + grupo('horas', HORAS) + '</div>'
+    + '<div class="sue-row"><span>Calidad</span>' + grupo('calidad', [['buena','Buena'],['regular','Regular'],['mala','Mala']], ['bien','','mal']) + '</div>'
+    + '<div class="sue-row"><span>Problemas</span>' + PROB.map(function(p){ return '<button type="button" class="sb mal" data-m="'+esc(p)+'">'+esc(p)+'</button>'; }).join('') + '</div>'
+    + '<div class="sue-row"><span>Ronquido</span>' + grupo('ronquido', [['no','No'],['ocasional','Ocasional'],['habitual','Habitual']], ['bien','','mal']) + '</div>'
+    + '<div class="sue-row"><span>Apneas presenciadas</span>' + grupo('apneas', [['no','No'],['si','Sí']], ['bien','mal']) + '</div>'
+    + '<div class="sue-row"><span>Somnolencia diurna</span>' + grupo('somnolencia', [['no','No'],['leve','Leve'],['marcada','Marcada']], ['bien','','mal']) + '</div>'
+    + '<div class="sue-row"><span>Siesta</span>' + grupo('siesta', [['no','No'],['corta','Corta (≤30 min)'],['larga','Larga']]) + '</div>'
+    + '<div class="sue-row"><span>Trabajo nocturno / turnos</span>' + grupo('turnos', [['no','No'],['si','Sí']]) + '</div>'
+    + '<div class="sue-row"><span>Medicación para dormir</span>' + grupo('hipnoticos', [['no','No'],['si','Sí']]) + '</div>'
+    + '<div class="sue-row"><span>CPAP</span>' + grupo('cpap', [['no','No usa'],['usa','Usa'],['indicado','Indicado, no lo usa']]) + '</div>'
+    + '<textarea id="sue_notas" rows="2" placeholder="Notas de sueño (horarios, pantallas, contexto…) — se vuelcan a la evolución"></textarea></div>'
+    + '<div class="sue-card"><div class="sue-t">🫁 STOP-BANG <span style="font-weight:600;text-transform:none;letter-spacing:0;color:#94a3b8">riesgo de apnea obstructiva del sueño</span><span class="score nd" id="sue_sb_score">—</span></div>'
+    + SB.map(function(q){ return '<div class="q"><div class="tx"><b>'+q[0].toUpperCase()+'</b> · '+esc(q[1])+' <small>'+esc(q[2])+'</small><span class="auto" data-auto="'+q[0]+'" style="display:none">AUTO</span></div><div class="yn" data-sb="'+q[0]+'"><button type="button" data-v="1">Sí</button><button type="button" data-v="0">No</button></div></div>'; }).join('')
+    + '</div>'
+    + '<div class="sue-card"><div class="sue-t">💤 Escala de somnolencia de Epworth <span style="font-weight:600;text-transform:none;letter-spacing:0;color:#94a3b8">0 nunca · 1 poca · 2 moderada · 3 alta probabilidad de dormirse</span><span class="score nd" id="sue_ep_score">—</span></div>'
+    + EP.map(function(q, i){ return '<div class="q"><div class="tx">'+(i+1)+'. '+esc(q)+'</div><div class="ep" data-ep="'+i+'">'+[0,1,2,3].map(function(n){ return '<button type="button" data-v="'+n+'">'+n+'</button>'; }).join('')+'</div></div>'; }).join('')
+    + '</div>';
+  }
+  function crear(){
+    if($('fhpanel_sue')) return true;
+    var ali = $('fhpanel_ali'); if(!ali) return false;
+    var bs0 = $('fhtab_sue_btn'), ba0 = $('fhtab_ali_btn'); if(bs0 && ba0) ba0.after(bs0);
+    var p = document.createElement('div'); p.id = 'fhpanel_sue'; p.style.display = 'none'; p.innerHTML = html();
+    ali.parentElement.insertBefore(p, ali.nextSibling);
+    p.addEventListener('click', function(e){
+      var b = e.target.closest('button'); if(!b) return;
+      if(b.dataset.c){ D[b.dataset.c] = (D[b.dataset.c] === b.dataset.v) ? '' : b.dataset.v; auto(); }
+      else if(b.dataset.m){ var i = D.problemas.indexOf(b.dataset.m); if(i >= 0) D.problemas.splice(i, 1); else D.problemas.push(b.dataset.m); }
+      else if(b.parentElement.dataset.sb){ var k = b.parentElement.dataset.sb, v = b.dataset.v === '1'; D.sb[k] = (D.sb[k] === v && D.sbMan[k]) ? undefined : v; D.sbMan[k] = D.sb[k] !== undefined; if(D.sb[k] === undefined) delete D.sbMan[k]; auto(); }
+      else if(b.parentElement.dataset.ep){ var j = +b.parentElement.dataset.ep, n = +b.dataset.v; D.ep[j] = (D.ep[j] === n) ? null : n; }
+      pintar();
+    });
+    p.querySelector('#sue_notas').addEventListener('input', function(){ D.notas = this.value; });
+    return true;
+  }
+  // Ítems que se completan solos (si no se tocaron a mano)
+  function auto(){
+    var dx = $('dx_hta'), sexo = (typeof calcSexoPaciente === 'function') ? calcSexoPaciente() : null, edad = (typeof calcEdadPaciente === 'function') ? calcEdadPaciente() : null;
+    var imc = null, cuello = null; try { imc = getUltimoValorAnt('IMC'); cuello = getUltimoValorAnt('Cuello'); } catch(e){}
+    if(!imc){ try { var pe = getUltimoValorAnt('Peso'), al = getUltimoValorAnt('Altura'); if(pe && al) imc = pe / Math.pow(al > 3 ? al / 100 : al, 2); } catch(e){} }
+    var A = {
+      s: D.ronquido ? D.ronquido === 'habitual' : undefined,
+      t: D.somnolencia ? D.somnolencia === 'marcada' : undefined,
+      o: D.apneas ? D.apneas === 'si' : undefined,
+      p: dx ? !!dx.checked : undefined,
+      b: imc ? imc > 35 : undefined,
+      a: edad != null ? edad > 50 : undefined,
+      n: cuello ? cuello > 40 : undefined,
+      g: sexo ? sexo === 'M' : undefined
+    };
+    D._auto = {};
+    Object.keys(A).forEach(function(k){ if(D.sbMan[k] || A[k] === undefined) return; D.sb[k] = A[k]; D._auto[k] = true; });
+  }
+  function sbScore(){
+    var n = 0, r = 0; SB.forEach(function(q){ if(D.sb[q[0]] !== undefined){ r++; if(D.sb[q[0]]) n++; } });
+    if(!r) return null;
+    var stop = ['s','t','o','p'].filter(function(k){ return D.sb[k]; }).length;
+    var alto = n >= 5 || (stop >= 2 && (D.sb.g || D.sb.b || D.sb.n));
+    return { n:n, r:r, nivel: alto ? 'alto' : (n >= 3 ? 'intermedio' : 'bajo') };
+  }
+  function epScore(){
+    var r = D.ep.filter(function(v){ return v !== null && v !== undefined; }).length; if(!r) return null;
+    var n = D.ep.reduce(function(a, v){ return a + (v || 0); }, 0);
+    var cat = n <= 10 ? 'normal' : n <= 12 ? 'somnolencia excesiva leve' : n <= 15 ? 'somnolencia excesiva moderada' : 'somnolencia excesiva severa';
+    return { n:n, r:r, cat:cat, completo: r === 8 };
+  }
+  function pintar(){
+    var p = $('fhpanel_sue'); if(!p) return;
+    p.querySelectorAll('[data-c]').forEach(function(b){ b.classList.toggle('sel', D[b.dataset.c] === b.dataset.v); });
+    p.querySelectorAll('[data-m]').forEach(function(b){ b.classList.toggle('sel', D.problemas.indexOf(b.dataset.m) >= 0); });
+    p.querySelectorAll('[data-sb]').forEach(function(g){ var k = g.dataset.sb; g.querySelectorAll('button').forEach(function(b){ b.classList.toggle('sel', D.sb[k] !== undefined && (b.dataset.v === '1') === !!D.sb[k]); }); });
+    p.querySelectorAll('[data-auto]').forEach(function(t){ t.style.display = (D._auto && D._auto[t.dataset.auto]) ? '' : 'none'; });
+    p.querySelectorAll('[data-ep]').forEach(function(g){ var j = +g.dataset.ep; g.querySelectorAll('button').forEach(function(b){ b.classList.toggle('sel', D.ep[j] === +b.dataset.v); }); });
+    var s = sbScore(), e = epScore(), a = $('sue_sb_score'), b = $('sue_ep_score');
+    if(a){ a.className = 'score ' + (!s ? 'nd' : s.nivel === 'alto' ? 'alto' : s.nivel === 'intermedio' ? 'med' : 'bajo'); a.textContent = s ? s.n + '/8 · riesgo ' + s.nivel + (s.r < 8 ? ' (faltan ' + (8 - s.r) + ')' : '') : '—'; }
+    if(b){ b.className = 'score ' + (!e ? 'nd' : !e.completo ? 'nd' : e.n <= 10 ? 'bajo' : e.n <= 15 ? 'med' : 'alto'); b.textContent = e ? (e.n + '/24' + (e.completo ? ' · ' + e.cat : ' (faltan ' + (8 - e.r) + ')')) : '—'; }
+    var n = $('sue_notas'); if(n && document.activeElement !== n) n.value = D.notas || '';
+  }
+  function hayAlgo(d){ return !!(d.horas || d.calidad || d.problemas.length || d.ronquido || d.apneas || d.somnolencia || d.siesta || d.turnos || d.hipnoticos || d.cpap || (d.notas || '').trim() || Object.keys(d.sbMan || {}).length || d.ep.some(function(v){ return v !== null && v !== undefined; })); }
+
+  window._suenoLeer = function(){
+    if(!$('fhpanel_sue')) return undefined;      // la ventana no está armada: no tocar lo guardado
+    var n = $('sue_notas'); if(n) D.notas = n.value;
+    if(!hayAlgo(D)) return null;
+    var o = JSON.parse(JSON.stringify(D)); delete o._auto;
+    var s = sbScore(), e = epScore();
+    o.stopbang = s ? s.n : null; o.stopbang_riesgo = s ? s.nivel : null;
+    o.epworth = (e && e.completo) ? e.n : null;
+    return o;
+  };
+  window._suenoCargar = function(v){
+    crear();
+    var x = (typeof _safeJ === 'function') ? _safeJ(v, null) : v;
+    D = vacio();
+    if(x && typeof x === 'object'){ Object.keys(D).forEach(function(k){ if(x[k] !== undefined) D[k] = x[k]; }); if(!Array.isArray(D.ep) || D.ep.length !== 8) D.ep = vacio().ep; D.sb = D.sb || {}; D.sbMan = D.sbMan || {}; D.problemas = D.problemas || []; }
+    auto(); pintar();
+  };
+  function txtDe(x){
+    x = (typeof _safeJ === 'function') ? _safeJ(x, null) : x; if(!x || typeof x !== 'object') return '';
+    var L = {buena:'calidad buena',regular:'calidad regular',mala:'calidad mala'};
+    var p = [];
+    if(x.horas) p.push(x.horas + ' h/noche');
+    if(x.calidad) p.push(L[x.calidad] || x.calidad);
+    if(x.problemas && x.problemas.length) p.push(x.problemas.join(', ').toLowerCase());
+    if(x.ronquido) p.push(x.ronquido === 'no' ? 'no ronca' : 'ronquido ' + x.ronquido);
+    if(x.apneas === 'si') p.push('apneas presenciadas'); else if(x.apneas === 'no') p.push('sin apneas presenciadas');
+    if(x.somnolencia) p.push(x.somnolencia === 'no' ? 'sin somnolencia diurna' : 'somnolencia diurna ' + x.somnolencia);
+    if(x.siesta && x.siesta !== 'no') p.push('siesta ' + x.siesta);
+    if(x.turnos === 'si') p.push('trabajo nocturno/por turnos');
+    if(x.hipnoticos === 'si') p.push('usa medicación para dormir');
+    if(x.cpap) p.push(x.cpap === 'usa' ? 'usa CPAP' : x.cpap === 'indicado' ? 'CPAP indicado, no lo usa' : 'sin CPAP');
+    if(x.stopbang != null) p.push('STOP-BANG ' + x.stopbang + '/8 (riesgo ' + x.stopbang_riesgo + ' de AOS)');
+    if(x.epworth != null) p.push('Epworth ' + x.epworth + '/24 (' + (x.epworth <= 10 ? 'normal' : x.epworth <= 12 ? 'somnolencia excesiva leve' : x.epworth <= 15 ? 'somnolencia excesiva moderada' : 'somnolencia excesiva severa') + ')');
+    if(x.notas && String(x.notas).trim()) p.push(String(x.notas).trim());
+    return p.join(' · ');
+  }
+  window._suenoTexto = txtDe;
+  window._suenoCorto = function(x){
+    x = (typeof _safeJ === 'function') ? _safeJ(x, null) : x; if(!x || typeof x !== 'object') return '';
+    var p = [];
+    if(x.horas) p.push(x.horas + ' h');
+    if(x.calidad) p.push('calidad ' + x.calidad);
+    if(x.stopbang != null) p.push('STOP-BANG ' + x.stopbang + '/8');
+    if(x.epworth != null) p.push('Epworth ' + x.epworth);
+    if(x.cpap === 'usa') p.push('CPAP');
+    if(!p.length) return '';
+    var malo = x.stopbang_riesgo === 'alto' || (x.epworth != null && x.epworth > 10) || x.calidad === 'mala';
+    return '<span class="' + (malo ? 'evh-habito-malo' : 'evh-habito-bien') + '">😴 ' + esc(p.join(' · ')) + '</span>';
+  };
+
+  // Subpestaña
+  var oSw = window.switchFHTab;
+  window.switchFHTab = function(tab){
+    crear();
+    if(typeof oSw === 'function') oSw(tab === 'sue' ? '__ninguna__' : tab);
+    var ps = $('fhpanel_sue'), bs = $('fhtab_sue_btn');
+    if(ps) ps.style.display = tab === 'sue' ? '' : 'none';
+    if(bs){ bs.style.borderBottomColor = tab === 'sue' ? '#4f46e5' : 'transparent'; bs.style.color = tab === 'sue' ? '#4f46e5' : '#888'; }
+    if(tab === 'sue'){ auto(); pintar(); }
+  };
+  // Si cambian HTA en la pestaña cardiometabólica, se actualiza la P de STOP-BANG
+  document.addEventListener('change', function(e){ if(e.target && e.target.id === 'dx_hta' && $('fhpanel_sue')){ auto(); pintar(); } });
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', crear); else crear();
+})();
+
+/* ════════ Alimentación: patrón / condición (vegetariana, vegana, celiaquía…) ════════
+   Se guarda dentro de hab_alimentacion_json.patron y se vuelca a la evolución. */
+(function(){
+  var PAT = ['Omnívora','Vegetariana (ovolacto)','Vegana','Pescetariana','Flexitariana','Celiaquía (sin TACC)','Sin lactosa','Mediterránea','Low carb / keto','Ayuno intermitente'];
+  var sel = [];
+  function $(id){ return document.getElementById(id); }
+  function crear(){
+    var ali = $('fhpanel_ali'); if(!ali || $('ali_patron')) return;
+    var d = document.createElement('div'); d.className = 'ali-patron'; d.id = 'ali_patron';
+    d.innerHTML = '<div class="t">🥗 Patrón / condición alimentaria</div><div class="ch">' + PAT.map(function(p){ return '<button type="button" data-p="'+p+'">'+p+'</button>'; }).join('') + '</div>';
+    ali.insertBefore(d, ali.firstChild);
+    d.addEventListener('click', function(e){ var b = e.target.closest('[data-p]'); if(!b) return; var i = sel.indexOf(b.dataset.p); if(i >= 0) sel.splice(i, 1); else sel.push(b.dataset.p); pintar(); });
+  }
+  function pintar(){ var d = $('ali_patron'); if(d) d.querySelectorAll('[data-p]').forEach(function(b){ b.classList.toggle('sel', sel.indexOf(b.dataset.p) >= 0); }); }
+  var oLeer = window.leerTabActAli;
+  if(typeof oLeer === 'function') window.leerTabActAli = function(){
+    var r = oLeer.apply(this, arguments);
+    if(!$('ali_patron')) return r;
+    if(sel.length){ r = r || {}; r.ali = r.ali || { cambio:'' }; r.ali.patron = sel.slice(); }
+    else if(r && r.ali) r.ali.patron = [];
+    return r;
+  };
+  var oPre = window.precargarTabActAli;
+  if(typeof oPre === 'function') window.precargarTabActAli = function(){
+    var r = oPre.apply(this, arguments);
+    crear(); sel = [];
+    try { var al = (typeof evolClinicaSnapshot !== 'undefined' && evolClinicaSnapshot && evolClinicaSnapshot.clinica) ? _hj(evolClinicaSnapshot.clinica.hab_alimentacion_json) : null; if(al && Array.isArray(al.patron)) sel = al.patron.slice(); } catch(e){}
+    pintar(); return r;
+  };
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', crear); else crear();
+})();
+</script>
+
+<script>
+/* ════════ Base para SPSS — TODO lo que se carga llega a la base ════════
+   Agrega a la hoja "Base": todo el laboratorio (incl. Lp(a) con su unidad y FIB-4),
+   todos los estudios complementarios (MAPA, eco, eco abdominal, PSG…), años de diagnóstico,
+   eventos, hábitos completos, sueño (STOP-BANG/Epworth), alimentación, MAC, tóxicos,
+   cirugía bariátrica, ingreso a la cohorte/seguimiento y asistencia a turnos.
+   Hojas nuevas: "Medicación" (historial completo con fechas) y "Tto adiposidad". */
+(function(){
+  function sinAc(t){ return String(t || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim(); }
+  function nume(x){ if(x == null) return null; var v = parseFloat(String(x).replace(',', '.')); return isNaN(v) ? null : v; }
+  function J(v){ return (typeof _safeJ === 'function') ? _safeJ(v, null) : v; }
+  // Serie de una fila extra (agregada a mano / Lp(a)) de una tabla
+  function serieExtra(datos, filasBase, re){
+    if(!datos || !Array.isArray(datos.extraFilas) || !datos.filas) return [];
+    var out = [];
+    datos.extraFilas.forEach(function(lbl, i){ if(!re.test(lbl)) return; var fila = datos.filas[filasBase.length + i] || [];
+      (datos.columnas || []).forEach(function(col, ci){ var v = nume(fila[ci]); if(v != null) out.push({ f: String(col || ''), v: v, u: (datos.unidades && (datos.unidades['extra_' + lbl] || datos.unidades[lbl])) || '' }); }); });
+    return out.sort(function(a, b){ return a.f.localeCompare(b.f); });
+  }
+  function lpa(D, dni){
+    var d = D.lab[dni], out = [];
+    if(d && Array.isArray(d.lpa)) d.lpa.forEach(function(x){ var v = nume(x && x.valor); if(v != null) out.push({ f: String(x.fecha || ''), v: v, u: x.unidad || 'mg/dL' }); });
+    serieExtra(d, LAB_FILAS, /^\s*lp\s*\(?\s*a\s*\)?/i).forEach(function(x){ if(!out.some(function(y){ return y.f === x.f; })) out.push(x); });
+    return out.sort(function(a, b){ return a.f.localeCompare(b.f); });
+  }
+  function plaq(v){ if(v == null) return null; return v > 2000 ? v / 1000 : v; }   // /mm³ → 10⁹/L
+  function fib4(edad, ast, alt, pl){ if(!edad || !ast || !alt || !pl) return null; return Math.round(edad * ast / (plaq(pl) * Math.sqrt(alt)) * 100) / 100; }
+  // Último / primer valor de una fila de estudios (texto o número)
+  function estVal(D, dni, key, primero){
+    var d = (D.est || {})[dni]; if(!d || !d.columnas || !d.filas) return null;
+    var fi = EST_FILAS.findIndex(function(f){ return f.key === key; }); if(fi < 0) return null;
+    var row = d.filas[fi] || [], orden = d.columnas.map(function(c, i){ return i; }).sort(function(a, b){ return String(d.columnas[a]).localeCompare(String(d.columnas[b])); });
+    if(!primero) orden.reverse();
+    for(var k = 0; k < orden.length; k++){ var v = row[orden[k]]; if(v != null && String(v).trim() !== '') return { v: v, f: d.columnas[orden[k]] }; }
+    return null;
+  }
+  function catDe(key){ var c = null; for(var i = 0; i < EST_FILAS.length; i++){ var f = EST_FILAS[i]; if(f.cat) c = f.label; if(f.key === key) return c; } return null; }
+  function prefijo(key){ return String(key).split('_')[0]; }
+  var ASIST_SI = ['atendido','asistio','presente'], ASIST_NO = ['ausente'];
+  function turnosDe(D){
+    if(D._turnosPorDni) return D._turnosPorDni;
+    var porDni = {}, porNom = {};
+    (pacientesData || []).forEach(function(p){ porNom[sinAc((p.apellido || '') + ', ' + (p.nombre || ''))] = p.dni; });
+    var hoy = (typeof fechaHoy === 'function') ? fechaHoy() : new Date().toISOString().slice(0, 10);
+    var T = ((D.extra || {}).turnos) || {};
+    Object.keys(T).forEach(function(k){ var t = T[k]; if(!t || typeof t !== 'object') return; var fecha = k.slice(0, 10); if(fecha > hoy) return;
+      var dni = t.dni_paciente || porNom[sinAc(t.paciente)]; if(!dni) return;
+      var x = porDni[dni] = porDni[dni] || { n: 0, si: 0, no: 0, sinDato: 0, video: 0, primero: null };
+      x.n++; var a = String(t.asistencia || ''); if(ASIST_SI.indexOf(a) >= 0) x.si++; else if(ASIST_NO.indexOf(a) >= 0) x.no++; else x.sinDato++;
+      if(t.video) x.video++;
+      if(!x.primero || fecha < x.primero.f){ x.primero = { f: fecha, mot: (typeof turnoMotivosArr === 'function' ? turnoMotivosArr(t) : []).join(' · ') }; }
+    });
+    D._turnosPorDni = porDni; return porDni;
+  }
+  function codif(V, cols, nombre, etiqueta, opciones, get){
+    var ops = opciones.filter(function(o){ return o !== ''; });
+    cols.push(V(nombre, etiqueta, ops.map(function(o, k){ return (k + 1) + ' = ' + o; }).join('; '), function(f){ var v = get(f); if(v == null || v === '') return null; var k = ops.indexOf(String(v).trim()); return k < 0 ? null : k + 1; }));
+  }
+
+  window._t1SPSSExtra = function(V, num, b01, SN, cols, D){
+    var C = function(f){ return D.cli[f.dni] || null; };
+    var yaLab = {}; (T1_LAB || []).forEach(function(l){ yaLab[l[0]] = 1; });
+    // ── Laboratorio completo (último y basal) + Lp(a) + FIB-4
+    LAB_FILAS.forEach(function(lf){ if(!lf.key || yaLab[lf.key] || lf.cat) return;
+      cols.push(V(lf.key + '_ult', 'Lab: ' + (lf.label || lf.key) + ' — último', '', function(f){ var s = _t1Serie(D.lab[f.dni], LAB_FILAS, lf.key); return s.length ? num(s[s.length - 1].v) : null; }));
+      cols.push(V(lf.key + '_bas', 'Lab: ' + (lf.label || lf.key) + ' — basal', '', function(f){ var s = _t1Serie(D.lab[f.dni], LAB_FILAS, lf.key); return s.length ? num(s[0].v) : null; }));
+    });
+    cols.push(V('lpa_ult', 'Lp(a) — último (ver lpa_unidad)', '', function(f){ var s = lpa(D, f.dni); return s.length ? num(s[s.length - 1].v) : null; }));
+    cols.push(V('lpa_bas', 'Lp(a) — basal', '', function(f){ var s = lpa(D, f.dni); return s.length ? num(s[0].v) : null; }));
+    cols.push(V('lpa_unidad', 'Lp(a) — unidad', '1 = mg/dL; 2 = nmol/L', function(f){ var s = lpa(D, f.dni); if(!s.length) return null; var u = s[s.length - 1].u || ''; return /nmol/i.test(u) ? 2 : 1; }));
+    cols.push(V('lpa_elevada', 'Lp(a) elevada (≥50 mg/dL o ≥125 nmol/L)', SN, function(f){ var s = lpa(D, f.dni); if(!s.length) return null; var x = s[s.length - 1]; return /nmol/i.test(x.u || '') ? (x.v >= 125 ? 1 : 0) : (x.v >= 50 ? 1 : 0); }));
+    cols.push(V('fib4_ult', 'FIB-4 — último (calculado: edad, AST, ALT, plaquetas)', '', function(f){
+      var g = function(k){ var s = _t1Serie(D.lab[f.dni], LAB_FILAS, k); return s.length ? s[s.length - 1].v : null; };
+      return fib4(f.edad, g('TGO'), g('TGP'), g('Rto_plaquetas')); }));
+    cols.push(V('fib4_cat', 'FIB-4 — categoría', '1 = <1,3 (bajo); 2 = 1,3-2,67 (indeterminado); 3 = >2,67 (alto)', function(f){
+      var g = function(k){ var s = _t1Serie(D.lab[f.dni], LAB_FILAS, k); return s.length ? s[s.length - 1].v : null; };
+      var x = fib4(f.edad, g('TGO'), g('TGP'), g('Rto_plaquetas')); return x == null ? null : x < 1.3 ? 1 : x <= 2.67 ? 2 : 3; }));
+    // ── Años de diagnóstico / evolución
+    [['hta','HTA'],['obe','Obesidad'],['dbt2','Diabetes tipo 2'],['dbt_otro','Diabetes (otro tipo)']].forEach(function(a){
+      var info = function(f){ var c = C(f); if(!c || !c['dx_' + a[0]] || !c['dx_' + a[0] + '_fecha']) return null; var p = (pacientesData || []).find(function(x){ return String(x.dni) === String(f.dni); }); return _dxInicioInfo(c['dx_' + a[0] + '_fecha'], p ? p.fecha_nacimiento : null); };
+      cols.push(V('anio_dx_' + a[0], 'Año de diagnóstico: ' + a[1], '', function(f){ var i = info(f); return i && i.anio ? i.anio : null; }));
+      cols.push(V('anios_evol_' + a[0], 'Años de evolución: ' + a[1], '', function(f){ var i = info(f); return i && i.anio ? new Date().getFullYear() - i.anio : null; }));
+    });
+    // ── Eventos
+    [['iam','IAM','dx_iam_eventos'],['acv','ACV','dx_acv_eventos']].forEach(function(a){
+      var ev = function(f){ var c = C(f); var l = c ? J(c[a[2]]) : null; return Array.isArray(l) ? l.filter(function(e){ return e && (e.tipo || e['año']); }) : []; };
+      cols.push(V('n_eventos_' + a[0], 'N.º de eventos: ' + a[1], '', function(f){ var c = C(f); if(!c || !c['dx_' + a[0]]) return c ? 0 : null; var l = ev(f); return l.length || 1; }));
+      cols.push(V('anio_1er_' + a[0], 'Año del primer ' + a[1], '', function(f){ var y = ev(f).map(function(e){ return parseInt(e['año'], 10); }).filter(function(x){ return x > 1900; }); return y.length ? Math.min.apply(null, y) : null; }));
+    });
+    // ── Cirugía bariátrica
+    cols.push(V('cx_bariatrica', 'Cirugía bariátrica (antecedente quirúrgico)', SN, function(f){ var c = C(f); if(!c) return null; var l = J(c.quirurg_cirugias) || []; return l.some(function(x){ return /bari/i.test(sinAc(x.cirugia)); }) ? 1 : 0; }));
+    cols.push(V('cx_bariatrica_anio', 'Cirugía bariátrica — año', '', function(f){ var c = C(f); var l = c ? (J(c.quirurg_cirugias) || []) : []; var x = l.find(function(x){ return /bari/i.test(sinAc(x.cirugia)); }); return x && parseInt(x['año'], 10) > 1900 ? parseInt(x['año'], 10) : null; }));
+    // ── Tabaco / vapeo / alcohol
+    cols.push(V('pack_year', 'Paquetes-año', '', function(f){ var c = C(f); if(!c || !/actual|ex/.test(c.tabaquismo || '')) return null; var x = (Number(c.cigarrillos_dia) || 0) * (Number(c.anios_fumando) || 0) / 20; return x ? num(x) : null; }));
+    codif(V, cols, 'vapeo', 'Vapeo / cigarrillo electrónico', ['No','Sí','Ex'], function(f){ var c = C(f); return c && c.vapeo ? ({ no:'No', si:'Sí', ex:'Ex' })[c.vapeo] : null; });
+    codif(V, cols, 'alcohol_estado', 'Alcohol: estado', ['No consume','Social','Consume','Ex consumidor'], function(f){ var c = C(f); if(!c) return null; var e = c.alcohol_estado || (c.alcohol ? 'si' : 'no'); return ({ no:'No consume', social:'Social', si:'Consume', ex:'Ex consumidor' })[e]; });
+    cols.push(V('alcohol_g_sem', 'Alcohol: gramos por semana', '', function(f){ var c = C(f); if(!c) return null; return Math.round((Number(c.alcohol_cerveza) || 0) * 13 + (Number(c.alcohol_vino) || 0) * 14 + (Number(c.alcohol_fernet) || 0) * 22 + (Number(c.alcohol_blanca) || 0) * 14 + (Number(c.alcohol_whisky) || 0) * 14); }));
+    ['Marihuana','Cocaína','Drogas sintéticas','Psicofármacos sin receta'].forEach(function(t){
+      cols.push(V('tox_' + sinAc(t).replace(/[^a-z]+/g, '_').replace(/_+$/, ''), 'Tóxicos: ' + t, SN, function(f){ var c = C(f); if(!c || !String(c.tox_notas || '').trim()) return null; return new RegExp(sinAc(t)).test(sinAc(c.tox_notas)) ? 1 : 0; }));
+    });
+    // ── Actividad física
+    var act = function(f){ var c = C(f); var a = c ? J(c.hab_actividad_json) : null; return a && Array.isArray(a.actividades) ? a.actividades : null; };
+    cols.push(V('af_min_sem', 'Actividad física: minutos totales por semana', '', function(f){ var l = act(f); if(!l) return null; return l.reduce(function(s, it){ return s + (Number(it.minutos) || 0) * (Number(it.dias) || 0); }, 0); }));
+    cols.push(V('af_min_mod_eq', 'Actividad física: minutos moderados-equivalentes/sem (intensa ×2)', '', function(f){ var l = act(f); if(!l) return null; return l.reduce(function(s, it){ var m = (Number(it.minutos) || 0) * (Number(it.dias) || 0); return s + (it.intensidad === 'moderada' ? m : it.intensidad === 'intensa' ? 2 * m : 0); }, 0); }));
+    cols.push(V('af_dias_fuerza', 'Actividad física: días de fuerza por semana', '', function(f){ var l = act(f); if(!l) return null; return l.filter(function(it){ return ['Gym – Fuerza','Gym – Mixto','Funcional / CrossFit'].indexOf(it.tipo) >= 0; }).reduce(function(s, it){ return s + (Number(it.dias) || 0); }, 0); }));
+    cols.push(V('af_no_realiza', 'No realiza actividad física', SN, function(f){ var l = act(f); if(!l) return null; return l.some(function(it){ return /no realiza/i.test(it.tipo); }) ? 1 : 0; }));
+    cols.push(V('pasos_dia', 'Pasos por día', '', function(f){ var c = C(f); var a = c ? J(c.hab_actividad_json) : null; return a && a.pasos ? nume(a.pasos) : null; }));
+    // ── Alimentación
+    var PAT = ['Omnívora','Vegetariana (ovolacto)','Vegana','Pescetariana','Flexitariana','Celiaquía (sin TACC)','Sin lactosa','Mediterránea','Low carb / keto','Ayuno intermitente'];
+    PAT.forEach(function(pn){ cols.push(V('ali_' + sinAc(pn).replace(/\(.*\)/, '').replace(/[^a-z]+/g, '_').replace(/^_|_$/g, ''), 'Alimentación: ' + pn, SN, function(f){ var c = C(f); var a = c ? J(c.hab_alimentacion_json) : null; if(!a || !Array.isArray(a.patron)) return null; return a.patron.indexOf(pn) >= 0 ? 1 : 0; })); });
+    codif(V, cols, 'ali_hiposodica', 'Dieta hiposódica', ['no_aplica','cumple','no_cumple'], function(f){ var c = C(f); var a = c ? J(c.hab_alimentacion_json) : null; return a ? a.hiposodica : null; });
+    ['frutas','verduras','lacteos','pescado','c_rojas','legumbres','huevo','frutos_secos','pollo','cerdo'].forEach(function(k){
+      cols.push(V('ali_' + k + '_sem', 'Alimentación: ' + k.replace('_', ' ') + ' (porciones/sem)', '', function(f){ var c = C(f); var a = c ? J(c.hab_alimentacion_json) : null; return a ? nume(a[k]) : null; }));
+    });
+    // ── Sueño
+    var sue = function(f){ var c = C(f); return c ? J(c.sueno_json) : null; };
+    cols.push(V('sueno_horas', 'Sueño: horas por noche (≤4 = 4; ≥10 = 10)', '', function(f){ var x = sue(f); return x && x.horas ? nume(String(x.horas).replace(/[≤≥]/g, '')) : null; }));
+    codif(V, cols, 'sueno_calidad', 'Sueño: calidad', ['buena','regular','mala'], function(f){ var x = sue(f); return x ? x.calidad : null; });
+    codif(V, cols, 'ronquido', 'Ronquido', ['no','ocasional','habitual'], function(f){ var x = sue(f); return x ? x.ronquido : null; });
+    cols.push(V('apneas_presenciadas', 'Apneas presenciadas', SN, function(f){ var x = sue(f); return x && x.apneas ? (x.apneas === 'si' ? 1 : 0) : null; }));
+    codif(V, cols, 'somnolencia', 'Somnolencia diurna', ['no','leve','marcada'], function(f){ var x = sue(f); return x ? x.somnolencia : null; });
+    codif(V, cols, 'cpap', 'CPAP', ['no','usa','indicado'], function(f){ var x = sue(f); return x ? x.cpap : null; });
+    cols.push(V('stopbang', 'STOP-BANG (0-8)', '', function(f){ var x = sue(f); return x && x.stopbang != null ? x.stopbang : null; }));
+    codif(V, cols, 'stopbang_riesgo', 'STOP-BANG: riesgo de AOS', ['bajo','intermedio','alto'], function(f){ var x = sue(f); return x ? x.stopbang_riesgo : null; });
+    cols.push(V('epworth', 'Escala de Epworth (0-24)', '', function(f){ var x = sue(f); return x && x.epworth != null ? x.epworth : null; }));
+    // ── Ginecología: MAC
+    cols.push(V('mac_metodo', 'Método anticonceptivo (texto)', '', function(f){ var c = C(f); return c && f.fem ? (c.mac_metodo || null) : null; }));
+    // ── Tratamientos alternativos
+    cols.push(V('tto_alternativos', 'Tratamientos alternativos (texto)', '', function(f){ var c = C(f); return c ? (c.tto_alternativos || null) : null; }));
+    cols.push(V('otras_enfermedades', 'Otras enfermedades (texto, separadas por coma)', '', function(f){ var c = C(f); return c ? (c.otras_enfermedades || null) : null; }));
+    // ── Medicación por fármaco frecuente
+    var meds = function(f){ return (D.meds[f.dni] || []).map(function(m){ return sinAc(m.farmaco); }); };
+    cols.push(V('n_antihipertensivos', 'N.º de antihipertensivos actuales', '', function(f){ return (D.meds[f.dni] || []).filter(function(m){ return /antihiper/i.test(m.grupo || ''); }).length; }));
+    cols.push(V('estatina', 'Estatina actual', SN, function(f){ return meds(f).some(function(m){ return /statina/.test(m); }) ? 1 : 0; }));
+    cols.push(V('ezetimibe', 'Ezetimibe actual', SN, function(f){ return meds(f).some(function(m){ return /ezetim/.test(m); }) ? 1 : 0; }));
+    cols.push(V('arglp1', 'AR GLP-1 / tirzepatida actual', SN, function(f){ return meds(f).some(function(m){ return /glutida|tirzep|exenat|dulaglut/.test(m); }) ? 1 : 0; }));
+    cols.push(V('isglt2', 'iSGLT2 actual', SN, function(f){ return meds(f).some(function(m){ return /gliflozina/.test(m); }) ? 1 : 0; }));
+    cols.push(V('metformina', 'Metformina actual', SN, function(f){ return meds(f).some(function(m){ return /metform/.test(m); }) ? 1 : 0; }));
+    cols.push(V('insulina', 'Insulina actual', SN, function(f){ return meds(f).some(function(m){ return /insulin|glargin|degludec|detemir|lispro|aspart|glulisin|nph/.test(m); }) ? 1 : 0; }));
+    // ── Estudios complementarios (último valor de cada ítem, sin comentarios)
+    var vistosCat = {};
+    EST_FILAS.forEach(function(ef){
+      if(ef.cat || !ef.key || ef.nota) return;
+      var cat = catDe(ef.key), pre = prefijo(ef.key);
+      if(!vistosCat[cat]){ vistosCat[cat] = 1;
+        cols.push(V('est_' + pre + '_fecha', 'Estudio ' + cat + ': fecha del último', '', function(f){ var d = (D.est || {})[f.dni]; if(!d || !d.columnas) return null; var best = null;
+          EST_FILAS.forEach(function(e2, fi){ if(e2.cat || !e2.key || catDe(e2.key) !== cat) return; (d.columnas || []).forEach(function(col, ci){ var v = (d.filas[fi] || [])[ci]; if(v != null && String(v).trim() !== '' && (!best || String(col) > best)) best = String(col); }); });
+          return best; })); }
+      var et = 'Estudio ' + cat + ': ' + ef.label + ' — último';
+      if(ef.opciones && ef.opciones.length) codif(V, cols, 'est_' + ef.key, et, ef.opciones, function(f){ var r = estVal(D, f.dni, ef.key); return r ? r.v : null; });
+      else if(ef.multiOp) cols.push(V('est_' + ef.key, et + ' (texto)', '', function(f){ var r = estVal(D, f.dni, ef.key); return r ? String(r.v) : null; }));
+      else cols.push(V('est_' + ef.key, et, '', function(f){ var r = estVal(D, f.dni, ef.key); if(!r) return null; var n = nume(r.v); return n != null ? num(n) : String(r.v); }));
+    });
+    // ── Cohorte y seguimiento
+    cols.push(V('fecha_ingreso', 'Fecha de ingreso a la cohorte (registrada; si no, primera evolución)', '', function(f){ var c = C(f); if(c && c.inv_ingreso) return String(c.inv_ingreso).slice(0, 10); var x = (D.evFechas || {})[f.dni]; return x ? x.pri : null; }));
+    if(window._invSPSS) window._invSPSS(V, num, SN, cols, D, C, codif);
+    cols.push(V('fecha_ultima', 'Fecha de la última evolución', '', function(f){ var x = (D.evFechas || {})[f.dni]; return x ? x.ult : null; }));
+    cols.push(V('seguimiento_meses', 'Meses de seguimiento (primera a última evolución)', '', function(f){ var x = (D.evFechas || {})[f.dni]; if(!x) return null; return Math.round((new Date(x.ult) - new Date(x.pri)) / (30.44 * 86400000) * 10) / 10; }));
+    // ── Agenda: asistencia
+    cols.push(V('n_turnos', 'N.º de turnos dados (hasta hoy)', '', function(f){ var x = turnosDe(D)[f.dni]; return x ? x.n : 0; }));
+    cols.push(V('n_ausentes', 'N.º de ausencias registradas', '', function(f){ var x = turnosDe(D)[f.dni]; return x ? x.no : 0; }));
+    cols.push(V('ausentismo_pct', '% de ausentismo (sobre turnos con asistencia registrada)', '', function(f){ var x = turnosDe(D)[f.dni]; if(!x || !(x.si + x.no)) return null; return Math.round(x.no / (x.si + x.no) * 1000) / 10; }));
+    cols.push(V('n_videoconsultas', 'N.º de videoconsultas', '', function(f){ var x = turnosDe(D)[f.dni]; return x ? x.video : 0; }));
+    cols.push(V('motivo_primera', 'Motivo del primer turno (texto)', '', function(f){ var x = turnosDe(D)[f.dni]; return x && x.primero ? (x.primero.mot || null) : null; }));
+  };
+
+  // Hoja "Mediciones": todo el laboratorio (no solo el de Tabla 1), Lp(a), filas extra y FIB-4 por fecha
+  window._t1SPSSMedExtra = function(med, idx, ult, idDe, D){
+    var yaLab = {}; (T1_LAB || []).forEach(function(l){ yaLab[l[0]] = 1; });
+    idx.forEach(function(i){ var dni = ult[i].dni, id = idDe[dni], edad = ult[i].edad;
+      LAB_FILAS.forEach(function(lf){ if(!lf.key || yaLab[lf.key]) return; _t1Serie(D.lab[dni], LAB_FILAS, lf.key).forEach(function(x){ med.push({ id: id, fecha: x.f, variable: _t1Var(lf.key), valor: x.v }); }); });
+      var d = D.lab[dni];
+      if(d && Array.isArray(d.extraFilas)) d.extraFilas.forEach(function(lbl){ var re = new RegExp('^' + lbl.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$');
+        serieExtra(d, LAB_FILAS, re).forEach(function(x){ med.push({ id: id, fecha: x.f, variable: _t1Var(/^\s*lp\s*\(?\s*a/i.test(lbl) ? 'lpa' : 'extra_' + sinAc(lbl).replace(/[^a-z0-9]+/g, '_')), valor: x.v, unidad: x.u || '' }); }); });
+      lpa(D, dni).forEach(function(x){ if(!(d && Array.isArray(d.extraFilas) && d.extraFilas.some(function(l){ return /^\s*lp\s*\(?\s*a/i.test(l); }) && !(d.lpa || []).some(function(y){ return String(y.fecha) === x.f; }))) med.push({ id: id, fecha: x.f, variable: 'lpa', valor: x.v, unidad: x.u }); });
+      var ast = _t1Serie(d, LAB_FILAS, 'TGO'), alt = _t1Serie(d, LAB_FILAS, 'TGP'), pl = _t1Serie(d, LAB_FILAS, 'Rto_plaquetas');
+      ast.forEach(function(a){ var b = alt.find(function(x){ return x.f === a.f; }), c = pl.find(function(x){ return x.f === a.f; }); var v = b && c ? fib4(edad, a.v, b.v, c.v) : null; if(v != null) med.push({ id: id, fecha: a.f, variable: 'fib4', valor: v }); });
+    });
+  };
+
+  // Hojas extra: Medicación (historial completo) y Tratamientos de adiposidad
+  window._t1SPSSHojas = function(wb, idx, ult, idDe, D){
+    var rows = [];
+    idx.forEach(function(i){ var dni = ult[i].dni, id = idDe[dni];
+      ((D.medsTodas || {})[dni] || []).forEach(function(m){ rows.push({ id: id, grupo: m.grupo || '', farmaco: m.farmaco || '', dosis: m.dosis || '', frecuencia: m.frecuencia || '', activo: m.activo ? 1 : 0, fecha_inicio: m.fecha_inicio || '', fecha_fin: m.fecha_fin || '', motivo_fin: m.motivo_fin || '' }); });
+    });
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows.length ? rows : [{ id: '' }]), 'Medicación');
+    var ad = [], ids = {}; idx.forEach(function(i){ ids[String(ult[i].dni)] = idDe[ult[i].dni]; });
+    ((D.extra || {}).adip || []).forEach(function(t){ var id = ids[String(t.paciente_dni || t.dni_paciente || '')]; if(id == null) return; var o = { id: id }; Object.keys(t).forEach(function(k){ if(/dni|^id$|nombre|paciente/i.test(k)) return; var v = t[k]; o[k] = (v && typeof v === 'object') ? JSON.stringify(v) : v; }); ad.push(o); });
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(ad.length ? ad : [{ id: '' }]), 'Tto adiposidad');
+  };
+})();
+</script>
+
+<style>
+#tab_inv .iv-card{background:#f8faff;border:1.5px solid #dbe2f5;border-radius:12px;padding:12px 14px;margin-bottom:12px}
+#tab_inv .iv-t{font-size:10.5px;font-weight:800;color:#4338ca;text-transform:uppercase;letter-spacing:.07em;margin-bottom:8px}
+#tab_inv .iv-row{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:8px}
+#tab_inv .iv-row>span{font-size:11.5px;color:#64748b;width:140px;flex-shrink:0}
+#tab_inv .ib{border:1.5px solid #dbe2f5;background:#fff;border-radius:999px;padding:4px 10px;font-size:12px;font-weight:600;cursor:pointer;font-family:var(--font-main);color:#334155}
+#tab_inv .ib.sel{background:#4338ca;border-color:#4338ca;color:#fff}
+#tab_inv .ib.ok.sel{background:#16a34a;border-color:#16a34a}
+#tab_inv .ib.mal.sel{background:#dc2626;border-color:#dc2626}
+#tab_inv input[type=date],#tab_inv input[type=text]{padding:5px 8px;border:1.5px solid #dbe2f5;border-radius:8px;font-size:12.5px;font-family:var(--font-main)}
+#tab_inv .iv-nota{font-size:11px;color:#64748b;margin-top:2px}
+#tab_inv .ds-add{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:8px}
+#tab_inv .ds-add button{border:1.5px dashed #c7d2fe;background:#fff;border-radius:8px;padding:4px 9px;font-size:11.5px;font-weight:600;cursor:pointer;color:#3730a3;font-family:var(--font-main)}
+#tab_inv .ds-add button.muerte{border-color:#fca5a5;color:#991b1b}
+#tab_inv .ds-fila{display:grid;grid-template-columns:1fr 130px 1.4fr 28px;gap:6px;align-items:center;background:#fff;border:1.5px solid #e0e7ff;border-radius:9px;padding:6px 8px;margin-bottom:5px}
+#tab_inv .ds-fila b{font-size:12.5px;color:#1e1b4b}
+#tab_inv .ds-fila button{background:#fee2e2;color:#dc2626;border:none;border-radius:7px;width:26px;height:26px;cursor:pointer;font-size:16px}
+#tab_inv .ds-fila.sinfecha input[type=date]{border-color:#f59e0b;background:#fffbeb}
+.evh-tag-inv{font-size:10.5px;font-weight:700;border-radius:10px;padding:2px 8px;border:1.5px solid}
+.evh-tag-inv.si{background:#eef2ff;color:#4338ca;border-color:#c7d2fe}
+.evh-tag-inv.no{background:#fff;color:#94a3b8;border-color:#e2e8f0;border-style:dashed}
+.evh-tag-inv.rev{background:#fff1f2;color:#be123c;border-color:#fecdd3}
+.evh-tag-inv.fall{background:#1e293b;color:#fff;border-color:#1e293b}
+.evh-tag-inv.perd{background:#fef3c7;color:#92400e;border-color:#fde68a}
+</style>
+<script>
+/* ════════ Datos clínicos › 🔬 Investigación ════════
+   Consentimiento para uso de datos · ingreso a la cohorte · estado de seguimiento ·
+   sociodemográficos · desenlaces con fecha. Se guarda en paciente_clinica (SQL 20),
+   se vuelca a la evolución y sale en la Base para SPSS. */
+(function(){
+  function $(id){ return document.getElementById(id); }
+  function esc(v){ return String(v==null?'':v).replace(/[&<>"]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+  function fAR(d){ if(!d) return ''; var p = String(d).slice(0, 10).split('-'); return p.length === 3 ? p[2] + '/' + p[1] + '/' + p[0] : d; }
+  function hoy(){ return (typeof fechaHoy === 'function') ? fechaHoy() : new Date().toISOString().slice(0, 10); }
+  var CONS = [['si','Otorgado','ok'],['no','No otorgado','mal'],['revocado','Revocado','mal']];
+  var SEG = [['activo','En seguimiento'],['perdido','Perdido'],['alta','Alta'],['derivado','Derivado'],['fallecido','Fallecido']];
+  var EDU = ['Primario incompleto','Primario completo','Secundario incompleto','Secundario completo','Terciario/universitario incompleto','Terciario/universitario completo','Posgrado'];
+  var LAB = ['Empleado/a','Independiente','Desocupado/a','Jubilado/a o pensionado/a','Estudiante','Tareas del hogar','Otro'];
+  var DES = [
+    ['iam','IAM'],['acv','ACV'],['ait','AIT'],['revasc','Revascularización coronaria'],['int_ic','Internación por insuficiencia cardíaca'],
+    ['int_cv','Internación cardiovascular (otra)'],['int_nocv','Internación no cardiovascular'],['dialisis','Inicio de diálisis / trasplante renal'],
+    ['amput','Amputación'],['dbt_inc','Diabetes nueva (incidente)'],['hta_inc','HTA nueva (incidente)'],['fa_inc','Fibrilación auricular nueva'],
+    ['otro','Otro'],['muerte_cv','Muerte cardiovascular'],['muerte_nocv','Muerte no cardiovascular'],['muerte_desc','Muerte de causa desconocida']
+  ];
+  var DESL = {}; DES.forEach(function(d){ DESL[d[0]] = d[1]; });
+  var DXDE = { iam:'dx_iam', acv:'dx_acv', ait:'dx_ait', revasc:'dx_coron', dialisis:'dx_erc', dbt_inc:'dx_dbt2', hta_inc:'dx_hta', fa_inc:'dx_fa', int_ic:'dx_icc' };
+  var S = vacio(), primeraEvol = null;
+  function vacio(){ return { inv_consentimiento:'', inv_consent_fecha:'', inv_consent_version:'', inv_ingreso:'', seguimiento_estado:'', seguimiento_fecha:'', causa_muerte:'', nivel_educativo:'', situacion_laboral:'', ocupacion:'', desenlaces:[] }; }
+  function pills(campo, ops){ return ops.map(function(o){ return '<button type="button" class="ib ' + (o[2] || '') + '" data-c="' + campo + '" data-v="' + esc(o[0]) + '">' + esc(o[1]) + '</button>'; }).join(''); }
+  function crear(){
+    var t = $('tab_inv'); if(!t || t._ok) return !!t; t._ok = true;
+    var ver = ''; try { ver = localStorage.getItem('urcym_consent_version') || 'v1'; } catch(e){ ver = 'v1'; }
+    t.innerHTML = ''
+      + '<div class="iv-card"><div class="iv-t">✍️ Consentimiento para uso de datos en investigación</div>'
+      + '<div class="iv-row"><span>Consentimiento</span>' + pills('inv_consentimiento', CONS) + '</div>'
+      + '<div class="iv-row"><span>Fecha / versión</span><input type="date" id="iv_cfecha"> <input type="text" id="iv_cver" placeholder="Versión del formulario" style="width:150px" value=""></div>'
+      + '<div class="iv-nota">Guardá el formulario firmado (papel o escaneado). Si el paciente revoca, marcá "Revocado" con la fecha: sale de la base de investigación.</div></div>'
+      + '<div class="iv-card"><div class="iv-t">🗓️ Cohorte y seguimiento</div>'
+      + '<div class="iv-row"><span>Ingreso a la cohorte</span><input type="date" id="iv_ingreso"> <span class="iv-nota" id="iv_ingreso_auto" style="width:auto"></span></div>'
+      + '<div class="iv-row"><span>Estado</span>' + pills('seguimiento_estado', SEG) + '</div>'
+      + '<div class="iv-row" id="iv_seg_fecha_row" style="display:none"><span>Fecha del estado</span><input type="date" id="iv_segfecha"> <input type="text" id="iv_causa" placeholder="Causa de muerte" style="width:240px;display:none"></div></div>'
+      + '<div class="iv-card"><div class="iv-t">👥 Datos sociodemográficos</div>'
+      + '<div class="iv-row"><span>Nivel educativo</span>' + pills('nivel_educativo', EDU.map(function(e){ return [e, e]; })) + '</div>'
+      + '<div class="iv-row"><span>Situación laboral</span>' + pills('situacion_laboral', LAB.map(function(e){ return [e, e]; })) + '</div>'
+      + '<div class="iv-row"><span>Ocupación</span><input type="text" id="iv_ocup" placeholder="Ej: docente, chofer, administrativa…" style="flex:1;min-width:200px"></div></div>'
+      + '<div class="iv-card"><div class="iv-t">📌 Desenlaces / eventos durante el seguimiento</div>'
+      + '<div class="ds-add">' + DES.map(function(d){ return '<button type="button" data-add="' + d[0] + '" class="' + (/^muerte/.test(d[0]) ? 'muerte' : '') + '">+ ' + esc(d[1]) + '</button>'; }).join('') + '</div>'
+      + '<div id="iv_des"></div>'
+      + '<div class="iv-nota">IAM, ACV, AIT, revascularización, diálisis, diabetes/HTA/FA nueva e internación por IC también tildan el diagnóstico. Una muerte pasa el estado a "Fallecido".</div></div>';
+    $('iv_cver').value = ver;
+    t.addEventListener('click', function(e){
+      var b = e.target.closest('button'); if(!b) return;
+      if(b.dataset.c){ var c = b.dataset.c; S[c] = (S[c] === b.dataset.v) ? '' : b.dataset.v;
+        if(c === 'inv_consentimiento' && S[c] && !$('iv_cfecha').value) $('iv_cfecha').value = hoy();
+        if(c === 'seguimiento_estado' && S[c] && S[c] !== 'activo' && !$('iv_segfecha').value) $('iv_segfecha').value = hoy();
+        pintar(); }
+      else if(b.dataset.add){ agregar(b.dataset.add); }
+      else if(b.dataset.del != null){ S.desenlaces.splice(+b.dataset.del, 1); pintarDes(); }
+    });
+    t.addEventListener('input', function(e){ var el = e.target, i = el.dataset && el.dataset.i; if(i == null) return; var d = S.desenlaces[+i]; if(!d) return; if(el.type === 'date'){ d.fecha = el.value; el.closest('.ds-fila').classList.toggle('sinfecha', !el.value); if(/^muerte/.test(d.tipo) && el.value){ $('iv_segfecha').value = el.value; } if((d.tipo === 'iam' || d.tipo === 'acv') && /^\d{4}-/.test(el.value)) sincEventos(); } else d.detalle = el.value; });
+    return true;
+  }
+  function agregar(tipo){
+    var d = { tipo: tipo, fecha: '', detalle: '' };
+    S.desenlaces.push(d);
+    if(/^muerte/.test(tipo)){ S.seguimiento_estado = 'fallecido'; pintar(); }
+    var dx = DXDE[tipo] && $(DXDE[tipo]); if(dx && !dx.checked){ dx.checked = true; dx.dispatchEvent(new Event('change', { bubbles:true })); }
+    pintarDes();
+    var f = document.querySelector('#iv_des .ds-fila:last-child input[type=date]'); if(f) f.focus();
+  }
+  // Al poner la fecha de un IAM/ACV, se suma al listado de eventos de ese diagnóstico (año)
+  function sincEventos(){
+    try {
+      S.desenlaces.forEach(function(d){ if(!d.fecha) return; var y = String(d.fecha).slice(0, 4);
+        var dt = String(d.detalle || '').toLowerCase();
+        if(d.tipo === 'iam' && typeof getEventosIAM === 'function' && !getEventosIAM().some(function(e){ return String(e['año']) === y; })) agregarEventoIAM({ tipo: /nstemi|sin supra/.test(dt) ? 'NSTEMI' : /stemi|con supra/.test(dt) ? 'STEMI' : /by.?pass|crm|cirug/.test(dt) ? 'By-pass' : /angiopl|stent|atc/.test(dt) ? 'Angioplastía' : 'Otro', año:y });
+        if(d.tipo === 'acv' && typeof getEventosACV === 'function' && !getEventosACV().some(function(e){ return String(e['año']) === y; })) agregarEventoACV({ tipo: /hemorr/.test(dt) ? 'Hemorrágico' : /isquem/.test(dt) ? 'Isquémico' : 'Otro', año:y });
+      });
+    } catch(e){}
+  }
+  function pintarDes(){
+    var w = $('iv_des'); if(!w) return;
+    w.innerHTML = S.desenlaces.map(function(d, i){ return '<div class="ds-fila' + (d.fecha ? '' : ' sinfecha') + '"><b>' + esc(DESL[d.tipo] || d.tipo) + '</b><input type="date" data-i="' + i + '" value="' + esc(d.fecha || '') + '" title="Fecha del evento"><input type="text" data-i="' + i + '" value="' + esc(d.detalle || '') + '" placeholder="Detalle (lugar, causa, tratamiento…)"><button type="button" data-del="' + i + '" title="Quitar">×</button></div>'; }).join('') || '<div class="iv-nota">Sin desenlaces registrados.</div>';
+  }
+  function pintar(){
+    var t = $('tab_inv'); if(!t) return;
+    t.querySelectorAll('[data-c]').forEach(function(b){ b.classList.toggle('sel', S[b.dataset.c] === b.dataset.v); });
+    var est = S.seguimiento_estado; $('iv_seg_fecha_row').style.display = (est && est !== 'activo') ? '' : 'none'; $('iv_causa').style.display = est === 'fallecido' ? '' : 'none';
+    $('iv_ingreso_auto').textContent = primeraEvol ? (S.inv_ingreso ? '' : 'Si lo dejás vacío se usa la primera evolución: ' + fAR(primeraEvol)) : '';
+  }
+  function txt(id){ var e = $(id); return e ? e.value.trim() : ''; }
+  window._invLeer = function(){
+    var t = $('tab_inv'); if(!t || !t._ok) return undefined;     // la pestaña no se armó: no tocar lo guardado
+    sincEventos();
+    var ver = txt('iv_cver'); if(ver){ try { localStorage.setItem('urcym_consent_version', ver); } catch(e){} }
+    return {
+      inv_consentimiento: S.inv_consentimiento || null,
+      inv_consent_fecha: S.inv_consentimiento ? (txt('iv_cfecha') || null) : null,
+      inv_consent_version: S.inv_consentimiento ? (ver || null) : null,
+      inv_ingreso: txt('iv_ingreso') || null,
+      seguimiento_estado: S.seguimiento_estado || null,
+      seguimiento_fecha: (S.seguimiento_estado && S.seguimiento_estado !== 'activo') ? (txt('iv_segfecha') || (S.seguimiento_estado === 'fallecido' ? ((S.desenlaces.filter(function(d){ return /^muerte/.test(d.tipo) && d.fecha; })[0] || {}).fecha || null) : null)) : null,
+      causa_muerte: S.seguimiento_estado === 'fallecido' ? (txt('iv_causa') || null) : null,
+      nivel_educativo: S.nivel_educativo || null,
+      situacion_laboral: S.situacion_laboral || null,
+      ocupacion: txt('iv_ocup') || null,
+      desenlaces_json: S.desenlaces.filter(function(d){ return d.tipo; }).map(function(d){ return { tipo: d.tipo, fecha: d.fecha || null, detalle: (d.detalle || '').trim() || null }; })
+    };
+  };
+  window._invCargar = function(data){
+    crear(); S = vacio(); data = data || {};
+    Object.keys(S).forEach(function(k){ if(k !== 'desenlaces' && data[k] != null) S[k] = String(data[k]); });
+    var dj = (typeof _safeJ === 'function') ? _safeJ(data.desenlaces_json, []) : (data.desenlaces_json || []); S.desenlaces = Array.isArray(dj) ? dj.map(function(d){ return { tipo: d.tipo, fecha: d.fecha ? String(d.fecha).slice(0, 10) : '', detalle: d.detalle || '' }; }) : [];
+    var set = function(id, v){ var e = $(id); if(e) e.value = v || ''; };
+    set('iv_cfecha', String(S.inv_consent_fecha || '').slice(0, 10)); if(S.inv_consent_version) set('iv_cver', S.inv_consent_version);
+    set('iv_ingreso', String(S.inv_ingreso || '').slice(0, 10)); set('iv_segfecha', String(S.seguimiento_fecha || '').slice(0, 10)); set('iv_causa', S.causa_muerte); set('iv_ocup', S.ocupacion);
+    pintar(); pintarDes();
+    primeraEvol = null;
+    var dni = data.dni_paciente || (typeof pacienteActual !== 'undefined' && pacienteActual && pacienteActual.dni);
+    if(dni && typeof sb !== 'undefined') sb.from('evoluciones').select('fecha_hora').eq('dni_paciente', dni).order('fecha_hora', { ascending: true }).limit(1).then(function(r){ var f = r && r.data && r.data[0] && r.data[0].fecha_hora; primeraEvol = f ? String(f).slice(0, 10) : null; pintar(); }).catch(function(){});
+  };
+  var $ing = null;
+  document.addEventListener('input', function(e){ if(e.target && e.target.id === 'iv_ingreso') pintar(); });
+
+  // ── Texto para la evolución
+  function dj(c){ var x = (typeof _safeJ === 'function') ? _safeJ(c.desenlaces_json, []) : c.desenlaces_json; return Array.isArray(x) ? x : []; }
+  var CONSL = { si:'otorgado', no:'no otorgado', revocado:'revocado' }, SEGL = { activo:'en seguimiento', perdido:'perdido en el seguimiento', alta:'alta', derivado:'derivado', fallecido:'fallecido' };
+  function desTxt(d){ return (DESL[d.tipo] || d.tipo) + (d.fecha ? ' (' + fAR(d.fecha) + ')' : '') + (d.detalle ? ': ' + d.detalle : ''); }
+  window._invTexto = function(c){
+    var L = [];
+    var soc = [c.nivel_educativo, c.situacion_laboral, c.ocupacion].filter(Boolean);
+    if(soc.length) L.push('<b>Datos sociodemográficos:</b> ' + soc.join(' · '));
+    var ds = dj(c); if(ds.length) L.push('<b>Desenlaces:</b> ' + ds.map(desTxt).join('; '));
+    if(c.seguimiento_estado && c.seguimiento_estado !== 'activo') L.push('<b>Seguimiento:</b> ' + SEGL[c.seguimiento_estado] + (c.seguimiento_fecha ? ' (' + fAR(c.seguimiento_fecha) + ')' : '') + (c.causa_muerte ? ' — causa: ' + c.causa_muerte : ''));
+    if(c.inv_consentimiento) L.push('<b>Consentimiento para investigación:</b> ' + CONSL[c.inv_consentimiento] + (c.inv_consent_fecha ? ' (' + fAR(c.inv_consent_fecha) + (c.inv_consent_version ? ', ' + c.inv_consent_version : '') + ')' : ''));
+    return L;
+  };
+  window._invCambios = function(n, a){
+    var L = []; n = n || {}; a = a || {};
+    if(n.inv_consentimiento && n.inv_consentimiento !== a.inv_consentimiento) L.push('Consentimiento para uso de datos en investigación: ' + CONSL[n.inv_consentimiento] + (n.inv_consent_fecha ? ' (' + fAR(n.inv_consent_fecha) + (n.inv_consent_version ? ', ' + n.inv_consent_version : '') + ')' : '') + '.');
+    var clave = function(d){ return d.tipo + '|' + (d.fecha || ''); }, prev = dj(a).map(clave);
+    dj(n).forEach(function(d){ if(prev.indexOf(clave(d)) < 0) L.push('Desenlace: ' + desTxt(d) + '.'); });
+    if(n.seguimiento_estado && n.seguimiento_estado !== a.seguimiento_estado && n.seguimiento_estado !== 'activo') L.push('Seguimiento: ' + SEGL[n.seguimiento_estado] + (n.seguimiento_fecha ? ' (' + fAR(n.seguimiento_fecha) + ')' : '') + (n.causa_muerte ? ' — causa: ' + n.causa_muerte : '') + '.');
+    var soc = [n.nivel_educativo, n.situacion_laboral, n.ocupacion].filter(Boolean).join(' · '), socA = [a.nivel_educativo, a.situacion_laboral, a.ocupacion].filter(Boolean).join(' · ');
+    if(soc && soc !== socA) L.push('Datos sociodemográficos: ' + soc + '.');
+    return L;
+  };
+  window._invChips = function(c){
+    if(!c) return '';
+    var h = '';
+    if(c.seguimiento_estado === 'fallecido') h += '<span class="evh-tag-inv fall">† Fallecido' + (c.seguimiento_fecha ? ' ' + fAR(c.seguimiento_fecha) : '') + '</span> ';
+    else if(c.seguimiento_estado === 'perdido') h += '<span class="evh-tag-inv perd">Perdido en seguimiento</span> ';
+    if(c.inv_consentimiento === 'si') h += '<span class="evh-tag-inv si" title="Consentimiento para investigación otorgado">🔬 Consentimiento ✓</span> ';
+    else if(c.inv_consentimiento === 'revocado') h += '<span class="evh-tag-inv rev">🔬 Consentimiento revocado</span> ';
+    else if(c.inv_consentimiento === 'no') h += '<span class="evh-tag-inv no">🔬 Sin consentimiento</span> ';
+    else h += '<span class="evh-tag-inv no" title="Registralo en Datos clínicos › Investigación">🔬 Consentimiento sin registrar</span> ';
+    return h;
+  };
+
+  // ── Base para SPSS
+  window._invSPSS = function(V, num, SN, cols, D, C, codif){
+    codif(V, cols, 'consentimiento', 'Consentimiento para investigación (4 = sin registrar: no se opuso)', ['Otorgado','No otorgado','Revocado','Sin registrar (no se opuso)'], function(f){ var c = C(f); return c && c.inv_consentimiento ? ({ si:'Otorgado', no:'No otorgado', revocado:'Revocado' })[c.inv_consentimiento] : 'Sin registrar (no se opuso)'; });
+    cols.push(V('consent_fecha', 'Consentimiento: fecha', '', function(f){ var c = C(f); return c && c.inv_consent_fecha ? String(c.inv_consent_fecha).slice(0, 10) : null; }));
+    cols.push(V('consent_version', 'Consentimiento: versión del formulario', '', function(f){ var c = C(f); return c ? (c.inv_consent_version || null) : null; }));
+    codif(V, cols, 'nivel_educativo', 'Nivel educativo', EDU, function(f){ var c = C(f); return c ? c.nivel_educativo : null; });
+    codif(V, cols, 'situacion_laboral', 'Situación laboral', LAB, function(f){ var c = C(f); return c ? c.situacion_laboral : null; });
+    cols.push(V('ocupacion', 'Ocupación (texto)', '', function(f){ var c = C(f); return c ? (c.ocupacion || null) : null; }));
+    codif(V, cols, 'seguimiento_estado', 'Estado de seguimiento', SEG.map(function(x){ return x[1]; }), function(f){ var c = C(f); var e = c && (c.seguimiento_estado || 'activo'); var m = SEG.find(function(x){ return x[0] === e; }); return c ? (m ? m[1] : null) : null; });
+    cols.push(V('seguimiento_fecha', 'Fecha del estado de seguimiento (pérdida, alta, derivación, muerte)', '', function(f){ var c = C(f); return c && c.seguimiento_fecha ? String(c.seguimiento_fecha).slice(0, 10) : null; }));
+    cols.push(V('fallecido', 'Fallecido', SN, function(f){ var c = C(f); return c ? (c.seguimiento_estado === 'fallecido' || dj(c).some(function(d){ return /^muerte/.test(d.tipo); }) ? 1 : 0) : null; }));
+    var ingreso = function(f){ var c = C(f); if(c && c.inv_ingreso) return String(c.inv_ingreso).slice(0, 10); var x = (D.evFechas || {})[f.dni]; return x ? x.pri : null; };
+    var meses = function(a, b){ if(!a || !b) return null; return Math.round((new Date(b) - new Date(a)) / (30.44 * 86400000) * 10) / 10; };
+    var finSeg = function(f){ var c = C(f); var x = (D.evFechas || {})[f.dni]; var cands = [x && x.ult]; if(c && c.seguimiento_fecha && c.seguimiento_estado && c.seguimiento_estado !== 'activo') cands.push(String(c.seguimiento_fecha).slice(0, 10)); dj(c || {}).forEach(function(d){ if(d.fecha) cands.push(String(d.fecha).slice(0, 10)); }); cands = cands.filter(Boolean).sort(); return cands.length ? cands[cands.length - 1] : null; };
+    cols.push(V('meses_seguimiento_total', 'Meses desde el ingreso hasta el último contacto/evento/estado (para análisis de sobrevida)', '', function(f){ return meses(ingreso(f), finSeg(f)); }));
+    var grupos = [['iam'],['acv'],['ait'],['revasc'],['int_ic'],['int_cv'],['int_nocv'],['dialisis'],['amput'],['dbt_inc'],['hta_inc'],['fa_inc'],['muerte_cv'],['muerte_nocv','muerte_desc']];
+    grupos.forEach(function(g){
+      var nom = g[0] === 'muerte_nocv' ? 'muerte_no_cv' : g[0], et = g.map(function(k){ return DESL[k]; }).join(' / ');
+      var prim = function(f){ var c = C(f); if(!c) return null; var l = dj(c).filter(function(d){ return g.indexOf(d.tipo) >= 0; }).map(function(d){ return d.fecha ? String(d.fecha).slice(0, 10) : '9999'; }).sort(); return l.length ? l[0] : null; };
+      cols.push(V('ev_' + nom, 'Desenlace: ' + et, SN, function(f){ var c = C(f); return c ? (prim(f) ? 1 : 0) : null; }));
+      cols.push(V('ev_' + nom + '_fecha', 'Desenlace: ' + et + ' — fecha del primero', '', function(f){ var x = prim(f); return x && x !== '9999' ? x : null; }));
+      cols.push(V('ev_' + nom + '_meses', 'Desenlace: ' + et + ' — meses desde el ingreso', '', function(f){ var x = prim(f); return x && x !== '9999' ? meses(ingreso(f), x) : null; }));
+    });
+    var MACE = ['iam','acv','revasc','int_ic','muerte_cv'];
+    var mace = function(f){ var c = C(f); if(!c) return null; var l = dj(c).filter(function(d){ return MACE.indexOf(d.tipo) >= 0; }).map(function(d){ return d.fecha ? String(d.fecha).slice(0, 10) : '9999'; }).sort(); return l.length ? l[0] : null; };
+    cols.push(V('mace', 'MACE (IAM, ACV, revascularización, internación por IC o muerte CV)', SN, function(f){ var c = C(f); return c ? (mace(f) ? 1 : 0) : null; }));
+    cols.push(V('mace_meses', 'MACE — meses desde el ingreso hasta el primero', '', function(f){ var x = mace(f); return x && x !== '9999' ? meses(ingreso(f), x) : null; }));
+  };
+  // Hoja "Desenlaces" (formato largo)
+  var oH = window._t1SPSSHojas;
+  window._t1SPSSHojas = function(wb, idx, ult, idDe, D){
+    if(typeof oH === 'function') oH(wb, idx, ult, idDe, D);
+    var rows = [];
+    idx.forEach(function(i){ var dni = ult[i].dni, c = D.cli[dni]; if(!c) return; dj(c).forEach(function(d){ rows.push({ id: idDe[dni], tipo: d.tipo, descripcion: DESL[d.tipo] || d.tipo, fecha: d.fecha ? String(d.fecha).slice(0, 10) : '', detalle: d.detalle || '' }); }); });
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows.length ? rows : [{ id: '', tipo: '', descripcion: '', fecha: '', detalle: '' }]), 'Desenlaces');
+  };
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', crear); else crear();
 })();
 </script>
 </body>
