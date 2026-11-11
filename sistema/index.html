@@ -2,7 +2,7 @@
 <html lang="es-AR">
 <head>
   <meta charset="UTF-8" />
-  <script>var URCYM_BUILD = '2026-11-12-0700';</script>
+  <script>var URCYM_BUILD = '2026-11-12-0800';</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Evaluaciones cardiometabólicas — Sistema de Historia Clínica</title>
 
@@ -7438,7 +7438,7 @@ function _entrarAlSistema() {
     } else if(currentUser.admin) {
       if(navFinanzas) navFinanzas.style.display = '';
       if(navMisPacientes) navMisPacientes.style.display = 'none';
-      if(navGestion) navGestion.style.display = '';
+      if(navGestion) navGestion.style.display = currentUser.readonly ? 'none' : '';   // el invitado no ve Gestión
       if(navInvestigacion) navInvestigacion.style.display = '';
       if(navPacientes) navPacientes.style.display = '';
       // Cierre: blindado para el invitado (ni lo ve)
@@ -8080,6 +8080,8 @@ async function showPage(page) {
   if(currentUser && currentUser.readonly && page === 'cierre') {
     page = 'dashboard';
   }
+  // Invitado: no ve Gestión
+  if(currentUser && currentUser.readonly && page === 'gestion') page = 'dashboard';
   // Invitado: Finanzas solo con la contraseña de un profesional
   if(currentUser && currentUser.readonly && page === 'finanzas' && !_finInvitadoAbierta()) {
     _finInvitadoPedirClave();
@@ -38494,6 +38496,153 @@ window._agWaNum = function(tel){
       }
     } catch(e){ console.warn('[Adiposidad auto]', e); }
     return r;
+  };
+})();
+</script>
+
+<script>
+/* ════════ Tabla 1: los datos nuevos (sueño, consentimiento, desenlaces, Lp(a), FIB-4, MAPA, PSG…) ════════ */
+(function(){
+  if(typeof _t1Fila !== 'function' || typeof _t1Variables !== 'function') return;
+  function J(v){ return (typeof _safeJ === 'function') ? _safeJ(v, null) : v; }
+  function sinAc(t){ return String(t || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim(); }
+  function nume(x){ if(x == null) return null; var v = parseFloat(String(x).replace(',', '.')); return isNaN(v) ? null : v; }
+  function estUlt(D, dni, key){
+    var d = (D.est || {})[dni]; if(!d || !d.columnas || !d.filas) return null;
+    var fi = EST_FILAS.findIndex(function(f){ return f.key === key; }); if(fi < 0) return null;
+    var row = d.filas[fi] || [], best = null, bf = '';
+    d.columnas.forEach(function(c, ci){ var v = row[ci]; if(v != null && String(v).trim() !== '' && String(c) >= bf){ best = v; bf = String(c); } });
+    return best;
+  }
+  function labUlt(D, dni, k){ var s = _t1Serie(D.lab[dni], LAB_FILAS, k); return s.length ? s[s.length - 1].v : null; }
+  var o = _t1Fila;
+  window._t1Fila = function(p, D){
+    var f = o.apply(this, arguments), c = D.cli[p.dni] || null, x = f.x = {};
+    // Sociodemográficos y consentimiento
+    x.edu = c && c.nivel_educativo ? (/posgrado|universitario completo/i.test(c.nivel_educativo) ? 'Terciario/univ. completo o más' : /secundario completo|universitario incompleto/i.test(c.nivel_educativo) ? 'Secundario completo' : 'Hasta secundario incompleto') : null;
+    x.laboral = c ? (c.situacion_laboral || null) : null;
+    x.consent = c ? ({ si:'Otorgado', no:'No otorgado', revocado:'Revocado' })[c.inv_consentimiento] || 'Sin registrar' : null;
+    // Años de evolución
+    ['hta','dbt2','obe'].forEach(function(k){ x['ev_' + k] = null; if(c && c['dx_' + k] && c['dx_' + k + '_fecha'] && typeof _dxInicioInfo === 'function'){ var i = _dxInicioInfo(c['dx_' + k + '_fecha'], p.fecha_nacimiento); if(i && i.anio) x['ev_' + k] = new Date().getFullYear() - i.anio; } });
+    // Hábitos
+    var ae = c ? (c.alcohol_estado || (c.alcohol ? 'si' : 'no')) : null;
+    x.alcEst = ae ? ({ no:'No consume', social:'Social', si:'Consume', ex:'Ex consumidor' })[ae] : null;
+    x.alcG = c ? Math.round((Number(c.alcohol_cerveza) || 0) * 13 + (Number(c.alcohol_vino) || 0) * 14 + (Number(c.alcohol_fernet) || 0) * 22 + (Number(c.alcohol_blanca) || 0) * 14 + (Number(c.alcohol_whisky) || 0) * 14) : null;
+    if(x.alcG === 0 && ae !== 'si' && ae !== 'social') x.alcG = null;
+    x.vapeo = c && c.vapeo ? c.vapeo === 'si' : null;
+    x.packY = c && /actual|^ex/.test(c.tabaquismo || '') && c.cigarrillos_dia && c.anios_fumando ? Number(c.cigarrillos_dia) * Number(c.anios_fumando) / 20 : null;
+    var aj = c ? J(c.hab_actividad_json) : null;
+    x.afMin = aj && Array.isArray(aj.actividades) ? aj.actividades.reduce(function(s, it){ var m = (Number(it.minutos) || 0) * (Number(it.dias) || 0); return s + (it.intensidad === 'moderada' ? m : it.intensidad === 'intensa' ? 2 * m : 0); }, 0) : null;
+    var al = c ? J(c.hab_alimentacion_json) : null, pat = al && Array.isArray(al.patron) ? al.patron : null;
+    x.vegetar = pat ? pat.some(function(z){ return /vegetar|vegana|pescet/i.test(z); }) : null;
+    x.celiaq = pat ? pat.indexOf('Celiaquía (sin TACC)') >= 0 : null;
+    // Sueño
+    var su = c ? J(c.sueno_json) : null;
+    x.horas = su && su.horas ? nume(String(su.horas).replace(/[≤≥]/g, '')) : null;
+    x.malaCal = su && su.calidad ? su.calidad === 'mala' : null;
+    x.ronca = su && su.ronquido ? su.ronquido === 'habitual' : null;
+    x.sb = su && su.stopbang != null ? su.stopbang : null;
+    x.sbR = su && su.stopbang_riesgo ? su.stopbang_riesgo.charAt(0).toUpperCase() + su.stopbang_riesgo.slice(1) : null;
+    x.ep = su && su.epworth != null ? su.epworth : null;
+    x.cpap = su && su.cpap ? su.cpap === 'usa' : null;
+    // Laboratorio extra: Lp(a) (mg/dL) y FIB-4
+    var d = D.lab[p.dni], lp = d && Array.isArray(d.lpa) ? d.lpa.filter(function(z){ return nume(z && z.valor) != null; }).sort(function(a, b){ return String(a.fecha).localeCompare(String(b.fecha)); }) : [];
+    var lu = lp.length ? lp[lp.length - 1] : null;
+    x.lpaMg = lu && !/nmol/i.test(lu.unidad || '') ? nume(lu.valor) : null;
+    x.lpaAlta = lu ? (/nmol/i.test(lu.unidad || '') ? nume(lu.valor) >= 125 : nume(lu.valor) >= 50) : null;
+    var ast = labUlt(D, p.dni, 'TGO'), alt = labUlt(D, p.dni, 'TGP'), pl = labUlt(D, p.dni, 'Rto_plaquetas');
+    x.fib4 = (f.edad && ast && alt && pl) ? Math.round(f.edad * ast / ((pl > 2000 ? pl / 1000 : pl) * Math.sqrt(alt)) * 100) / 100 : null;
+    x.fib4Cat = x.fib4 == null ? null : x.fib4 < 1.3 ? 'Bajo (<1,3)' : x.fib4 <= 2.67 ? 'Indeterminado (1,3-2,67)' : 'Alto (>2,67)';
+    // Estudios
+    x.mapaS = nume(estUlt(D, p.dni, 'mapa_TAS24')); x.mapaD = nume(estUlt(D, p.dni, 'mapa_TAD24'));
+    var pt = estUlt(D, p.dni, 'mapa_Patron'); x.mapaPat = pt ? String(pt).trim() : null;
+    var es = estUlt(D, p.dni, 'ecoabd_Est'); x.esteat = es ? String(es).trim() === 'Sí' : null;
+    x.iah = nume(estUlt(D, p.dni, 'psg_IAH'));
+    var sv = estUlt(D, p.dni, 'psg_Sev'); x.aos = sv ? String(sv).replace(/\s*\(.*/, '').trim() : null;
+    // Seguimiento y desenlaces
+    var ds = c ? (J(c.desenlaces_json) || []) : [];
+    var ing = (c && c.inv_ingreso) ? String(c.inv_ingreso).slice(0, 10) : ((D.evFechas || {})[p.dni] || {}).pri;
+    var fin = ((D.evFechas || {})[p.dni] || {}).ult;
+    x.segMeses = ing && fin ? Math.round((new Date(fin) - new Date(ing)) / (30.44 * 86400000) * 10) / 10 : null;
+    x.mace = c ? ds.some(function(z){ return ['iam','acv','revasc','int_ic','muerte_cv'].indexOf(z.tipo) >= 0; }) : null;
+    x.fallecido = c ? (c.seguimiento_estado === 'fallecido' || ds.some(function(z){ return /^muerte/.test(z.tipo); })) : null;
+    x.internado = c ? ds.some(function(z){ return /^int_/.test(z.tipo); }) : null;
+    return f;
+  };
+  var ov = _t1Variables;
+  window._t1Variables = function(){
+    var v = ov.apply(this, arguments), out = [];
+    var X = function(k){ return function(f){ return f.x ? f.x[k] : null; }; };
+    var antes = { 'Hábitos': [
+        { sec: 'Sociodemográficos e investigación' },
+        { id: 'edu', l: 'Nivel educativo', t: 'cat', g: X('edu'), cats: ['Hasta secundario incompleto','Secundario completo','Terciario/univ. completo o más'] },
+        { l: 'Situación laboral', t: 'cat', g: X('laboral'), cats: ['Empleado/a','Independiente','Desocupado/a','Jubilado/a o pensionado/a','Estudiante','Tareas del hogar','Otro'] },
+        { id: 'consent', l: 'Consentimiento para investigación', t: 'cat', g: X('consent'), cats: ['Otorgado','No otorgado','Revocado','Sin registrar'] },
+        { l: 'Años de evolución de la HTA', t: 'cont', np: true, g: X('ev_hta') },
+        { l: 'Años de evolución de la diabetes tipo 2', t: 'cont', np: true, g: X('ev_dbt2') },
+        { l: 'Años de evolución de la obesidad', t: 'cont', np: true, g: X('ev_obe') } ],
+      'Laboratorio (último valor)': [
+        { sec: 'Sueño' },
+        { l: 'Horas de sueño por noche', t: 'cont', g: X('horas') },
+        { l: 'Calidad del sueño mala', t: 'bin', g: X('malaCal') },
+        { l: 'Ronquido habitual', t: 'bin', g: X('ronca') },
+        { l: 'STOP-BANG (0-8)', t: 'cont', np: true, dec: 0, g: X('sb') },
+        { id: 'sbR', l: 'Riesgo de AOS (STOP-BANG)', t: 'cat', g: X('sbR'), cats: ['Bajo','Intermedio','Alto'] },
+        { l: 'Epworth (0-24)', t: 'cont', np: true, dec: 0, g: X('ep') },
+        { l: 'Somnolencia excesiva (Epworth >10)', t: 'bin', g: function(f){ return f.x && f.x.ep != null ? f.x.ep > 10 : null; } },
+        { l: 'Usa CPAP', t: 'bin', g: X('cpap'), ocultarSi0: true } ] };
+    var despues = { 'Hábitos': [
+        { id: 'alcEst', l: 'Alcohol', t: 'cat', g: X('alcEst'), cats: ['No consume','Social','Consume','Ex consumidor'] },
+        { l: 'Alcohol (g/semana, consumidores)', t: 'cont', np: true, dec: 0, g: X('alcG') },
+        { l: 'Paquetes-año (fumadores y ex)', t: 'cont', np: true, g: X('packY') },
+        { l: 'Vapeo', t: 'bin', g: X('vapeo'), ocultarSi0: true },
+        { l: 'Actividad física (min moderados-equivalentes/sem)', t: 'cont', np: true, dec: 0, g: X('afMin') },
+        { l: 'Alimentación vegetariana / vegana / pescetariana', t: 'bin', g: X('vegetar'), ocultarSi0: true },
+        { l: 'Celiaquía (dieta sin TACC)', t: 'bin', g: X('celiaq'), ocultarSi0: true } ],
+      'Laboratorio (último valor)': [
+        { l: 'Lp(a) (mg/dL)', t: 'cont', np: true, g: X('lpaMg') },
+        { l: 'Lp(a) elevada (≥50 mg/dL o ≥125 nmol/L)', t: 'bin', g: X('lpaAlta') },
+        { l: 'FIB-4', t: 'cont', np: true, g: X('fib4') },
+        { id: 'fib4', l: 'FIB-4 (categoría)', t: 'cat', g: X('fib4Cat'), cats: ['Bajo (<1,3)','Indeterminado (1,3-2,67)','Alto (>2,67)'] },
+        { sec: 'Estudios complementarios (último)' },
+        { l: 'MAPA: TAS 24 h (mmHg)', t: 'cont', g: X('mapaS') },
+        { l: 'MAPA: TAD 24 h (mmHg)', t: 'cont', g: X('mapaD') },
+        { id: 'mapaPat', l: 'MAPA: patrón', t: 'cat', g: X('mapaPat'), cats: ['Dipper','Non dipper','Dipper extremo','Riser (reverse dipper)'] },
+        { l: 'Esteatosis hepática (ecografía)', t: 'bin', g: X('esteat') },
+        { l: 'Polisomnografía: IAH (ev/h)', t: 'cont', np: true, g: X('iah') },
+        { id: 'aos', l: 'Polisomnografía: severidad de AOS', t: 'cat', g: X('aos'), cats: ['Sin AOS','Leve','Moderada','Severa'] } ],
+      'Medicación cardiometabólica actual': null };
+    var secActual = null;
+    v.forEach(function(it, i){
+      if(it.sec){
+        if(secActual && despues[secActual]) despues[secActual].forEach(function(z){ out.push(z); });
+        if(antes[it.sec]) antes[it.sec].forEach(function(z){ out.push(z); });
+        secActual = it.sec;
+      }
+      out.push(it);
+    });
+    if(secActual && despues[secActual]) despues[secActual].forEach(function(z){ out.push(z); });
+    out.push({ sec: 'Seguimiento y desenlaces' });
+    out.push({ l: 'Meses de seguimiento', t: 'cont', np: true, g: X('segMeses') });
+    out.push({ id: 'mace', l: 'MACE (IAM, ACV, revascularización, internación por IC, muerte CV)', t: 'bin', g: X('mace') });
+    out.push({ l: 'Internación (cualquier causa)', t: 'bin', g: X('internado'), ocultarSi0: true });
+    out.push({ l: 'Fallecido', t: 'bin', g: X('fallecido'), ocultarSi0: true });
+    return out;
+  };
+  // Nuevos cruces (estratos)
+  var oe = _t1Estratos;
+  window._t1Estratos = function(){ var e = oe.apply(this, arguments); e.splice(5, 0, ['sbR', 'Riesgo de AOS (STOP-BANG)'], ['fib4', 'FIB-4 (categoría)'], ['mapaPat', 'MAPA: patrón'], ['edu', 'Nivel educativo'], ['mace', 'Con / sin MACE']); return e; };
+  var og = _t1GrupoDe;
+  window._t1GrupoDe = function(f, est){
+    if(est === 'sbR' || est === 'fib4' || est === 'mapaPat' || est === 'edu'){ var k = est === 'fib4' ? 'fib4Cat' : est; var v = f.x ? f.x[k] : null; return v == null ? null : String(v).replace(/ \(.*/, ''); }
+    if(est === 'mace'){ var m = f.x ? f.x.mace : null; return m == null ? null : m ? 'Con' : 'Sin'; }
+    return og.apply(this, arguments);
+  };
+  var oo = _t1OrdenGrupos;
+  window._t1OrdenGrupos = function(est, presentes){
+    var ord = { sbR: ['Bajo','Intermedio','Alto'], fib4: ['Bajo','Indeterminado','Alto'], mapaPat: ['Dipper','Non dipper','Dipper extremo','Riser'], edu: ['Hasta secundario incompleto','Secundario completo','Terciario/univ. completo o más'], mace: ['Con','Sin'] }[est];
+    if(ord) return ord.filter(function(g){ return presentes.indexOf(g) >= 0; });
+    return oo.apply(this, arguments);
   };
 })();
 </script>
