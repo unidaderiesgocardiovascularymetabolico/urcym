@@ -2,7 +2,7 @@
 <html lang="es-AR">
 <head>
   <meta charset="UTF-8" />
-  <script>var URCYM_BUILD = '2026-11-11-1500';</script>
+  <script>var URCYM_BUILD = '2026-11-11-1900';</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Evaluaciones cardiometabólicas — Sistema de Historia Clínica</title>
 
@@ -1564,6 +1564,11 @@
         <div class="user-avatar" style="background:#7c3aed">SE</div>
         <div class="user-name">Secretaría</div>
         <div class="user-role">Gestión de agenda</div>
+      </button>
+      <button class="user-btn" id="btn-invitado" onclick="selectUser('invitado')">
+        <div class="user-avatar" style="background:#64748b">👁</div>
+        <div class="user-name">Invitado</div>
+        <div class="user-role">Solo lectura</div>
       </button>
     </div>
     <!-- Stub temprano: evita ReferenceError si el usuario hace clic antes de que cargue el script principal -->
@@ -5019,8 +5024,11 @@
 </div>
 
 <style>
-.otros-med-box{margin-top:18px;background:#f0fdf4;border:1.5px solid #86efac;border-left:5px solid #16a34a;border-radius:14px;padding:12px 14px 8px}
-.otros-med-box h4{color:#166534!important;font-size:13px!important}
+.otros-med-box{margin-top:14px;background:#f7fbf8;border:1px dashed #a7d7b5;border-left:3px solid #4ade80;border-radius:10px;padding:8px 12px 4px}
+.otros-med-box h4{color:#3f7a52!important;font-size:11px!important;letter-spacing:.06em!important}
+.otros-med-box button[onclick^="agregarFilaOtroMed"]{background:white!important;color:#16a34a!important;border:1px solid #86efac!important;padding:3px 10px!important;font-size:11px!important}
+.otros-med-box input,.otros-med-box select{font-size:12px!important;padding-top:4px!important;padding-bottom:4px!important;min-height:0!important}
+.otros-med-box .med-cab-otros{font-size:9.5px!important}
 .evh-other-med-item{font-weight:600}
 #modalPaciente .modal{max-width:1000px;width:96vw;padding:22px 26px}
 #modalPaciente .modal-title{margin-bottom:12px}
@@ -5480,6 +5488,37 @@ function _profIniciales(){
   return partes[0] ? partes[0].slice(0,2).toUpperCase() : '·';
 }
 window._fetchOriginal = window._fetchOriginal || window.fetch.bind(window);
+// ── Sesión de invitado: nada que escriba sale del navegador ──
+// Se permite leer (GET), renovar la sesión (/auth/) y pedir links para VER comprobantes (/object/sign/).
+// Todo lo demás (guardar, borrar, subir archivos, funciones del servidor) se corta acá.
+function _roBloquea(url, init){
+  if(!window._readonlyMode) return null;
+  var m = String((init && init.method) || 'GET').toUpperCase();
+  if(m === 'GET' || m === 'HEAD' || m === 'OPTIONS') return null;
+  url = String(url || '');
+  if(url.indexOf('/auth/v1/') >= 0) return null;
+  if(url.indexOf('/storage/v1/object/sign/') >= 0) return null;
+  if(!/supabase\.co\//.test(url)) return null;
+  if(window._roAviso) window._roAviso();
+  console.warn('[Invitado] escritura bloqueada:', m, url);
+  return Promise.resolve(new Response(JSON.stringify({ code:'42501', message:'Sesión de invitado: solo lectura (no se guardó)', error:'Sesión de invitado: solo lectura' }),
+    { status: 403, headers: { 'Content-Type':'application/json' } }));
+}
+window._roAviso = function(){
+  var now = Date.now();
+  if(window._roAvisoT && now - window._roAvisoT < 4000) return;
+  window._roAvisoT = now;
+  var t = document.getElementById('ro-toast');
+  if(!t){
+    t = document.createElement('div'); t.id = 'ro-toast';
+    t.style.cssText = 'position:fixed;left:50%;bottom:22px;transform:translateX(-50%);background:#713f12;color:#fff;padding:10px 18px;border-radius:12px;font:600 13px DM Sans,sans-serif;box-shadow:0 8px 24px rgba(0,0,0,.25);z-index:100000;transition:opacity .3s';
+    document.body.appendChild(t);
+  }
+  t.textContent = '👁 Sesión de invitado: no se guardan cambios';
+  t.style.opacity = '1';
+  clearTimeout(window._roToastTimer);
+  window._roToastTimer = setTimeout(function(){ t.style.opacity = '0'; }, 2600);
+};
 var sb = createClient(
   'https://qdjzetylyojfjdottjrk.supabase.co',
   'sb_publishable_qe6L1Uc7mRwsen7lzZlllw_DzOXonwL',
@@ -5491,6 +5530,7 @@ var sb = createClient(
       init = init || {};
       var ctrl = new AbortController(), t = setTimeout(function(){ ctrl.abort(); if(window._avisoConexion) window._avisoConexion(); }, 40000);
       if(init.signal){ if(init.signal.aborted) ctrl.abort(); else init.signal.addEventListener('abort', function(){ ctrl.abort(); }); }
+      var _ro = _roBloquea(url, init); if(_ro){ clearTimeout(t); return _ro; }
       return window._fetchOriginal(url, Object.assign({}, init, { signal: ctrl.signal })).finally(function(){ clearTimeout(t); });
     } } }
 );
@@ -5500,6 +5540,8 @@ window.sb = sb;
   var FN = 'https://qdjzetylyojfjdottjrk.supabase.co/functions/v1/';
   var fetchOrig = window.fetch.bind(window);
   window.fetch = async function(input, init){
+    var _ro = _roBloquea(typeof input === 'string' ? input : (input && input.url) || '', init || (typeof input !== 'string' ? input : null));
+    if(_ro) return _ro;
     try {
       var url = typeof input === 'string' ? input : (input && input.url) || '';
       if(url.indexOf(FN) === 0) {
@@ -5542,6 +5584,14 @@ const users = {
   secretaria: {
     email:'secretaria@urcym.com.ar', name:'Secretaría', role:'Gestión de agenda',
     titulo:'Secretaría', mp:'', admin:false, readonly:false, secretaria:true,
+    especialidades:[]
+  },
+  // Invitado: ve todo (como un profesional) pero NO guarda nada.
+  // Finanzas le pide la contraseña de un profesional; Cierre no lo ve.
+  // La base también lo frena (15_invitado.sql: solo lectura).
+  invitado: {
+    email:'invitado@urcym.com.ar', name:'Invitado', role:'Solo lectura',
+    titulo:'Invitado (solo lectura)', mp:'', admin:true, readonly:true, invitado:true,
     especialidades:[]
   },
 };
@@ -7375,7 +7425,9 @@ function _entrarAlSistema() {
       if(navGestion) navGestion.style.display = '';
       if(navInvestigacion) navInvestigacion.style.display = '';
       if(navPacientes) navPacientes.style.display = '';
-      if(navCierre) navCierre.style.display = '';
+      // Cierre: blindado para el invitado (ni lo ve)
+      if(navCierre) navCierre.style.display = currentUser.readonly ? 'none' : '';
+      if(navFinanzas && currentUser.readonly) navFinanzas.textContent = '🔒 Finanzas';
       if(navAgenda) navAgenda.textContent = 'Agenda';
       // Admin: ver todos los profesionales en la agenda
       if(typeof profFilter !== 'undefined') profFilter = [];
@@ -7424,7 +7476,7 @@ function _entrarAlSistema() {
         roBar = document.createElement('div');
         roBar.id = 'urcym-readonly-bar';
         roBar.style.cssText = 'background:#fef9c3;border-bottom:1.5px solid #fde047;padding:7px 24px;font-size:12px;font-weight:600;color:#713f12;text-align:center;letter-spacing:.02em;z-index:99;';
-        roBar.textContent = '👁 Modo solo lectura — los cambios no se guardarán';
+        roBar.textContent = '👁 Sesión de invitado · solo lectura: podés ver todo, pero no se guarda ningún cambio. Finanzas pide contraseña de un profesional.';
         var navTabsEl = document.querySelector('.nav-tabs');
         if(navTabsEl && navTabsEl.parentNode) navTabsEl.parentNode.insertBefore(roBar, navTabsEl.nextSibling);
       }
@@ -7516,6 +7568,7 @@ let pacienteTabsAbiertas = [];
 // ===== PERSISTENCIA DE PESTAÑAS EN SESIÓN =====
 // Guarda el borrador del paciente actual en sessionStorage
 function _guardarEstadoPestana(dni) {
+  if(window._readonlyMode) return;
   if(!dni) return;
   const editor    = document.getElementById('evol_editor');
   const indEditor = document.getElementById('evol_indicaciones_editor');
@@ -7617,6 +7670,7 @@ function _limpiarEstadoPestana(dni) {
 // ─── BORRADOR PERSISTENTE EN localStorage (sobrevive cierre de pestaña/apagón) ────
 // Guarda TODO en localStorage: evolución + tablas (lab/ant/est/vac/mdpa/adip) + campos numéricos
 function _guardarDraftLocal(dni) {
+  if(window._readonlyMode) return;
   if(!dni) return;
   try {
     const editor    = document.getElementById('evol_editor');
@@ -8009,6 +8063,11 @@ async function showPage(page) {
   // "Cierre" lo ven Secretaría y los profesionales; Invitado no.
   if(currentUser && currentUser.readonly && page === 'cierre') {
     page = 'dashboard';
+  }
+  // Invitado: Finanzas solo con la contraseña de un profesional
+  if(currentUser && currentUser.readonly && page === 'finanzas' && !_finInvitadoAbierta()) {
+    _finInvitadoPedirClave();
+    return;
   }
 
   // Cambiar de sección (Inicio/Pacientes/Agenda/Finanzas/etc.) NUNCA debe
@@ -10006,6 +10065,7 @@ function generarTextoClinico(c, meds) {
   if(gpac.length===4) ginList.push('G'+c.gpac_g+'P'+c.gpac_p+'A'+c.gpac_a+'C'+c.gpac_c);
   if(ginList.length) lines.push('<b>Ant. Ginecológicos:</b> '+ginList.join(' · '));
   if(window.macTexto && macTexto(c)) lines.push('<b>MAC:</b> '+macTexto(c));
+  if(c.tto_alternativos) lines.push('<b>Tratamientos alternativos:</b> '+c.tto_alternativos);
   const _famDet = (window._famDetalleTexto ? window._famDetalleTexto(c.fam_detalle) : {});
   const famList = Object.keys(FAM_NAMES).filter(d=>c['fam_'+d]).map(d=>FAM_NAMES[d] + (_famDet[d] ? ' (' + _famDet[d] + ')' : ''));
   if(famList.length) lines.push('<b>Ant. Familiares:</b> '+famList.join(' · '));
@@ -10210,6 +10270,7 @@ function generarTextoCambiosClinicos(nuevo, anterior, medsNuevo, medsAnterior) {
     if(cambio(nuevo[n.key], anterior[n.key]) && txt(nuevo[n.key])) lines.push(n.label+': '+txt(nuevo[n.key]));
   });
   if(window.macTexto){ const macN = macTexto(nuevo||{}), macA = macTexto(anterior||{}); if(macN && macN !== macA) lines.push('Método anticonceptivo (MAC): '+macN); }
+  if(cambio(nuevo.tto_alternativos, anterior.tto_alternativos) && txt(nuevo.tto_alternativos)) lines.push('Tratamientos alternativos: '+txt(nuevo.tto_alternativos));
 
   if(!lines.length) return '';
   return '<div class="bloque-clinico" data-modo="cambios" style="font-family:Arial,sans-serif;font-size:10pt;color:#333;border:1px solid #e0e0e0;padding:4px 10px;border-radius:6px;margin-bottom:6px;line-height:1.5">'+
@@ -10292,6 +10353,7 @@ async function guardarClinica() {
     mac_marca:(document.getElementById('mac_marca')?.value||'').trim()||null,
     fam_notas:document.getElementById('fam_notas_generales')?.value||null,
     med_notas:document.getElementById('med_notas_generales')?.value||null,
+    tto_alternativos:(document.getElementById('tto_alternativos')?.value||'').trim()||null,
     act_notas:document.getElementById('act_notas_generales')?.value||null,
     tox_notas:document.getElementById('tox_notas_generales')?.value||null,
     ali_notas:document.getElementById('ali_notas_generales')?.value||null,
@@ -10458,6 +10520,7 @@ async function cargarDatosClinica(dni) {
   ['mac_metodo','mac_compuesto','mac_marca'].forEach(function(id){const el=document.getElementById(id);if(el)el.value='';}); if(window.macActualizarUI) macActualizarUI();
   {const famNotes=document.getElementById('fam_notas_generales');if(famNotes)famNotes.value='';}
   {const medNotes=document.getElementById('med_notas_generales');if(medNotes)medNotes.value='';}
+  {const tAlt=document.getElementById('tto_alternativos');if(tAlt)tAlt.value='';}
   {const actNotes=document.getElementById('act_notas_generales');if(actNotes)actNotes.value='';}
   {const toxNotes=document.getElementById('tox_notas_generales');if(toxNotes)toxNotes.value='';}
   {const aliNotes=document.getElementById('ali_notas_generales');if(aliNotes)aliNotes.value='';}
@@ -10559,6 +10622,7 @@ async function cargarDatosClinica(dni) {
   if(famNotes) famNotes.value = data.fam_notas || '';
   const medNotes = document.getElementById('med_notas_generales');
   if(medNotes) medNotes.value = data.med_notas || '';
+  { const tAlt = document.getElementById('tto_alternativos'); if(tAlt) tAlt.value = data.tto_alternativos || ''; }
   const actNotes = document.getElementById('act_notas_generales');
   if(actNotes) actNotes.value = data.act_notas || '';
   const toxNotes = document.getElementById('tox_notas_generales');
@@ -26843,6 +26907,12 @@ loadLocal();  // async, carga en background y llama renderGrid al final
         if (c[kv[0]]) ginHtml += '<span class="evh-tag-pink">' + kv[1] + '</span>';
       });
     }
+    if (c && window.macTexto && macTexto(c)) {
+      ginHtml += '<span class="evh-tag-mac">💊 MAC: ' + esc(macTexto(c)) + '</span>';
+    } else if (c && !c.dx_menopausia && typeof calcSexoPaciente === 'function' && calcSexoPaciente() === 'F') {
+      var _ed = (typeof pacienteActual !== 'undefined' && pacienteActual && pacienteActual.fecha_nacimiento) ? Math.floor((Date.now() - Date.parse(pacienteActual.fecha_nacimiento)) / 31557600000) : null;
+      if (_ed == null || _ed < 55) ginHtml += '<span class="evh-tag-mac falta" title="Completalo en Datos clínicos › Ginecológicos">⚠ MAC sin registrar</span>';
+    }
     $h('evh_dx_gin',    ginHtml);
     $h('hc_evh_dx_gin', ginHtml);
     $show('evh_dx_gin_wrap',    !!ginHtml);
@@ -26863,6 +26933,9 @@ loadLocal();  // async, carga en background y llama renderGrid al final
           return '<span class="evh-other-med-item" style="background:#dcfce7;color:#166534;border:1px solid #86efac">' +
                  esc(m.farmaco) + ' ' + esc(m.dosis || '') + (m.frecuencia ? ' ' + esc(m.frecuencia) : '') + '</span>';
         }).join('');
+    }
+    if (c && c.tto_alternativos) {
+      medHtml += '<div style="width:100%;margin-top:5px"><span class="evh-other-med-item" style="background:#fefce8;color:#854d0e;border:1px solid #fde68a">🌿 ' + esc(c.tto_alternativos) + '</span></div>';
     }
     $h('evh_med',    medHtml);
     $h('hc_evh_med', medHtml);
@@ -33900,7 +33973,7 @@ var CIR_COMUNES = ['Colecistectomía','Cesárea','Cirugía bariátrica','Angiopl
   function prepararCir(){
     var cont = document.getElementById('quirurg_filas'); if(!cont || document.getElementById('cir_chips')) return;
     var box = document.createElement('div'); box.id = 'cir_chips'; box.className = 'med-chips'; box.style.margin = '0 0 10px';
-    box.innerHTML = CIR_COMUNES.map(function(c){ return '<button type="button" class="med-chip" data-cir="'+esc(c)+'">'+esc(c)+'</button>'; }).join('');
+    box.innerHTML = CIR_COMUNES.slice().sort(function(a, b){ return sinAc(a).localeCompare(sinAc(b), 'es'); }).map(function(c){ return '<button type="button" class="med-chip" data-cir="'+esc(c)+'">'+esc(c)+'</button>'; }).join('');
     cont.parentElement.insertBefore(box, cont);
     box.querySelectorAll('[data-cir]').forEach(function(b){ b.onclick = function(){
       var ya = filasCir().filter(function(d){ return sinAc(d.querySelector('input[type=text]').value) === sinAc(b.dataset.cir); });
@@ -37147,5 +37220,179 @@ function _cargaEstPrec(p){
 .dif-si{background:#d97706;color:#fff;border:none;border-radius:8px;padding:8px 18px;font-weight:700;cursor:pointer}
 </style>
 
+
+<script>
+/* ══ Invitado › Finanzas con contraseña ══
+   El invitado escribe la contraseña de la Dra. Guerrero o del Dr. Bertani.
+   Se verifica contra Supabase con un cliente aparte que NO guarda sesión
+   (no cambia quién está logueado: el invitado sigue en solo lectura).
+   Queda abierta 30 minutos en esta pestaña. */
+(function(){
+  var KEY='urcym_fin_inv', DURA=30*60e3;
+  window._finInvitadoAbierta = function(){
+    try { var v = +sessionStorage.getItem(KEY) || 0; return v > Date.now(); } catch(e){ return false; }
+  };
+  function abrir(){ try { sessionStorage.setItem(KEY, String(Date.now()+DURA)); } catch(e){} }
+  window._finInvitadoPedirClave = function(){
+    var m = document.getElementById('fin-inv-modal');
+    if(!m){
+      m = document.createElement('div'); m.id='fin-inv-modal';
+      m.style.cssText='position:fixed;inset:0;background:rgba(15,23,42,.45);display:flex;align-items:center;justify-content:center;z-index:100001;padding:16px';
+      m.innerHTML = '<div style="background:#fff;border-radius:16px;padding:22px 22px 18px;max-width:360px;width:100%;box-shadow:0 20px 50px rgba(0,0,0,.3);font-family:DM Sans,sans-serif">'
+        +'<div style="font-size:17px;font-weight:700;margin-bottom:4px">🔒 Finanzas</div>'
+        +'<div style="font-size:13px;color:#64748b;margin-bottom:14px">Para ver Finanzas, un profesional tiene que escribir su contraseña.</div>'
+        +'<input type="password" id="fin-inv-pwd" placeholder="Contraseña" autocomplete="off" style="width:100%;box-sizing:border-box;padding:11px 14px;border-radius:12px;border:1.5px solid #e2e8f0;font-size:14px;outline:none"/>'
+        +'<div id="fin-inv-err" style="color:#dc2626;font-size:12px;min-height:18px;margin-top:6px"></div>'
+        +'<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:6px">'
+        +'<button type="button" id="fin-inv-cancel" style="padding:9px 14px;border-radius:10px;border:1.5px solid #e2e8f0;background:#fff;cursor:pointer;font-weight:600">Cancelar</button>'
+        +'<button type="button" id="fin-inv-ok" style="padding:9px 16px;border-radius:10px;border:none;background:#1e3a5f;color:#fff;cursor:pointer;font-weight:600">Abrir</button>'
+        +'</div></div>';
+      document.body.appendChild(m);
+      var pwd=m.querySelector('#fin-inv-pwd'), err=m.querySelector('#fin-inv-err'), ok=m.querySelector('#fin-inv-ok');
+      m.querySelector('#fin-inv-cancel').onclick=function(){ m.style.display='none'; };
+      m.addEventListener('click', function(e){ if(e.target===m) m.style.display='none'; });
+      pwd.addEventListener('keydown', function(e){ if(e.key==='Enter') ok.click(); if(e.key==='Escape') m.style.display='none'; });
+      ok.onclick = async function(){
+        var v = pwd.value; if(!v) { pwd.focus(); return; }
+        ok.disabled=true; var tx=ok.textContent; ok.textContent='Verificando…'; err.textContent='';
+        var bien=false;
+        try{
+          var tmp = window._finInvCli || (window._finInvCli = supabase.createClient('https://qdjzetylyojfjdottjrk.supabase.co','sb_publishable_qe6L1Uc7mRwsen7lzZlllw_DzOXonwL',
+            { auth:{ persistSession:false, autoRefreshToken:false, detectSessionInUrl:false, storageKey:'urcym-fin-inv-chk' },
+              global:{ fetch: function(u,i){ return window._fetchOriginal(u,i); } } }));
+          var mails=[users.barbara.email, users.omar.email];
+          for(var i=0;i<mails.length && !bien;i++){
+            var r = await tmp.auth.signInWithPassword({ email: mails[i], password: v });
+            if(!r.error) bien=true;
+          }
+        }catch(e){ console.warn('[Finanzas invitado]', e); }
+        ok.disabled=false; ok.textContent=tx;
+        if(!bien){ err.textContent='Contraseña incorrecta.'; pwd.select(); return; }
+        abrir(); m.style.display='none'; pwd.value='';
+        showPage('finanzas');
+      };
+    }
+    m.style.display='flex';
+    var p=m.querySelector('#fin-inv-pwd'); p.value=''; m.querySelector('#fin-inv-err').textContent='';
+    setTimeout(function(){ p.focus(); }, 30);
+  };
+})();
+</script>
+
+<style>
+.evh-tag-mac{background:#f3e8ff;color:#6d28d9;border:1.5px solid #c4b5fd;font-size:11px;padding:2px 8px;border-radius:10px;font-weight:700}
+.evh-tag-mac.falta{background:#fff;border-style:dashed;color:#7c3aed}
+.hb-pills{display:flex;flex-wrap:wrap;gap:6px;margin:2px 0 10px}
+.hb-pill{border:1.5px solid var(--border);background:#fff;border-radius:999px;padding:6px 12px;font-size:12.5px;font-weight:600;cursor:pointer;font-family:var(--font-main);color:var(--text)}
+.hb-pill:hover{border-color:var(--blue)}
+.hb-pill.sel{background:var(--blue);border-color:var(--blue);color:#fff}
+.hb-num{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:8px;font-size:12px}
+.hb-num>span{min-width:92px;color:var(--text-soft);font-size:12px}
+.hb-num .hb-q{border:1.5px solid var(--border);background:#fff;border-radius:8px;padding:3px 8px;font-size:12px;font-weight:600;cursor:pointer;font-family:var(--font-main)}
+.hb-num .hb-q.sel{background:#eef4fc;border-color:var(--blue);color:var(--blue)}
+.hb-num input{width:64px;padding:4px 6px;border:1.5px solid var(--border);border-radius:8px;font-size:12px}
+.alc-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(118px,1fr));gap:8px;margin:4px 0 8px}
+.alc-b{position:relative;border:1.5px solid #f5d9a8;background:#fffaf2;border-radius:12px;padding:8px 6px 7px;cursor:pointer;text-align:center;font-family:var(--font-main);user-select:none}
+.alc-b:hover{border-color:#f59e0b}
+.alc-b .ic{font-size:20px;line-height:1}
+.alc-b .nm{font-size:12px;font-weight:700;color:#7c4a03;margin-top:2px}
+.alc-b .un{font-size:10.5px;color:#a16207}
+.alc-b .ct{position:absolute;top:-8px;right:-6px;background:#d97706;color:#fff;border-radius:999px;min-width:20px;height:20px;font-size:11px;font-weight:800;display:none;align-items:center;justify-content:center;padding:0 5px}
+.alc-b.con .ct{display:flex}
+.alc-b.con{background:#fef3c7;border-color:#f59e0b}
+.alc-b .menos{position:absolute;top:-8px;left:-6px;background:#fff;border:1.5px solid #f59e0b;color:#b45309;border-radius:999px;width:20px;height:20px;font-size:13px;font-weight:800;line-height:15px;display:none;padding:0;cursor:pointer}
+.alc-b.con .menos{display:block}
+.alc-hint{font-size:11px;color:#a16207;margin-bottom:12px}
+.tto-alt{margin-top:10px;display:flex;align-items:center;gap:8px;background:#fefce8;border:1px dashed #fde68a;border-radius:10px;padding:6px 10px}
+.tto-alt label{font-size:11px;font-weight:700;color:#854d0e;white-space:nowrap;text-transform:uppercase;letter-spacing:.05em}
+.tto-alt input{flex:1;min-width:0;padding:5px 9px;border:1px solid #fde68a;border-radius:8px;font-size:12px;background:#fff;font-family:var(--font-main)}
+</style>
+<script>
+/* ════════ Hábitos con botones ════════
+   Los casilleros originales (select / número) siguen siendo los que se guardan:
+   los botones solo los completan, así no cambia nada de lo que va a la base. */
+(function(){
+  function $(id){ return document.getElementById(id); }
+  function disparar(el, ev){ el.dispatchEvent(new Event(ev || 'change', { bubbles:true })); }
+
+  // Select → fila de botones
+  function pillsDeSelect(sel, opciones){
+    if(!sel || sel._pills) return; sel._pills = true;
+    var box = document.createElement('div'); box.className = 'hb-pills';
+    box.innerHTML = opciones.map(function(o){ return '<button type="button" class="hb-pill" data-v="'+o[0]+'">'+o[1]+'</button>'; }).join('');
+    sel.style.display = 'none';
+    var row = sel.closest('.habito-row');
+    if(row){ var lb = row.querySelector('label'); if(lb) lb.style.display = 'none'; row.parentElement.insertBefore(box, row.nextSibling); row.style.display = 'none'; }
+    else sel.parentElement.insertBefore(box, sel);
+    box.querySelectorAll('[data-v]').forEach(function(b){ b.onclick = function(){
+      sel.value = (sel.value === b.dataset.v && b.dataset.v !== '') ? '' : b.dataset.v;
+      if(sel.value === '' && !Array.prototype.some.call(sel.options, function(o){ return o.value === ''; })) sel.value = b.dataset.v;
+      disparar(sel); pintar();
+    }; });
+    sel._box = box;
+  }
+  // Número → botones rápidos + casillero
+  function rapidos(inp, rotulo, valores){
+    if(!inp || inp._rap) return; inp._rap = true;
+    var row = inp.closest('.habito-row');
+    var w = document.createElement('div'); w.className = 'hb-num';
+    w.innerHTML = '<span>'+rotulo+'</span>' + valores.map(function(v){ return '<button type="button" class="hb-q" data-n="'+v+'">'+v+'</button>'; }).join('');
+    if(row){ row.parentElement.insertBefore(w, row); row.style.display = 'none'; }
+    inp.placeholder = 'otro'; w.appendChild(inp);
+    w.querySelectorAll('[data-n]').forEach(function(b){ b.onclick = function(){ inp.value = (inp.value === b.dataset.n) ? '' : b.dataset.n; disparar(inp, 'input'); pintar(); }; });
+    inp.addEventListener('input', pintar);
+    inp._w = w;
+  }
+  // Bebidas → botón que suma una porción por semana
+  var BEB = [['cerveza','🍺','Cerveza','lata'],['vino','🍷','Vino','copa'],['fernet','🥃','Fernet','vaso'],['blanca','🍸','Dest. blanca','vaso'],['whisky','🥃','Whisky','vaso']];
+  function bebidas(){
+    var det = $('hab_alcohol_detalle'); if(!det || det._btn) return; det._btn = true;
+    var g = document.createElement('div');
+    g.innerHTML = '<div class="alc-hint">Tocá la bebida para sumar 1 por semana · el – resta</div><div class="alc-grid">' + BEB.map(function(b){
+      return '<div class="alc-b" data-b="'+b[0]+'" role="button" tabindex="0" title="Sumar 1 '+b[3]+' por semana"><button type="button" class="menos" title="Restar">–</button><span class="ct"></span><div class="ic">'+b[1]+'</div><div class="nm">'+b[2]+'</div><div class="un">'+b[3]+'s/sem</div></div>';
+    }).join('') + '</div>';
+    det.insertBefore(g, det.firstChild);
+    BEB.forEach(function(b){ var inp = $('alc_'+b[0]); var r = inp && inp.closest('.habito-row'); if(r) r.style.display = 'none'; });
+    g.querySelectorAll('.alc-b').forEach(function(el){
+      var inp = $('alc_'+el.dataset.b);
+      function sumar(d){ var v = Math.max(0, (parseFloat(inp.value) || 0) + d); inp.value = v ? String(v) : ''; disparar(inp, 'input'); pintar(); }
+      el.addEventListener('click', function(e){ if(e.target.classList.contains('menos')) { e.stopPropagation(); sumar(-1); } else sumar(1); });
+      el.addEventListener('keydown', function(e){ if(e.key === 'Enter' || e.key === ' ') { e.preventDefault(); sumar(1); } });
+    });
+  }
+  function altCasillero(){
+    if($('tto_alternativos')) return;
+    var ref = document.querySelector('#modalClinica .otros-med-box') || ($('med_filas') && $('med_filas').parentElement.lastElementChild);
+    if(!ref) return;
+    ref.insertAdjacentHTML('afterend', '<div class="tto-alt"><label for="tto_alternativos">🌿 Tratamientos alternativos</label><input type="text" id="tto_alternativos" placeholder="Homeopatía, fitoterapia, suplementos, acupuntura…" autocomplete="off"/></div>');
+  }
+  function pintar(){
+    [['hab_tabaquismo'],['hab_alcohol']].forEach(function(x){ var sel = $(x[0]); if(sel && sel._box) sel._box.querySelectorAll('[data-v]').forEach(function(b){ b.classList.toggle('sel', b.dataset.v === sel.value && sel.value !== ''); }); });
+    ['hab_cig_dia','hab_anios'].forEach(function(id){ var inp = $(id); if(inp && inp._w) inp._w.querySelectorAll('[data-n]').forEach(function(b){ b.classList.toggle('sel', b.dataset.n === String(inp.value)); }); });
+    BEB.forEach(function(b){ var inp = $('alc_'+b[0]), el = document.querySelector('.alc-b[data-b="'+b[0]+'"]'); if(!inp || !el) return; var v = parseFloat(inp.value) || 0; el.classList.toggle('con', v > 0); el.querySelector('.ct').textContent = v ? String(v).replace('.', ',') : ''; });
+    var lbl = $('hab_anios_label'), sp = $('hab_anios') && $('hab_anios')._w && $('hab_anios')._w.querySelector('span'); if(lbl && sp) sp.textContent = lbl.textContent;
+  }
+  window._habPintar = pintar;
+  function preparar(){
+    pillsDeSelect($('hab_tabaquismo'), [['nunca','Nunca fumó'],['social','Social'],['actual','Fuma'],['ex','Ex fumador']]);
+    pillsDeSelect($('hab_alcohol'), [['no','No consume'],['social','Social'],['si','Sí consume']]);
+    rapidos($('hab_cig_dia'), 'Cig/día', [5,10,15,20,30,40]);
+    rapidos($('hab_anios'), 'Años fumando', [5,10,15,20,30,40]);
+    bebidas(); altCasillero(); pintar();
+  }
+  // Al cargar/limpiar un paciente se llaman estas funciones: repintar los botones
+  ['actualizarTabaquismo','calcPackYear','actualizarAlcohol','calcAlcohol'].forEach(function(fn){
+    var o = window[fn]; if(typeof o !== 'function' || o._hb) return;
+    var w = function(){ var r = o.apply(this, arguments); try { pintar(); } catch(e){} return r; }; w._hb = true; window[fn] = w;
+  });
+  // Elegir una bebida con "No consume" marcado → pasa a "Sí consume"
+  document.addEventListener('click', function(e){
+    var b = e.target.closest && e.target.closest('.alc-b'); if(!b) return;
+    var s = $('hab_alcohol'); if(s && s.value === 'no'){ s.value = 'si'; disparar(s); pintar(); }
+  }, true);
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function(){ setTimeout(preparar, 0); }); else setTimeout(preparar, 0);
+  document.addEventListener('click', function(){ setTimeout(function(){ if($('hab_tabaquismo') && !$('hab_tabaquismo')._pills) preparar(); else altCasillero(); }, 0); }, true);
+})();
+</script>
 </body>
 </html>
