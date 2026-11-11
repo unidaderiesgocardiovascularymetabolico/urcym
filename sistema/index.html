@@ -2,7 +2,7 @@
 <html lang="es-AR">
 <head>
   <meta charset="UTF-8" />
-  <script>var URCYM_BUILD = '2026-11-11-1900';</script>
+  <script>var URCYM_BUILD = '2026-11-11-2000';</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Evaluaciones cardiometabólicas — Sistema de Historia Clínica</title>
 
@@ -10078,7 +10078,10 @@ function generarTextoClinico(c, meds) {
   else if(c.tabaquismo==='actual') habParts.push('Fumador ('+((c.cigarrillos_dia||0)*(c.anios_fumando||0)/20).toFixed(1)+' PA)');
   else if(c.tabaquismo==='social') habParts.push('Fumador social');
   else if(c.tabaquismo==='ex') habParts.push('Ex fumador ('+((c.cigarrillos_dia||0)*(c.anios_fumando||0)/20).toFixed(1)+' PA)');
-  if(c.alcohol_social) habParts.push('Alcohol social');
+  if(c.vapeo==='si') habParts.push('Vapea (cigarrillo electrónico)');
+  else if(c.vapeo==='ex') habParts.push('Ex vapeador');
+  if(c.alcohol_estado==='ex') habParts.push('Ex consumidor de alcohol');
+  else if(c.alcohol_social || c.alcohol_estado==='social') habParts.push('Alcohol social');
   else if(!c.alcohol) habParts.push('No alcohol');
   else { const gr=Math.round((c.alcohol_cerveza||0)*13+(c.alcohol_vino||0)*14+(c.alcohol_fernet||0)*22+(c.alcohol_blanca||0)*14+(c.alcohol_whisky||0)*14); habParts.push('Alcohol: '+gr+'g/sem'); }
   // Actividad física: usar nuevo campo JSON si existe, si no el campo texto legado
@@ -10270,6 +10273,10 @@ function generarTextoCambiosClinicos(nuevo, anterior, medsNuevo, medsAnterior) {
     if(cambio(nuevo[n.key], anterior[n.key]) && txt(nuevo[n.key])) lines.push(n.label+': '+txt(nuevo[n.key]));
   });
   if(window.macTexto){ const macN = macTexto(nuevo||{}), macA = macTexto(anterior||{}); if(macN && macN !== macA) lines.push('Método anticonceptivo (MAC): '+macN); }
+  { const AE = {no:'no consume', social:'consumo social', si:'consume', ex:'ex consumidor'};
+    if(nuevo.alcohol_estado && anterior.alcohol_estado !== undefined && cambio(nuevo.alcohol_estado, anterior.alcohol_estado || (anterior.alcohol ? 'si' : 'no'))) lines.push('Alcohol: '+(AE[nuevo.alcohol_estado]||nuevo.alcohol_estado)+'.');
+    const VP = {no:'no vapea', si:'vapea (cigarrillo electrónico)', ex:'ex vapeador'};
+    if(nuevo.vapeo && cambio(nuevo.vapeo, anterior.vapeo)) lines.push('Vapeo: '+(VP[nuevo.vapeo]||nuevo.vapeo)+'.'); }
   if(cambio(nuevo.tto_alternativos, anterior.tto_alternativos) && txt(nuevo.tto_alternativos)) lines.push('Tratamientos alternativos: '+txt(nuevo.tto_alternativos));
 
   if(!lines.length) return '';
@@ -10337,7 +10344,9 @@ async function guardarClinica() {
     dx_dbt_otro_nota:document.getElementById('dx_dbt_otro_nota')?.value||null,
     dx_menopausia_edad:document.getElementById('dx_menopausia_edad')?.value||null,
     dx_menopausia_nota:document.getElementById('dx_menopausia_nota')?.value||null,
-    alcohol:document.getElementById('hab_alcohol').value!=='no',
+    alcohol:['si','social'].indexOf(document.getElementById('hab_alcohol').value)>=0,
+    alcohol_estado:document.getElementById('hab_alcohol').value||null,
+    vapeo:document.getElementById('hab_vapeo')?.value||null,
     alcohol_cerveza:parseFloat(document.getElementById('alc_cerveza').value)||0,
     alcohol_vino:parseFloat(document.getElementById('alc_vino').value)||0,
     alcohol_fernet:parseFloat(document.getElementById('alc_fernet').value)||0,
@@ -10510,6 +10519,7 @@ async function cargarDatosClinica(dni) {
   {const ani=document.getElementById('hab_anios');if(ani)ani.value='';}
   calcPackYear();
   {const alc=document.getElementById('hab_alcohol');if(alc){alc.value='no';actualizarAlcohol();}}
+  {const vp=document.getElementById('hab_vapeo');if(vp)vp.value='';}
   ['cerveza','vino','fernet','blanca','whisky'].forEach(b=>{const el=document.getElementById('alc_'+b);if(el)el.value='';});
   calcAlcohol();
   {const actEl=document.getElementById('hab_actividad');if(actEl)actEl.value='';}
@@ -10600,7 +10610,8 @@ async function cargarDatosClinica(dni) {
   calcPackYear();
   const alc=document.getElementById('hab_alcohol');
   if(alc){
-    alc.value=data.alcohol?'si':'no';
+    alc.value=(['no','social','si','ex'].indexOf(data.alcohol_estado)>=0) ? data.alcohol_estado : (data.alcohol?'si':'no');
+    {const vp=document.getElementById('hab_vapeo'); if(vp) vp.value=data.vapeo||'';}
     actualizarAlcohol();
   }
   ['cerveza','vino','fernet','blanca','whisky'].forEach(b=>{const el=document.getElementById('alc_'+b);if(el&&data['alcohol_'+b])el.value=data['alcohol_'+b];});
@@ -12834,7 +12845,7 @@ function renderActItems() {
     if(a.intensidad === 'moderada') minMod += ms;
     else if(a.intensidad === 'intensa') { minInt += ms; minMod += ms * 2; } // 1 min intensa = 2 mod
     else if(a.intensidad === 'leve') minLeve += ms;
-    if(['Gym – Fuerza','Gym – Mixto'].includes(a.tipo)) diasFuerza += a.dias;
+    if(['Gym – Fuerza','Gym – Mixto','Funcional / CrossFit'].includes(a.tipo)) diasFuerza += a.dias;
   });
 
   const minModEq = minMod; // ya incluye conversión de intensa
@@ -12953,6 +12964,22 @@ const _intSugerida = {
   'Gym – Cardio':        'moderada',
   'Gym – Mixto':         'moderada',
   'Gym – Fuerza':        'intensa',
+  'Spinning':            'intensa',
+  'Aquagym':             'leve',
+  'Funcional / CrossFit':'intensa',
+  'Baile / Zumba / ritmos':'moderada',
+  'Tango':               'moderada',
+  'Folklore':            'moderada',
+  'Tenis':               'moderada',
+  'Hockey':              'intensa',
+  'Básquet':             'intensa',
+  'Handball':            'intensa',
+  'Rugby':               'intensa',
+  'Boxeo / Artes marciales':'intensa',
+  'Golf':                'leve',
+  'Patín':               'moderada',
+  'Remo / Kayak':        'moderada',
+  'Trekking / Montaña':  'moderada',
   'Otro':                ''
 };
 
@@ -20161,7 +20188,7 @@ function _lipSeccionActividad(d) {
     if(a.intensidad === 'moderada') minMod += min;
     else if(a.intensidad === 'intensa') { minInt += min; minMod += min * 2; }
     else minLeve += min;
-    if(['Gym – Fuerza','Gym – Mixto'].includes(a.tipo)) diasFuerza += dias;
+    if(['Gym – Fuerza','Gym – Mixto','Funcional / CrossFit'].includes(a.tipo)) diasFuerza += dias;
     return `<li>${a.tipo||'Actividad'}${a.intensidad?' · '+a.intensidad:''} — ${a.minutos||'—'} min, ${dias} día(s)/semana</li>`;
   }).join('');
   const minSemana = minMod;
@@ -21085,7 +21112,7 @@ function _obeSeccionActividad(d) {
     if(a.intensidad === 'moderada') minMod += min;
     else if(a.intensidad === 'intensa') { minInt += min; minMod += min * 2; }
     else minLeve += min;
-    if(['Gym – Fuerza','Gym – Mixto'].includes(a.tipo)) diasFuerza += dias;
+    if(['Gym – Fuerza','Gym – Mixto','Funcional / CrossFit'].includes(a.tipo)) diasFuerza += dias;
     return `<li>${a.tipo||'Actividad'}${a.intensidad?' · '+a.intensidad:''} — ${a.minutos||'—'} min, ${dias} día(s)/semana</li>`;
   }).join('');
   const minSemana = minMod; // ya incluye la conversión de intensa (equivalente moderado)
@@ -21479,6 +21506,7 @@ function _obeGenerarHTMLInforme(opts) {
               <option value="no">No consume</option>
               <option value="social">Consumo social</option>
               <option value="si">Sí consume</option>
+              <option value="ex">Ex consumidor</option>
             </select>
           </div>
           <div id="hab_alcohol_detalle" style="display:none">
@@ -21578,6 +21606,7 @@ function _obeGenerarHTMLInforme(opts) {
                 <option value="Running / Trote">Running / Trote</option>
                 <option value="Vóley">Vóley</option>
                 <option value="Yoga">Yoga</option>
+                <option value="Spinning">Spinning</option><option value="Aquagym">Aquagym</option><option value="Funcional / CrossFit">Funcional / CrossFit</option><option value="Baile / Zumba / ritmos">Baile / Zumba / ritmos</option><option value="Tango">Tango</option><option value="Folklore">Folklore</option><option value="Tenis">Tenis</option><option value="Hockey">Hockey</option><option value="Básquet">Básquet</option><option value="Handball">Handball</option><option value="Rugby">Rugby</option><option value="Boxeo / Artes marciales">Boxeo / Artes marciales</option><option value="Golf">Golf</option><option value="Patín">Patín</option><option value="Remo / Kayak">Remo / Kayak</option><option value="Trekking / Montaña">Trekking / Montaña</option>
                 <option value="Otro">Otro</option>
               </select>
             </div>
@@ -26955,7 +26984,10 @@ loadLocal();  // async, carga en background y llama renderGrid al final
         (Number(c.alcohol_whisky)  || 0) * 14
       );
       var lim = (window.pacienteActual && window.pacienteActual.sexo === 'Femenino') ? 98 : 196;
-      var a   = c.alcohol_social ? '<span style="color:#e08c3a;font-weight:600">Alcohol social</span>'
+      if (c.vapeo === 'si') t += ' <span class="evh-habito-malo">Vapea</span>';
+      else if (c.vapeo === 'ex') t += ' <span style="color:#e08c3a;font-weight:600">Ex vapeador</span>';
+      var a   = c.alcohol_estado === 'ex' ? '<span style="color:#e08c3a;font-weight:600">Ex consumidor de alcohol</span>'
+              : (c.alcohol_social || c.alcohol_estado === 'social') ? '<span style="color:#e08c3a;font-weight:600">Alcohol social</span>'
               : !c.alcohol       ? '<span class="evh-habito-bien">No alcohol</span>'
               :                    '<span class="' + (gr > lim ? 'evh-habito-malo' : 'evh-habito-bien') + '">Alcohol ' + gr + 'g/sem</span>';
       var act = '';
@@ -31287,7 +31319,7 @@ function _renderFHLista(){
     if(a.intensidad==='moderada') minMod+=ms;
     else if(a.intensidad==='intensa'){minInt+=ms; minMod+=ms*2;}
     else if(a.intensidad==='leve') minLeve+=ms;
-    if(['Gym – Fuerza','Gym – Mixto'].includes(a.tipo)) diasFuerza+=a.dias;
+    if(['Gym – Fuerza','Gym – Mixto','Funcional / CrossFit'].includes(a.tipo)) diasFuerza+=a.dias;
   });
   var pct=Math.min(100,Math.round(minMod/150*100));
   var sinNadaRegistrado = minMod===0 && minLeve===0;
@@ -31763,7 +31795,7 @@ async function imprimirInformeHabitos(opts) {
       if(a.intensidad==='moderada') minMod+=ms;
       else if(a.intensidad==='intensa'){minInt+=ms;minMod+=ms*2;}
       else minLeve+=ms;
-      if(['Gym – Fuerza','Gym – Mixto'].includes(a.tipo)) diasF+=a.dias;
+      if(['Gym – Fuerza','Gym – Mixto','Funcional / CrossFit'].includes(a.tipo)) diasF+=a.dias;
     });
     return {minMod,minInt,minLeve,diasF,pct:Math.min(100,Math.round(minMod/150*100))};
   };
@@ -37392,6 +37424,154 @@ function _cargaEstPrec(p){
   }, true);
   if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function(){ setTimeout(preparar, 0); }); else setTimeout(preparar, 0);
   document.addEventListener('click', function(){ setTimeout(function(){ if($('hab_tabaquismo') && !$('hab_tabaquismo')._pills) preparar(); else altCasillero(); }, 0); }, true);
+})();
+</script>
+
+<style>
+.vp-row{margin:12px 0 4px}
+.vp-row .tit,.tox-tit{font-size:11px;font-weight:700;color:#5b5b8a;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px}
+.tox-box{margin-top:12px;background:#fff4f4;border-radius:10px;padding:10px 12px}
+.tox-tit{color:#b91c1c}
+.tox-chips{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:7px}
+.tox-chips button{border:1.5px solid #f8d0d0;background:#fff;border-radius:999px;padding:4px 10px;font-size:11.5px;font-weight:600;cursor:pointer;font-family:var(--font-main);color:#7f1d1d}
+.tox-chips button.sel{background:#dc2626;border-color:#dc2626;color:#fff}
+.act-chips{display:flex;flex-direction:column;gap:6px;margin-bottom:8px}
+.act-grupo{display:flex;flex-wrap:wrap;gap:5px;align-items:center}
+.act-grupo>span{font-size:9.5px;font-weight:800;color:#94a3b8;text-transform:uppercase;letter-spacing:.06em;width:78px;flex-shrink:0}
+.act-chip{border:1.5px solid #dde3ec;background:#fff;border-radius:999px;padding:4px 10px;font-size:12px;font-weight:600;cursor:pointer;font-family:var(--font-main);color:#334155}
+.act-chip:hover{border-color:#2a9496}
+.act-chip.sel{background:#2a9496;border-color:#2a9496;color:#fff}
+.act-chip.no{border-color:#fca5a5;color:#b91c1c}
+.act-min{display:inline-flex;flex-wrap:wrap;gap:4px;margin-left:6px;vertical-align:middle}
+.act-min button{border:1.5px solid #dde3ec;background:#fff;border-radius:8px;padding:4px 8px;font-size:12px;font-weight:600;cursor:pointer;font-family:var(--font-main);color:#334155}
+.act-min button.sel{background:#2a9496;border-color:#2a9496;color:#fff}
+.act-hint{font-size:11px;color:#2a9496;margin:-4px 0 10px}
+.act-ok{display:inline-block;margin-left:8px;font-size:11.5px;font-weight:700;color:#16a34a;opacity:0;transition:opacity .3s}
+</style>
+<script>
+/* ════════ Tabaquismo extra · Ex consumidor de alcohol · Actividad física con botones ════════ */
+(function(){
+  function $(id){ return document.getElementById(id); }
+  function esc(v){ return String(v==null?'':v).replace(/[&<>"]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+
+  // ── 1) Debajo de tabaquismo: vapeo + otras sustancias (tóxicos, que antes estaban abajo de todo)
+  var TOX = ['Marihuana','Cocaína','Drogas sintéticas','Psicofármacos sin receta','Otras'];
+  function tabExtra(){
+    var tab = $('hab_tabaquismo'); if(!tab || $('hab_vapeo')) return;
+    var col = tab.closest('.clinica-section'); if(!col) return;
+    var vp = document.createElement('div'); vp.className = 'vp-row';
+    vp.innerHTML = '<div class="tit">💨 Vapeo / cigarrillo electrónico</div><select id="hab_vapeo" style="display:none"><option value=""></option><option value="no">No</option><option value="si">Sí</option><option value="ex">Ex</option></select>'
+      + '<div class="hb-pills" id="vp_pills"><button type="button" class="hb-pill" data-v="no">No vapea</button><button type="button" class="hb-pill" data-v="si">Vapea</button><button type="button" class="hb-pill" data-v="ex">Ex vapeador</button></div>';
+    var notas = $('tab_notas_generales'); var ref = notas ? notas.closest('div[style*="background"]') : null;
+    if(ref) col.insertBefore(vp, ref); else col.appendChild(vp);
+    vp.querySelectorAll('[data-v]').forEach(function(b){ b.onclick = function(){ var s = $('hab_vapeo'); s.value = (s.value === b.dataset.v) ? '' : b.dataset.v; pintarVp(); }; });
+    // Tóxicos: se mudan debajo de tabaquismo, con botones rápidos
+    var tox = $('tox_notas_generales');
+    if(tox){
+      var vieja = tox.closest('.clinica-section');
+      var box = document.createElement('div'); box.className = 'tox-box';
+      box.innerHTML = '<div class="tox-tit">⚠️ Otras sustancias (tóxicos)</div><div class="tox-chips" id="tox_chips"><button type="button" data-niega="1">Niega consumo</button>' + TOX.map(function(t){ return '<button type="button" data-t="'+esc(t)+'">'+esc(t)+'</button>'; }).join('') + '</div>';
+      box.appendChild(tox); tox.rows = 2; tox.placeholder = 'Detalle: frecuencia, desde cuándo, contexto… (se vuelca a la evolución)';
+      col.appendChild(box);
+      if(vieja && vieja !== col && !vieja.querySelector('textarea')) vieja.style.display = 'none';
+      box.querySelectorAll('button').forEach(function(b){ b.onclick = function(){ toxToggle(b); }; });
+      tox.addEventListener('input', pintarTox);
+    }
+    pintarVp(); pintarTox();
+  }
+  var NIEGA = 'Niega consumo de otras sustancias';
+  function toxLista(v){ return String(v||'').split(/\s*[,;]\s*|\n/).map(function(x){ return x.trim(); }).filter(Boolean); }
+  function toxToggle(b){
+    var t = $('tox_notas_generales'); if(!t) return;
+    var v = t.value;
+    if(b.dataset.niega){ t.value = (v.indexOf(NIEGA) >= 0) ? v.replace(NIEGA, '').replace(/^[\s,.;]+|[\s,;]+$/g, '') : (v.trim() ? NIEGA + '. ' + v.trim() : NIEGA); }
+    else {
+      var nom = b.dataset.t, re = new RegExp('(^|[\\s,;.])' + nom.replace(/[.*+?^${}()|[\]\\\/]/g, '\\$&') + '(?=$|[\\s,;.])', 'i');
+      if(re.test(v)) t.value = v.replace(re, '$1').replace(/\s*,\s*,/g, ',').replace(/^[\s,;.]+|[\s,;]+$/g, '').replace(/\s{2,}/g, ' ');
+      else { v = v.replace(NIEGA + '. ', '').replace(NIEGA, '').trim(); t.value = v ? (/^[^.]*$/.test(v.split('\n')[0]) && !/[.:]$/.test(v) ? v + ', ' + nom : nom + ', ' + v) : nom; }
+    }
+    t.dispatchEvent(new Event('input', { bubbles:true })); pintarTox();
+  }
+  function pintarTox(){
+    var t = $('tox_notas_generales'), box = $('tox_chips'); if(!t || !box) return; var v = t.value;
+    box.querySelectorAll('button').forEach(function(b){
+      if(b.dataset.niega) b.classList.toggle('sel', v.indexOf(NIEGA) >= 0);
+      else b.classList.toggle('sel', new RegExp('(^|[\\s,;.])' + b.dataset.t.replace(/[.*+?^${}()|[\]\\\/]/g, '\\$&') + '(?=$|[\\s,;.])', 'i').test(v));
+    });
+  }
+  function pintarVp(){ var s = $('hab_vapeo'), p = $('vp_pills'); if(!s || !p) return; p.querySelectorAll('[data-v]').forEach(function(b){ b.classList.toggle('sel', b.dataset.v === s.value); }); }
+
+  // ── 2) Alcohol: botón "Ex consumidor"
+  function alcEx(){
+    var sel = $('hab_alcohol'); if(!sel || !sel._box || sel._box.querySelector('[data-v=ex]')) return;
+    var b = document.createElement('button'); b.type = 'button'; b.className = 'hb-pill'; b.dataset.v = 'ex'; b.textContent = 'Ex consumidor';
+    b.onclick = function(){ sel.value = 'ex'; sel.dispatchEvent(new Event('change', { bubbles:true })); if(window._habPintar) _habPintar(); };
+    sel._box.appendChild(b);
+  }
+
+  // ── 3) Actividad física: deportes con botones, minutos rápidos, se agrega sola
+  var GRUPOS = [
+    ['Caminar', ['Caminata','Running / Trote','Trekking / Montaña']],
+    ['Gimnasio', ['Gym – Fuerza','Gym – Cardio','Gym – Mixto','Funcional / CrossFit','Spinning']],
+    ['Cuerpo', ['Pilates','Yoga']],
+    ['Baile', ['Baile / Zumba / ritmos','Tango','Folklore']],
+    ['Deportes', ['Fútbol','Pádel','Tenis','Hockey','Vóley','Newcom','Básquet','Handball','Rugby','Boxeo / Artes marciales','Golf']],
+    ['Agua/rueda', ['Natación','Aquagym','Ciclismo','Patín','Remo / Kayak']]
+  ];
+  var CORTO = {'Running / Trote':'Running','Trekking / Montaña':'Trekking','Baile / Zumba / ritmos':'Baile / Zumba','Boxeo / Artes marciales':'Boxeo / Marciales','Funcional / CrossFit':'Funcional / CrossFit','Remo / Kayak':'Remo / Kayak'};
+  var MINS = [15,20,30,45,60,90,120];
+  var FORMS = [
+    { sel:'fh_nueva_tipo', min:'fh_nueva_min', dias:'fh_nueva_dias', diaOn:'button[data-active="1"]', add:'agregarActividadFH', cambio:'onFHTipoActividadChange' },
+    { sel:'hab_nueva_tipo', min:'hab_nueva_min', dias:'hab_nueva_dias', diaOn:'button[data-sel="1"]', add:'agregarActividadHab', cambio:'onTipoActividadChange' }
+  ];
+  function asegurarOpcion(sel, v){ if(!Array.prototype.some.call(sel.options, function(o){ return o.value === v; })) sel.add(new Option(v, v)); }
+  function actForm(F){
+    var sel = $(F.sel), min = $(F.min), dias = $(F.dias); if(!sel || !min || sel._chips) return; sel._chips = true;
+    var w = document.createElement('div'); w.className = 'act-chips';
+    w.innerHTML = '<div class="act-grupo"><span>&nbsp;</span><button type="button" class="act-chip no" data-a="No realiza actividad física">🚫 No realiza</button><button type="button" class="act-chip" data-a="Otro">Otro…</button></div>'
+      + GRUPOS.map(function(g){ return '<div class="act-grupo"><span>'+g[0]+'</span>' + g[1].map(function(a){ return '<button type="button" class="act-chip" data-a="'+esc(a)+'">'+esc(CORTO[a] || a)+'</button>'; }).join('') + '</div>'; }).join('');
+    sel.style.display = 'none'; sel.parentElement.appendChild(w);
+    var grid = sel.closest('div[style*="grid-template-columns"]');
+    if(grid){ var celdaTipo = sel.parentElement; celdaTipo.style.gridColumn = '1 / -1'; }
+    var hint = document.createElement('div'); hint.className = 'act-hint'; hint.innerHTML = 'Elegí actividad → minutos → días por semana: <b>se agrega sola</b> (la intensidad se completa sola, la podés cambiar antes).<span class="act-ok">✓ Agregada</span>';
+    if(grid) grid.parentElement.insertBefore(hint, grid);
+    var mb = document.createElement('div'); mb.className = 'act-min';
+    mb.innerHTML = MINS.map(function(m){ return '<button type="button" data-m="'+m+'">'+m+'</button>'; }).join('');
+    min.parentElement.appendChild(mb); min.placeholder = 'otro'; min.style.width = '64px'; min.style.display = 'inline-block'; min.style.verticalAlign = 'middle';
+    function listo(){
+      var ok = sel.value && sel.value !== 'Otro' && (parseInt(min.value) || 0) > 0 && dias && dias.querySelector(F.diaOn);
+      if(!ok) return;
+      window[F.add]();
+      var t = hint.querySelector('.act-ok'); t.style.opacity = '1'; setTimeout(function(){ t.style.opacity = '0'; }, 1600);
+      pintar();
+    }
+    function pintar(){
+      w.querySelectorAll('[data-a]').forEach(function(b){ b.classList.toggle('sel', b.dataset.a === sel.value); });
+      mb.querySelectorAll('[data-m]').forEach(function(b){ b.classList.toggle('sel', b.dataset.m === String(min.value)); });
+    }
+    w.querySelectorAll('[data-a]').forEach(function(b){ b.onclick = function(){
+      var v = (sel.value === b.dataset.a) ? '' : b.dataset.a;
+      if(v) asegurarOpcion(sel, v); sel.value = v;
+      if(typeof window[F.cambio] === 'function') window[F.cambio]();
+      if(v === 'No realiza actividad física'){ window[F.add](); pintar(); return; }
+      if(v === 'Otro'){ var n = prompt('¿Qué actividad?'); if(n && n.trim()){ n = n.trim(); asegurarOpcion(sel, n); sel.value = n; if(typeof window[F.cambio] === 'function') window[F.cambio](); } else { sel.value = ''; } }
+      pintar(); listo();
+    }; });
+    mb.querySelectorAll('[data-m]').forEach(function(b){ b.onclick = function(){ min.value = (min.value === b.dataset.m) ? '' : b.dataset.m; pintar(); listo(); }; });
+    min.addEventListener('input', pintar);
+    if(dias) dias.addEventListener('click', function(e){ if(e.target.tagName === 'BUTTON') setTimeout(listo, 0); });
+    // Después de agregar (el formulario se limpia solo) → despintar
+    var oAdd = window[F.add]; if(typeof oAdd === 'function' && !oAdd._chips){ var nw = function(){ var r = oAdd.apply(this, arguments); setTimeout(pintar, 0); return r; }; nw._chips = true; window[F.add] = nw; }
+  }
+
+  function preparar(){ tabExtra(); alcEx(); FORMS.forEach(actForm); pintarVp(); pintarTox(); }
+  // Repintar vapeo / tóxicos al cargar o limpiar un paciente
+  ['calcPackYear','calcAlcohol'].forEach(function(fn){
+    var o = window[fn]; if(typeof o !== 'function' || o._hb2) return;
+    var w = function(){ var r = o.apply(this, arguments); try { pintarVp(); pintarTox(); alcEx(); } catch(e){} return r; }; w._hb2 = true; window[fn] = w;
+  });
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function(){ setTimeout(preparar, 30); }); else setTimeout(preparar, 30);
+  document.addEventListener('click', function(){ setTimeout(preparar, 40); }, true);
 })();
 </script>
 </body>
