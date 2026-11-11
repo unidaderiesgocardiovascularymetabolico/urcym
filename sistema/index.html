@@ -2,7 +2,7 @@
 <html lang="es-AR">
 <head>
   <meta charset="UTF-8" />
-  <script>var URCYM_BUILD = '2026-11-12-0500';</script>
+  <script>var URCYM_BUILD = '2026-11-12-0700';</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Evaluaciones cardiometabólicas — Sistema de Historia Clínica</title>
 
@@ -7492,7 +7492,7 @@ function _entrarAlSistema() {
         roBar = document.createElement('div');
         roBar.id = 'urcym-readonly-bar';
         roBar.style.cssText = 'background:#fef9c3;border-bottom:1.5px solid #fde047;padding:7px 24px;font-size:12px;font-weight:600;color:#713f12;text-align:center;letter-spacing:.02em;z-index:99;';
-        roBar.textContent = '👁 Sesión de invitado · solo lectura: podés ver todo, pero no se guarda ningún cambio. Finanzas pide contraseña de un profesional.';
+        roBar.textContent = '👁 Sesión de invitado · solo lectura: podés ver todo, pero no se guarda ningún cambio.';
         var navTabsEl = document.querySelector('.nav-tabs');
         if(navTabsEl && navTabsEl.parentNode) navTabsEl.parentNode.insertBefore(roBar, navTabsEl.nextSibling);
       }
@@ -8166,7 +8166,7 @@ async function showPage(page) {
   }, 100);
   if(page==='mis-pacientes') setTimeout(function(){ mpCargar(); }, 100);
   if(page==='gestion') setTimeout(function(){ gpCargar(); }, 100);
-  if(page==='investigacion') setTimeout(function(){ if(window.invInit) invInit(); }, 100);
+  if(page==='investigacion') setTimeout(function(){ if(window.invInit) invInit(); if(window._invAbrirTabla1) window._invAbrirTabla1(); }, 100);
   if(page==='cierre') setTimeout(function(){ if(window.cierreInit) cierreInit(); }, 100);
   if(page==='historia_clinica') window.scrollTo(0,0);
 }
@@ -13746,7 +13746,7 @@ async function enviarMailIndicacionesEvol(conIndic) {
   const desdeMaterial = conIndic === false;
   if(!txt && !desdeMaterial) { alert('Sin indicaciones.'); return; }
   const email = await _mailPacienteAsegurado(p); if(!email) return;
-  const eleccion = await _modalEnviarMail({ email: email, que: txt ? 'las indicaciones (PDF)' : null, marcado: !desdeMaterial }); if(!eleccion) return;
+  const eleccion = await _modalEnviarMail({ email: email, que: txt ? 'las indicaciones (PDF)' : null, marcado: true }); if(!eleccion) return;
   if(!eleccion.incluirDoc) {
     _enviarDocPorMail({ tipo:'material', p:p, texto:'', doc:null, filename:'', materiales: eleccion.materiales, extras: eleccion.extras, resumen: eleccion.resumen,
       btn: document.querySelector('button[onclick="' + (desdeMaterial ? 'enviarMaterialesPaciente()' : 'enviarMailIndicacionesEvol()') + '"]') });
@@ -13786,7 +13786,7 @@ async function enviarPorMail(tipo) {
 // Botón "📚 Materiales": mandar solo material (planillas, dietas…) sin indicaciones
 async function enviarMaterialesPaciente() {
   const p = pacienteActual; if(!p) { alert('Abrí primero un paciente.'); return; }
-  // En la evolución: se marca el material y después se decide si van también las indicaciones (arranca sin marcar)
+  // En la evolución: se marca el material; el PDF de indicaciones arranca marcado
   if(document.getElementById('evol_indicaciones_editor')) return enviarMailIndicacionesEvol(false);
   const email = await _mailPacienteAsegurado(p); if(!email) return;
   const eleccion = await _modalEnviarMail({ email: email, que: null }); if(!eleccion) return;
@@ -35184,7 +35184,7 @@ document.addEventListener('click', function(e){ if(e.target && e.target.id === '
   function pestaña(){
     var tabs = document.querySelector('#page-investigacion .inv-mode-tabs'); if(!tabs || document.getElementById('inv-mode-tab-tabla1')) return;
     var b = document.createElement('button'); b.className = 'inv-mode-tab'; b.id = 'inv-mode-tab-tabla1'; b.textContent = '📊 Tabla 1 · panorama';
-    b.onclick = function(){ invSetModoPagina('tabla1'); }; tabs.appendChild(b);
+    b.onclick = function(){ invSetModoPagina('tabla1'); }; tabs.insertBefore(b, tabs.firstChild);
   }
   if(typeof invSetModoPagina === 'function'){
     var o = invSetModoPagina;
@@ -35195,6 +35195,8 @@ document.addEventListener('click', function(e){ if(e.target && e.target.id === '
       t1Abrir(null);
     };
   }
+  // Al entrar a Investigación se abre directo la Tabla 1
+  window._invAbrirTabla1 = function(){ pestaña(); invSetModoPagina('tabla1'); };
   // Botón en la barra de la cohorte filtrada
   if(typeof invRenderCohorte === 'function'){
     var orc = invRenderCohorte;
@@ -38443,6 +38445,55 @@ window._agWaNum = function(tel){
       sb.from('pacientes').select('dni,apellido,nombre,telefono,email,obra_social,numero_afiliado').eq('dni', t.dni_paciente).maybeSingle()
         .then(function(r){ cache[t.dni_paciente] = (r && r.data) || null; if(document.body.contains(menu)) pintar(); }).catch(function(){});
     }
+  };
+})();
+</script>
+
+<script>
+/* ════════ Evolución › "Se agrega" un fármaco para adiposidad → nuevo tratamiento de adiposidad ════════
+   Si es la primera vez que ese paciente recibe esa droga (semaglutida, tirzepatida, liraglutida,
+   orlistat, naltrexona/bupropión…), se crea solo el tratamiento con fecha de hoy, droga y dosis,
+   así la planilla ya está para mandar por mail sin entrar a la pestaña Adiposidad. */
+(function(){
+  var DROGAS = [
+    [/semaglut|ozempic|wegovy|rybelsus/, 'semaglut'],
+    [/tirzepat|mounjaro|zepbound/, 'tirzepat'],
+    [/liraglut|saxenda|victoza/, 'liraglut'],
+    [/dulaglut|trulicity/, 'dulaglut'],
+    [/orlistat|xenical/, 'orlistat'],
+    [/naltrex|bupropi|contrave/, 'naltrex']
+  ];
+  function sinAc(t){ return String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim(); }
+  function base(f){ f = sinAc(f); for(var i = 0; i < DROGAS.length; i++) if(DROGAS[i][0].test(f)) return DROGAS[i][1]; return null; }
+  function toast(txt){
+    var t = document.getElementById('ag-copy-toast');
+    if(!t){ t = document.createElement('div'); t.id = 'ag-copy-toast'; t.style.cssText = 'position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#0f766e;color:#fff;padding:10px 18px;border-radius:10px;font:600 13px DM Sans,sans-serif;box-shadow:0 8px 22px rgba(0,0,0,.2);z-index:100000;transition:opacity .3s;max-width:90vw;text-align:center'; document.body.appendChild(t); }
+    t.textContent = txt; t.style.opacity = '1'; clearTimeout(t._h); t._h = setTimeout(function(){ t.style.opacity = '0'; }, 4200);
+  }
+  var orig = window.volcarActualizacion;
+  if(typeof orig !== 'function') return;
+  window.volcarActualizacion = async function(){
+    var dni = (typeof pacienteActual !== 'undefined' && pacienteActual) ? String(pacienteActual.dni) : '';
+    var items = (typeof updTtoItems !== 'undefined' ? updTtoItems : []).filter(function(i){ return i && i.accion === 'se agrega' && base(i.farmaco); }).map(function(i){ return { farmaco: i.farmaco, dosis: i.dosis || '' }; });
+    var r = await orig.apply(this, arguments);
+    if(!dni || !items.length || window._readonlyMode || typeof sb === 'undefined') return r;
+    try {
+      var q = await sb.from('adiposidad_tratamientos').select('id,droga').eq('paciente_dni', dni);
+      if(q.error) return r;
+      var ya = (q.data || []).map(function(t){ return base(t.droga); });
+      for(var k = 0; k < items.length; k++){
+        var it = items[k], b = base(it.farmaco);
+        if(ya.indexOf(b) >= 0) continue;                 // ya tuvo un tratamiento con esa droga: no se duplica
+        var hoy = (typeof fechaHoy === 'function') ? fechaHoy() : new Date().toISOString().slice(0, 10);
+        var ins = await sb.from('adiposidad_tratamientos').insert({ paciente_dni: dni, fecha_inicio: hoy, fecha_control: null, tipo_tratamiento: 'farmacologico', tipo_cirugia: '', actividad_factor: 'sedentario', droga: it.farmaco, dosis: it.dosis, updated_at: new Date().toISOString() }).select().single();
+        if(ins.error){ console.warn('[Adiposidad auto]', ins.error); continue; }
+        ya.push(b);
+        // Si la pestaña Adiposidad ya estaba cargada para este paciente, se suma a la lista
+        try { if(typeof adipPacDni !== 'undefined' && String(adipPacDni) === dni && Array.isArray(adipTratamientos)){ adipTratamientos.unshift(Object.assign({ chk_guia:true, chk_colocacion:true, chk_control:true, chk_efectos:true, chk_alarma:true, chk_planif: (typeof _adipEsMujerPosible === 'function' ? _adipEsMujerPosible() : false), chk_anticoncepcion:false, anticoncepcion_texto:'' }, ins.data)); if(typeof adipRenderPills === 'function') adipRenderPills(); } } catch(e){}
+        toast('🎯 Se creó el tratamiento de adiposidad: ' + it.farmaco + (it.dosis ? ' ' + it.dosis : '') + ' — ya podés enviar la planilla por mail');
+      }
+    } catch(e){ console.warn('[Adiposidad auto]', e); }
+    return r;
   };
 })();
 </script>
