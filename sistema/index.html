@@ -2,7 +2,7 @@
 <html lang="es-AR">
 <head>
   <meta charset="UTF-8" />
-  <script>var URCYM_BUILD = '2026-11-12-1200';</script>
+  <script>var URCYM_BUILD = '2026-11-12-1300';</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Evaluaciones cardiometabólicas — Sistema de Historia Clínica</title>
 
@@ -7037,6 +7037,7 @@ async function _archivarPacienteTabla(dni, tipo) {
 
 // ===== TOAST DISCRETO =====
 function showToast(msg, tipo='ok', duracion=2000) {
+  if(tipo === 'success' || tipo === 'info') tipo = 'ok'; else if(tipo === 'warning') tipo = 'warn';
   const t = document.createElement('div');
   const color = tipo==='ok' ? '#22a06b' : tipo==='warn' ? '#e08c3a' : '#e25247';
   const icon  = tipo==='ok' ? '✓' : tipo==='warn' ? '⚠' : '✕';
@@ -36120,6 +36121,7 @@ function _cargaEstPrec(p){
     var ta = m.box.querySelector('.lp-txt'), prev = m.box.querySelector('.lp-prev'), btn = m.box.querySelector('.lp-si'), res = null, dniModal = String(pacienteActual.dni);
     ta.addEventListener('keydown', function(ev){ ev.stopPropagation(); });
     setTimeout(function(){ ta.focus(); }, 50);
+    if(window._multiDoc) window._multiDoc(ta, 'lab', function(){ prev.innerHTML = ''; }, btn);
     function columnaDe(fecha){ return (labDatos.columnas || []).indexOf(fecha); }
     function pintar(){
       var fechaPrev = (prev.querySelector('.lp-fecha') || {}).value;
@@ -36206,8 +36208,9 @@ function _cargaEstPrec(p){
       try { sincronizarRO(); } catch(_) {}
       guardarDatosPac('lab_tabla_wrap');
       if(lpaNueva){ try { if(typeof renderLpa === 'function') renderLpa(); volcarLpaAlEditor(); } catch(_) {} }
-      m.cerrar();
       if(typeof showToast === 'function') showToast('Laboratorio cargado: ' + elegidos.length + ' valores (' + _fmtFechaCol(fecha) + ')', 'success', 4000);
+      if(ta._md && ta._md.multi()){ ta._md.marcarHecho(); if(ta._md.irSiguiente()){ prev.innerHTML = ''; pintar(); return; } }
+      m.cerrar();
     };
   };
 })();
@@ -36563,7 +36566,7 @@ function _cargaEstPrec(p){
           est.textContent = '⏳ Leyendo ' + files[i].name + '…';
           var t = await window._leerArchivoTexto(files[i], function(p, extra){ est.textContent = '⏳ Leyendo ' + (extra ? extra + ' ' : '') + p + '%…'; });
           t = String(t || '').replace(/(\s*\.){4,}\s*/g, ' …… ').replace(/[ \t]{3,}/g, '   ');
-          textarea.value = (textarea.value ? textarea.value + '\n' : '') + t;
+          textarea.value = (textarea.value.trim() ? textarea.value + '\n' + (window._MD_SEP || '') + '\n' : '') + t;
         }
         est.textContent = '✓ Listo. Revisá lo reconocido abajo.';
         textarea.dispatchEvent(new Event('input', { bubbles:true }));
@@ -36628,9 +36631,13 @@ function _cargaEstPrec(p){
     var resto = l.slice(m.index + m[0].length, m.index + m[0].length + (ventana || 40));
     var n = new RegExp('^[^\\d-]*?' + NUM).exec(resto); return n ? n[1].replace(',', '.') : null;
   }
-  function par(l, re){ // "128/78" después de la etiqueta
-    var m = re.exec(l); if(!m) return null;
-    var n = /(\d{2,3})\s*\/\s*(\d{2,3})/.exec(l.slice(m.index, m.index + m[0].length + 40)); return n ? [n[1], n[2]] : null;
+  function par(l, re){ // "128/78" después de la etiqueta (prueba cada vez que aparece la etiqueta: el título "MAPA 24 horas" no tiene valores)
+    var g = new RegExp(re.source, 'g'), m;
+    while((m = g.exec(l))){
+      var n = /(\d{2,3})\s*\/\s*(\d{2,3})/.exec(l.slice(m.index, m.index + m[0].length + 40)); if(n) return [n[1], n[2]];
+      if(!m[0].length) g.lastIndex++;
+    }
+    return null;
   }
   function negado(l, idx){ return /(sin|no se (observan?|evidencian?|detectan?|registran?)|ausencia de|niega|no presenta)\s+([\w\s,]{0,25})$/.test(l.slice(Math.max(0, idx - 45), idx)); }
   function siNo(l, re){ var m = re.exec(l); if(!m) return null; return negado(l, m.index) ? 'No' : 'Sí'; }
@@ -36640,6 +36647,7 @@ function _cargaEstPrec(p){
     cat = cat || detectarCat(t);
     var v = {}, put = function(k, x){ if(x != null && x !== '') v[k] = String(x); };
     var fecha = ''; var mf = t.match(/\b(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})\b/); if(mf){ var y = mf[3].length === 2 ? '20' + mf[3] : mf[3]; fecha = y + '-' + String(mf[2]).padStart(2, '0') + '-' + String(mf[1]).padStart(2, '0'); if(isNaN(new Date(fecha + 'T12:00:00'))) fecha = ''; }
+    l = l.replace(/\b\d{1,2}[\/\-.]\d{1,2}[\/\-.]\d{2,4}\b/g, ' ');   // las fechas no son valores (02/04/2026 ≠ 02/04 mmHg)
     if(cat === 'ECOCARDIO'){
       put('eco_AI', numTras(l, /auricula izquierda|\bai\b/)); put('eco_DDVI', numTras(l, /\bddvi\b|diametro diastolico/));
       put('eco_SIV', numTras(l, /\bsiv\b|septum|septo interventricular/)); put('eco_PP', numTras(l, /pared posterior|\bpp\b/));
@@ -36737,6 +36745,8 @@ function _cargaEstPrec(p){
     _botonFotoTexto(ta);
     if(catInicial){ sel.value = catInicial; elegidaAMano = true; }
     sel.onchange = function(){ elegidaAMano = true; pintar(); };
+    if(window._multiDoc) window._multiDoc(ta, 'est', function(){ elegidaAMano = false; if(ta._md && ta._md.actual() && ta._md.actual().cat){ sel.value = ta._md.actual().cat; } }, btn);
+    if(window._edCola && String(window._edCola.dni) === dniModal && ta._md){ ta._md.restaurar(window._edCola); window._edCola = null; setTimeout(pintar, 30); }
     setTimeout(function(){ ta.focus(); }, 50);
     function pintar(){
       var auto = detectarCat(ta.value);
@@ -36751,12 +36761,13 @@ function _cargaEstPrec(p){
       btn.disabled = false; btn.style.opacity = 1;
     }
     var tmr; ta.addEventListener('input', function(){ clearTimeout(tmr); tmr = setTimeout(pintar, 250); });
-    m.box.querySelector('.ed-no').onclick = m.cerrar;
+    m.box.querySelector('.ed-no').onclick = function(){ window._edCola = null; m.cerrar(); };
     btn.onclick = function(){
       if(!res || !sel.value) return;
       var cat = sel.value, r = rangoCat(cat); if(!r) return;
       if(!pacienteActual || String(pacienteActual.dni) !== dniModal){ alert('Cambió el paciente abierto: no se cargó nada.'); m.cerrar(); return; }
       var conTexto = !!(m.box.querySelector('.ed-com') || {}).checked;
+      if(ta._md && ta._md.multi()) window._edCola = Object.assign(ta._md.estado(), { dni: dniModal, esperando: true }); else window._edCola = null;
       m.cerrar();
       abrirCargaRapidaEstudio(cat);
       setTimeout(function(){
@@ -38934,6 +38945,165 @@ function copiarEditor(id, btn){
     pintar();
   }
   if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', crear); else crear();
+})();
+</script>
+
+<style>
+.md-tabs{display:flex;flex-wrap:wrap;gap:5px;margin:2px 0 6px;align-items:center}
+.md-tabs .md-t{border:1.5px solid #dbe2f5;background:#fff;border-radius:9px 9px 3px 3px;padding:5px 10px;font-size:12px;font-weight:600;cursor:pointer;font-family:var(--font-main);color:#334155;display:inline-flex;gap:5px;align-items:center}
+.md-tabs .md-t.act{background:#1e3a5f;border-color:#1e3a5f;color:#fff}
+.md-tabs .md-t.hecho{background:#dcfce7;border-color:#86efac;color:#166534}
+.md-tabs .md-t.hecho.act{background:#16a34a;border-color:#16a34a;color:#fff}
+.md-tabs .md-t.malid{border-color:#fca5a5}
+.md-tabs .md-info{font-size:11px;color:#64748b;margin-left:4px}
+.md-id{font-size:12px;border-radius:9px;padding:6px 10px;margin:0 0 6px;display:none}
+.md-id.ok{display:block;background:#f0fdf4;color:#166534;border:1px solid #bbf7d0}
+.md-id.warn{display:block;background:#fffbeb;color:#92400e;border:1px solid #fde68a}
+.md-id.error{display:block;background:#fef2f2;color:#991b1b;border:1.5px solid #fca5a5;font-weight:600}
+</style>
+<script>
+/* ════════ Carga de estudios / laboratorios: identidad del paciente + varios documentos en pestañas ════════
+   • Verifica que el informe sea del paciente abierto (apellido / nombre / DNI que figuran en el texto).
+   • Si se cargan varios archivos o el texto trae varios informes, se separan en pestañas
+     ordenadas por fecha y se van revisando y cargando de a uno (✓ cuando está cargado). */
+(function(){
+  var SEP = window._MD_SEP = '════════ siguiente archivo ════════';
+  function sinAc(t){ return String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase(); }
+  function esc(v){ return String(v == null ? '' : v).replace(/[&<>"]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+  function fAR(f){ return f && typeof _fmtFechaCol === 'function' ? _fmtFechaCol(f) : (f || ''); }
+
+  // ── Identidad
+  function identidad(texto){
+    var p = (typeof pacienteActual !== 'undefined') ? pacienteActual : null; if(!p) return null;
+    var t = sinAc(texto); if(t.replace(/\s/g, '').length < 40) return null;
+    var dniP = String(p.dni || '').replace(/\D/g, '');
+    var aps = sinAc(p.apellido).split(/[\s-]+/).filter(function(x){ return x.length >= 3; });
+    var noms = sinAc(p.nombre).split(/\s+/).filter(function(x){ return x.length >= 3; });
+    var dnis = [], m, re = /(?:d\.?\s?n\.?\s?i\.?|documento|doc\.?|dni)\s*(?:n[°ºo]\.?|nro\.?|#)?\s*[:\-]?\s*((?:\d[\d.\s]{5,11}\d))/gi;
+    while((m = re.exec(texto))){ var d = m[1].replace(/\D/g, ''); if(d.length >= 7 && d.length <= 9) dnis.push(d); }
+    var tieneAp = aps.length && aps.some(function(a){ return new RegExp('\\b' + a + '\\b').test(t); });
+    var tieneNom = noms.length && noms.some(function(a){ return new RegExp('\\b' + a + '\\b').test(t); });
+    var nomRot = null, mn = /(?:paciente|apellido\s+y\s+nombres?|nombre\s+y\s+apellido|nombres?\s+y\s+apellidos?|sr\.?\s*\(?a\)?|sra\.?)\s*[:.]\s*([a-zñ ,.'-]{4,60})/i.exec(sinAc(texto));
+    if(mn) nomRot = mn[1].replace(/\s+(dni|edad|fecha|doc|h\.?c|historia|sexo|medico|solicit|obra|os)\b.*$/, '').trim();
+    var quien = esc(p.apellido + ', ' + p.nombre);
+    if(dnis.length && dniP){
+      if(dnis.indexOf(dniP) >= 0) return { n:'ok', msg:'✓ El informe coincide con el paciente: DNI ' + Number(dniP).toLocaleString('es-AR') + (tieneAp ? ' y apellido' : '') + '.' };
+      return { n:'error', msg:'⛔ El DNI del informe (' + Number(dnis[0]).toLocaleString('es-AR') + ') NO coincide con el de ' + quien + ' (' + Number(dniP).toLocaleString('es-AR') + '). Verificá que sea de este paciente.' };
+    }
+    if(nomRot && aps.length && !aps.some(function(a){ return nomRot.indexOf(a) >= 0; }))
+      return { n:'error', msg:'⛔ El informe dice "' + esc(nomRot.replace(/\b\w/g, function(c){ return c.toUpperCase(); })) + '" y el paciente abierto es ' + quien + '. Verificá que sea de este paciente.' };
+    if(tieneAp) return { n:'ok', msg:'✓ Figura el apellido ' + esc(p.apellido) + (tieneNom ? ' y el nombre' : '') + (dniP ? ' (el informe no trae DNI)' : '') + '.' };
+    return { n:'warn', msg:'⚠ El informe no trae el nombre ni el DNI del paciente: verificá que sea de ' + quien + '.' };
+  }
+  window._identidadInforme = identidad;
+
+  // ── Separar en documentos y ordenar por fecha
+  function fechaDe(txt, tipo){
+    try { var r = tipo === 'lab' ? (window._labAnalizarTexto ? window._labAnalizarTexto(txt) : null) : (window._estAnalizarTexto ? window._estAnalizarTexto(txt) : null); return r && r.fecha || null; } catch(e){ return null; }
+  }
+  var HDR = /(fecha|laboratorio|protocolo|extracci|ingreso|recepci|toma de muestra|informe|orden)[^\n]{0,40}\b\d{1,2}[\/\-.]\d{1,2}[\/\-.]\d{2,4}/i;
+  function nItemsLab(t){ try { return ((window._labAnalizarTexto && window._labAnalizarTexto(t)) || { items:[] }).items.length; } catch(e){ return 0; } }
+  function segmentar(texto, tipo){
+    var archivos = String(texto || '').split(SEP).map(function(x){ return x.trim(); }).filter(Boolean), out = [];
+    archivos.forEach(function(a){
+      var id = identidad(a), partes = [a];
+      if(tipo === 'lab'){
+        var lineas = a.split('\n'), cur = [], ps = [];
+        lineas.forEach(function(l){ if(HDR.test(l) && !/nacimiento|nac\.|edad|validaci|impres|emisi/i.test(l) && cur.length && nItemsLab(cur.join('\n')) >= 3){ ps.push(cur.join('\n')); cur = []; } cur.push(l); });
+        if(cur.length) ps.push(cur.join('\n'));
+        // un pedazo sin valores (pie de página, firma, fecha de impresión) va con el anterior
+        for(var q = ps.length - 1; q > 0; q--){ if(nItemsLab(ps[q]) < 2){ ps[q - 1] += '\n' + ps[q]; ps.splice(q, 1); } }
+        // varias páginas del mismo informe (misma fecha o sin fecha) son un solo laboratorio
+        for(var q2 = ps.length - 1; q2 > 0; q2--){ var fa = fechaDe(ps[q2 - 1], 'lab'), fb = fechaDe(ps[q2], 'lab'); if(!fb || fa === fb){ ps[q2 - 1] += '\n' + ps[q2]; ps.splice(q2, 1); } }
+        if(ps.length > 1) partes = ps;
+      } else if(window._pasarATablasSeparar){
+        var sp = window._pasarATablasSeparar(a);
+        if(sp.estudios && sp.estudios.length > 1) partes = sp.estudios.map(function(x){ return x.txt; });
+      }
+      partes.forEach(function(pt){
+        var seg = { txt: pt, fecha: fechaDe(pt, tipo), id: identidad(pt) || id, hecho: false };
+        if(tipo === 'est' && window._estAnalizarTexto){ try { var r = window._estAnalizarTexto(pt); seg.cat = r && r.cat || ''; if(!seg.cat && window._pasarATablasSeparar){ var s2 = window._pasarATablasSeparar(pt); if(s2.estudios && s2.estudios[0]) seg.cat = s2.estudios[0].cat; } } catch(e){} }
+        out.push(seg);
+      });
+    });
+    out.sort(function(a, b){ return (a.fecha || '9999') < (b.fecha || '9999') ? -1 : (a.fecha || '9999') > (b.fecha || '9999') ? 1 : 0; });
+    return out;
+  }
+  window._segmentarDocs = segmentar;
+
+  // ── Pestañas sobre el textarea
+  window._multiDoc = function(ta, tipo, alCambiar, btnOk){
+    if(ta._md) return ta._md;
+    var st = { segs: null, idx: 0 };
+    var bar = document.createElement('div'); bar.className = 'md-tabs'; bar.style.display = 'none';
+    var idb = document.createElement('div'); idb.className = 'md-id';
+    var ancla = ta.previousElementSibling && /Foto o PDF|📷/.test(ta.previousElementSibling.textContent || '') ? ta.previousElementSibling : ta;
+    ta.parentNode.insertBefore(bar, ancla); ta.parentNode.insertBefore(idb, ta);
+    function idActual(){ return st.segs ? st.segs[st.idx].id : identidad(ta.value); }
+    function pintarId(){ var i = idActual(); idb.className = 'md-id' + (i ? ' ' + i.n : ''); idb.innerHTML = i ? i.msg : ''; }
+    function pintarBar(){
+      if(!st.segs){ bar.style.display = 'none'; pintarId(); return; }
+      bar.style.display = '';
+      var hechos = st.segs.filter(function(x){ return x.hecho; }).length;
+      bar.innerHTML = st.segs.map(function(sg, i){
+        var et = (tipo === 'est' && sg.cat ? sg.cat.split(/[ ,]/)[0].charAt(0) + sg.cat.split(/[ ,]/)[0].slice(1).toLowerCase() + ' · ' : '') + (sg.fecha ? fAR(sg.fecha) : 'sin fecha');
+        return '<button type="button" class="md-t' + (i === st.idx ? ' act' : '') + (sg.hecho ? ' hecho' : '') + (sg.id && sg.id.n === 'error' ? ' malid' : '') + '" data-i="' + i + '">' + (sg.hecho ? '✓ ' : (sg.id && sg.id.n === 'error' ? '⛔ ' : '')) + (i + 1) + ' · ' + esc(et) + '</button>';
+      }).join('') + '<span class="md-info">' + st.segs.length + ' ' + (tipo === 'lab' ? 'laboratorios' : 'estudios') + ', ordenados por fecha · ' + hechos + ' cargado' + (hechos === 1 ? '' : 's') + '</span>';
+      pintarId();
+    }
+    function ir(i){ if(!st.segs) return; st.segs[st.idx].txt = ta.value; st.idx = i; ta.value = st.segs[i].txt; if(alCambiar) alCambiar(); pintarBar(); ta._mdIgnorar = true; ta.dispatchEvent(new Event('input', { bubbles:true })); ta._mdIgnorar = false; }
+    bar.addEventListener('click', function(e){ var b = e.target.closest('[data-i]'); if(b) ir(+b.dataset.i); });
+    ta.addEventListener('input', function(){
+      if(ta._mdIgnorar) return;
+      if(st.segs){
+        if(ta.value.indexOf(SEP) >= 0){ var nuevos = segmentar(ta.value, tipo); var resto = st.segs.filter(function(x, i){ return i !== st.idx; }); st.segs = resto.concat(nuevos);
+          st.segs.sort(function(a, b){ return (a.fecha || '9999') < (b.fecha || '9999') ? -1 : 1; }); st.idx = st.segs.indexOf(nuevos[0]); ta.value = nuevos[0].txt; if(alCambiar) alCambiar(); }
+        else { var sg = st.segs[st.idx]; sg.txt = ta.value; sg.fecha = fechaDe(ta.value, tipo) || sg.fecha; sg.id = identidad(ta.value) || sg.id; }
+        pintarBar(); return;
+      }
+      var segs = segmentar(ta.value, tipo);
+      if(segs.length >= 2){ st.segs = segs; st.idx = 0; ta.value = segs[0].txt; if(alCambiar) alCambiar(); }
+      pintarBar();
+    }, true);
+    // Si el informe es de otro paciente, pedir confirmación antes de cargar
+    if(btnOk) btnOk.addEventListener('click', function(ev){
+      var i = idActual();
+      if(i && i.n === 'error' && !confirm(i.msg.replace(/^⛔\s*/, '') + '\n\n¿Cargarlo igual en ' + pacienteActual.apellido + ', ' + pacienteActual.nombre + '?')){ ev.stopImmediatePropagation(); ev.preventDefault(); }
+    }, true);
+    ta._md = {
+      multi: function(){ return !!st.segs; },
+      actual: function(){ return st.segs ? st.segs[st.idx] : null; },
+      marcarHecho: function(){ if(st.segs) st.segs[st.idx].hecho = true; pintarBar(); },
+      irSiguiente: function(){ if(!st.segs) return false; for(var k = 1; k <= st.segs.length; k++){ var j = (st.idx + k) % st.segs.length; if(!st.segs[j].hecho){ ir(j); return true; } }
+        if(typeof showToast === 'function') showToast('✓ Listo: se cargaron los ' + st.segs.length + ' documentos.', 'success', 4500); return false; },
+      estado: function(){ st.segs[st.idx].txt = ta.value; return { segs: JSON.parse(JSON.stringify(st.segs)), idx: st.idx }; },
+      restaurar: function(c){ st.segs = c.segs; st.idx = c.idx; if(c.guardado) st.segs[st.idx].hecho = true;
+        if(c.guardado){ var hay = false; for(var k = 1; k <= st.segs.length; k++){ var j = (st.idx + k) % st.segs.length; if(!st.segs[j].hecho){ st.idx = j; hay = true; break; } }
+          if(!hay){ if(typeof showToast === 'function') showToast('✓ Listo: se cargaron los ' + st.segs.length + ' estudios.', 'success', 4500); } }
+        ta.value = st.segs[st.idx].txt; if(alCambiar) alCambiar(); pintarBar(); }
+    };
+    setTimeout(pintarId, 0);
+    return ta._md;
+  };
+
+  // Estudios: al cerrar la carga de un estudio de la cola, volver a las pestañas (con ✓ si se guardó)
+  var oG = window.guardarCargaEstudio;
+  if(typeof oG === 'function') window.guardarCargaEstudio = function(){ if(window._edCola && window._edCola.esperando) window._edCola.guardado = true; return oG.apply(this, arguments); };
+  function vigilar(){
+    var mod = document.getElementById('modalCargaEstudio'); if(!mod || mod._md) return; mod._md = true;
+    var abierto = false;
+    new MutationObserver(function(){
+      var ahora = mod.classList.contains('open');
+      if(abierto && !ahora && window._edCola && window._edCola.esperando){
+        window._edCola.esperando = false;
+        var c = window._edCola, todos = c.guardado && c.segs.filter(function(x, i){ return i !== c.idx && !x.hecho; }).length === 0;
+        if(todos){ window._edCola = null; if(typeof showToast === 'function') showToast('✓ Listo: se cargaron los ' + c.segs.length + ' estudios.', 'success', 4500); }
+        else setTimeout(function(){ if(typeof estDictadoAbrir === 'function') estDictadoAbrir(null); }, 250);
+      }
+      abierto = ahora;
+    }).observe(mod, { attributes:true, attributeFilter:['class'] });
+  }
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', vigilar); else vigilar();
 })();
 </script>
 </body>
