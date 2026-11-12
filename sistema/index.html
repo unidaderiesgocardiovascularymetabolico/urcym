@@ -2,7 +2,7 @@
 <html lang="es-AR">
 <head>
   <meta charset="UTF-8" />
-  <script>var URCYM_BUILD = '2026-11-12-1500';</script>
+  <script>var URCYM_BUILD = '2026-11-12-1600';</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Evaluaciones cardiometabólicas — Sistema de Historia Clínica</title>
 
@@ -36534,17 +36534,30 @@ function _cargaEstPrec(p){
       var cv = document.createElement('canvas'); cv.width = Math.round(w * esc); cv.height = Math.round(h * esc);
       var cx = cv.getContext('2d', { willReadFrequently:true }); cx.imageSmoothingEnabled = true; cx.imageSmoothingQuality = 'high';
       cx.fillStyle = '#fff'; cx.fillRect(0, 0, cv.width, cv.height); cx.drawImage(src, 0, 0, cv.width, cv.height);
-      var W = cv.width, H = cv.height, id = cx.getImageData(0, 0, W, H), p = id.data, n = W * H, g = new Float32Array(n), hist = new Uint32Array(256), i;
-      for(i = 0; i < n; i++){ var y = 0.299 * p[i*4] + 0.587 * p[i*4+1] + 0.114 * p[i*4+2]; g[i] = y; hist[y | 0]++; }
-      var lo = 0, hi = 255, acc = 0, cut = n * 0.02;
-      for(i = 0; i < 256; i++){ acc += hist[i]; if(acc > cut){ lo = i; break; } }
-      acc = 0; for(i = 255; i >= 0; i--){ acc += hist[i]; if(acc > cut){ hi = i; break; } }
-      var k = hi > lo ? 255 / (hi - lo) : 1;
-      for(i = 0; i < n; i++){ var v = (g[i] - lo) * k; g[i] = v < 0 ? 0 : v > 255 ? 255 : v; }
-      // enfoque (máscara de desenfoque 5x5 en caja)
-      var tmp = new Float32Array(n), bl = new Float32Array(n), x, yy, r = 2, d = 2 * r + 1;
-      for(yy = 0; yy < H; yy++){ var s = 0, o = yy * W; for(x = -r; x <= r; x++) s += g[o + Math.min(W - 1, Math.max(0, x))]; for(x = 0; x < W; x++){ tmp[o + x] = s / d; s += g[o + Math.min(W - 1, x + r + 1)] - g[o + Math.max(0, x - r)]; } }
-      for(x = 0; x < W; x++){ var s2 = 0; for(yy = -r; yy <= r; yy++) s2 += tmp[Math.min(H - 1, Math.max(0, yy)) * W + x]; for(yy = 0; yy < H; yy++){ bl[yy * W + x] = s2 / d; s2 += tmp[Math.min(H - 1, yy + r + 1) * W + x] - tmp[Math.max(0, yy - r) * W + x]; } }
+      var W = cv.width, H = cv.height, id = cx.getImageData(0, 0, W, H), p = id.data, n = W * H, g = new Float32Array(n), i, x, yy;
+      for(i = 0; i < n; i++) g[i] = 0.299 * p[i*4] + 0.587 * p[i*4+1] + 0.114 * p[i*4+2];
+      // caja (promedio) separable de radio r
+      function caja(src, r){ var tmp = new Float32Array(n), out = new Float32Array(n), d = 2 * r + 1, s, o;
+        for(yy = 0; yy < H; yy++){ s = 0; o = yy * W; for(x = -r; x <= r; x++) s += src[o + Math.min(W - 1, Math.max(0, x))]; for(x = 0; x < W; x++){ tmp[o + x] = s / d; s += src[o + Math.min(W - 1, x + r + 1)] - src[o + Math.max(0, x - r)]; } }
+        for(x = 0; x < W; x++){ s = 0; for(yy = -r; yy <= r; yy++) s += tmp[Math.min(H - 1, Math.max(0, yy)) * W + x]; for(yy = 0; yy < H; yy++){ out[yy * W + x] = s / d; s += tmp[Math.min(H - 1, yy + r + 1) * W + x] - tmp[Math.max(0, yy - r) * W + x]; } }
+        return out; }
+      // máximo separable de radio r (borra la letra y deja el "papel")
+      function maximo(src, r){ var tmp = new Float32Array(n), out = new Float32Array(n), k, m, o;
+        for(yy = 0; yy < H; yy++){ o = yy * W; for(x = 0; x < W; x++){ m = 0; for(k = Math.max(0, x - r); k <= Math.min(W - 1, x + r); k++) if(src[o + k] > m) m = src[o + k]; tmp[o + x] = m; } }
+        for(x = 0; x < W; x++){ for(yy = 0; yy < H; yy++){ m = 0; for(k = Math.max(0, yy - r); k <= Math.min(H - 1, yy + r); k++) if(tmp[k * W + x] > m) m = tmp[k * W + x]; out[yy * W + x] = m; } }
+        return out; }
+      // 1) se aplana el fondo: papel gris, sombras y zonas oscuras de la foto quedan blancas (si no, el lector toma todo el papel como negro)
+      var bg = caja(maximo(g, 4), 30);
+      for(i = 0; i < n; i++){ var v0 = g[i] / Math.max(bg[i], 1) * 255; g[i] = v0 > 255 ? 255 : v0; }
+      // 2) contraste: 1 % más oscuro → negro, 90 % más claro → blanco
+      var hist = new Uint32Array(256), lo = 0, hi = 255, acc = 0;
+      for(i = 0; i < n; i++) hist[g[i] | 0]++;
+      for(i = 0; i < 256; i++){ acc += hist[i]; if(acc > n * 0.01){ lo = i; break; } }
+      acc = 0; for(i = 0; i < 256; i++){ acc += hist[i]; if(acc > n * 0.90){ hi = i; break; } }
+      var k2 = hi > lo ? 255 / (hi - lo) : 1;
+      for(i = 0; i < n; i++){ var v = (g[i] - lo) * k2; g[i] = v < 0 ? 0 : v > 255 ? 255 : v; }
+      // 3) enfoque
+      var bl = caja(g, 2);
       for(i = 0; i < n; i++){ var q = g[i] + 1.5 * (g[i] - bl[i]); q = q < 0 ? 0 : q > 255 ? 255 : q; p[i*4] = p[i*4+1] = p[i*4+2] = q; p[i*4+3] = 255; }
       cx.putImageData(id, 0, 0);
       return cv;
@@ -36671,14 +36684,15 @@ function _cargaEstPrec(p){
     }
     return null;
   }
-  function negado(l, idx){ return /(sin|no se (observan?|evidencian?|detectan?|registran?)|ausencia de|niega|no presenta)\s+([\w\s,]{0,25})$/.test(l.slice(Math.max(0, idx - 45), idx)); }
+  function negado(l, idx){ return /(sin|no se (observan?|evidencian?|detectan?|registran?|constatan?)|ausencia de|niega|no presenta|no presento|no refiere|no refirio|no hubo|no tuvo)\s+([\w\s,]{0,25})$/.test(l.slice(Math.max(0, idx - 45), idx)); }
   function siNo(l, re){ var m = re.exec(l); if(!m) return null; return negado(l, m.index) ? 'No' : 'Sí'; }
   function grado(s){ s = String(s || '').toLowerCase(); return /iii|\b3\b/.test(s) ? '3' : /ii|\b2\b/.test(s) ? '2' : /\bi\b|\b1\b|primer/.test(s) ? '1' : ''; }
   function analizarEstudio(texto, cat){
+    texto = String(texto || '').replace(/\b\d{1,2}\s+de\s+[a-záéíóú]+(\s+de\s+\d{4})?\s+\d{1,2}:\d{2}\s*[ap]\.?\s?m\.?/gi, ' ');   // fecha/hora de la galería del celular
     var t = window._normalizarDictado(texto), l = sinAc(t).replace(/\s+/g, ' ');
     cat = cat || detectarCat(t);
     var v = {}, put = function(k, x){ if(x != null && x !== '') v[k] = String(x); };
-    var fecha = ''; var mf = t.match(/\b(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})\b/); if(mf){ var y = mf[3].length === 2 ? '20' + mf[3] : mf[3]; fecha = y + '-' + String(mf[2]).padStart(2, '0') + '-' + String(mf[1]).padStart(2, '0'); if(isNaN(new Date(fecha + 'T12:00:00'))) fecha = ''; }
+    var fecha = ''; var mf = /(?:fecha|realizad\w*|inicio de la prueba)[^\n\d]{0,40}?(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})\b/i.exec(t) || t.match(/\b(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})\b/); if(mf){ var y = mf[3].length === 2 ? '20' + mf[3] : mf[3]; fecha = y + '-' + String(mf[2]).padStart(2, '0') + '-' + String(mf[1]).padStart(2, '0'); if(isNaN(new Date(fecha + 'T12:00:00'))) fecha = ''; }
     l = l.replace(/\b\d{1,2}[\/\-.]\d{1,2}[\/\-.]\d{2,4}\b/g, ' ');   // las fechas no son valores (02/04/2026 ≠ 02/04 mmHg)
     if(cat === 'ECOCARDIO'){
       put('eco_AI', numTras(l, /auricula izquierda|\bai\b/)); put('eco_DDVI', numTras(l, /\bddvi\b|diametro diastolico/));
@@ -36734,19 +36748,19 @@ function _cargaEstPrec(p){
       var lit = /(micro)?litiasis|calculos? (vesicular|biliar)|colelitiasis/.exec(l);
       if(lit){ put('ecoabd_Lit', negado(l, lit.index) ? 'No' : 'Sí'); if(v.ecoabd_Lit === 'Sí') put('ecoabd_LitT', /microlitiasis|barro biliar/.test(l) ? 'Micro' : (/litiasis|calculo/.test(lit[0]) ? 'Macro' : '')); }
       if(/colecistectom/.test(l)) put('ecoabd_Colecis', 'Sí');
-      var otras = []; if(/pancrea\w*[^.]{0,120}(esteatos\w*|lipomatosis|infiltracion grasa)|(esteatosis|lipomatosis)[^.]{0,30}pancrea/.test(l)) otras.push('Pancreática'); if(/(esteatosis|infiltracion grasa|lipomatosis)[^.]{0,30}renal/.test(l)) otras.push('Renal'); if(/(esteatosis|infiltracion grasa)[^.]{0,30}(bazo|esplen)/.test(l)) otras.push('Esplénica');
+      var otras = []; if(/\bpan[a-z]{3,5}s\b[^.]{0,120}(esteatos\w*|lipomatosis|infiltracion grasa)|(esteatosis|lipomatosis)[^.]{0,30}pancrea/.test(l)) otras.push('Pancreática'); if(/(esteatosis|infiltracion grasa|lipomatosis)[^.]{0,30}renal/.test(l)) otras.push('Renal'); if(/(esteatosis|infiltracion grasa)[^.]{0,30}(bazo|esplen)/.test(l)) otras.push('Esplénica');
       if(otras.length) put('ecoabd_EstOtras', otras.join(', '));
     } else if(cat === 'ERGOMETRÍA'){
       var mets = /(\d{1,2}(?:[.,]\d)?)\s*mets?\b/.exec(l); put('ergo_METS', mets ? mets[1].replace(',', '.') : numTras(l, /\bmets?\b/)); put('ergo_FCbas', numTras(l, /(fc|frecuencia cardiaca) (basal|de reposo|inicial)/));
-      put('ergo_FCmax', numTras(l, /(fc|frecuencia cardiaca) maxima( alcanzada)?/)); var pc = /(\d{2,3})\s*%[^.]{0,30}(teoric|maxim|predich)/.exec(l); if(pc) put('ergo_FCpct', pc[1]);
-      var pam = par(l, /(presion|tension|ta|pa) (arterial )?maxima/); if(pam) put('ergo_PAmax', pam[0]);
-      if(/respuesta (presora|tensional|hipertensiva)[^.]{0,20}(hipertensiva|exagerada)|respuesta hipertensiva/.test(l)) put('ergo_RespPA', 'Hipertensiva'); else if(/respuesta (presora|tensional)[^.]{0,20}(hipotensiva|plana|aplanada)/.test(l)) put('ergo_RespPA', 'Hipotensiva / plana'); else if(/respuesta (presora|tensional)[^.]{0,20}(normal|adecuada|fisiologica)/.test(l)) put('ergo_RespPA', 'Normal');
+      put('ergo_FCmax', numTras(l, /(fc|frecuencia cardiaca) maxima( alcanzada)?|(max\.?|maxima) (fc|frec\w*\.? cardiaca)( alcanzada)?/)); var pc = /(\d{2,3})\s*%[^.]{0,30}(teoric|maxim|predich)/.exec(l) || /alcanz\w*\s+(?:el\s+)?(\d{2,3})\s*%/.exec(l) || /(\d{2,3})\s*%\s*de\s*la\s*fc/.exec(l); if(pc) put('ergo_FCpct', pc[1]);
+      var pam = par(l, /(presion|tension|ta|pa) (arterial )?maxima/); if(pam) put('ergo_PAmax', pam[0]); else put('ergo_PAmax', numTras(l, /(max\.?|maxima),? (presion|tension|ta|pa) (\S+ )?sistolica|(presion|tension) (\S+ )?sistolica maxima/, 25));
+      if(/respuesta (presora|tensional|hipertensiva)[^.]{0,20}(hipertensiva|exagerada)|respuesta hipertensiva/.test(l)) put('ergo_RespPA', 'Hipertensiva'); else if(/respuesta (presora|tensional)[^.]{0,20}(hipotensiva|plana|aplanada)/.test(l)) put('ergo_RespPA', 'Hipotensiva / plana'); else if(/respuesta (presora|tensional)[^.]{0,20}(normal|adecuada|fisiologica)|comportamiento (normal|adecuado|fisiologico|n\w{0,2}\s?\w{0,2}al) de la (ta|pa|presion|tension)/.test(l)) put('ergo_RespPA', 'Normal');
       var sint = []; [['angor','Angor'],['angina','Angor'],['dolor precordial','Angor'],['disnea','Disnea'],['mareo','Mareo'],['palpitacion','Palpitaciones'],['claudicacion','Claudicación']].forEach(function(s){ var i = l.indexOf(s[0]); if(i >= 0 && !negado(l, i) && sint.indexOf(s[1]) < 0) sint.push(s[1]); });
-      if(sint.length){ put('ergo_Sint', 'Sí'); put('ergo_SintCual', sint.join(', ')); } else if(/asintomatic|sin sintomas/.test(l)) put('ergo_Sint', 'No');
-      var ecg = []; [['infradesnivel','Infradesnivel ST'],['depresion del st','Infradesnivel ST'],['supradesnivel','Supradesnivel ST'],['elevacion del st','Supradesnivel ST'],['inversion de (la )?onda t','Inversión de onda T'],['bloqueo de rama','Bloqueo de rama']].forEach(function(s){ var mm = new RegExp(s[0]).exec(l); if(mm && !negado(l, mm.index) && ecg.indexOf(s[1]) < 0) ecg.push(s[1]); });
+      if(sint.length){ put('ergo_Sint', 'Sí'); put('ergo_SintCual', sint.join(', ')); } else if(/asintomatic|sin sintomas|no (refiri\w*|refiere|present\w*|tuvo) (angor|angina|dolor precordial|disnea|sintomas)/.test(l)) put('ergo_Sint', 'No');
+      var ecg = []; [['infradesnivel','Infradesnivel ST'],['depresion del st','Infradesnivel ST'],['supradesnivel','Supradesnivel ST'],['elevacion del st','Supradesnivel ST'],['inversion de (la )?onda t','Inversión de onda T'],['bloqueo (completo |incompleto )?de rama|\\bbc?r[id]\\b','Bloqueo de rama']].forEach(function(s){ var mm = new RegExp(s[0]).exec(l); if(mm && !negado(l, mm.index) && ecg.indexOf(s[1]) < 0) ecg.push(s[1]); });
       if(ecg.length){ put('ergo_ECG', 'Sí'); put('ergo_ECGCual', ecg.join(', ')); } else if(/sin (cambios|alteraciones|modificaciones) (electrocardiograficos|del st|isquemicos|en el ecg)|sin cambios del segmento st/.test(l)) put('ergo_ECG', 'No');
       var ar = []; [['extrasistoles? supraventricular|\\besv\\b','ESV aisladas'],['extrasistoles? ventricular(es)? (frecuentes|complejas|en duplas|bigemin)','EV frecuentes / complejas'],['extrasistoles? ventricular|\\bev\\b','EV aisladas'],['taquicardia supraventricular|\\btsv\\b','TSV'],['taquicardia ventricular|\\btv\\b','TV'],['fibrilacion auricular','FA']].forEach(function(s){ var mm = new RegExp(s[0]).exec(l); if(mm && !negado(l, mm.index) && ar.indexOf(s[1]) < 0 && !(s[1] === 'EV aisladas' && ar.indexOf('EV frecuentes / complejas') >= 0)) ar.push(s[1]); });
-      if(ar.length){ put('ergo_Arrit', 'Sí'); put('ergo_ArritCual', ar.join(', ')); } else if(/sin arritmias/.test(l)) put('ergo_Arrit', 'No');
+      if(ar.length){ put('ergo_Arrit', 'Sí'); put('ergo_ArritCual', ar.join(', ')); } else if(/sin arritmias|no (se )?present\w* arritmias|no (se )?(observaron|registraron|constataron) arritmias/.test(l)) put('ergo_Arrit', 'No');
       if(/no concluyente|no valorable|insuficiente|submaxima no diagnostica/.test(l)) put('ergo_Res', 'No concluyente'); else if(/positiva (para isquemia)?|isquemia (inducible|positiva)/.test(l) && !/negativa/.test(l)) put('ergo_Res', 'Positiva para isquemia'); else if(/negativa|sin evidencia de isquemia/.test(l)) put('ergo_Res', 'Negativa para isquemia');
     } else if(cat === 'DENSITOMETRÍA'){
       if(/osteoporosis/.test(l) && !/sin osteoporosis/.test(l)) put('dmo_Res', 'Osteoporosis'); else if(/osteopenia|baja masa osea/.test(l)) put('dmo_Res', 'Osteopenia'); else if(/(densidad|masa) osea normal|dentro de (los )?(limites|parametros) normales/.test(l)) put('dmo_Res', 'Normal');
@@ -39043,7 +39057,7 @@ function copiarEditor(id, btn){
     while((m = re.exec(texto))){ var d = m[1].replace(/\D/g, ''); if(d.length >= 7 && d.length <= 9) dnis.push(d); }
     var tieneAp = aps.length && aps.some(function(a){ return new RegExp('\\b' + a + '\\b').test(t); });
     var tieneNom = noms.length && noms.some(function(a){ return new RegExp('\\b' + a + '\\b').test(t); });
-    var nomRot = null, mn = /(?:paciente|apellido\s+y\s+nombres?|nombre\s+y\s+apellido|nombres?\s+y\s+apellidos?|sr\.?\s*\(?a\)?|sra\.?)\s*[:.]\s*[^a-zñ\n]{0,3}([a-zñ ,.'-]{4,60})/i.exec(sinAc(texto));
+    var nomRot = null, mn = /(?:paciente|apellido\s+y\s+nombres?|nombre\s+y\s+apellido|nombres?\s+y\s+apellidos?|sr\.?\s*\(?a\)?|sra\.?|pacient[eo])\s*[:.|\u2014\u2013-]+[\s|:\u2014\u2013-]*[^a-zñ\n]{0,3}([a-zñ ,.'-]{4,60})/i.exec(sinAc(texto));
     if(mn) nomRot = mn[1].replace(/\s+(dni|edad|fecha|doc|h\.?c|historia|sexo|medico|solicit|obra|os)\b.*$/, '').trim();
     var quien = esc(p.apellido + ', ' + p.nombre);
     if(dnis.length && dniP){
