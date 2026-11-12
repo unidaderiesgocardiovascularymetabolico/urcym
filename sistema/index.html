@@ -2,7 +2,7 @@
 <html lang="es-AR">
 <head>
   <meta charset="UTF-8" />
-  <script>var URCYM_BUILD = '2026-11-12-0900';</script>
+  <script>var URCYM_BUILD = '2026-11-12-1100';</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Evaluaciones cardiometabólicas — Sistema de Historia Clínica</title>
 
@@ -3574,6 +3574,7 @@
             <button onclick="formatCmd('foreColor','#8B0000')" title="Color Bordó" style="color:#8B0000;font-weight:700">A</button>
             <div class="evol-toolbar-sep"></div>
             <button onclick="formatCmd('insertOrderedList')" title="Lista numerada" style="font-size:11px;width:auto;padding:0 6px">1. Lista</button>
+            <button type="button" class="ed-copiar" onclick="copiarEditor('evol_editor', this)" title="Copiar todo el texto de la evolución (para pegarlo en otro sistema)">📋 Copiar</button>
           </div>
 
           <!-- Editor principal -->
@@ -3650,6 +3651,7 @@
               <button onclick="formatIndCmd('foreColor','#8B0000')" title="Color Bordó" style="color:#8B0000;font-weight:700">A</button>
               <div class="evol-toolbar-sep"></div>
               <button onclick="formatIndCmd('insertOrderedList')" title="Lista numerada" style="font-size:11px;width:auto;padding:0 6px">1. Lista</button>
+              <button type="button" class="ed-copiar" onclick="copiarEditor('evol_indicaciones_editor', this)" title="Copiar todas las indicaciones (para pegarlas en otro sistema)">📋 Copiar</button>
             </div>
             <div id="evol_indicaciones_editor" class="evol-editor" contenteditable="true" spellcheck="true"
               placeholder="Escribí las indicaciones para el paciente..."
@@ -3672,8 +3674,7 @@
                 <option value="costabucal">COSTA BUCAL (Santa Teresita)</option>
               </select>
               <button class="btn btn-teal" onclick="generarPDFIndicacionesEvol()" style="width:auto;margin:0;padding:7px 16px;font-size:12px">⬇ PDF</button>
-              <button class="btn" onclick="enviarMailIndicacionesEvol()" style="width:auto;margin:0;padding:7px 16px;font-size:12px;background:var(--gray);border:1.5px solid var(--border);color:var(--text)">✉ Enviar por mail</button>
-              <button class="btn" onclick="enviarMaterialesPaciente()" title="Mandar planillas, dietas o guías al paciente" style="width:auto;margin:0;padding:7px 16px;font-size:12px;background:var(--gray);border:1.5px solid var(--border);color:var(--text)">📚 Materiales</button>
+              <button class="btn" onclick="enviarMailIndicacionesEvol()" title="Indicaciones en PDF, planillas, dietas o guías: elegís todo en la misma ventana" style="width:auto;margin:0;padding:7px 16px;font-size:12px;background:var(--gray);border:1.5px solid var(--border);color:var(--text)">✉ Enviar por mail (indicaciones y material)</button>
             </div>
           </div>
 
@@ -10146,6 +10147,7 @@ function generarTextoClinico(c, meds) {
   }
   if(habParts.length) lines.push('<b>Hábitos:</b> '+habParts.join(' · '));
   if(window._suenoTexto){ const _st = window._suenoTexto(c.sueno_json); if(_st) lines.push('<b>Sueño:</b> '+_st); }
+  if(window._bebTexto){ const _bt = window._bebTexto(c.hab_alimentacion_json); if(_bt) lines.push('<b>Bebidas:</b> '+_bt); }
   if(window._invTexto) window._invTexto(c).forEach(function(l){ lines.push(l); });
   if(c.otras_enfermedades) lines.push('<b>Otras enfermedades:</b> '+c.otras_enfermedades);
   if(c.cardio_notas) lines.push('<b>Notas cardiometabólicas:</b> '+c.cardio_notas);
@@ -13747,13 +13749,12 @@ async function enviarMailIndicacionesEvol(conIndic) {
   const p = pacienteActual; if(!p) return;
   const indEl2 = document.getElementById('evol_indicaciones_editor');
   const txt = indEl2 ? indEl2.innerText.trim() : '';
-  const desdeMaterial = conIndic === false;
-  if(!txt && !desdeMaterial) { alert('Sin indicaciones.'); return; }
+  const desdeMaterial = conIndic === false || !txt;   // sin indicaciones escritas: se manda solo material
   const email = await _mailPacienteAsegurado(p); if(!email) return;
   const eleccion = await _modalEnviarMail({ email: email, que: txt ? 'las indicaciones (PDF)' : null, marcado: true }); if(!eleccion) return;
   if(!eleccion.incluirDoc) {
     _enviarDocPorMail({ tipo:'material', p:p, texto:'', doc:null, filename:'', materiales: eleccion.materiales, extras: eleccion.extras, resumen: eleccion.resumen,
-      btn: document.querySelector('button[onclick="' + (desdeMaterial ? 'enviarMaterialesPaciente()' : 'enviarMailIndicacionesEvol()') + '"]') });
+      btn: document.querySelector('button[onclick="enviarMailIndicacionesEvol()"]') });
     return;
   }
   const btn = document.querySelector('button[onclick="enviarMailIndicacionesEvol()"]');
@@ -26977,9 +26978,9 @@ loadLocal();  // async, carga en background y llama renderGrid al final
         });
       }
     }
-    var _invC = window._invChips ? window._invChips(c) : '';
-    $h('evh_dx',    _invC + (cardioHtml || '<span style="font-size:11px;color:var(--text-soft)">Sin diagnósticos</span>'));
-    $h('hc_evh_dx', _invC + (cardioHtml || '<span style="font-size:11px;color:var(--text-soft)">Sin diagnósticos</span>'));
+    var _invC = window._invChips ? window._invChips(c) : '', _invK = window._invConsChip ? window._invConsChip(c) : '';
+    $h('evh_dx',    _invC + (cardioHtml || '<span style="font-size:11px;color:var(--text-soft)">Sin diagnósticos</span>') + _invK);
+    $h('hc_evh_dx', _invC + (cardioHtml || '<span style="font-size:11px;color:var(--text-soft)">Sin diagnósticos</span>') + _invK);
 
     // ── Diagnósticos ginecológicos ──
     var ginHtml = '';
@@ -38258,11 +38259,16 @@ function _cargaEstPrec(p){
     var h = '';
     if(c.seguimiento_estado === 'fallecido') h += '<span class="evh-tag-inv fall">† Fallecido' + (c.seguimiento_fecha ? ' ' + fAR(c.seguimiento_fecha) : '') + '</span> ';
     else if(c.seguimiento_estado === 'perdido') h += '<span class="evh-tag-inv perd">Perdido en seguimiento</span> ';
-    if(c.inv_consentimiento === 'si') h += '<span class="evh-tag-inv si" title="Consentimiento para investigación otorgado">🔬 Consentimiento ✓</span> ';
-    else if(c.inv_consentimiento === 'revocado') h += '<span class="evh-tag-inv rev">🔬 Consentimiento revocado</span> ';
-    else if(c.inv_consentimiento === 'no') h += '<span class="evh-tag-inv no">🔬 Sin consentimiento</span> ';
-    else h += '<span class="evh-tag-inv no" title="Registralo en Datos clínicos › Investigación">🔬 Consentimiento sin registrar</span> ';
     return h;
+  };
+  // Consentimiento: discreto, al final de los diagnósticos
+  window._invConsChip = function(c){
+    if(!c) return '';
+    var t = c.inv_consentimiento === 'si' ? ['🔬✓', 'Consentimiento para investigación otorgado', '#6366f1']
+          : c.inv_consentimiento === 'revocado' ? ['🔬 revocado', 'Consentimiento revocado', '#be123c']
+          : c.inv_consentimiento === 'no' ? ['🔬✗', 'No otorgó consentimiento para investigación', '#94a3b8']
+          : ['🔬?', 'Consentimiento sin registrar (Datos clínicos › Investigación)', '#cbd5e1'];
+    return ' <span title="' + t[1] + '" style="font-size:10px;color:' + t[2] + ';font-weight:600;margin-left:2px;white-space:nowrap;cursor:help">' + t[0] + '</span>';
   };
 
   // ── Base para SPSS
@@ -38647,6 +38653,205 @@ window._agWaNum = function(tel){
     return oo.apply(this, arguments);
   };
 })();
+</script>
+
+<style>
+/* ── Actividad y alimentación: mismos botones que el resto ── */
+#fhpanel_act label:has(> input[type=radio]),#fhpanel_ali label:has(> input[type=radio]){display:inline-flex!important;flex:0 0 auto!important;align-items:center!important;justify-content:center!important;gap:5px!important;padding:5px 12px!important;border:1.5px solid #dde3ec!important;border-radius:999px!important;background:#fff!important;color:#334155!important;font-size:12px!important;font-weight:600!important;text-transform:none!important;letter-spacing:0!important;cursor:pointer!important;white-space:nowrap!important;width:auto!important;margin:0!important}
+#fhpanel_act label:has(> input[type=radio]) > input[type=radio],#fhpanel_ali label:has(> input[type=radio]) > input[type=radio]{position:absolute;opacity:0;width:0;height:0;pointer-events:none}
+#fhpanel_act label:has(> input[type=radio]:checked),#fhpanel_ali label:has(> input[type=radio]:checked){background:#2a9496!important;border-color:#2a9496!important;color:#fff!important}
+#fhpanel_act label.hab-int-opt:has(input[value=leve]:checked){background:#0369a1!important;border-color:#0369a1!important}
+#fhpanel_act label.hab-int-opt:has(input[value=moderada]:checked){background:#d97706!important;border-color:#d97706!important}
+#fhpanel_act label.hab-int-opt:has(input[value=intensa]:checked){background:#dc2626!important;border-color:#dc2626!important}
+#fhpanel_act label:has(> input[type=radio]:checked) *,#fhpanel_ali label:has(> input[type=radio]:checked) *{color:#fff!important}
+#fhpanel_act label:has(> input[type=radio]) input[type=number],#fhpanel_act label:has(> input[type=radio]) input[type=text]{color:#1e293b!important;background:#fff!important;border-radius:6px!important;padding:2px 6px!important;width:66px!important}
+#fhpanel_act div:has(> label > input[name=fhcli_pausas]){flex-direction:row!important;flex-wrap:wrap!important;gap:6px!important}
+#fhpanel_act div:has(> label.hab-int-opt){gap:6px!important;flex-wrap:wrap}
+#fh_nueva_dias{gap:5px!important;flex-wrap:wrap}
+#fh_nueva_dias button{width:auto!important;min-width:34px!important;height:auto!important;padding:4px 9px!important;border-radius:8px!important;font-size:12px!important}
+#fhpanel_ali label:has(> input[type=radio]) svg,#fhpanel_act label:has(> input[type=radio]) svg{display:none}
+.pasos-q{display:flex;flex-wrap:wrap;gap:4px;margin:2px 0 10px}
+.pasos-q button{border:1.5px solid #dde3ec;background:#fff;border-radius:8px;padding:4px 8px;font-size:12px;font-weight:600;cursor:pointer;font-family:var(--font-main);color:#334155}
+.pasos-q button.sel{background:#2a9496;border-color:#2a9496;color:#fff}
+/* ── Debajo de alcohol: AUDIT-C y bebidas ── */
+.beb-box{margin-top:12px;background:#fffaf2;border-radius:10px;padding:10px 12px}
+.beb-t{font-size:10.5px;font-weight:800;color:#b45309;text-transform:uppercase;letter-spacing:.07em;margin-bottom:8px;display:flex;align-items:center;gap:8px}
+.beb-t .sc{margin-left:auto;font-size:11.5px;text-transform:none;letter-spacing:0;border-radius:999px;padding:2px 9px;background:#f1f5f9;color:#64748b}
+.beb-t .sc.pos{background:#fee2e2;color:#b91c1c}.beb-t .sc.neg{background:#dcfce7;color:#166534}
+.beb-q{font-size:12px;color:#7c4a03;margin:6px 0 4px}
+.beb-op{display:flex;flex-wrap:wrap;gap:4px}
+.beb-op button{border:1.5px solid #f5d9a8;background:#fff;border-radius:999px;padding:3px 9px;font-size:11.5px;font-weight:600;cursor:pointer;font-family:var(--font-main);color:#7c4a03}
+.beb-op button.sel{background:#d97706;border-color:#d97706;color:#fff}
+.beb-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:8px;margin-top:4px}
+.beb-b{position:relative;border:1.5px solid #bae6fd;background:#f0f9ff;border-radius:12px;padding:8px 6px 7px;cursor:pointer;text-align:center;user-select:none}
+.beb-b .ic{font-size:19px;line-height:1}.beb-b .nm{font-size:12px;font-weight:700;color:#0c4a6e;margin-top:2px}.beb-b .un{font-size:10.5px;color:#0369a1}
+.beb-b .ct{position:absolute;top:-8px;right:-6px;background:#0284c7;color:#fff;border-radius:999px;min-width:20px;height:20px;font-size:11px;font-weight:800;display:none;align-items:center;justify-content:center;padding:0 5px}
+.beb-b.con .ct{display:flex}.beb-b.con{background:#e0f2fe;border-color:#0284c7}
+.beb-b .menos{position:absolute;top:-8px;left:-6px;background:#fff;border:1.5px solid #0284c7;color:#0369a1;border-radius:999px;width:20px;height:20px;font-size:13px;font-weight:800;line-height:15px;display:none;padding:0;cursor:pointer}
+.beb-b.con .menos{display:block}
+.beb-b.azu{border-color:#fecaca;background:#fff5f5}.beb-b.azu .nm{color:#7f1d1d}.beb-b.azu .un{color:#b91c1c}.beb-b.azu.con{background:#fee2e2;border-color:#dc2626}.beb-b.azu .ct{background:#dc2626}.beb-b.azu .menos{border-color:#dc2626;color:#b91c1c}
+</style>
+<script>
+/* ════════ Pasos diarios con botones · AUDIT-C · Bebidas e infusiones ════════
+   AUDIT-C y bebidas se guardan dentro de hab_alimentacion_json (no requiere SQL) y se vuelcan a la evolución. */
+(function(){
+  function $(id){ return document.getElementById(id); }
+  // ── Pasos: botones rápidos
+  function pasos(){
+    var inp = $('fh_pasos'); if(!inp || inp._q) return; inp._q = true;
+    var q = document.createElement('div'); q.className = 'pasos-q';
+    q.innerHTML = [3000, 5000, 7500, 10000, 12000].map(function(n){ return '<button type="button" data-p="' + n + '">' + n.toLocaleString('es-AR') + '</button>'; }).join('');
+    inp.parentElement.parentElement.insertBefore(q, inp.parentElement.nextSibling);
+    q.addEventListener('click', function(e){ var b = e.target.closest('[data-p]'); if(!b) return; inp.value = (inp.value === b.dataset.p) ? '' : b.dataset.p; inp.dispatchEvent(new Event('input', { bubbles:true })); pintarPasos(); });
+    inp.addEventListener('input', pintarPasos);
+  }
+  function pintarPasos(){ var inp = $('fh_pasos'); if(!inp) return; document.querySelectorAll('.pasos-q [data-p]').forEach(function(b){ b.classList.toggle('sel', b.dataset.p === String(inp.value)); }); }
+
+  // ── AUDIT-C y bebidas
+  var AQ = [
+    ['¿Con qué frecuencia toma alguna bebida alcohólica?', ['Nunca','1 vez/mes o menos','2-4 veces/mes','2-3 veces/sem','4 o más veces/sem']],
+    ['¿Cuántas consumiciones toma en un día típico?', ['1-2','3-4','5-6','7-9','10 o más']],
+    ['¿Con qué frecuencia toma 6 o más en una misma ocasión?', ['Nunca','Menos de 1 vez/mes','Mensual','Semanal','A diario o casi']]
+  ];
+  var BEB = [['cafe','☕','Café','tazas/día',''],['mate','🧉','Mate','termos/día',''],['azucaradas','🥤','Gaseosas / jugos azucarados','vasos/día','azu'],['energizantes','⚡','Energizantes','latas/sem','azu'],['agua','💧','Agua','vasos/día','']];
+  var B = { audit:[null,null,null], beb:{} };
+  function crearBeb(){
+    var alc = $('hab_alcohol'); if(!alc || $('beb_box')) return;
+    var col = alc.closest('.clinica-section'); if(!col) return;
+    var w = document.createElement('div'); w.id = 'beb_box';
+    w.innerHTML = '<div class="beb-box" id="audit_box"><div class="beb-t">🍷 AUDIT-C <span style="font-weight:600;text-transform:none;letter-spacing:0;color:#a16207">consumo de riesgo</span><span class="sc" id="audit_sc">—</span></div>'
+      + AQ.map(function(q, i){ return '<div class="beb-q">' + (i + 1) + '. ' + q[0] + '</div><div class="beb-op" data-a="' + i + '">' + q[1].map(function(o, k){ return '<button type="button" data-v="' + k + '">' + o + '</button>'; }).join('') + '</div>'; }).join('')
+      + '</div>'
+      + '<div class="beb-box" style="background:#f8fbff"><div class="beb-t" style="color:#0369a1">🥤 Bebidas e infusiones <span style="font-weight:600;text-transform:none;letter-spacing:0;color:#64748b">tocá para sumar · – resta</span></div><div class="beb-grid">'
+      + BEB.map(function(b){ return '<div class="beb-b ' + b[4] + '" data-b="' + b[0] + '" role="button" tabindex="0"><button type="button" class="menos">–</button><span class="ct"></span><div class="ic">' + b[1] + '</div><div class="nm">' + b[2] + '</div><div class="un">' + b[3] + '</div></div>'; }).join('')
+      + '</div></div>';
+    col.appendChild(w);
+    w.addEventListener('click', function(e){
+      var op = e.target.closest('.beb-op [data-v]');
+      if(op){ var i = +op.parentElement.dataset.a, v = +op.dataset.v; B.audit[i] = (B.audit[i] === v) ? null : v; pintarBeb(); return; }
+      var bb = e.target.closest('.beb-b'); if(!bb) return;
+      var k = bb.dataset.b, n = Number(B.beb[k]) || 0;
+      n = e.target.classList.contains('menos') ? Math.max(0, n - 1) : n + 1;
+      if(n) B.beb[k] = n; else delete B.beb[k]; pintarBeb();
+    });
+    pintarBeb();
+  }
+  function auditScore(){ if(B.audit.some(function(v){ return v == null; })) return null; return B.audit[0] + B.audit[1] + B.audit[2]; }
+  function sexoF(){ return typeof calcSexoPaciente === 'function' ? calcSexoPaciente() === 'F' : false; }
+  function pintarBeb(){
+    var box = $('beb_box'); if(!box) return;
+    box.querySelectorAll('.beb-op').forEach(function(g){ var i = +g.dataset.a; g.querySelectorAll('button').forEach(function(b){ b.classList.toggle('sel', B.audit[i] === +b.dataset.v); }); });
+    var sc = auditScore(), el = $('audit_sc');
+    if(el){ if(sc == null){ el.className = 'sc'; el.textContent = B.audit.some(function(v){ return v != null; }) ? 'faltan respuestas' : '—'; } else { var pos = sc >= (sexoF() ? 3 : 4); el.className = 'sc ' + (pos ? 'pos' : 'neg'); el.textContent = sc + '/12 · ' + (pos ? 'consumo de riesgo' : 'sin riesgo'); } }
+    BEB.forEach(function(b){ var el2 = box.querySelector('[data-b="' + b[0] + '"]'); var n = Number(B.beb[b[0]]) || 0; el2.classList.toggle('con', n > 0); el2.querySelector('.ct').textContent = n || ''; });
+    var alc = $('hab_alcohol'), ab = $('audit_box'); if(ab) ab.style.display = (alc && alc.value === 'no') ? 'none' : '';
+  }
+  document.addEventListener('change', function(e){ if(e.target && e.target.id === 'hab_alcohol') pintarBeb(); });
+  document.addEventListener('click', function(e){ if(e.target.closest && e.target.closest('.hb-pill')) setTimeout(pintarBeb, 0); }, true);
+  // Guardar dentro de la alimentación
+  var oLeer = window.leerTabActAli;
+  if(typeof oLeer === 'function') window.leerTabActAli = function(){
+    var r = oLeer.apply(this, arguments);
+    if(!$('beb_box')) return r;
+    var sc = auditScore(), alc = $('hab_alcohol'), noTomo = alc && alc.value === 'no';
+    var tiene = Object.keys(B.beb).length || B.audit.some(function(v){ return v != null; });
+    if(tiene || (r && r.ali)){ r = r || {}; r.ali = r.ali || { cambio:'' };
+      r.ali.bebidas = Object.keys(B.beb).length ? Object.assign({}, B.beb) : null;
+      r.ali.auditc = noTomo ? null : (B.audit.some(function(v){ return v != null; }) ? { r: B.audit.slice(), score: sc, positivo: sc == null ? null : sc >= (sexoF() ? 3 : 4) } : null); }
+    return r;
+  };
+  var oPre = window.precargarTabActAli;
+  if(typeof oPre === 'function') window.precargarTabActAli = function(){
+    var r = oPre.apply(this, arguments);
+    crearBeb(); pasos(); B = { audit:[null,null,null], beb:{} };
+    try { var al = (typeof evolClinicaSnapshot !== 'undefined' && evolClinicaSnapshot && evolClinicaSnapshot.clinica) ? _hj(evolClinicaSnapshot.clinica.hab_alimentacion_json) : null;
+      if(al){ if(al.bebidas && typeof al.bebidas === 'object') B.beb = Object.assign({}, al.bebidas); if(al.auditc && Array.isArray(al.auditc.r)) B.audit = al.auditc.r.slice(0, 3); } } catch(e){}
+    pintarBeb(); pintarPasos(); return r;
+  };
+  // Texto para la evolución
+  window._bebTexto = function(v){
+    var al = (typeof _safeJ === 'function') ? _safeJ(v, null) : v; if(!al || typeof al !== 'object') return '';
+    var p = [];
+    if(al.auditc && al.auditc.score != null) p.push('AUDIT-C ' + al.auditc.score + '/12 (' + (al.auditc.positivo ? 'consumo de riesgo' : 'sin riesgo') + ')');
+    var b = al.bebidas || {};
+    BEB.forEach(function(x){ if(b[x[0]]) p.push(x[2].toLowerCase() + ' ' + b[x[0]] + ' ' + x[3]); });
+    return p.join(' · ');
+  };
+  // Al guardar Datos clínicos: si cambiaron bebidas/AUDIT-C, se vuelca a la evolución (también cuando se vuelcan solo los cambios)
+  var oG = window.guardarClinica;
+  if(typeof oG === 'function') window.guardarClinica = async function(){
+    var snap = function(){ return (typeof evolClinicaSnapshot !== 'undefined' && evolClinicaSnapshot && evolClinicaSnapshot.clinica) ? evolClinicaSnapshot.clinica.hab_alimentacion_json : null; };
+    var dni = (typeof pacienteActual !== 'undefined' && pacienteActual) ? String(pacienteActual.dni) : '';
+    var antes = window._bebTexto(snap());
+    var r = await oG.apply(this, arguments);
+    try {
+      if(!dni || !pacienteActual || String(pacienteActual.dni) !== dni) return r;
+      var ahora = window._bebTexto(snap());
+      if(!ahora || ahora === antes) return r;
+      var ed = document.getElementById('evol_editor'); if(!ed) return r;
+      var linea = '<b>Bebidas:</b> ' + ahora;
+      var bl = ed.querySelector('.bloque-clinico');
+      if(bl){
+        var ex = Array.prototype.find.call(bl.querySelectorAll('div,p,span'), function(x){ return /^\s*Bebidas:/.test(x.textContent) && x.children.length <= 1; });
+        if(ex) ex.innerHTML = linea; else if(bl.textContent.indexOf('Bebidas:') < 0){ var d = document.createElement('div'); d.innerHTML = linea; bl.appendChild(d); }
+      } else {
+        var nb = document.createElement('div'); nb.className = 'bloque-clinico'; nb.dataset.modo = 'cambios';
+        nb.style.cssText = 'font-family:Arial,sans-serif;font-size:10pt;color:#333;border:1px solid #e0e0e0;padding:4px 10px;border-radius:6px;margin-bottom:6px;line-height:1.5';
+        nb.innerHTML = '<div>' + linea + '</div>'; ed.insertBefore(nb, ed.firstChild);
+      }
+      if(typeof marcarDirty === 'function') try { marcarDirty('evol'); } catch(e){}
+    } catch(e){ console.warn('[bebidas volcado]', e); }
+    return r;
+  };
+  function preparar(){ crearBeb(); pasos(); pintarPasos(); }
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function(){ setTimeout(preparar, 60); }); else setTimeout(preparar, 60);
+  document.addEventListener('click', function(){ setTimeout(function(){ if(!$('beb_box') || !($('fh_pasos') || {})._q) preparar(); }, 50); }, true);
+
+  // Base para SPSS y Tabla 1
+  var oX = window._t1SPSSExtra;
+  if(typeof oX === 'function') window._t1SPSSExtra = function(V, num, b01, SN, cols, D){
+    oX.apply(this, arguments);
+    var al = function(f){ var c = D.cli[f.dni]; return c ? ((typeof _safeJ === 'function') ? _safeJ(c.hab_alimentacion_json, null) : null) : null; };
+    cols.push(V('auditc', 'AUDIT-C (0-12)', '', function(f){ var a = al(f); return a && a.auditc && a.auditc.score != null ? a.auditc.score : null; }));
+    cols.push(V('auditc_positivo', 'AUDIT-C positivo (≥4 varones, ≥3 mujeres)', SN, function(f){ var a = al(f); return a && a.auditc && a.auditc.positivo != null ? (a.auditc.positivo ? 1 : 0) : null; }));
+    BEB.forEach(function(x){ cols.push(V('beb_' + x[0], 'Bebidas: ' + x[2] + ' (' + x[3] + ')', '', function(f){ var a = al(f); return a && a.bebidas ? (Number(a.bebidas[x[0]]) || 0) : null; })); });
+  };
+  var oF = window._t1Fila, oV = window._t1Variables;
+  if(typeof oF === 'function' && typeof oV === 'function'){
+    window._t1Fila = function(p, D){ var f = oF.apply(this, arguments), c = D.cli[p.dni]; var a = c ? ((typeof _safeJ === 'function') ? _safeJ(c.hab_alimentacion_json, null) : null) : null; f.x = f.x || {};
+      f.x.auditPos = a && a.auditc && a.auditc.positivo != null ? a.auditc.positivo : null; f.x.azuc = a && a.bebidas ? (Number(a.bebidas.azucaradas) || 0) >= 1 : null; f.x.mate = a && a.bebidas ? Number(a.bebidas.mate) || 0 : null; return f; };
+    window._t1Variables = function(){ var v = oV.apply(this, arguments), i = v.findIndex(function(z){ return z.l === 'Paquetes-año (fumadores y ex)'; });
+      var nuevas = [ { l: 'AUDIT-C positivo (consumo de riesgo)', t: 'bin', g: function(f){ return f.x ? f.x.auditPos : null; } }, { l: 'Bebidas azucaradas ≥1 vaso/día', t: 'bin', g: function(f){ return f.x ? f.x.azuc : null; } } ];
+      if(i >= 0) v.splice.apply(v, [i, 0].concat(nuevas)); return v; };
+  }
+})();
+</script>
+
+<style>
+#modalClinica > .modal{max-width:1040px!important}
+#modalClinica .clinica-tabs{flex-wrap:nowrap!important;gap:6px!important;overflow-x:auto}
+#modalClinica .clinica-tabs .ctab{padding:8px 11px!important;white-space:nowrap;flex-shrink:0}
+.ed-copiar{margin-left:auto!important;width:auto!important;padding:0 9px!important;font-size:11.5px!important;font-weight:600;color:#0f766e!important;border:1px solid #99d6d7!important;border-radius:7px!important;background:#f0fbfb!important}
+.ed-copiar.ok{background:#16a34a!important;color:#fff!important;border-color:#16a34a!important}
+</style>
+<script>
+/* Copiar todo lo escrito en la evolución o en las indicaciones (texto con formato + texto plano) */
+function copiarEditor(id, btn){
+  var ed = document.getElementById(id); if(!ed) return;
+  var txt = (ed.innerText || '').replace(/\n{3,}/g, '\n\n').trim();
+  if(!txt){ alert('No hay nada escrito para copiar.'); return; }
+  var ok = function(){ if(!btn) return; var t = btn.textContent; btn.classList.add('ok'); btn.textContent = '✓ Copiado'; setTimeout(function(){ btn.classList.remove('ok'); btn.textContent = t; }, 1300); };
+  try {
+    if(navigator.clipboard && window.ClipboardItem && window.isSecureContext){
+      var html = '<div>' + ed.innerHTML + '</div>';
+      navigator.clipboard.write([ new ClipboardItem({ 'text/html': new Blob([html], { type:'text/html' }), 'text/plain': new Blob([txt], { type:'text/plain' }) }) ])
+        .then(ok, function(){ navigator.clipboard.writeText(txt).then(ok, function(){ if(typeof _copiarViejo === 'function'){ _copiarViejo(txt); ok(); } }); });
+      return;
+    }
+  } catch(e){}
+  if(navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(txt).then(ok, function(){ if(typeof _copiarViejo === 'function'){ _copiarViejo(txt); ok(); } });
+  else if(typeof _copiarViejo === 'function'){ _copiarViejo(txt); ok(); }
+}
 </script>
 </body>
 </html>
