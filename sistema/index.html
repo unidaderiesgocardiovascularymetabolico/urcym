@@ -2,7 +2,7 @@
 <html lang="es-AR">
 <head>
   <meta charset="UTF-8" />
-  <script>var URCYM_BUILD = '2026-11-12-1100';</script>
+  <script>var URCYM_BUILD = '2026-11-12-1200';</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Evaluaciones cardiometabólicas — Sistema de Historia Clínica</title>
 
@@ -38852,6 +38852,89 @@ function copiarEditor(id, btn){
   if(navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(txt).then(ok, function(){ if(typeof _copiarViejo === 'function'){ _copiarViejo(txt); ok(); } });
   else if(typeof _copiarViejo === 'function'){ _copiarViejo(txt); ok(); }
 }
+</script>
+
+<style>
+/* ── Frecuencias alimentarias: como las bebidas (tocar suma, burbuja con el número, – chiquito) ── */
+.ali-tile{position:relative!important;overflow:visible!important}
+.ali-tile .ali-fila{position:static!important}
+.ali-tile .ali-fila input[type=number]{position:absolute!important;top:-9px!important;right:-7px!important;width:30px!important;min-width:0!important;max-width:30px!important;height:22px!important;border-radius:999px!important;background:#2a9496!important;color:#fff!important;border:none!important;text-align:center!important;font-weight:800!important;font-size:11.5px!important;padding:0 6px!important;pointer-events:none!important;-moz-appearance:textfield;box-shadow:0 1px 3px rgba(0,0,0,.18)}
+.ali-tile .ali-fila input[type=number]::-webkit-inner-spin-button,.ali-tile .ali-fila input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
+.ali-tile:not(.ali-on) .ali-fila input[type=number]{display:none!important}
+.ali-tile .ali-menos{position:absolute!important;top:-9px!important;left:-7px!important;width:22px!important;height:22px!important;border-radius:999px!important;border:1.5px solid #2a9496!important;background:#fff!important;color:#0f766e!important;font-weight:800!important;font-size:14px!important;line-height:17px!important;display:none!important;padding:0!important;z-index:2}
+.ali-tile.ali-on .ali-menos{display:block!important}
+/* ── TA: brazo con el que se está midiendo ── */
+.ta-brazo-sel{display:flex;align-items:center;gap:6px;margin:2px 0 8px;font-size:11px;color:var(--text-soft)}
+.ta-brazo-sel button{border:1.5px solid var(--border);background:#fff;border-radius:999px;padding:3px 11px;font-size:11.5px;font-weight:700;cursor:pointer;color:var(--text-soft);font-family:var(--font-main)}
+.ta-brazo-sel button.sel.d{background:#1e3a5f;border-color:#1e3a5f;color:#fff}
+.ta-brazo-sel button.sel.i{background:#f0a43a;border-color:#f0a43a;color:#fff}
+.ta-brazo-res{font-size:10.5px;color:var(--text-soft);margin:-2px 0 6px;line-height:1.5}
+.ta-brazo-res b{color:var(--text)}
+.ta-row.ta-otro-brazo input{background:#f8fafc!important;color:#64748b!important}
+</style>
+<script>
+/* ════════ TA: se elige el brazo ANTES de cargar ════════
+   "Brazo: Derecho | Izquierdo". Al pasar a Izquierdo, las tomas ya cargadas quedan como derecho
+   (no se reinterpretan) y se sigue en la próxima fila vacía, que ya queda marcada como izquierdo.
+   Se puede corregir el brazo de una toma tocando su D/I (pide confirmación si ya tiene valores). */
+(function(){
+  function $(id){ return document.getElementById(id); }
+  function llena(k){ return ['s','d'].some(function(x){ var e = $('evol_ta' + k + x); return e && e.value; }) || (($('evol_fc' + k) || {}).value); }
+  var actual = 'D', antes = {}, tocado = false;
+  function setBrazos(a){ var h = $('evol_ta_brazos'); if(h) h.value = a.indexOf('I') >= 0 ? a.join(',') : ''; }
+  function pintar(){
+    var w = $('ta_brazo_sel'); if(!w) return;
+    w.querySelectorAll('button').forEach(function(b){ b.classList.toggle('sel', b.dataset.b === actual); });
+    var a = taBrazos(), D = [], I = [];
+    for(var k = 1; k <= 5; k++){ var row = $('evol_ta' + k + 's') && $('evol_ta' + k + 's').closest('tr'); if(row) row.classList.toggle('ta-otro-brazo', llena(k) && a[k - 1] !== actual);
+      var sv = parseFloat(($('evol_ta' + k + 's') || {}).value), dv = parseFloat(($('evol_ta' + k + 'd') || {}).value); if(sv && dv) (a[k - 1] === 'I' ? I : D).push([sv, dv]); }
+    for(var j = 1; j <= 5; j++) antes[j] = !!llena(j);
+    var res = $('ta_brazo_res'); if(!res) return;
+    var pr = function(l){ var s = 0, d = 0; l.forEach(function(x){ s += x[0]; d += x[1]; }); return Math.round(s / l.length) + '/' + Math.round(d / l.length); };
+    res.innerHTML = (D.length && I.length) ? 'Derecho: <b>' + pr(D) + '</b> (' + D.length + ') · Izquierdo: <b>' + pr(I) + '</b> (' + I.length + ')' : '';
+  }
+  function primeraVacia(){ for(var k = 1; k <= 5; k++){ if(!llena(k)) return k; } return null; }
+  function elegir(b){
+    actual = b; tocado = true;
+    var a = taBrazos();
+    for(var k = 1; k <= 5; k++){ if(!llena(k)) a[k - 1] = b; }        // solo las vacías toman el brazo nuevo
+    setBrazos(a);
+    var k = primeraVacia();
+    if(k && k >= 4){ var f = $('ta_fila_' + k); if(f){ f.style.display = ''; var f4 = $('ta_fila_4'); if(f4) f4._abierta = true; } }
+    if(typeof taSincronizarUI === 'function') taSincronizarUI();
+    if(typeof actualizarPromedios === 'function') actualizarPromedios();
+    pintar();
+    if(k){ var i = $('evol_ta' + k + 's'); if(i) i.focus(); }
+  }
+  function crear(){
+    var t = $('evol_ta1s') && $('evol_ta1s').closest('table'); if(!t || $('ta_brazo_sel')) return;
+    var w = document.createElement('div'); w.className = 'ta-brazo-sel'; w.id = 'ta_brazo_sel';
+    w.innerHTML = 'Brazo: <button type="button" class="d" data-b="D">Derecho</button><button type="button" class="i" data-b="I">Izquierdo</button>';
+    t.parentElement.insertBefore(w, t);
+    var r = document.createElement('div'); r.className = 'ta-brazo-res'; r.id = 'ta_brazo_res'; t.parentElement.insertBefore(r, t.nextSibling);
+    w.addEventListener('click', function(e){ var b = e.target.closest('[data-b]'); if(b) elegir(b.dataset.b); });
+    // Corregir el brazo de una toma ya cargada: pedir confirmación (antes cambiaba sin avisar)
+    document.addEventListener('click', function(ev){
+      var bb = ev.target.closest && ev.target.closest('.ta-brazo'); if(!bb) return;
+      var k = +bb.dataset.toma; if(!llena(k)) return;
+      var a = taBrazos(), nuevo = a[k - 1] === 'I' ? 'derecho' : 'izquierdo';
+      if(!confirm('La toma ' + k + ' ya tiene valores. ¿Corregir: esa toma fue en el brazo ' + nuevo + '?\n\n(Para medir el otro brazo usá "Brazo: Derecho / Izquierdo" arriba de la tabla: sigue en la próxima fila vacía.)')){ ev.stopImmediatePropagation(); ev.preventDefault(); }
+    }, true);
+    // Al cargar un paciente: el brazo actual es el de la última toma cargada
+    var h = $('evol_ta_brazos'), ult = '';
+    setInterval(function(){ var v = (h || {}).value + '|' + [1,2,3,4,5].map(function(k){ return llena(k) ? 1 : 0; }).join(''); if(v === ult) return; ult = v;
+      var a = taBrazos(), last = null, alguna = false; for(var k = 1; k <= 5; k++) if(llena(k)){ last = a[k - 1]; alguna = true; }
+      if(!alguna){ tocado = false; if(!h.value) actual = 'D'; }           // tabla vacía (paciente nuevo): vuelve a derecho
+      else if(!tocado && last) actual = last;                             // paciente cargado: sigue con el brazo de la última toma
+      pintar(); }, 700);
+    document.addEventListener('input', function(e){ if(/^evol_(ta\d[sd]|fc\d)$/.test(e.target.id || '')){
+      var m = e.target.id.match(/\d/), k = +m[0], a = taBrazos();
+      if(!antes[k] && a[k - 1] !== actual){ a[k - 1] = actual; setBrazos(a); if(typeof taSincronizarUI === 'function') taSincronizarUI(); }   // solo una fila nueva toma el brazo actual
+      pintar(); } });
+    pintar();
+  }
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', crear); else crear();
+})();
 </script>
 </body>
 </html>
