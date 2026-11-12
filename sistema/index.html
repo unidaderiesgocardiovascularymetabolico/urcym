@@ -2,7 +2,7 @@
 <html lang="es-AR">
 <head>
   <meta charset="UTF-8" />
-  <script>var URCYM_BUILD = '2026-11-12-1300';</script>
+  <script>var URCYM_BUILD = '2026-11-12-1400';</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Evaluaciones cardiometabólicas — Sistema de Historia Clínica</title>
 
@@ -39104,6 +39104,137 @@ function copiarEditor(id, btn){
     }).observe(mod, { attributes:true, attributeFilter:['class'] });
   }
   if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', vigilar); else vigilar();
+})();
+</script>
+
+<style>
+#est_tabs{display:flex;flex-wrap:wrap;gap:5px;margin:4px 0 10px;border-bottom:2px solid #e2e8f0;padding-bottom:6px}
+#est_tabs .et{border:1.5px solid #e2e8f0;background:#fff;border-radius:9px;padding:5px 10px;font-size:12px;font-weight:600;cursor:pointer;font-family:var(--font-main);color:#475569;display:inline-flex;gap:5px;align-items:center;white-space:nowrap}
+#est_tabs .et:hover{border-color:#93c5fd}
+#est_tabs .et.con{color:#1e3a5f;border-color:#bfdbfe;background:#f5f9ff}
+#est_tabs .et.con::after{content:'';width:6px;height:6px;border-radius:50%;background:#16a34a;display:inline-block}
+#est_tabs .et.act{background:#1e3a5f;border-color:#1e3a5f;color:#fff}
+#est_drop{display:none;border:2px dashed #93c5fd;background:#f5f9ff;border-radius:12px;padding:14px 16px;margin-bottom:10px;align-items:center;gap:12px;flex-wrap:wrap;font-size:13px;color:#1e3a5f;cursor:default;transition:background .15s}
+#est_drop.vis{display:flex}
+#est_drop.sobre{background:#dbeafe;border-color:#2563eb}
+#est_drop .ttl{font-weight:700;flex:1;min-width:240px}
+#est_drop .ttl small{display:block;font-weight:500;color:#64748b;font-size:11.5px;margin-top:2px}
+#est_drop button,#est_drop label{border:1.5px solid #bfdbfe;background:#fff;border-radius:9px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer;color:#1e3a5f;font-family:var(--font-main)}
+#est_drop .leyendo{font-size:12px;color:#2563eb;font-weight:600}
+#est_info{font-size:12px;color:#475569;margin:-2px 0 8px}
+</style>
+<script>
+/* ════════ Estudios en pestañas + pegar la foto del informe ahí mismo ════════
+   • Una pestaña por estudio (punto verde = tiene registros). "Todos" muestra la vista de siempre.
+   • En la pestaña de un estudio: la tabla muestra solo ese estudio (y solo las fechas que tienen datos).
+   • Pegás la foto/captura (Ctrl+V), arrastrás el PDF o lo subís: se lee y se abre la carga de ESE estudio
+     para revisar y guardar (con el control de que sea del paciente). Varios archivos → pestañas por fecha. */
+(function(){
+  function $(id){ return document.getElementById(id); }
+  var actual = 'Todos';
+  try { actual = sessionStorage.getItem('urcym_est_tab') || 'Todos'; } catch(e){}
+  function esc(v){ return String(v == null ? '' : v).replace(/[&<>"]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+  function corto(l){ return l.replace(/,? FEMORAL Y OTROS/, '').replace(/ CAROTÍDEO/, ' carotídeo').replace(/^(\w)(.*)$/, function(m, a, b){ return a + b.toLowerCase(); }).replace(/\becg\b/i, 'ECG').replace(/\bmapa\b/i, 'MAPA').replace(/\bvop\b/i, 'VOP').replace(/\btc\b/i, 'TC').replace(/\brnm\b/i, 'RNM').replace(/\bspect\b/i, 'SPECT'); }
+  function tieneDatos(cat){
+    if(typeof estDatos === 'undefined' || !estDatos.columnas) return false;
+    var s = EST_FILAS.findIndex(function(f){ return f.cat && f.label === cat; }); if(s < 0) return false;
+    for(var fi = s + 1; fi < EST_FILAS.length && !EST_FILAS[fi].cat; fi++){ var r = estDatos.filas[fi] || []; if(r.some(function(v){ return v != null && String(v).trim() !== ''; })) return true; }
+    return false;
+  }
+  function crear(){
+    var pm = $('pmain-est'), grid = $('est_resumen_grid'); if(!pm || !grid || $('est_tabs')) return;
+    var t = document.createElement('div'); t.id = 'est_tabs'; grid.parentElement.insertBefore(t, grid);
+    var d = document.createElement('div'); d.id = 'est_drop';
+    d.innerHTML = '<div class="ttl">📋 <span class="et-nom"></span>: pegá acá la foto o captura del informe (Ctrl + V) o arrastrá el PDF<small>Se lee el informe, se verifica que sea de este paciente y se abre la carga para revisar y guardar. Podés pegar varios: quedan en pestañas por fecha.</small></div>'
+      + '<label>📷 Foto o PDF<input type="file" accept="image/*,application/pdf" multiple style="display:none"></label>'
+      + '<button type="button" class="ed-dic">🎙 Dictar / pegar texto</button><button type="button" class="ed-man">✏️ Cargar a mano</button><span class="leyendo"></span>';
+    t.parentElement.insertBefore(d, t.nextSibling);
+    var info = document.createElement('div'); info.id = 'est_info'; d.parentElement.insertBefore(info, d.nextSibling);
+    t.addEventListener('click', function(e){ var b = e.target.closest('[data-c]'); if(!b) return; actual = b.dataset.c; try { sessionStorage.setItem('urcym_est_tab', actual); } catch(_){} pintar(); });
+    d.querySelector('.ed-dic').onclick = function(){ estDictadoAbrir(actual === 'Todos' ? null : actual); };
+    d.querySelector('.ed-man').onclick = function(){ if(actual !== 'Todos') abrirCargaRapidaEstudio(actual); };
+    var inp = d.querySelector('input[type=file]'); inp.onchange = function(){ leerYAbrir(Array.prototype.slice.call(inp.files || [])); inp.value = ''; };
+    d.addEventListener('dragover', function(e){ e.preventDefault(); d.classList.add('sobre'); });
+    d.addEventListener('dragleave', function(){ d.classList.remove('sobre'); });
+    d.addEventListener('drop', function(e){ e.preventDefault(); d.classList.remove('sobre'); leerYAbrir(Array.prototype.slice.call((e.dataTransfer && e.dataTransfer.files) || []).filter(function(f){ return /^image\/|pdf/.test(f.type) || /\.pdf$/i.test(f.name); })); });
+    // la tabla se vuelve a dibujar seguido: re-aplicar el filtro
+    var w = $('evest_wrap'); if(w) new MutationObserver(function(){ clearTimeout(w._etT); w._etT = setTimeout(filtrar, 30); }).observe(w, { childList:true, subtree:false });
+    new MutationObserver(function(){ clearTimeout(grid._etT); grid._etT = setTimeout(pintarTabs, 30); }).observe(grid, { childList:true });
+    pintar();
+  }
+  function pintarTabs(){
+    var t = $('est_tabs'); if(!t) return;
+    var cats = (typeof EST_CATS !== 'undefined' ? EST_CATS : []);
+    if(actual !== 'Todos' && !cats.some(function(c){ return c.label === actual; })) actual = 'Todos';
+    t.innerHTML = '<button type="button" class="et' + (actual === 'Todos' ? ' act' : '') + '" data-c="Todos">📚 Todos</button>'
+      + cats.map(function(c){ return '<button type="button" class="et' + (tieneDatos(c.label) ? ' con' : '') + (actual === c.label ? ' act' : '') + '" data-c="' + esc(c.label) + '" title="' + esc(c.label) + '">' + c.icon + ' ' + esc(corto(c.label)) + '</button>'; }).join('');
+  }
+  function pintar(){
+    pintarTabs();
+    var grid = $('est_resumen_grid'), d = $('est_drop'), info = $('est_info'), todos = actual === 'Todos';
+    if(grid) grid.style.display = todos ? '' : 'none';
+    if(d){ d.classList.toggle('vis', true); d.querySelector('.et-nom').textContent = todos ? 'Cualquier estudio' : corto(actual); d.querySelector('.ed-man').style.display = todos ? 'none' : ''; }
+    if(info){
+      if(todos) info.innerHTML = '';
+      else { var card = grid && Array.prototype.find.call(grid.querySelectorAll('.est-card'), function(c){ return (c.querySelector('.est-card-titulo') || {}).textContent === actual; });
+        info.innerHTML = card ? (card.classList.contains('sin-datos') ? '<span style="color:#94a3b8">Sin registros de este estudio todavía.</span>' : ((card.querySelector('.est-card-fecha') || {}).textContent || '') + ' · ' + ((card.querySelector('.est-card-alterados') || card.querySelector('.est-card-ok') || {}).textContent || '')) : ''; }
+    }
+    filtrar();
+  }
+  // Tabla: solo el estudio elegido y solo las fechas con datos de ese estudio
+  function filtrar(){
+    var w = $('evest_wrap'); if(!w) return; var tb = w.querySelector('tbody'); if(!tb) return;
+    var q = ($('est_tabla_buscador') || {}).value; if(q && q.trim()) return;      // si se está buscando, manda el buscador
+    var todos = actual === 'Todos', cat = null, rows = Array.prototype.slice.call(tb.children);
+    rows.forEach(function(tr){
+      var td = tr.children[0], esFooter = !!tr.querySelector('input[id^="new_row_input_"]');
+      if(!esFooter && td && td.hasAttribute('colspan')) cat = td.textContent.trim();
+      tr.style.display = (todos || (cat === actual && !esFooter)) ? '' : 'none';
+    });
+    var cab = w.querySelector('thead tr'); if(!cab) return;
+    var ths = Array.prototype.slice.call(cab.children);
+    ths.forEach(function(th, i){
+      if(i === 0) return;
+      var nueva = /nueva carga/i.test(th.textContent) || th.querySelector('input[type=date]');
+      var mostrar = todos || nueva;
+      if(!mostrar) mostrar = rows.some(function(tr){ if(tr.style.display === 'none') return false; var c = tr.children[i]; if(!c || c.hasAttribute('colspan')) return false; var el = c.querySelector('input,select,textarea'); var v = el ? el.value : c.textContent; return v && String(v).trim() !== '' && String(v).trim() !== '—'; });
+      th.style.display = mostrar ? '' : 'none';
+      rows.forEach(function(tr){ var c = tr.children[i]; if(c && !tr.children[0].hasAttribute('colspan')) c.style.display = mostrar ? '' : 'none'; });
+    });
+  }
+  // Leer las fotos/PDF y abrir la carga del estudio elegido
+  async function leerYAbrir(files){
+    if(!files || !files.length) return;
+    var d = $('est_drop'), msg = d && d.querySelector('.leyendo'), textos = [];
+    try {
+      for(var i = 0; i < files.length; i++){
+        if(msg) msg.textContent = '⏳ Leyendo ' + (files[i].name || 'captura') + '…';
+        var t = await window._leerArchivoTexto(files[i], function(p, extra){ if(msg) msg.textContent = '⏳ Leyendo ' + (extra ? extra + ' ' : '') + p + '%…'; });
+        textos.push(String(t || '').replace(/(\s*\.){4,}\s*/g, ' …… ').replace(/[ \t]{3,}/g, '   '));
+      }
+      if(msg) msg.textContent = '';
+    } catch(e){ if(msg) msg.textContent = '⚠ ' + e.message; return; }
+    abrirConTexto(textos.join('\n' + (window._MD_SEP || '') + '\n'));
+  }
+  function abrirConTexto(txt){
+    estDictadoAbrir(actual === 'Todos' ? null : actual);
+    setTimeout(function(){ var ta = document.querySelector('.ed-txt'); if(ta){ ta.value = txt; ta.dispatchEvent(new Event('input', { bubbles:true })); } }, 80);
+  }
+  window._estPegarArchivos = leerYAbrir;
+  // Ctrl+V en la pestaña Estudios (sin ninguna ventana abierta): foto, captura, PDF o texto del informe
+  document.addEventListener('paste', function(ev){
+    var pm = $('pmain-est'); if(!pm || pm.style.display === 'none' || !pm.offsetParent) return;
+    if(document.querySelector('.modal-overlay.open, .ui-modal-bg, .ed-txt, .lp-txt')) return;     // hay una carga abierta: la maneja ella
+    var a = document.activeElement; if(a && (a.tagName === 'INPUT' || a.tagName === 'TEXTAREA' || a.isContentEditable)) return;
+    var items = Array.prototype.slice.call((ev.clipboardData && ev.clipboardData.items) || []);
+    var fs = items.filter(function(it){ return it.kind === 'file' && /^image\/|^application\/pdf/.test(it.type); }).map(function(it, k){ var f = it.getAsFile(); return f && !f.name ? new File([f], 'captura-' + (k + 1) + '.png', { type: f.type }) : f; }).filter(Boolean);
+    if(fs.length){ ev.preventDefault(); leerYAbrir(fs); return; }
+    var txt = ev.clipboardData && ev.clipboardData.getData('text/plain');
+    if(txt && txt.trim().length > 20){ ev.preventDefault(); abrirConTexto(txt); }
+  });
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', crear); else crear();
+  var oR = window.renderEstResumen;
+  if(typeof oR === 'function') window.renderEstResumen = function(){ var r = oR.apply(this, arguments); crear(); pintar(); return r; };
 })();
 </script>
 </body>
