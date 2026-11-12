@@ -2,7 +2,7 @@
 <html lang="es-AR">
 <head>
   <meta charset="UTF-8" />
-  <script>var URCYM_BUILD = '2026-11-12-1600';</script>
+  <script>var URCYM_BUILD = '2026-11-12-1700';</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Evaluaciones cardiometabólicas — Sistema de Historia Clínica</title>
 
@@ -36798,16 +36798,18 @@ function _cargaEstPrec(p){
       var lb = barra.querySelector('label'); if(lb) lb.childNodes[0].nodeValue = '📁 Subir foto o PDF'; }
     // pestañas: una por estudio (punto verde = ya tiene registros)
     var ESTC = (typeof EST_CATS !== 'undefined' ? EST_CATS : CATS.map(function(c){ return { label:c[0], icon:'' }; }));
+    (function(){ var o = document.createElement('option'); o.value = '__TEXTO__'; o.textContent = 'Indicaciones / texto'; sel.appendChild(o); })();
     ESTC.forEach(function(c){ if(!Array.prototype.some.call(sel.options, function(o){ return o.value === c.label; })){ var o = document.createElement('option'); o.value = o.textContent = c.label; sel.appendChild(o); } });
     function nomCorto(l){ return String(l).replace(/,? FEMORAL Y OTROS/, '').toLowerCase().replace(/^./, function(x){ return x.toUpperCase(); }).replace(/\b(ecg|mapa|vop|tc|rnm|spect)\b/gi, function(x){ return x.toUpperCase(); }); }
     function conDatos(cat){ var r = rangoCat(cat); if(!r || !estDatos.filas) return false; for(var i = r[0] + 1; i < r[1]; i++){ if((estDatos.filas[i] || []).some(function(v){ return v != null && String(v).trim() !== ''; })) return true; } return false; }
     function pintarTabs(){
-      tabsEl.innerHTML = ESTC.map(function(c){ return '<button type="button" class="ec-t' + (conDatos(c.label) ? ' con' : '') + (sel.value === c.label ? ' act' : '') + '" data-c="' + _esc(c.label) + '">' + (c.icon || '') + ' ' + _esc(nomCorto(c.label)) + '</button>'; }).join('');
+      tabsEl.innerHTML = '<button type="button" class="ec-t ec-tx' + (sel.value === '__TEXTO__' ? ' act' : '') + '" data-c="__TEXTO__" title="Indicaciones, recetas, epicrisis o cualquier papel: se lee y te deja el texto para copiar o pasar a la HC">📄 Indicaciones / texto</button>' + ESTC.map(function(c){ return '<button type="button" class="ec-t' + (conDatos(c.label) ? ' con' : '') + (sel.value === c.label ? ' act' : '') + '" data-c="' + _esc(c.label) + '">' + (c.icon || '') + ' ' + _esc(nomCorto(c.label)) + '</button>'; }).join('');
       var nom = zona.querySelector('.ec-nom');
-      nom.innerHTML = sel.value ? 'Pegá acá la foto del informe de <b>' + _esc(nomCorto(sel.value)) + '</b>' : 'Elegí arriba el estudio <span style="font-weight:500;color:#64748b">(o pegá el informe y lo reconozco)</span>';
-      m.box.querySelector('.ed-man').style.display = sel.value ? '' : 'none';
+      nom.innerHTML = sel.value === '__TEXTO__' ? 'Pegá acá la foto de las <b>indicaciones</b> (o de cualquier papel) y te extraigo el texto' : sel.value ? 'Pegá acá la foto del informe de <b>' + _esc(nomCorto(sel.value)) + '</b>' : 'Elegí arriba el estudio <span style="font-weight:500;color:#64748b">(o pegá el informe y lo reconozco)</span>';
+      m.box.querySelector('.ed-man').style.display = (sel.value && sel.value !== '__TEXTO__') ? '' : 'none';
+      btn.style.display = sel.value === '__TEXTO__' ? 'none' : '';
     }
-    tabsEl.addEventListener('click', function(e){ var b = e.target.closest('[data-c]'); if(!b) return; sel.value = b.dataset.c; elegidaAMano = true; if(ta._md && ta._md.actual()) ta._md.actual().cat = sel.value; pintar(); });
+    tabsEl.addEventListener('click', function(e){ var b = e.target.closest('[data-c]'); if(!b) return; sel.value = b.dataset.c; elegidaAMano = true; ta._sinSegmentar = sel.value === '__TEXTO__'; if(ta._md && ta._md.actual()) ta._md.actual().cat = sel.value; pintar(); });
     m.box.querySelector('.ed-man').onclick = function(){ var c = sel.value; if(!c) return; window._edCola = null; m.cerrar(); abrirCargaRapidaEstudio(c); };
     zona.addEventListener('dragover', function(e){ e.preventDefault(); zona.classList.add('sobre'); });
     zona.addEventListener('dragleave', function(){ zona.classList.remove('sobre'); });
@@ -36821,11 +36823,37 @@ function _cargaEstPrec(p){
     if(window._multiDoc) window._multiDoc(ta, 'est', function(){ elegidaAMano = false; if(ta._md && ta._md.actual() && ta._md.actual().cat){ sel.value = ta._md.actual().cat; } }, btn);
     if(window._edCola && String(window._edCola.dni) === dniModal && ta._md){ ta._md.restaurar(window._edCola); window._edCola = null; setTimeout(pintar, 30); }
     pintar(); setTimeout(function(){ ta.focus(); }, 50);
+    // ── Modo "Indicaciones / texto": solo extraer el texto y llevarlo a donde se necesite
+    function textoLimpio(){ return ta.value.replace(new RegExp('\\s*' + (window._MD_SEP || '\\u0000').replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s*', 'g'), '\n\n').replace(/[ \t]{2,}/g, ' ').replace(/\n\s*\n/g, '\n').trim(); }
+    function aEditor(id){
+      var ed = document.getElementById(id), t = textoLimpio(); if(!ed || !t) return false;
+      var html = t.split('\n').map(function(l){ return '<div>' + (l.trim() ? _esc(l) : '<br>') + '</div>'; }).join('');
+      if(ed.innerText.trim()) ed.insertAdjacentHTML('beforeend', '<div><br></div>');
+      ed.insertAdjacentHTML('beforeend', html);
+      ed.dispatchEvent(new Event('input', { bubbles:true }));
+      return true;
+    }
+    function pintarTexto(){
+      if(!ta.value.trim()){ prev.innerHTML = '<div style="color:#64748b">Pegá la foto o subí el PDF: el texto aparece arriba, lo corregís si hace falta y lo copiás o lo pasás a la historia.</div>'; return; }
+      var hayInd = !!document.getElementById('evol_indicaciones_editor'), hayEv = !!document.getElementById('evol_editor');
+      var b = 'padding:8px 14px;border-radius:9px;border:1.5px solid #bfdbfe;background:#fff;color:#1e3a5f;font-weight:700;cursor:pointer;font-family:var(--font-main);font-size:12.5px';
+      prev.innerHTML = '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><button type="button" class="tx-cop" style="' + b + '">📋 Copiar texto</button>'
+        + (hayInd ? '<button type="button" class="tx-ind" style="' + b + '">💊 Pasar a Indicaciones</button>' : '')
+        + (hayEv ? '<button type="button" class="tx-ev" style="' + b + '">📝 Pasar a la Evolución</button>' : '')
+        + '<span class="tx-ok" style="color:#16a34a;font-weight:600"></span></div>';
+      var ok = prev.querySelector('.tx-ok');
+      prev.querySelector('.tx-cop').onclick = function(){ var t = textoLimpio();
+        (navigator.clipboard && navigator.clipboard.writeText ? navigator.clipboard.writeText(t) : Promise.reject()).then(function(){ ok.textContent = '✓ Copiado'; }, function(){ ta.select(); try { document.execCommand('copy'); ok.textContent = '✓ Copiado'; } catch(e){ ok.textContent = 'Seleccioná el texto y Ctrl + C'; } }); };
+      var bi = prev.querySelector('.tx-ind'); if(bi) bi.onclick = function(){ if(aEditor('evol_indicaciones_editor')){ m.cerrar(); if(typeof showToast === 'function') showToast('✓ Texto agregado a Indicaciones: revisalo antes de guardar.', 'success', 4000); } };
+      var be = prev.querySelector('.tx-ev'); if(be) be.onclick = function(){ if(aEditor('evol_editor')){ m.cerrar(); if(typeof showToast === 'function') showToast('✓ Texto agregado a la Evolución: revisalo antes de guardar.', 'success', 4000); } };
+    }
     function pintar(){
       var auto = detectarCat(ta.value);
       if(!elegidaAMano && auto) sel.value = auto;
       det.textContent = (!elegidaAMano && auto) ? 'Estudio detectado: ' + auto + ' (si no es, tocá la pestaña correcta).' : '';
+      ta._sinSegmentar = sel.value === '__TEXTO__';
       pintarTabs();
+      if(sel.value === '__TEXTO__'){ det.textContent = ''; pintarTexto(); return; }
       if(!sel.value || !ta.value.trim()){ prev.innerHTML = ''; btn.disabled = true; btn.style.opacity = .5; return; }
       res = analizarEstudio(ta.value, sel.value);
       var ks = Object.keys(res.valores);
@@ -39133,6 +39161,7 @@ function copiarEditor(id, btn){
         else { var sg = st.segs[st.idx]; sg.txt = ta.value; sg.fecha = fechaDe(ta.value, tipo) || sg.fecha; sg.id = identidad(ta.value) || sg.id; }
         pintarBar(); return;
       }
+      if(ta._sinSegmentar){ pintarBar(); return; }
       var segs = segmentar(ta.value, tipo);
       if(segs.length >= 2){ st.segs = segs; st.idx = 0; ta.value = segs[0].txt; if(alCambiar) alCambiar(); }
       pintarBar();
