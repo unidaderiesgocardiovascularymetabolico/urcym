@@ -2,7 +2,7 @@
 <html lang="es-AR">
 <head>
   <meta charset="UTF-8" />
-  <script>var URCYM_BUILD = '2026-11-12-1400';</script>
+  <script>var URCYM_BUILD = '2026-11-12-1500';</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Evaluaciones cardiometabólicas — Sistema de Historia Clínica</title>
 
@@ -3896,7 +3896,7 @@
               <input type="text" id="est_tabla_buscador" placeholder="Buscar parámetro o estudio..." oninput="filtrarTablaEstudios(this.value)"/>
               <button type="button" class="est-buscador-clear" id="est_tabla_buscador_clear" onclick="_limpiarBuscadorEstudios()" title="Limpiar" style="display:none">✕</button>
             </div>
-            <button onclick="estDictadoAbrir()" title="Dictá, pegá o subí la foto/PDF del informe" style="padding:5px 14px;border:1.5px solid var(--blue);border-radius:7px;background:var(--blue-light);color:var(--blue);font-size:12px;cursor:pointer;font-family:var(--font-main);font-weight:600">🎙 Dictado / 📷 foto</button>
+            <button onclick="estDictadoAbrir()" title="Elegís el estudio en su pestaña y pegás la foto, subís el PDF o dictás" style="padding:5px 14px;border:1.5px solid var(--blue);border-radius:7px;background:var(--blue);color:#fff;font-size:12px;cursor:pointer;font-family:var(--font-main);font-weight:700">📥 Cargar estudio</button>
             <button onclick="agregarColumnaManual('est')" style="padding:5px 14px;border:1.5px solid var(--teal);border-radius:7px;background:var(--teal-light);color:var(--teal);font-size:12px;cursor:pointer;font-family:var(--font-main);font-weight:600;white-space:nowrap">➕ Agregar columna</button>
           </div>
         </div>
@@ -36519,8 +36519,38 @@ function _cargaEstPrec(p){
     await script(CDN.tess);
     var worker = await Tesseract.createWorker('spa', 1, { workerPath:CDN.tessWorker, corePath:CDN.tessCore, langPath:CDN.tessLang,
       logger:function(m){ if(m.status === 'recognizing text' && progreso) progreso(Math.round(m.progress * 100)); } });
-    try { var r = await worker.recognize(imagen); return r.data.text || ''; } finally { await worker.terminate(); }
+    try { var r = await worker.recognize(await mejorarImagen(imagen)); return limpiarOCR(r.data.text || ''); } finally { await worker.terminate(); }
   }
+  // Renglones basura (logos, sellos, bordes de la foto): sin ninguna palabra de 4+ letras ni número de 2+ cifras
+  function limpiarOCR(t){ return String(t).split('\n').filter(function(l){ return !l.trim() || /[A-Za-zÁÉÍÓÚáéíóúÑñ]{4,}|\d{2,}/.test(l); }).join('\n').replace(/\n{3,}/g, '\n\n').trim(); }
+  // Fotos de celular / capturas chicas: se agranda, se pasa a gris, se estira el contraste y se enfoca antes de leer
+  async function mejorarImagen(img){
+    try {
+      var src = img;
+      if(!(img instanceof HTMLCanvasElement)) src = await createImageBitmap(img);
+      var w = src.width, h = src.height; if(!w || !h) return img;
+      var esc = w < 2200 ? Math.min(3, 2400 / w) : 1;
+      if(w * esc * h * esc > 18e6) esc = Math.sqrt(18e6 / (w * h));
+      var cv = document.createElement('canvas'); cv.width = Math.round(w * esc); cv.height = Math.round(h * esc);
+      var cx = cv.getContext('2d', { willReadFrequently:true }); cx.imageSmoothingEnabled = true; cx.imageSmoothingQuality = 'high';
+      cx.fillStyle = '#fff'; cx.fillRect(0, 0, cv.width, cv.height); cx.drawImage(src, 0, 0, cv.width, cv.height);
+      var W = cv.width, H = cv.height, id = cx.getImageData(0, 0, W, H), p = id.data, n = W * H, g = new Float32Array(n), hist = new Uint32Array(256), i;
+      for(i = 0; i < n; i++){ var y = 0.299 * p[i*4] + 0.587 * p[i*4+1] + 0.114 * p[i*4+2]; g[i] = y; hist[y | 0]++; }
+      var lo = 0, hi = 255, acc = 0, cut = n * 0.02;
+      for(i = 0; i < 256; i++){ acc += hist[i]; if(acc > cut){ lo = i; break; } }
+      acc = 0; for(i = 255; i >= 0; i--){ acc += hist[i]; if(acc > cut){ hi = i; break; } }
+      var k = hi > lo ? 255 / (hi - lo) : 1;
+      for(i = 0; i < n; i++){ var v = (g[i] - lo) * k; g[i] = v < 0 ? 0 : v > 255 ? 255 : v; }
+      // enfoque (máscara de desenfoque 5x5 en caja)
+      var tmp = new Float32Array(n), bl = new Float32Array(n), x, yy, r = 2, d = 2 * r + 1;
+      for(yy = 0; yy < H; yy++){ var s = 0, o = yy * W; for(x = -r; x <= r; x++) s += g[o + Math.min(W - 1, Math.max(0, x))]; for(x = 0; x < W; x++){ tmp[o + x] = s / d; s += g[o + Math.min(W - 1, x + r + 1)] - g[o + Math.max(0, x - r)]; } }
+      for(x = 0; x < W; x++){ var s2 = 0; for(yy = -r; yy <= r; yy++) s2 += tmp[Math.min(H - 1, Math.max(0, yy)) * W + x]; for(yy = 0; yy < H; yy++){ bl[yy * W + x] = s2 / d; s2 += tmp[Math.min(H - 1, yy + r + 1) * W + x] - tmp[Math.max(0, yy - r) * W + x]; } }
+      for(i = 0; i < n; i++){ var q = g[i] + 1.5 * (g[i] - bl[i]); q = q < 0 ? 0 : q > 255 ? 255 : q; p[i*4] = p[i*4+1] = p[i*4+2] = q; p[i*4+3] = 255; }
+      cx.putImageData(id, 0, 0);
+      return cv;
+    } catch(e){ console.warn('[ocr] sin mejora de imagen:', e && e.message); return img; }
+  }
+  window._ocrMejorarImagen = mejorarImagen;
   async function leerPDF(file, progreso){
     await script(CDN.pdf);
     pdfjsLib.GlobalWorkerOptions.workerSrc = CDN.pdfWorker;
@@ -36564,6 +36594,7 @@ function _cargaEstPrec(p){
       try {
         for(var i = 0; i < files.length; i++){
           est.textContent = '⏳ Leyendo ' + files[i].name + '…';
+          try { textarea.dispatchEvent(new CustomEvent('ft-archivo', { detail: files[i] })); } catch(_){}
           var t = await window._leerArchivoTexto(files[i], function(p, extra){ est.textContent = '⏳ Leyendo ' + (extra ? extra + ' ' : '') + p + '%…'; });
           t = String(t || '').replace(/(\s*\.){4,}\s*/g, ' …… ').replace(/[ \t]{3,}/g, '   ');
           textarea.value = (textarea.value.trim() ? textarea.value + '\n' + (window._MD_SEP || '') + '\n' : '') + t;
@@ -36575,6 +36606,7 @@ function _cargaEstPrec(p){
       inp.value = '';
     };
     inp.onchange = function(){ leer(Array.prototype.slice.call(inp.files || [])); };
+    textarea._leerArchivos = leer;
     // Pegar una captura (Ctrl+V) mientras está abierta la carga: se lee igual que una foto
     var alPegar = function(ev){
       if(!document.contains(textarea)){ document.removeEventListener('paste', alPegar, true); return; }
@@ -36620,7 +36652,7 @@ function _cargaEstPrec(p){
     ['DENSITOMETRÍA', /densitometr|\bdmo\b|t\s*-?\s*score/],
     ['ECG', /electrocardiogra|\becg\b|\bekg\b/],
     ['FONDO DE OJO', /fondo\s+de\s+ojo/], ['SCORE CALCIO CORONARIO', /score\s+de\s+calcio|calcio\s+coronario|agatston/],
-    ['VOP', /velocidad\s+de\s+(la\s+)?onda\s+de\s+pulso|\bvop\b/], ['SPECT CARDÍACO', /spect|perfusion\s+miocardica|camara\s+gamma/],
+    ['VOP', /velocidad\s+de\s+(la\s+)?onda\s+de\s+pulso|\bvop\b/], ['SPECT CARDÍACO', /\bspect\b|perfusion\s+miocardica|camara\s+gamma/],
     ['ECOSTRESS CARDÍACO', /eco\s*stress|ecoestres/], ['TC ENCÉFALO', /tomografia.*(cerebr|encef|craneo)|\btac\b/], ['RNM ENCÉFALO', /resonancia.*(cerebr|encef)|\brmn\b|\brnm\b/],
     ['CARDIOGRAFÍA', /cardiografia/]
   ];
@@ -36702,7 +36734,7 @@ function _cargaEstPrec(p){
       var lit = /(micro)?litiasis|calculos? (vesicular|biliar)|colelitiasis/.exec(l);
       if(lit){ put('ecoabd_Lit', negado(l, lit.index) ? 'No' : 'Sí'); if(v.ecoabd_Lit === 'Sí') put('ecoabd_LitT', /microlitiasis|barro biliar/.test(l) ? 'Micro' : (/litiasis|calculo/.test(lit[0]) ? 'Macro' : '')); }
       if(/colecistectom/.test(l)) put('ecoabd_Colecis', 'Sí');
-      var otras = []; if(/pancrea\w*[^.]{0,40}(esteatosis|lipomatosis|infiltracion grasa)|(esteatosis|lipomatosis)[^.]{0,30}pancrea/.test(l)) otras.push('Pancreática'); if(/(esteatosis|infiltracion grasa)[^.]{0,30}renal/.test(l)) otras.push('Renal'); if(/(esteatosis|infiltracion grasa)[^.]{0,30}(bazo|esplen)/.test(l)) otras.push('Esplénica');
+      var otras = []; if(/pancrea\w*[^.]{0,120}(esteatos\w*|lipomatosis|infiltracion grasa)|(esteatosis|lipomatosis)[^.]{0,30}pancrea/.test(l)) otras.push('Pancreática'); if(/(esteatosis|infiltracion grasa|lipomatosis)[^.]{0,30}renal/.test(l)) otras.push('Renal'); if(/(esteatosis|infiltracion grasa)[^.]{0,30}(bazo|esplen)/.test(l)) otras.push('Esplénica');
       if(otras.length) put('ecoabd_EstOtras', otras.join(', '));
     } else if(cat === 'ERGOMETRÍA'){
       var mets = /(\d{1,2}(?:[.,]\d)?)\s*mets?\b/.exec(l); put('ergo_METS', mets ? mets[1].replace(',', '.') : numTras(l, /\bmets?\b/)); put('ergo_FCbas', numTras(l, /(fc|frecuencia cardiaca) (basal|de reposo|inicial)/));
@@ -36732,32 +36764,60 @@ function _cargaEstPrec(p){
   window.estDictadoAbrir = function(catInicial){
     if(typeof estDatos === 'undefined' || !pacienteActual) return;
     var opts = CATS.map(function(c){ return '<option value="' + _esc(c[0]) + '">' + _esc(c[0]) + '</option>'; }).join('');
-    var m = _uiModal('🎙 Estudio por dictado o foto',
-      '<div style="font-size:12.5px;color:#64748b;margin-bottom:6px">Dictá el informe, pegalo, o subí la foto o el PDF. Se reconocen los datos y se abre la carga del estudio ya completa para que la revises y guardes.</div>'
-      + '<textarea class="ed-txt" rows="7" style="width:100%;padding:10px;border:1.5px solid #e5e7eb;border-radius:10px;font:13px/1.5 var(--font-main);resize:vertical" placeholder="Ej.: Ecocardiograma del 5 de octubre: DDVI 48, septum 12, pared posterior 11, fracción de eyección 62%, disfunción diastólica grado 1…"></textarea>'
-      + '<div style="display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap;font-size:12.5px"><b>Estudio</b> <select class="ed-cat" style="padding:6px 8px;border:1.5px solid #e5e7eb;border-radius:8px;font:inherit"><option value="">— elegí —</option>' + opts + '</select><span class="ed-det" style="color:#64748b"></span></div>'
+    var m = _uiModal('📥 Cargar estudio',
+      '<div class="ec-tabs"></div>'
+      + '<div class="ec-zona"><div class="ec-z-ttl">📋 <span class="ec-nom">Elegí arriba el estudio</span></div>'
+      + '<div class="ec-z-sub">Copiá la foto o captura del informe y apretá <b>Ctrl + V</b> acá. También podés arrastrar la foto o el PDF, o subirlo.</div>'
+      + '<div class="ec-z-btns"></div><div class="ec-thumbs"></div></div>'
+      + '<div class="ec-txt-lbl">Texto del informe (leído de la foto, pegado o dictado) · podés corregirlo</div>'
+      + '<textarea class="ed-txt" rows="5" style="width:100%;padding:10px;border:1.5px solid #e5e7eb;border-radius:10px;font:13px/1.5 var(--font-main);resize:vertical" placeholder="Acá aparece lo leído. También podés pegar el texto o dictar (Handy / Win + H)."></textarea>'
+      + '<div style="display:none"><select class="ed-cat"><option value="">— elegí —</option>' + opts + '</select></div><div class="ed-det" style="font-size:12px;color:#64748b;margin-top:4px"></div>'
       + '<div class="ed-prev" style="margin-top:8px;font-size:12.5px;max-height:38vh;overflow:auto"></div>'
-      + '<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:10px"><button type="button" class="ed-no" style="padding:8px 14px;border-radius:9px;border:1.5px solid #e5e7eb;background:#fff;cursor:pointer">Cancelar</button>'
+      + '<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:10px"><button type="button" class="ed-man" style="padding:8px 14px;border-radius:9px;border:1.5px solid #e5e7eb;background:#fff;cursor:pointer;margin-right:auto">✏️ Cargar a mano</button><button type="button" class="ed-no" style="padding:8px 14px;border-radius:9px;border:1.5px solid #e5e7eb;background:#fff;cursor:pointer">Cancelar</button>'
       + '<button type="button" class="ed-si" disabled style="padding:8px 16px;border-radius:9px;border:none;background:var(--teal);color:#fff;font-weight:700;cursor:pointer;opacity:.5">Revisar y guardar →</button></div>');
+    try { m.bg.firstChild.style.maxWidth = '880px'; } catch(_){}
     var dniModal = String(pacienteActual.dni);
     var ta = m.box.querySelector('.ed-txt'), sel = m.box.querySelector('.ed-cat'), prev = m.box.querySelector('.ed-prev'), btn = m.box.querySelector('.ed-si'), det = m.box.querySelector('.ed-det'), elegidaAMano = false, res = null;
     ta.addEventListener('keydown', function(ev){ ev.stopPropagation(); });
-    _botonFotoTexto(ta);
+    var barra = _botonFotoTexto(ta), zona = m.box.querySelector('.ec-zona'), tabsEl = m.box.querySelector('.ec-tabs'), thumbs = m.box.querySelector('.ec-thumbs');
+    if(barra){ barra.style.margin = '0'; var ay = barra.querySelector('.ft-est'); if(ay) ay.textContent = ''; zona.querySelector('.ec-z-btns').appendChild(barra);
+      var lb = barra.querySelector('label'); if(lb) lb.childNodes[0].nodeValue = '📁 Subir foto o PDF'; }
+    // pestañas: una por estudio (punto verde = ya tiene registros)
+    var ESTC = (typeof EST_CATS !== 'undefined' ? EST_CATS : CATS.map(function(c){ return { label:c[0], icon:'' }; }));
+    ESTC.forEach(function(c){ if(!Array.prototype.some.call(sel.options, function(o){ return o.value === c.label; })){ var o = document.createElement('option'); o.value = o.textContent = c.label; sel.appendChild(o); } });
+    function nomCorto(l){ return String(l).replace(/,? FEMORAL Y OTROS/, '').toLowerCase().replace(/^./, function(x){ return x.toUpperCase(); }).replace(/\b(ecg|mapa|vop|tc|rnm|spect)\b/gi, function(x){ return x.toUpperCase(); }); }
+    function conDatos(cat){ var r = rangoCat(cat); if(!r || !estDatos.filas) return false; for(var i = r[0] + 1; i < r[1]; i++){ if((estDatos.filas[i] || []).some(function(v){ return v != null && String(v).trim() !== ''; })) return true; } return false; }
+    function pintarTabs(){
+      tabsEl.innerHTML = ESTC.map(function(c){ return '<button type="button" class="ec-t' + (conDatos(c.label) ? ' con' : '') + (sel.value === c.label ? ' act' : '') + '" data-c="' + _esc(c.label) + '">' + (c.icon || '') + ' ' + _esc(nomCorto(c.label)) + '</button>'; }).join('');
+      var nom = zona.querySelector('.ec-nom');
+      nom.innerHTML = sel.value ? 'Pegá acá la foto del informe de <b>' + _esc(nomCorto(sel.value)) + '</b>' : 'Elegí arriba el estudio <span style="font-weight:500;color:#64748b">(o pegá el informe y lo reconozco)</span>';
+      m.box.querySelector('.ed-man').style.display = sel.value ? '' : 'none';
+    }
+    tabsEl.addEventListener('click', function(e){ var b = e.target.closest('[data-c]'); if(!b) return; sel.value = b.dataset.c; elegidaAMano = true; if(ta._md && ta._md.actual()) ta._md.actual().cat = sel.value; pintar(); });
+    m.box.querySelector('.ed-man').onclick = function(){ var c = sel.value; if(!c) return; window._edCola = null; m.cerrar(); abrirCargaRapidaEstudio(c); };
+    zona.addEventListener('dragover', function(e){ e.preventDefault(); zona.classList.add('sobre'); });
+    zona.addEventListener('dragleave', function(){ zona.classList.remove('sobre'); });
+    zona.addEventListener('drop', function(e){ e.preventDefault(); zona.classList.remove('sobre'); var fs = Array.prototype.slice.call((e.dataTransfer && e.dataTransfer.files) || []).filter(function(f){ return /^image\/|pdf/.test(f.type) || /\.pdf$/i.test(f.name); }); if(fs.length && ta._leerArchivos) ta._leerArchivos(fs); });
+    ta.addEventListener('ft-archivo', function(e){ var f = e.detail; if(!f) return; var d = document.createElement('div'); d.className = 'ec-th';
+      if(/^image\//.test(f.type)){ var im = document.createElement('img'); im.src = URL.createObjectURL(f); im.title = 'Clic para ver grande'; im.onclick = function(){ window.open(im.src, '_blank'); }; d.appendChild(im); }
+      else d.textContent = '📄 ' + (f.name || 'PDF');
+      thumbs.appendChild(d); });
     if(catInicial){ sel.value = catInicial; elegidaAMano = true; }
     sel.onchange = function(){ elegidaAMano = true; pintar(); };
     if(window._multiDoc) window._multiDoc(ta, 'est', function(){ elegidaAMano = false; if(ta._md && ta._md.actual() && ta._md.actual().cat){ sel.value = ta._md.actual().cat; } }, btn);
     if(window._edCola && String(window._edCola.dni) === dniModal && ta._md){ ta._md.restaurar(window._edCola); window._edCola = null; setTimeout(pintar, 30); }
-    setTimeout(function(){ ta.focus(); }, 50);
+    pintar(); setTimeout(function(){ ta.focus(); }, 50);
     function pintar(){
       var auto = detectarCat(ta.value);
       if(!elegidaAMano && auto) sel.value = auto;
-      det.textContent = (!elegidaAMano && auto) ? '(detectado solo — podés cambiarlo)' : '';
+      det.textContent = (!elegidaAMano && auto) ? 'Estudio detectado: ' + auto + ' (si no es, tocá la pestaña correcta).' : '';
+      pintarTabs();
       if(!sel.value || !ta.value.trim()){ prev.innerHTML = ''; btn.disabled = true; btn.style.opacity = .5; return; }
       res = analizarEstudio(ta.value, sel.value);
       var ks = Object.keys(res.valores);
       prev.innerHTML = (res.fecha ? '<div style="margin-bottom:4px"><b>Fecha:</b> ' + _fmtFechaCol(res.fecha) + '</div>' : '<div style="margin-bottom:4px;color:#64748b">Sin fecha en el texto: se usa la de hoy (la cambiás en la carga).</div>')
         + (ks.length ? '<div style="display:flex;flex-wrap:wrap;gap:5px">' + ks.map(function(k){ return '<span style="background:#eef6ff;border:1px solid #cfe3fb;border-radius:999px;padding:3px 9px"><b>' + _esc(lbl(k)) + ':</b> ' + _esc(res.valores[k]) + '</span>'; }).join('') + '</div>' : '<div style="color:#b45309">No reconocí datos estructurados: el texto va a Comentarios.</div>')
-        + '<label style="display:flex;gap:6px;align-items:center;margin-top:8px;cursor:pointer"><input type="checkbox" class="ed-com"' + (ks.length ? '' : ' checked') + '> Guardar también el texto completo en Comentarios</label>';
+        + '<label style="display:flex;gap:6px;align-items:center;margin-top:8px;cursor:pointer"><input type="checkbox" class="ed-com"' + ((!ks.length || res.texto.length > 250) ? ' checked' : '') + '> Guardar también el texto completo en Comentarios</label>';
       btn.disabled = false; btn.style.opacity = 1;
     }
     var tmr; ta.addEventListener('input', function(){ clearTimeout(tmr); tmr = setTimeout(pintar, 250); });
@@ -38983,7 +39043,7 @@ function copiarEditor(id, btn){
     while((m = re.exec(texto))){ var d = m[1].replace(/\D/g, ''); if(d.length >= 7 && d.length <= 9) dnis.push(d); }
     var tieneAp = aps.length && aps.some(function(a){ return new RegExp('\\b' + a + '\\b').test(t); });
     var tieneNom = noms.length && noms.some(function(a){ return new RegExp('\\b' + a + '\\b').test(t); });
-    var nomRot = null, mn = /(?:paciente|apellido\s+y\s+nombres?|nombre\s+y\s+apellido|nombres?\s+y\s+apellidos?|sr\.?\s*\(?a\)?|sra\.?)\s*[:.]\s*([a-zñ ,.'-]{4,60})/i.exec(sinAc(texto));
+    var nomRot = null, mn = /(?:paciente|apellido\s+y\s+nombres?|nombre\s+y\s+apellido|nombres?\s+y\s+apellidos?|sr\.?\s*\(?a\)?|sra\.?)\s*[:.]\s*[^a-zñ\n]{0,3}([a-zñ ,.'-]{4,60})/i.exec(sinAc(texto));
     if(mn) nomRot = mn[1].replace(/\s+(dni|edad|fecha|doc|h\.?c|historia|sexo|medico|solicit|obra|os)\b.*$/, '').trim();
     var quien = esc(p.apellido + ', ' + p.nombre);
     if(dnis.length && dniP){
@@ -39016,10 +39076,8 @@ function copiarEditor(id, btn){
         // varias páginas del mismo informe (misma fecha o sin fecha) son un solo laboratorio
         for(var q2 = ps.length - 1; q2 > 0; q2--){ var fa = fechaDe(ps[q2 - 1], 'lab'), fb = fechaDe(ps[q2], 'lab'); if(!fb || fa === fb){ ps[q2 - 1] += '\n' + ps[q2]; ps.splice(q2, 1); } }
         if(ps.length > 1) partes = ps;
-      } else if(window._pasarATablasSeparar){
-        var sp = window._pasarATablasSeparar(a);
-        if(sp.estudios && sp.estudios.length > 1) partes = sp.estudios.map(function(x){ return x.txt; });
       }
+      // estudios: cada archivo (foto / PDF) es un informe; no se parte por dentro (se perdía el encabezado con nombre y fecha)
       partes.forEach(function(pt){
         var seg = { txt: pt, fecha: fechaDe(pt, tipo), id: identidad(pt) || id, hecho: false };
         if(tipo === 'est' && window._estAnalizarTexto){ try { var r = window._estAnalizarTexto(pt); seg.cat = r && r.cat || ''; if(!seg.cat && window._pasarATablasSeparar){ var s2 = window._pasarATablasSeparar(pt); if(s2.estudios && s2.estudios[0]) seg.cat = s2.estudios[0].cat; } } catch(e){} }
@@ -39108,133 +39166,36 @@ function copiarEditor(id, btn){
 </script>
 
 <style>
-#est_tabs{display:flex;flex-wrap:wrap;gap:5px;margin:4px 0 10px;border-bottom:2px solid #e2e8f0;padding-bottom:6px}
-#est_tabs .et{border:1.5px solid #e2e8f0;background:#fff;border-radius:9px;padding:5px 10px;font-size:12px;font-weight:600;cursor:pointer;font-family:var(--font-main);color:#475569;display:inline-flex;gap:5px;align-items:center;white-space:nowrap}
-#est_tabs .et:hover{border-color:#93c5fd}
-#est_tabs .et.con{color:#1e3a5f;border-color:#bfdbfe;background:#f5f9ff}
-#est_tabs .et.con::after{content:'';width:6px;height:6px;border-radius:50%;background:#16a34a;display:inline-block}
-#est_tabs .et.act{background:#1e3a5f;border-color:#1e3a5f;color:#fff}
-#est_drop{display:none;border:2px dashed #93c5fd;background:#f5f9ff;border-radius:12px;padding:14px 16px;margin-bottom:10px;align-items:center;gap:12px;flex-wrap:wrap;font-size:13px;color:#1e3a5f;cursor:default;transition:background .15s}
-#est_drop.vis{display:flex}
-#est_drop.sobre{background:#dbeafe;border-color:#2563eb}
-#est_drop .ttl{font-weight:700;flex:1;min-width:240px}
-#est_drop .ttl small{display:block;font-weight:500;color:#64748b;font-size:11.5px;margin-top:2px}
-#est_drop button,#est_drop label{border:1.5px solid #bfdbfe;background:#fff;border-radius:9px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer;color:#1e3a5f;font-family:var(--font-main)}
-#est_drop .leyendo{font-size:12px;color:#2563eb;font-weight:600}
-#est_info{font-size:12px;color:#475569;margin:-2px 0 8px}
+.ec-tabs{display:flex;flex-wrap:wrap;gap:5px;margin:0 0 10px;padding-bottom:8px;border-bottom:2px solid #e2e8f0}
+.ec-t{border:1.5px solid #e2e8f0;background:#fff;border-radius:9px;padding:5px 10px;font-size:12px;font-weight:600;cursor:pointer;font-family:var(--font-main);color:#475569;display:inline-flex;gap:5px;align-items:center;white-space:nowrap}
+.ec-t:hover{border-color:#93c5fd}
+.ec-t.con{color:#1e3a5f;border-color:#bfdbfe;background:#f5f9ff}
+.ec-t.con::after{content:'';width:6px;height:6px;border-radius:50%;background:#16a34a;display:inline-block}
+.ec-t.act{background:#1e3a5f;border-color:#1e3a5f;color:#fff}
+.ec-zona{border:2px dashed #93c5fd;background:#f5f9ff;border-radius:12px;padding:16px;margin-bottom:10px;text-align:center;color:#1e3a5f;transition:background .15s}
+.ec-zona.sobre{background:#dbeafe;border-color:#2563eb}
+.ec-z-ttl{font-size:15px;font-weight:700}
+.ec-z-sub{font-size:12px;color:#64748b;margin:4px 0 10px}
+.ec-z-btns>div{justify-content:center}
+.ec-thumbs{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-top:8px}
+.ec-thumbs:empty{display:none}
+.ec-th{border:1px solid #cbd5e1;border-radius:8px;background:#fff;padding:3px;font-size:12px;max-width:150px}
+.ec-th img{display:block;max-height:120px;max-width:140px;border-radius:5px;cursor:zoom-in}
+.ec-txt-lbl{font-size:12px;font-weight:700;color:#475569;margin:2px 0 4px}
 </style>
 <script>
-/* ════════ Estudios en pestañas + pegar la foto del informe ahí mismo ════════
-   • Una pestaña por estudio (punto verde = tiene registros). "Todos" muestra la vista de siempre.
-   • En la pestaña de un estudio: la tabla muestra solo ese estudio (y solo las fechas que tienen datos).
-   • Pegás la foto/captura (Ctrl+V), arrastrás el PDF o lo subís: se lee y se abre la carga de ESE estudio
-     para revisar y guardar (con el control de que sea del paciente). Varios archivos → pestañas por fecha. */
+/* Ctrl+V de una foto/PDF estando en la pestaña Estudios (sin nada abierto): abre "Cargar estudio" con esa imagen */
 (function(){
-  function $(id){ return document.getElementById(id); }
-  var actual = 'Todos';
-  try { actual = sessionStorage.getItem('urcym_est_tab') || 'Todos'; } catch(e){}
-  function esc(v){ return String(v == null ? '' : v).replace(/[&<>"]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
-  function corto(l){ return l.replace(/,? FEMORAL Y OTROS/, '').replace(/ CAROTÍDEO/, ' carotídeo').replace(/^(\w)(.*)$/, function(m, a, b){ return a + b.toLowerCase(); }).replace(/\becg\b/i, 'ECG').replace(/\bmapa\b/i, 'MAPA').replace(/\bvop\b/i, 'VOP').replace(/\btc\b/i, 'TC').replace(/\brnm\b/i, 'RNM').replace(/\bspect\b/i, 'SPECT'); }
-  function tieneDatos(cat){
-    if(typeof estDatos === 'undefined' || !estDatos.columnas) return false;
-    var s = EST_FILAS.findIndex(function(f){ return f.cat && f.label === cat; }); if(s < 0) return false;
-    for(var fi = s + 1; fi < EST_FILAS.length && !EST_FILAS[fi].cat; fi++){ var r = estDatos.filas[fi] || []; if(r.some(function(v){ return v != null && String(v).trim() !== ''; })) return true; }
-    return false;
-  }
-  function crear(){
-    var pm = $('pmain-est'), grid = $('est_resumen_grid'); if(!pm || !grid || $('est_tabs')) return;
-    var t = document.createElement('div'); t.id = 'est_tabs'; grid.parentElement.insertBefore(t, grid);
-    var d = document.createElement('div'); d.id = 'est_drop';
-    d.innerHTML = '<div class="ttl">📋 <span class="et-nom"></span>: pegá acá la foto o captura del informe (Ctrl + V) o arrastrá el PDF<small>Se lee el informe, se verifica que sea de este paciente y se abre la carga para revisar y guardar. Podés pegar varios: quedan en pestañas por fecha.</small></div>'
-      + '<label>📷 Foto o PDF<input type="file" accept="image/*,application/pdf" multiple style="display:none"></label>'
-      + '<button type="button" class="ed-dic">🎙 Dictar / pegar texto</button><button type="button" class="ed-man">✏️ Cargar a mano</button><span class="leyendo"></span>';
-    t.parentElement.insertBefore(d, t.nextSibling);
-    var info = document.createElement('div'); info.id = 'est_info'; d.parentElement.insertBefore(info, d.nextSibling);
-    t.addEventListener('click', function(e){ var b = e.target.closest('[data-c]'); if(!b) return; actual = b.dataset.c; try { sessionStorage.setItem('urcym_est_tab', actual); } catch(_){} pintar(); });
-    d.querySelector('.ed-dic').onclick = function(){ estDictadoAbrir(actual === 'Todos' ? null : actual); };
-    d.querySelector('.ed-man').onclick = function(){ if(actual !== 'Todos') abrirCargaRapidaEstudio(actual); };
-    var inp = d.querySelector('input[type=file]'); inp.onchange = function(){ leerYAbrir(Array.prototype.slice.call(inp.files || [])); inp.value = ''; };
-    d.addEventListener('dragover', function(e){ e.preventDefault(); d.classList.add('sobre'); });
-    d.addEventListener('dragleave', function(){ d.classList.remove('sobre'); });
-    d.addEventListener('drop', function(e){ e.preventDefault(); d.classList.remove('sobre'); leerYAbrir(Array.prototype.slice.call((e.dataTransfer && e.dataTransfer.files) || []).filter(function(f){ return /^image\/|pdf/.test(f.type) || /\.pdf$/i.test(f.name); })); });
-    // la tabla se vuelve a dibujar seguido: re-aplicar el filtro
-    var w = $('evest_wrap'); if(w) new MutationObserver(function(){ clearTimeout(w._etT); w._etT = setTimeout(filtrar, 30); }).observe(w, { childList:true, subtree:false });
-    new MutationObserver(function(){ clearTimeout(grid._etT); grid._etT = setTimeout(pintarTabs, 30); }).observe(grid, { childList:true });
-    pintar();
-  }
-  function pintarTabs(){
-    var t = $('est_tabs'); if(!t) return;
-    var cats = (typeof EST_CATS !== 'undefined' ? EST_CATS : []);
-    if(actual !== 'Todos' && !cats.some(function(c){ return c.label === actual; })) actual = 'Todos';
-    t.innerHTML = '<button type="button" class="et' + (actual === 'Todos' ? ' act' : '') + '" data-c="Todos">📚 Todos</button>'
-      + cats.map(function(c){ return '<button type="button" class="et' + (tieneDatos(c.label) ? ' con' : '') + (actual === c.label ? ' act' : '') + '" data-c="' + esc(c.label) + '" title="' + esc(c.label) + '">' + c.icon + ' ' + esc(corto(c.label)) + '</button>'; }).join('');
-  }
-  function pintar(){
-    pintarTabs();
-    var grid = $('est_resumen_grid'), d = $('est_drop'), info = $('est_info'), todos = actual === 'Todos';
-    if(grid) grid.style.display = todos ? '' : 'none';
-    if(d){ d.classList.toggle('vis', true); d.querySelector('.et-nom').textContent = todos ? 'Cualquier estudio' : corto(actual); d.querySelector('.ed-man').style.display = todos ? 'none' : ''; }
-    if(info){
-      if(todos) info.innerHTML = '';
-      else { var card = grid && Array.prototype.find.call(grid.querySelectorAll('.est-card'), function(c){ return (c.querySelector('.est-card-titulo') || {}).textContent === actual; });
-        info.innerHTML = card ? (card.classList.contains('sin-datos') ? '<span style="color:#94a3b8">Sin registros de este estudio todavía.</span>' : ((card.querySelector('.est-card-fecha') || {}).textContent || '') + ' · ' + ((card.querySelector('.est-card-alterados') || card.querySelector('.est-card-ok') || {}).textContent || '')) : ''; }
-    }
-    filtrar();
-  }
-  // Tabla: solo el estudio elegido y solo las fechas con datos de ese estudio
-  function filtrar(){
-    var w = $('evest_wrap'); if(!w) return; var tb = w.querySelector('tbody'); if(!tb) return;
-    var q = ($('est_tabla_buscador') || {}).value; if(q && q.trim()) return;      // si se está buscando, manda el buscador
-    var todos = actual === 'Todos', cat = null, rows = Array.prototype.slice.call(tb.children);
-    rows.forEach(function(tr){
-      var td = tr.children[0], esFooter = !!tr.querySelector('input[id^="new_row_input_"]');
-      if(!esFooter && td && td.hasAttribute('colspan')) cat = td.textContent.trim();
-      tr.style.display = (todos || (cat === actual && !esFooter)) ? '' : 'none';
-    });
-    var cab = w.querySelector('thead tr'); if(!cab) return;
-    var ths = Array.prototype.slice.call(cab.children);
-    ths.forEach(function(th, i){
-      if(i === 0) return;
-      var nueva = /nueva carga/i.test(th.textContent) || th.querySelector('input[type=date]');
-      var mostrar = todos || nueva;
-      if(!mostrar) mostrar = rows.some(function(tr){ if(tr.style.display === 'none') return false; var c = tr.children[i]; if(!c || c.hasAttribute('colspan')) return false; var el = c.querySelector('input,select,textarea'); var v = el ? el.value : c.textContent; return v && String(v).trim() !== '' && String(v).trim() !== '—'; });
-      th.style.display = mostrar ? '' : 'none';
-      rows.forEach(function(tr){ var c = tr.children[i]; if(c && !tr.children[0].hasAttribute('colspan')) c.style.display = mostrar ? '' : 'none'; });
-    });
-  }
-  // Leer las fotos/PDF y abrir la carga del estudio elegido
-  async function leerYAbrir(files){
-    if(!files || !files.length) return;
-    var d = $('est_drop'), msg = d && d.querySelector('.leyendo'), textos = [];
-    try {
-      for(var i = 0; i < files.length; i++){
-        if(msg) msg.textContent = '⏳ Leyendo ' + (files[i].name || 'captura') + '…';
-        var t = await window._leerArchivoTexto(files[i], function(p, extra){ if(msg) msg.textContent = '⏳ Leyendo ' + (extra ? extra + ' ' : '') + p + '%…'; });
-        textos.push(String(t || '').replace(/(\s*\.){4,}\s*/g, ' …… ').replace(/[ \t]{3,}/g, '   '));
-      }
-      if(msg) msg.textContent = '';
-    } catch(e){ if(msg) msg.textContent = '⚠ ' + e.message; return; }
-    abrirConTexto(textos.join('\n' + (window._MD_SEP || '') + '\n'));
-  }
-  function abrirConTexto(txt){
-    estDictadoAbrir(actual === 'Todos' ? null : actual);
-    setTimeout(function(){ var ta = document.querySelector('.ed-txt'); if(ta){ ta.value = txt; ta.dispatchEvent(new Event('input', { bubbles:true })); } }, 80);
-  }
-  window._estPegarArchivos = leerYAbrir;
-  // Ctrl+V en la pestaña Estudios (sin ninguna ventana abierta): foto, captura, PDF o texto del informe
   document.addEventListener('paste', function(ev){
-    var pm = $('pmain-est'); if(!pm || pm.style.display === 'none' || !pm.offsetParent) return;
-    if(document.querySelector('.modal-overlay.open, .ui-modal-bg, .ed-txt, .lp-txt')) return;     // hay una carga abierta: la maneja ella
+    var pm = document.getElementById('pmain-est'); if(!pm || !pm.offsetParent) return;
+    if(document.querySelector('.modal-overlay.open, .ui-modal-bg, .ed-txt, .lp-txt')) return;
     var a = document.activeElement; if(a && (a.tagName === 'INPUT' || a.tagName === 'TEXTAREA' || a.isContentEditable)) return;
     var items = Array.prototype.slice.call((ev.clipboardData && ev.clipboardData.items) || []);
     var fs = items.filter(function(it){ return it.kind === 'file' && /^image\/|^application\/pdf/.test(it.type); }).map(function(it, k){ var f = it.getAsFile(); return f && !f.name ? new File([f], 'captura-' + (k + 1) + '.png', { type: f.type }) : f; }).filter(Boolean);
-    if(fs.length){ ev.preventDefault(); leerYAbrir(fs); return; }
-    var txt = ev.clipboardData && ev.clipboardData.getData('text/plain');
-    if(txt && txt.trim().length > 20){ ev.preventDefault(); abrirConTexto(txt); }
+    if(!fs.length || typeof estDictadoAbrir !== 'function') return;
+    ev.preventDefault(); estDictadoAbrir(null);
+    setTimeout(function(){ var ta = document.querySelector('.ed-txt'); if(ta && ta._leerArchivos) ta._leerArchivos(fs); }, 80);
   });
-  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', crear); else crear();
-  var oR = window.renderEstResumen;
-  if(typeof oR === 'function') window.renderEstResumen = function(){ var r = oR.apply(this, arguments); crear(); pintar(); return r; };
 })();
 </script>
 </body>
