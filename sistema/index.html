@@ -2,7 +2,7 @@
 <html lang="es-AR">
 <head>
   <meta charset="UTF-8" />
-  <script>var URCYM_BUILD = '2026-11-14-0100';</script>
+  <script>var URCYM_BUILD = '2026-11-14-0130';</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Evaluaciones cardiometabólicas — Sistema de Historia Clínica</title>
 
@@ -36848,6 +36848,26 @@ function _cargaEstPrec(p){
   ];
   // El estudio con más coincidencias gana (antes ganaba el primero de la lista: un "ett" suelto en una eco abdominal la hacía Ecocardio)
   window._estCats = CATS;
+  // Varios estudios en un mismo texto (ej. una foto de una planilla con Eco, ECG y Doppler): cuáles y dónde aparece cada uno
+  window._estCatsEn = function(t){
+    var l = sinAc(t), out = [];
+    CATS.forEach(function(c){ var m = new RegExp(c[1].source).exec(l); if(m) out.push({ cat: c[0], pos: m.index }); });
+    var tiene = function(c){ return out.some(function(x){ return x.cat === c; }); };
+    out = out.filter(function(x){
+      if(/^DOPPLER/.test(x.cat)) return /vaso|carot|cuello|arteri|venos|miembro|femor|vascul|aort|renal|troncos/.test(l);
+      if(x.cat === 'ECG') return !tiene('ERGOMETRÍA') && !tiene('HOLTER');
+      if(x.cat === 'ECOCARDIO') return !tiene('ECOSTRESS CARDÍACO');
+      if(x.cat === 'ECO ABDOMINAL') return /ecograf|eco\s*abd/.test(l);
+      if(x.cat === 'ELASTOGRAFÍA HEPÁTICA') return /elastograf|fibroscan/.test(l);
+      if(x.cat === 'FONDO DE OJO') return /fondo\s+de\s+ojo|fundoscop/.test(l);
+      return true;
+    });
+    // fecha más cercana a cada estudio
+    var fechas = [], re = /(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})\b|fecha\s*:?\s*(\d{1,2})[\/\-.](\d{4})\b/g, m;
+    while((m = re.exec(l))){ if(m[1]) fechas.push({ pos: m.index, txt: m[1] + '/' + m[2] + '/' + m[3] }); else fechas.push({ pos: m.index, txt: m[4] + '/' + m[5] }); }
+    out.forEach(function(x){ var best = null, bd = 1e9; fechas.forEach(function(f){ var d = Math.abs(f.pos - x.pos) + (f.pos < x.pos ? 0 : 5); if(d < bd){ bd = d; best = f; } }); x.fecha = best ? best.txt : ''; });
+    return out.sort(function(a, b){ return a.pos - b.pos; });
+  };
   function detectarCat(t){ var l = sinAc(t), mejor = '', max = 0; for(var i = 0; i < CATS.length; i++){ var n = (l.match(new RegExp(CATS[i][1].source, 'g')) || []).length; if(n > max){ max = n; mejor = CATS[i][0]; } } return mejor; }
   var NUM = '(-?\\d+(?:[.,]\\d+)?)';
   function numTras(l, re, ventana){
@@ -36873,8 +36893,11 @@ function _cargaEstPrec(p){
     var t = window._normalizarDictado(texto), l = sinAc(t).replace(/\s+/g, ' ');
     cat = cat || detectarCat(t);
     var v = {}, put = function(k, x){ if(x != null && x !== '') v[k] = String(x); };
-    var fecha = ''; var mf = /(?:fecha|realizad\w*|inicio de la prueba)[^\n\d]{0,40}?(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})\b/i.exec(t) || t.match(/\b(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})\b/);
-    if(!mf){ var mmy = /(?:fecha|realizad\w*)\s*:?\s*(\d{1,2})[\/\-.](\d{4})\b/i.exec(t); if(mmy && +mmy[1] >= 1 && +mmy[1] <= 12) fecha = mmy[2] + '-' + String(+mmy[1]).padStart(2, '0'); }   /* "Fecha: 10/2025" → solo mes y año */ if(mf){ var y = mf[3].length === 2 ? '20' + mf[3] : mf[3]; fecha = y + '-' + String(mf[2]).padStart(2, '0') + '-' + String(mf[1]).padStart(2, '0'); if(isNaN(new Date(fecha + 'T12:00:00'))) fecha = ''; }
+    var fecha = ''; var fPri = /^\s*fecha del estudio:\s*(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})\b/i.exec(t);
+    if(fPri){ if(fPri[3]){ var yP = fPri[3].length === 2 ? '20' + fPri[3] : fPri[3]; fecha = yP + '-' + String(fPri[2]).padStart(2, '0') + '-' + String(fPri[1]).padStart(2, '0'); } }
+    else { var fPm = /^\s*fecha del estudio:\s*(\d{1,2})[\/\-.](\d{4})/i.exec(t); if(fPm) fecha = fPm[2] + '-' + String(+fPm[1]).padStart(2, '0'); }
+    var mf = fecha ? null : /(?:fecha|realizad\w*|inicio de la prueba)[^\n\d]{0,40}?(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})\b/i.exec(t) || t.match(/\b(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})\b/);
+    if(!mf && !fecha){ var mmy = /(?:fecha|realizad\w*)\s*:?\s*(\d{1,2})[\/\-.](\d{4})\b/i.exec(t); if(mmy && +mmy[1] >= 1 && +mmy[1] <= 12) fecha = mmy[2] + '-' + String(+mmy[1]).padStart(2, '0'); }   /* "Fecha: 10/2025" → solo mes y año */ if(mf){ var y = mf[3].length === 2 ? '20' + mf[3] : mf[3]; fecha = y + '-' + String(mf[2]).padStart(2, '0') + '-' + String(mf[1]).padStart(2, '0'); if(isNaN(new Date(fecha + 'T12:00:00'))) fecha = ''; }
     l = l.replace(/\b\d{1,2}[\/\-.]\d{1,2}[\/\-.]\d{2,4}\b/g, ' ');   // las fechas no son valores (02/04/2026 ≠ 02/04 mmHg)
     if(cat === 'ECOCARDIO'){
       var mm = function(x, lim){ if(x == null) return null; var n = parseFloat(x); return (n > 0 && n < lim) ? String(Math.round(n * 100) / 10) : x; };   // 3,8 cm → 38 mm
@@ -37040,7 +37063,7 @@ function _cargaEstPrec(p){
       + '<div class="ec-z-sub">Copiá la foto o captura del informe y apretá <b>Ctrl + V</b> acá. También podés arrastrar la foto o el PDF, o subirlo.</div>'
       + '<div class="ec-z-btns"></div><div class="ec-thumbs"></div></div>'
       + '<div class="ec-lado"><div class="ec-foto"></div><div class="ec-der">'
-      + '<div class="ec-txt-lbl">Texto del informe (leído de la foto, pegado o dictado) · podés corregirlo</div>'
+      + '<div class="ec-txt-lbl">Texto del informe (leído de la foto, pegado o dictado) · podés corregirlo <button type="button" class="ec-otro" title="Si en la misma foto o texto hay otro estudio (ej. un ECG debajo del eco), se agrega una solapa para cargarlo también">➕ Tiene otro estudio</button></div>'
       + '<textarea class="ed-txt" rows="5" style="width:100%;padding:10px;border:1.5px solid #e5e7eb;border-radius:10px;font:13px/1.5 var(--font-main);resize:vertical" placeholder="Acá aparece lo leído. También podés pegar el texto o dictar (Handy / Win + H)."></textarea>'
       + '<div style="display:none"><select class="ed-cat"><option value="">— elegí —</option>' + opts + '</select></div><div class="ed-det" style="font-size:12px;color:#64748b;margin-top:4px"></div>'
       + '<div class="ed-prev" style="margin-top:8px;font-size:12.5px;max-height:38vh;overflow:auto"></div>'
@@ -37102,11 +37125,12 @@ function _cargaEstPrec(p){
     sel.onchange = function(){ elegidaAMano = true; pintar(); };
     // ── Foto al costado: la del estudio de la solapa abierta, en grande, mientras se corrige
     var lado = m.box.querySelector('.ec-lado'), fotoEl = m.box.querySelector('.ec-foto'), fotoElegida = null, zoom = 1, giro = {};
+    sel.addEventListener('change', function(){ var sg = ta._md && ta._md.actual ? ta._md.actual() : null; if(sg && sel.value && sel.value !== '__TEXTO__') sg.cat = sel.value; });
     if(window._multiDoc) window._multiDoc(ta, 'est', function(){ elegidaAMano = false; if(ta._md && ta._md.actual() && ta._md.actual().cat){ sel.value = ta._md.actual().cat; } fotoElegida = null; }, btn);
     function asociarFotos(){
       var segs = ta._md && ta._md.todos ? ta._md.todos() : null; if(!segs) return;
       (ta._fuentes || []).forEach(function(f){ if(!f.url) return; var k = String(f.texto || '').trim().slice(0, 120); if(k.length < 8) return;
-        segs.forEach(function(sg){ if(String(sg.txt || '').indexOf(k) >= 0){ sg.fotos = sg.fotos || []; if(!sg.fotos.some(function(x){ return x.url === f.url; })) sg.fotos.push({ url: f.url, texto: f.texto, words: f.words || [], w: f.w || 0, h: f.h || 0 }); } }); });
+        segs.forEach(function(sg){ var st = String(sg.txt || '').trim(); if(st.indexOf(k) >= 0 || (st.length >= 12 && String(f.texto || '').indexOf(st.split('\n').slice(0, 2).join('\n').slice(0, 80)) >= 0)){ sg.fotos = sg.fotos || []; if(!sg.fotos.some(function(x){ return x.url === f.url; })) sg.fotos.push({ url: f.url, texto: f.texto, words: f.words || [], w: f.w || 0, h: f.h || 0 }); } }); });
     }
     function fotosActuales(){
       asociarFotos();
@@ -37149,10 +37173,12 @@ function _cargaEstPrec(p){
       pintarFoto();
     }
     // Estudio quitado con la ✕ de su solapa: se ocultan sus fotos (vuelven con "Deshacer")
-    function marcarThumbs(sg, quitar){ var urls = (sg.fotos || []).map(function(f){ return f.url; });
-      Array.prototype.forEach.call(thumbs.querySelectorAll('.ec-th'), function(d){ if(urls.indexOf(d._url) >= 0 || (d._t && String(d._t).trim().length > 8 && String(sg.txt || '').indexOf(String(d._t).trim().slice(0, 120)) >= 0)) d.classList.toggle('quitada', quitar); }); }
+    function marcarThumbs(sg, quitar){ var otras = []; ((ta._md && ta._md.todos && ta._md.todos()) || []).forEach(function(s){ (s.fotos || []).forEach(function(f){ otras.push(f.url); }); });
+      var urls = (sg.fotos || []).map(function(f){ return f.url; }).filter(function(u){ return !quitar || otras.indexOf(u) < 0; });
+      Array.prototype.forEach.call(thumbs.querySelectorAll('.ec-th'), function(d){ if(urls.indexOf(d._url) >= 0 || (!d._url && d._t && String(d._t).trim().length > 8 && String(sg.txt || '').indexOf(String(d._t).trim().slice(0, 120)) >= 0)) d.classList.toggle('quitada', quitar); }); }
     ta.addEventListener('md-quitado', function(e){ marcarThumbs(e.detail || {}, true); fotoElegida = null; setTimeout(pintar, 0); });
     ta.addEventListener('md-repuesto', function(e){ marcarThumbs(e.detail || {}, false); setTimeout(pintar, 0); });
+    m.box.querySelector('.ec-otro').onclick = function(){ if(!ta.value.trim()){ alert('Primero pegá o subí el informe.'); return; } if(ta._md && ta._md.duplicar){ var actual = sel.value; ta._md.duplicar(actual && actual !== '__TEXTO__' ? actual : ''); elegidaAMano = false; pintar(); if(typeof showToast === 'function') showToast('Se agregó una solapa con el mismo informe: elegí arriba qué estudio es y cargalo.', 'info', 5000); } };
     function thumbsDesdeCola(){
       // al volver a la lista (después de guardar un estudio) se rearman las miniaturas y las fotos de cada solapa
       var segs = ta._md && ta._md.todos ? ta._md.todos() : null; if(!segs) return;
@@ -37189,8 +37215,10 @@ function _cargaEstPrec(p){
       var be = prev.querySelector('.tx-ev'); if(be) be.onclick = function(){ if(aEditor('evol_editor')){ m.cerrar(); if(typeof showToast === 'function') showToast('✓ Texto agregado a la Evolución: revisalo antes de guardar.', 'success', 4000); } };
     }
     function pintar(){
-      var auto = detectarCat(ta.value);
-      if(!elegidaAMano && auto) sel.value = auto;
+      var sgA = ta._md && ta._md.actual ? ta._md.actual() : null, auto = sgA && sgA.cat ? sgA.cat : detectarCat(ta.value);
+      if(sgA && !sgA.cat && window._estCatsEn){ var usados = (ta._md.todos() || []).filter(function(s){ return s !== sgA && s.txt === sgA.txt; }).map(function(s){ return s.cat; });
+        if(usados.length){ var otro = window._estCatsEn(ta.value).map(function(x){ return x.cat; }).find(function(c){ return usados.indexOf(c) < 0; }); auto = otro || ''; } }
+      if(!elegidaAMano && auto) sel.value = auto; else if(!elegidaAMano && sgA && !sgA.cat && !auto) sel.value = '';
       det.textContent = (!elegidaAMano && auto) ? 'Estudio detectado: ' + auto + ' (si no es, tocá la pestaña correcta).' : '';
       ta._sinSegmentar = sel.value === '__TEXTO__';
       pintarTabs(); pintarFoto();
@@ -39508,10 +39536,47 @@ function copiarEditor(id, btn){
         for(var q2 = ps.length - 1; q2 > 0; q2--){ var fa = fechaDe(ps[q2 - 1], 'lab'), fb = fechaDe(ps[q2], 'lab'); if(!fb || fa === fb){ ps[q2 - 1] += '\n' + ps[q2]; ps.splice(q2, 1); } }
         if(ps.length > 1) partes = ps;
       }
-      // estudios: cada archivo (foto / PDF) es un informe; no se parte por dentro (se perdía el encabezado con nombre y fecha)
-      partes.forEach(function(pt){
+      // estudios: cada archivo es un informe, salvo que traiga TÍTULOS de estudios distintos
+      // (ej. una planilla o foto con ECOCARDIOGRAMA, ECG y Doppler uno abajo del otro): ahí se separa por título
+      if(tipo === 'est' && window._estCats){
+        var L = a.split('\n'), hs = [];
+        var tituloDe = function(l){
+          var t = String(l || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/^[\W_\d]+/, '').trim();
+          if(!t || t.length > 70) return '';
+          for(var ci = 0; ci < window._estCats.length; ci++){
+            var mm = window._estCats[ci][1].exec(t); if(!mm || mm.index > 2) continue;
+            var cola = t.slice(mm.index + mm[0].length), pal = /^\S*/.exec(cola)[0], resto = cola.slice(pal.length).trim();
+            if(/:$/.test(pal) && !/^fecha/.test(resto)) continue;                                   // "ECG: normal" es un dato del informe, no un título
+            if(/basal|esfuerzo|recuperaci|reposo|durante|maxim|post|pre\b|control/.test(resto)) continue; // "ECG basal" dentro de una ergometría
+            var cat0 = window._estCats[ci][0];
+            if(/^DOPPLER/.test(cat0) && !/vaso|carot|cuello|arteri|venos|miembro|femor|vascul|aort|renal|tsa|tronco/.test(t)) continue; // "Doppler" dentro de un eco
+            if(cat0 === 'ECG' && /holter|ergometr/.test(t)) continue;
+            var mayus = /[A-ZÁÉÍÓÚ]{4,}/.test(String(l).slice(0, 30)) && String(l).slice(0, 20) === String(l).slice(0, 20).toUpperCase();
+            if(resto.length <= 24 || /^(fecha|:|-)/.test(resto) || mayus) return window._estCats[ci][0];
+          }
+          return '';
+        };
+        L.forEach(function(l, i){ var c = tituloDe(l); if(c) hs.push({ i: i, c: c }); });
+        var distintos = hs.map(function(h){ return h.c; }).filter(function(c, i, arr){ return arr.indexOf(c) === i; });
+        if(hs.length >= 2 && distintos.length >= 2){
+          var cortes = [hs[0]]; hs.slice(1).forEach(function(h){ if(h.c !== cortes[cortes.length - 1].c) cortes.push(h); });
+          var ps2 = [], fArch = fechaDe(a, 'est');
+          cortes.forEach(function(h, k){ var desde = k === 0 ? 0 : h.i, hasta = k + 1 < cortes.length ? cortes[k + 1].i : L.length; ps2.push(L.slice(desde, hasta).join('\n')); });
+          ps2 = ps2.filter(function(x){ return x.replace(/\s/g, '').length > 6; });
+          // la fecha del informe (si está una sola vez arriba) vale para todos
+          if(fArch && /^\d{4}-\d{2}-\d{2}$/.test(fArch)) ps2 = ps2.map(function(x){ return fechaDe(x, 'est') ? x : x + '\nFecha: ' + fArch.slice(8, 10) + '/' + fArch.slice(5, 7) + '/' + fArch.slice(0, 4); });
+          if(ps2.length > 1) partes = ps2;
+        }
+      }
+      if(tipo === 'est' && partes.length === 1 && window._estCatsEn){
+        var cs = window._estCatsEn(a);
+        if(cs.length >= 2) partes = cs.map(function(x){ return { txt: (x.fecha ? 'Fecha del estudio: ' + x.fecha + '\n' : '') + a, cat: x.cat }; });
+      }
+      partes.forEach(function(pt0){
+        var pt = typeof pt0 === 'string' ? pt0 : pt0.txt, catF = typeof pt0 === 'string' ? '' : pt0.cat;
         var seg = { txt: pt, fecha: fechaDe(pt, tipo), id: identidad(pt) || id, hecho: false };
-        if(tipo === 'est' && window._estAnalizarTexto){ try { var r = window._estAnalizarTexto(pt); seg.cat = r && r.cat || ''; if(!seg.cat && window._pasarATablasSeparar){ var s2 = window._pasarATablasSeparar(pt); if(s2.estudios && s2.estudios[0]) seg.cat = s2.estudios[0].cat; } } catch(e){} }
+        if(catF){ seg.cat = catF; seg.catFija = true; try { var rF = window._estAnalizarTexto(pt, catF); if(rF && rF.fecha) seg.fecha = rF.fecha; } catch(_){} }
+        else if(tipo === 'est' && window._estAnalizarTexto){ try { var r = window._estAnalizarTexto(pt); seg.cat = r && r.cat || ''; if(!seg.cat && window._pasarATablasSeparar){ var s2 = window._pasarATablasSeparar(pt); if(s2.estudios && s2.estudios[0]) seg.cat = s2.estudios[0].cat; } } catch(e){} }
         out.push(seg);
       });
     });
@@ -39602,6 +39667,12 @@ function copiarEditor(id, btn){
       multi: function(){ return !!st.segs; },
       actual: function(){ return st.segs ? st.segs[st.idx] : null; },
       todos: function(){ return st.segs; },
+      duplicar: function(catActual){
+        if(!st.segs){ st.segs = [{ txt: ta.value, fecha: fechaDe(ta.value, tipo), id: identidad(ta.value), hecho: false, cat: catActual || '' }]; st.idx = 0; }
+        else { st.segs[st.idx].txt = ta.value; if(catActual && !st.segs[st.idx].cat) st.segs[st.idx].cat = catActual; }
+        var cur = st.segs[st.idx], nu = JSON.parse(JSON.stringify(cur)); nu.cat = ''; nu.hecho = false; nu.catFija = false;
+        st.segs.splice(st.idx + 1, 0, nu); ir(st.idx + 1);
+      },
       ir: function(i){ ir(i); },
       quitarSeg: function(i){ if(st.segs && st.segs[i]) quitarSeg(i); },
       marcarHecho: function(){ if(st.segs) st.segs[st.idx].hecho = true; pintarBar(); },
@@ -39701,6 +39772,8 @@ function copiarEditor(id, btn){
 .md-tabs .md-x:hover{background:#fee2e2;color:#dc2626}
 .md-tabs .md-t.act .md-x{color:#cbd5e1}
 .md-tabs .md-t.act .md-x:hover{background:#fff;color:#dc2626}
+.ec-otro{margin-left:8px;border:1.5px dashed #a5b4fc;background:#eef2ff;color:#4338ca;border-radius:8px;padding:2px 9px;font:700 11px var(--font-main);cursor:pointer;text-transform:none;letter-spacing:0}
+.ec-otro:hover{background:#e0e7ff}
 .md-tabs .md-undo{border:none;background:#fef3c7;color:#92400e;border-radius:8px;padding:4px 10px;font-size:11.5px;font-weight:700;cursor:pointer;font-family:var(--font-main)}
 @media (max-width: 900px){ .ec-lado.con-foto{grid-template-columns:1fr} .ec-lado.con-foto .ec-foto{position:static;height:50vh} }
 </style>
@@ -41695,6 +41768,83 @@ window._verFotoGrande = function(src){
 .evi-t{width:100%;padding:7px 9px;border:1.5px solid #e2e8f0;border-radius:8px;font:12.5px/1.45 var(--font-main);resize:vertical}
 .evi-ta{font-size:12px;color:#0e7490;margin-top:4px}
 @media (max-width:900px){ .evi-cols{grid-template-columns:1fr} }
+</style>
+
+<script>
+/* ═══ Antropometría: comparación al pie de la tabla (vs anterior, vs ~1 mes, vs inicio, vs peso máximo) ═══ */
+(function(){
+  function $(id){ return document.getElementById(id); }
+  var FILAS = [['Peso','Peso','kg',-1], ['IMC','IMC','',-1], ['Cintura','Cintura','cm',-1], ['Cadera','Cadera','cm',-1], ['PctGrasa','% grasa','%',-1], ['PctMusculo','% músculo','%',1], ['GrasaVisceral','Grasa visceral','',-1], ['FuerzaPresion','Prensión','kg',1], ['CintEst','Cintura/talla','',-1]];
+  function num(v){ if(v == null || v === '') return null; var n = parseFloat(String(v).replace(',', '.')); return isNaN(n) ? null : n; }
+  function fISO(c){ c = String(c || ''); return /^\d{4}-\d{2}-\d{2}/.test(c) ? c.slice(0, 10) : /^\d{4}-\d{2}$/.test(c) ? c + '-15' : /^\d{4}$/.test(c) ? c + '-07-01' : ''; }
+  function fmtF(c){ return typeof _fmtFechaCol === 'function' ? _fmtFechaCol(c) : c; }
+  function fmtN(n, dec){ return (Math.round(n * Math.pow(10, dec)) / Math.pow(10, dec)).toString().replace('.', ','); }
+  function celda(act, ref, uni, mejor, refTxt){
+    if(act == null || ref == null) return '<td class="ac-v ac-na">—</td>';
+    var d = act - ref, pct = ref ? d / ref * 100 : 0, dec = Math.abs(ref) < 5 ? 2 : 1, eps = Math.abs(ref) < 5 ? 0.005 : 0.05;
+    if(uni === '%') uni = 'pts';
+    var igual = Math.abs(d) < eps;
+    var cls = igual ? 'ac-eq' : ((d > 0 ? 1 : -1) === mejor ? 'ac-ok' : 'ac-mal');
+    var flecha = igual ? '=' : d < 0 ? '▼' : '▲';
+    return '<td class="ac-v ' + cls + '" title="' + refTxt + '"><b>' + flecha + (igual ? '' : ' ' + (d > 0 ? '+' : '−') + fmtN(Math.abs(d), dec) + (uni ? ' ' + uni : '')) + '</b><span>' + (Math.abs(pct) >= 0.05 ? (pct > 0 ? '+' : '−') + fmtN(Math.abs(pct), 1) + ' %' : '') + '</span></td>';
+  }
+  function pintar(){
+    var wrap = $('evant_wrap'); if(!wrap) return;
+    var cont = $('ant_comp'); if(!cont){ cont = document.createElement('div'); cont.id = 'ant_comp'; var caja = wrap.parentNode; caja.parentNode.insertBefore(cont, caja.nextSibling); }
+    var D = (typeof antDatos !== 'undefined' && antDatos) || null;
+    if(!D || !D.columnas || D.columnas.length < 2){ cont.innerHTML = ''; return; }
+    var cols = D.columnas.map(function(c, ci){ return { c: c, ci: ci, f: fISO(c) }; }).filter(function(x){ return x.f; }).sort(function(a, b){ return a.f < b.f ? -1 : 1; });
+    var pmaxDx = num(($('dxd_pmax') || {}).value);
+    var filasH = '', hayAlgo = false;
+    FILAS.forEach(function(F){
+      var fi = ANT_FILAS.findIndex(function(f){ return f.key === F[0]; }); if(fi < 0) return;
+      var vals = cols.map(function(x){ return { f: x.f, c: x.c, v: num(D.filas[fi] && D.filas[fi][x.ci]) }; }).filter(function(x){ return x.v != null; });
+      if(vals.length < 2 && !(F[0] === 'Peso' && vals.length && pmaxDx)) return;
+      hayAlgo = true;
+      var ult = vals[vals.length - 1], ant = vals.length > 1 ? vals[vals.length - 2] : null, ini = vals[0];
+      // ~1 mes antes de la última medición (entre 3 y 8 semanas)
+      var tU = new Date(ult.f + 'T12:00:00').getTime(), mes = null, bd = 1e15;
+      vals.slice(0, -1).forEach(function(x){ var dd = (tU - new Date(x.f + 'T12:00:00').getTime()) / 864e5; if(dd >= 21 && dd <= 56 && Math.abs(dd - 30) < bd){ bd = Math.abs(dd - 30); mes = x; } });
+      var max = null;
+      if(F[0] === 'Peso' || F[0] === 'IMC'){
+        var mx = vals.reduce(function(a, x){ return !a || x.v > a.v ? x : a; }, null);
+        if(F[0] === 'Peso' && pmaxDx && (!mx || pmaxDx > mx.v)) mx = { v: pmaxDx, c: 'máximo referido' };
+        if(F[0] === 'IMC' && pmaxDx){ var pIdx = ANT_FILAS.findIndex(function(f){ return f.key === 'Peso'; }), tIdx = ANT_FILAS.findIndex(function(f){ return f.key === 'Altura'; }); var tal = null; cols.forEach(function(x){ var t = num(D.filas[tIdx] && D.filas[tIdx][x.ci]); if(t) tal = t; }); if(tal){ if(tal > 3) tal = tal / 100; var imcMax = pmaxDx / (tal * tal); if(!mx || imcMax > mx.v) mx = { v: Math.round(imcMax * 10) / 10, c: 'máximo referido' }; } }
+        max = mx;
+      }
+      filasH += '<tr><td class="ac-n">' + F[1] + '</td><td class="ac-act"><b>' + fmtN(ult.v, Math.abs(ult.v) < 5 ? 2 : 1) + '</b>' + (F[2] ? ' ' + F[2] : '') + '<span>' + fmtF(ult.c) + '</span></td>'
+        + celda(ult.v, ant && ant.v, F[2], F[3], ant ? 'vs ' + fmtF(ant.c) + ': ' + fmtN(ant.v, 1) : '')
+        + celda(ult.v, mes && mes.v, F[2], F[3], mes ? 'vs ' + fmtF(mes.c) + ': ' + fmtN(mes.v, 1) : 'no hay una medición de hace ~1 mes')
+        + celda(ult.v, vals.length > 1 ? ini.v : null, F[2], F[3], 'vs ' + fmtF(ini.c) + ': ' + fmtN(ini.v, 1))
+        + (max ? celda(ult.v, max.v, F[2], F[3], 'vs ' + (max.c === 'máximo referido' ? 'peso máximo referido (Datos clínicos)' : fmtF(max.c)) + ': ' + fmtN(max.v, 1)) : '<td class="ac-v ac-na"></td>')
+        + '</tr>';
+    });
+    if(!hayAlgo){ cont.innerHTML = ''; return; }
+    var u = cols[cols.length - 1], p = cols.length > 1 ? cols[cols.length - 2] : null;
+    cont.innerHTML = '<div class="ac-box"><div class="ac-t">📊 Comparación de la última medición <span>verde = mejora · rojo = empeora · pasá el mouse para ver contra qué valor</span></div>'
+      + '<div style="overflow-x:auto"><table class="ac-tab"><thead><tr><th></th><th>Última</th><th>vs anterior</th><th>vs ~1 mes</th><th>vs inicio<br><span>' + fmtF(cols[0].c) + '</span></th><th>vs máximo</th></tr></thead><tbody>' + filasH + '</tbody></table></div></div>';
+  }
+  window._antComparar = pintar;
+  var o = window.renderTablaGenerica;
+  if(typeof o === 'function') window.renderTablaGenerica = renderTablaGenerica = function(datos, filas, wrapId){ var r = o.apply(this, arguments); if(wrapId === 'evant_wrap' || wrapId === 'ant_tabla_wrap') setTimeout(pintar, 0); return r; };
+  // al editar una celda de la tabla también se actualiza
+  document.addEventListener('change', function(e){ if(e.target && e.target.closest && e.target.closest('#evant_wrap')) setTimeout(pintar, 50); }, true);
+})();
+</script>
+<style>
+.ac-box{margin-top:10px;border:1.5px solid #e2e8f0;border-radius:12px;padding:10px 12px;background:#fbfdff}
+.ac-t{font-size:12.5px;font-weight:700;color:#1e3a5f;margin-bottom:6px}
+.ac-t span{font-weight:400;color:#94a3b8;font-size:11px;margin-left:6px}
+.ac-tab{border-collapse:collapse;font-size:12px;min-width:620px;width:100%}
+.ac-tab th{font-size:10.5px;text-transform:uppercase;letter-spacing:.04em;color:#64748b;font-weight:700;padding:4px 8px;text-align:center;border-bottom:1.5px solid #e2e8f0}
+.ac-tab th span{text-transform:none;letter-spacing:0;font-weight:400;color:#94a3b8}
+.ac-tab td{padding:5px 8px;border-bottom:1px solid #f1f5f9;text-align:center;white-space:nowrap}
+.ac-n{text-align:left !important;font-weight:700;color:#334155}
+.ac-act span,.ac-v span{display:block;font-size:10.5px;color:#94a3b8;font-weight:400}
+.ac-ok b{color:#15803d}.ac-ok span{color:#16a34a}
+.ac-mal b{color:#b91c1c}.ac-mal span{color:#dc2626}
+.ac-eq b{color:#64748b}
+.ac-na{color:#cbd5e1}
 </style>
 
 </body>
