@@ -2,7 +2,7 @@
 <html lang="es-AR">
 <head>
   <meta charset="UTF-8" />
-  <script>var URCYM_BUILD = '2026-11-14-0400';</script>
+  <script>var URCYM_BUILD = '2026-11-14-0530';</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Evaluaciones cardiometabólicas — Sistema de Historia Clínica</title>
 
@@ -36107,14 +36107,14 @@ function _cargaEstPrec(p){
     if(/^\d{1,3}(\.\d{3})+,\d+$/.test(t)) return t.replace(/\./g, '').replace(',', '.');
     return t.replace(',', '.');
   }
-  function fila(k){ return LAB_FILAS.find(function(f){ return f.key === k; }); }
+  function fila(k){ if(/^extra_/.test(k || '')) return { key: k, label: k.slice(6), unidades: [''] }; return LAB_FILAS.find(function(f){ return f.key === k; }); }
   // ── Nombres aprendidos: cuando un laboratorio escribe un parámetro de otra forma, se elige una vez
   //    a qué fila corresponde y queda guardado para siempre (compartido entre profesionales).
   var APRENDIDOS = [], IGNORAR = {};
   function regNombre(n){ return new RegExp('^[\\s.:/()\\-]*' + n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '[\\s.:/()\\-]+') + '(?![a-z])'); }
   function aplicarSinonimos(o){
     APRENDIDOS = []; IGNORAR = {};
-    Object.keys(o || {}).forEach(function(n){ if(o[n] === '-') IGNORAR[n] = 1; else if(LAB_FILAS.some(function(f){ return f.key === o[n]; })) APRENDIDOS.push([regNombre(n), o[n]]); });
+    Object.keys(o || {}).forEach(function(n){ if(o[n] === '-') IGNORAR[n] = 1; else if(/^extra_/.test(o[n]) || LAB_FILAS.some(function(f){ return f.key === o[n]; })) APRENDIDOS.push([regNombre(n), o[n]]); });
     APRENDIDOS.sort(function(a, b){ return b[0].source.length - a[0].source.length; });
   }
   async function leerSinonimos(){
@@ -36138,11 +36138,19 @@ function _cargaEstPrec(p){
     return !r.error;
   };
   var NO_PARAM_LINEA = /(protocolo|paciente|documento|obra social|dr\.?\s*\/\s*dra|fecha\s*:|matricula|\bm\.?\s?p\.?\s*\d)/;
-  var NO_PARAM = /^((colesterol )?ldl (calc|estim|segun|por formula)|directa|indirecta|mp|tel|whatsapp|documento|dni|protocolo|fecha|paciente|dr|dra|medico|metodo|v\.? ?ref|valor(es)? de ref|ref|hombres?|mujer(es)?|ninos|adultos|en adultos|riesgo (ecv|grado)|ayuno|verano|invierno|obra social|avda|av|calle|contador|formula|aspecto|edad|sexo|pagina|hoja|\d)/;
+  var NO_PARAM = /^((colesterol )?ldl (calc|estim|segun|por formula)|hasta|limitrofe|normal|deseable|optimo|insuficiencia|deficiencia|suficiencia|riesgo|alto|bajo|elevado|hombres?|mujeres?|varones?|adultos?|meses|anos|vn|v r|valor|valores|rango|metodo|tecnica|directa|indirecta|mp|tel|whatsapp|documento|dni|protocolo|fecha|paciente|dr|dra|medico|metodo|v\.? ?ref|valor(es)? de ref|ref|hombres?|mujer(es)?|ninos|adultos|en adultos|riesgo (ecv|grado)|ayuno|verano|invierno|obra social|avda|av|calle|contador|formula|aspecto|edad|sexo|pagina|hoja|\d)/;
+  var REFW = /(valor(es)?\s+(de\s+)?(referencia|normal(es)?|deseable|optimo|esperado)|\bv\.?\s?[rn]\.?(?=[\s:>]|$)|\bvn\s*>|\brango\b|\breferencia\b|\bdeseable\b|\boptimo\b|\blimitrofe\b|\bnormal(es)?\s*:|\bhasta\s*:?\s*\d|\b(menor|mayor|inferior|superior)\s+(de|a)\s+\d|\bdeficiencia\b|\binsuficiencia\b|\bsuficiencia\b|\b(hombres?|varones?|mujeres?)\s*:?\s*[<>≤≥]?\s*\d|\b(adultos?|ninos?|embarazadas?)\s*:|\d+\s*a\s*\d+\s*(anos|meses|dias)\b|\briesgo\s+(bajo|alto|moderado|intermedio)|\b(bajo|alto|elevado|muy alto)\s*:\s*[<>≥≤]?\s*\d|\bfase\s+(folicular|lutea)|\bpost\s*menopausia|\btrimestre\b)/;
+  function sinRefs(lin){
+    // paréntesis con rangos o referencias
+    lin = String(lin).replace(/\([^()]*\)/g, function(p){ var q = sinAc(p); return /\d\s*[-–]\s*\d|\d\s+a\s+\d|[<>≤≥]\s*\d|refer|normal|hasta|\bv\.?\s?[rn]\b/.test(q) ? ' '.repeat(p.length) : p; });
+    var q = sinAc(lin), mR = REFW.exec(q);
+    if(mR) lin = lin.slice(0, mR.index);
+    return lin;
+  }
   function analizar(texto){
     var out = [], usadas = {}, fecha = '', otros = [];
     function desconocidos(seg, origen){
-      var re = /([a-z][a-z0-9 .\/()'+-]{0,32}?)\s*[:=]?\s*(-?\d+(?:[.,]\d+)*)(?!\s*\/\s*\d)/g, mm;
+      var re = /([a-z][a-z0-9 .\/()'+-]{0,32}?)\s*[:=]?\s*(?<![a-z0-9])(-?\d+(?:[.,]\d+)*)(?!\s*\/\s*\d)/g, mm;
       while((mm = re.exec(seg))){
         var nombre = mm[1].replace(/^((mg|g|ml|dl|l|ui|u|meq|mmol|umol|ng|pg|mm3|mm|cel|x)\b[\s\/.]*|%\s*)+/g, '').replace(/[.:%\-–_/()]+/g, ' ').replace(/\s+/g, ' ').trim();
         if(!nombre || nombre.length < 2 || nombre.length > 40 || !/^[a-z]/.test(nombre) || /^\d/.test(nombre)) continue;
@@ -36162,6 +36170,8 @@ function _cargaEstPrec(p){
      // dentro de "Bilirrubinemia": "Total ...: 0,65" es la bilirrubina total (directa/indirecta no se cargan)
      if(seccion === 'bili' && desdeSeccion <= 4 && /^total\b/.test(ls)) lineaEntera = 'Bilirrubina total ' + lineaEntera.replace(/^\s*total/i, '');
      var origen = lineaEntera.replace(/(\s*\.){3,}\s*/g, ' … ').replace(/\s{2,}/g, ' ').trim();
+     // Rangos y explicaciones del laboratorio NO son el resultado: "(70 - 110)", "Deseable: < 200", "VN hasta 40", "Hombres: 30 a 400"…
+     lineaEntera = sinRefs(lineaEntera);
      // una línea puede traer más de un parámetro ("Sodio 140 mEq/L   Potasio 4.3 mEq/L")
      var linea = lineaEntera, vueltas = 0, LISTA = APRENDIDOS.concat(SIN);
      while(linea && vueltas++ < 40){
@@ -36181,7 +36191,7 @@ function _cargaEstPrec(p){
         // renglón con nombre y número que no es de la tabla conocida: se ofrece para enseñarlo
         if(vueltas === 1){
           var lc = l.replace(/(\s*\.){3,}\s*|\s*…+\s*/g, ' : ');
-          var dp = lc.indexOf(':'), pn = lc.search(/\d/);
+          var pnm = /(^|[^a-z0-9])(\d)/.exec(lc), dp = lc.indexOf(':'), pn = pnm ? pnm.index + pnm[1].length : -1;
           var nombre = (dp > 0 && dp < pn ? lc.slice(0, dp) : lc.slice(0, pn)).replace(/[.:%\-–_/()]+/g, ' ').replace(/\s+/g, ' ').trim();
           var mv = (dp > 0 && dp < pn ? lc.slice(dp + 1) : lc.slice(pn)).match(/-?\d[\d.,]*/);
           if(nombre && nombre.length >= 2 && nombre.length <= 45 && /^[a-z]/.test(nombre) && !NO_PARAM.test(nombre) && !NO_PARAM_LINEA.test(lc) && !IGNORAR[nombre] && mv && !otros.some(function(o){ return o.nombre === nombre; }))
@@ -36201,7 +36211,13 @@ function _cargaEstPrec(p){
         // (los puntos suspensivos pueden venir como "……": la lectura del PDF los junta así)
         if(dp >= 0 && (pn < 0 || dp < pn || /^\s*\d\s*[.\s…]*(\.{3,}|…)/.test(resto0))) resto0 = resto0.slice(dp + 1);
         var resto = resto0.replace(/\b\d{1,2}[\/\-.]\d{1,2}[\/\-.]\d{2,4}\b/g, function(x){ return ' '.repeat(x.length); });
-        var mn = resto.match(/(?:^|[^\w(\[])\s*[<>]?\s*(\d[\d.,]*)\s*([a-zA-Zµμ%\/\d.³²]*(?:\/[a-zA-Zµμ\d.,²³]+)?)/);
+        // primer número que no esté pegado a una palabra que no es unidad ("0nooraner…" es basura de la lectura, no un 0)
+        var reN = /(?:^|[^\w(\[])\s*[<>]?\s*(\d[\d.,]*)\s*([a-zA-Zµμ%\/\d.³²]*(?:\/[a-zA-Zµμ\d.,²³]+)?)/g, mn = null, mx;
+        while((mx = reN.exec(resto))){
+          var pegado = resto.charAt(mx.index + mx[0].indexOf(mx[1]) + mx[1].length), u0 = (mx[2] || '').trim();
+          if(/[a-zA-Z]/.test(pegado) && u0.length > 4 && !/^(%|[µμu]?(g|mg|ng|pg|ui|u|meq|mmol|nmol|umol|mui|uui|mil|mm|ml|l)(\b|\/|$)|mg\/|g\/|mm\/)/i.test(u0)){ if(mx[0].length === 0) reN.lastIndex++; continue; }
+          mn = mx; mn.index = mx.index; break;
+        }
         if(!mn) return '';
         var uTxt = (mn[2] || '').trim();
         var esUnidad = /^(%|[µμu]?(g|mg|ng|pg|ui|u|meq|mmol|nmol|umol|mui|uui|mil|mm|ml|l)(\b|\/|$)|mg\/|g\/|mm\/)/i.test(uTxt);
@@ -36277,7 +36293,9 @@ function _cargaEstPrec(p){
       var otros = (res.otros || []);
       if(otros.length){
         var opts = '<option value="">— no cargar —</option><option value="-">⛔ No es de mi tabla (no preguntar más)</option>'
-          + LAB_FILAS.filter(function(f){ return !f.cat && (!f.calc || f.calcAuto); }).map(function(f){ return '<option value="' + f.key + '">' + _esc(f.label) + '</option>'; }).join('');
+          + LAB_FILAS.filter(function(f){ return !f.cat && (!f.calc || f.calcAuto); }).map(function(f){ return '<option value="' + f.key + '">' + _esc(f.label) + '</option>'; }).join('')
+          + (window._filasExtraDe ? window._filasExtraDe('lab').map(function(l){ return '<option value="extra_' + _esc(l) + '">' + _esc(l) + ' (fila agregada)</option>'; }).join('') : '')
+          + '<option value="__nueva">➕ Crear fila nueva (para todos los pacientes)…</option>';
         html += '<div style="margin-top:12px;padding:10px;border:1.5px dashed #cbd5e1;border-radius:10px;background:#f8fafc">'
           + '<div style="font-weight:700;font-size:12.5px;margin-bottom:6px">🤔 No reconocí estos renglones (' + otros.length + ')</div>'
           + '<div style="font-size:11.5px;color:#64748b;margin-bottom:6px">Si alguno es un parámetro de tu tabla, elegí cuál: se carga y el sistema lo aprende para la próxima vez (con este y otros laboratorios). Lo que dejes en <b>no cargar</b> no se vuelve a preguntar. <button type="button" class="lp-ign-todos" style="margin-left:4px;border:1.5px solid #cbd5e1;background:white;border-radius:7px;padding:2px 8px;font:600 11.5px var(--font-main);cursor:pointer">⛔ Ninguno es de mi tabla</button></div>'
@@ -36286,7 +36304,15 @@ function _cargaEstPrec(p){
       }
       prev.innerHTML = html;
       prev.querySelectorAll('.lp-ens').forEach(function(sl){ sl.onchange = async function(){
-        var o = otros[+sl.dataset.i]; if(!sl.value) return; sl.disabled = true;
+        var o = otros[+sl.dataset.i]; if(!sl.value) return;
+        if(sl.value === '__nueva'){
+          var sug = o.nombre.replace(/\b\w/g, function(c){ return c.toUpperCase(); });
+          var nombreF = prompt('Nombre de la fila nueva (se agrega a la tabla de laboratorio de TODOS los pacientes).\nPodés poner la unidad entre paréntesis, ej.: T4 libre (ng/dL)', sug);
+          if(!nombreF || !nombreF.trim()){ sl.value = ''; return; }
+          nombreF = nombreF.trim(); await window._filaGlobalAgregar('lab', nombreF);
+          var op = document.createElement('option'); op.value = 'extra_' + nombreF; op.textContent = nombreF; sl.appendChild(op); sl.value = op.value;
+        }
+        sl.disabled = true;
         var ok = await window._labSinonimoGuardar(o.nombre, sl.value);
         if(!ok && typeof showToast === 'function') showToast('No se pudo guardar lo aprendido (se usa solo esta vez).', 'warning', 4000);
         pintar();
@@ -36325,7 +36351,7 @@ function _cargaEstPrec(p){
       var lpaNueva = false;
       elegidos.forEach(function(e){
         if(e.key === 'LPA'){ if(!labDatos.lpa) labDatos.lpa = []; labDatos.lpa.push({ valor:e.val, unidad:e.unidad || 'mg/dL', fecha:fecha }); lpaNueva = true; return; }
-        var fi = LAB_FILAS.findIndex(function(f){ return f.key === e.key; }); if(fi < 0) return;
+        var fi = window._filaIdx ? window._filaIdx('lab', e.key, true) : LAB_FILAS.findIndex(function(f){ return f.key === e.key; }); if(fi < 0) return;
         while(labDatos.filas.length <= fi) labDatos.filas.push([]);
         if(!labDatos.filas[fi]) labDatos.filas[fi] = [];
         while(labDatos.filas[fi].length < labDatos.columnas.length) labDatos.filas[fi].push('');
@@ -40273,6 +40299,12 @@ function copiarEditor(id, btn){
 .lp-vista button{border:1.5px solid #e2e8f0;background:#fff;border-radius:8px;padding:4px 10px;font-size:12px;font-weight:600;cursor:pointer;font-family:var(--font-main);color:#475569}
 .lp-vista button.act{background:#1e3a5f;border-color:#1e3a5f;color:#fff}
 .lp-vista button:disabled{opacity:.4;cursor:default}
+.lp-fnav{font-size:12.5px;color:#1e3a5f;background:#eef2ff;border:1px solid #c7d2fe;border-radius:10px;padding:7px 10px;margin-bottom:8px;line-height:1.6}
+.lp-fnav:empty{display:none}
+.lp-fn-b{display:inline-flex;gap:5px;margin-left:6px}
+.lp-fn-b button{border:1.5px solid #a5b4fc;background:#fff;color:#3730a3;border-radius:7px;padding:2px 10px;font:700 12px var(--font-main);cursor:pointer}
+.lp-fn-cuenta{font-size:11.5px;color:#64748b}
+.lp-fn-cuenta:empty{display:none}
 .lp-foto{height:66vh;min-height:300px;overflow:auto;border:1.5px solid #e5e7eb;border-radius:10px;padding:8px;background:#f8fafc}
 </style>
 <script>
@@ -40369,6 +40401,8 @@ function copiarEditor(id, btn){
     var hoy = hoyISO();
     if(fecha > hoy && !confirm('⚠ La fecha de ' + que + ' (' + fFmt(fecha) + ') es FUTURA.\n\n¿Guardar igual?')) return false;
     var fn = pacienteActual && pacienteActual.fecha_nacimiento;
+    var hace10 = new Date(); hace10.setFullYear(hace10.getFullYear() - 10);
+    if(fecha < hace10.toISOString().slice(0, 10) && !confirm('⚠ La fecha de ' + que + ' es ' + fFmt(fecha) + ': de hace más de 10 años.\n\nMuchas veces la lectura confunde el año (2025 → 2005). ¿Es correcta?')) return false;
     if(fn && fecha < String(fn).slice(0, 10) && !confirm('⛔ La fecha de ' + que + ' (' + fFmt(fecha) + ') es ANTERIOR al nacimiento del paciente (' + fFmt(String(fn).slice(0, 10)) + ').\n\n¿Guardar igual?')) return false;
     if(sinFecha && fecha === hoy && !confirm('No se leyó la fecha en el informe y quedó la de HOY (' + fFmt(hoy) + ').\n\n¿' + que.charAt(0).toUpperCase() + que.slice(1) + ' es de hoy? (Si no, Cancelar y elegí la fecha correcta.)')) return false;
     return true;
@@ -40512,8 +40546,45 @@ function copiarEditor(id, btn){
         foto.style.display = esFoto ? '' : 'none';
         var grid = col.closest('.lp-grid'); if(grid) grid.style.gridTemplateColumns = esFoto ? 'minmax(0,1.35fr) minmax(0,1fr)' : '';
         try { var caja = col.closest('.ui-body').parentNode; caja.style.maxWidth = esFoto ? '1500px' : '1200px'; } catch(_){}
-        if(esFoto){ foto.innerHTML = ''; foto.appendChild(crearVisor(fuentesActuales())); }
+        if(esFoto){ var fa = fuentesActuales(); if(sel && fa.indexOf(sel) < 0) sel = null; foto.innerHTML = ''; foto.appendChild(crearVisor(sel ? [sel] : fa)); }
+        navFoto(); filtrar();
       }
+      // ── Foto por foto: tocando una miniatura se ve esa foto y, al lado, solo lo que se leyó de ella
+      var sel = null, prevEl = col.closest('.lp-grid') && col.closest('.lp-grid').querySelector('.lp-prev');
+      var nav = document.createElement('div'); nav.className = 'lp-fnav'; if(prevEl) prevEl.parentNode.insertBefore(nav, prevEl);
+      function norm(t){ return String(t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, ''); }
+      function navFoto(){
+        var fa = fuentesActuales();
+        if(fa.length < 2 || foto.style.display === 'none'){ nav.innerHTML = ''; return; }
+        var k = sel ? fa.indexOf(sel) : -1;
+        nav.innerHTML = k >= 0 ? '📷 <b>Foto ' + (k + 1) + ' de ' + fa.length + '</b> de este laboratorio: abajo solo lo que se leyó de esta foto <span class="lp-fn-b"><button type="button" data-n="-1">←</button><button type="button" data-n="1">→</button><button type="button" data-n="0">Ver todo junto</button></span>'
+          : '📷 Este laboratorio tiene <b>' + fa.length + ' fotos</b>. Revisalas de a una: <span class="lp-fn-b"><button type="button" data-n="1">Empezar por la foto 1 →</button></span>';
+      }
+      nav.addEventListener('click', function(e){ var b = e.target.closest('[data-n]'); if(!b) return; var fa = fuentesActuales(), n = +b.dataset.n;
+        if(n === 0){ sel = null; } else { var k = sel ? fa.indexOf(sel) : -1; k = Math.max(0, Math.min(fa.length - 1, k + n)); sel = fa[k]; }
+        ver('foto'); });
+      function filtrar(){
+        if(!prevEl) return;
+        var filas = prevEl.querySelectorAll('tr'); var n = 0, tot = 0;
+        var clave = sel ? norm(sel.texto) : '';
+        filas.forEach(function(tr){
+          if(!tr.querySelector('.lp-ck, .lp-ens')) return; tot++;
+          var celdas = tr.querySelectorAll('td'), orig = celdas.length ? celdas[celdas.length - 1].textContent : tr.textContent;
+          var o = norm(orig.split(/⛔|◆|🔶/)[0]).slice(0, 28);
+          var mostrar = !sel || (o && clave.indexOf(o) >= 0);
+          tr.style.display = mostrar ? '' : 'none'; if(mostrar) n++;
+        });
+        prevEl.querySelectorAll('.lp-ens').forEach(function(s){ var row = s.closest('tr, div'); if(!row || row.tagName === 'TR') return; var o = norm(row.textContent).slice(0, 28); row.style.display = !sel || clave.indexOf(o) >= 0 ? '' : 'none'; });
+        var info = prevEl.parentNode.querySelector('.lp-fn-cuenta'); if(!info){ info = document.createElement('div'); info.className = 'lp-fn-cuenta'; nav.appendChild(info); }
+        info.textContent = sel ? n + ' de ' + tot + ' renglones son de esta foto (los demás siguen tildados, en sus fotos)' : '';
+        document.querySelectorAll('.ec-th').forEach(function(d){ d.classList.toggle('es-act', !!sel && d._f === sel.file); });
+      }
+      if(prevEl) new MutationObserver(function(){ clearTimeout(prevEl._ft); prevEl._ft = setTimeout(filtrar, 30); }).observe(prevEl, { childList: true });
+      ta._lpVerFoto = function(file){
+        var f = (ta._fuentes || []).find(function(x){ return x.file === file; }); if(!f) return false;
+        if(fuentesActuales().indexOf(f) < 0 && ta._md && ta._md.todos && ta._md.todos()){ var segs = ta._md.todos(), k0 = String(f.texto).trim().slice(0, 120); var j = segs.findIndex(function(s){ return k0 && String(s.txt).indexOf(k0) >= 0; }); if(j >= 0) ta._md.ir(j); }
+        sel = f; bar.querySelector('[data-v=foto]').disabled = false; setTimeout(function(){ ver('foto'); }, ta._md && ta._md.multi() ? 350 : 0); return true;
+      };
       bar.addEventListener('click', function(e){ var b = e.target.closest('[data-v]'); if(b && !b.disabled) ver(b.dataset.v); });
       var tm; ta.addEventListener('input', function(){ clearTimeout(tm); tm = setTimeout(function(){ var hay = fuentesActuales().length > 0; bar.querySelector('[data-v=foto]').disabled = !hay; if(foto.style.display !== 'none') ver(hay ? 'foto' : 'txt'); }, 300); });
       ta.addEventListener('ft-leido', function(){ setTimeout(function(){ if(fuentesActuales().length){ bar.querySelector('[data-v=foto]').disabled = false; ver('foto'); } }, 350); });
@@ -41059,7 +41130,7 @@ function copiarEditor(id, btn){
     z.addEventListener('drop', function(e){ e.preventDefault(); z.classList.remove('sobre'); var fs = Array.prototype.slice.call((e.dataTransfer && e.dataTransfer.files) || []).filter(function(f){ return /^image\/|pdf/.test(f.type) || /\.pdf$/i.test(f.name); }); if(fs.length && ta._leerArchivos) ta._leerArchivos(fs); });
     ta.addEventListener('ft-archivo', function(e){ var f = e.detail; if(!f) return; var d = document.createElement('div'); d.className = 'ec-th leyendo'; d._f = f;
       var bx = document.createElement('button'); bx.type = 'button'; bx.className = 'ec-x'; bx.title = 'Sacar esta foto (y su texto)'; bx.textContent = '×'; d.appendChild(bx);
-      if(/^image\//.test(f.type)){ var im = document.createElement('img'); im.src = URL.createObjectURL(f); im.title = 'Clic para ver grande'; im.onclick = function(){ var vb = document.querySelector('.lp-vista [data-v=foto]'); if(vb && !vb.disabled && vb.offsetParent){ vb.click(); return; } window._verFotoGrande(im.src); }; d.appendChild(im); }
+      if(/^image\//.test(f.type)){ var im = document.createElement('img'); im.src = URL.createObjectURL(f); im.title = 'Clic: ver esta foto y lo que se leyó de ella'; im.onclick = function(){ if(ta._lpVerFoto && ta._lpVerFoto(f)) return; var vb = document.querySelector('.lp-vista [data-v=foto]'); if(vb && !vb.disabled && vb.offsetParent){ vb.click(); return; } window._verFotoGrande(im.src); }; d.appendChild(im); }
       else d.appendChild(document.createTextNode('📄 ' + (f.name || 'PDF')));
       thumbs.appendChild(d); });
     ta.addEventListener('ft-leido', function(e){ var d = Array.prototype.find.call(thumbs.querySelectorAll('.ec-th'), function(x){ return x._f === e.detail.file; }); if(d){ d._t = e.detail.texto; d.classList.remove('leyendo'); } });
@@ -41210,6 +41281,7 @@ window._verFotoGrande = function(src){
   function distancia(a, b){ var m = a.length, n = b.length, d = []; for(var i = 0; i <= m; i++){ d[i] = [i]; } for(var j = 0; j <= n; j++) d[0][j] = j; for(i = 1; i <= m; i++) for(j = 1; j <= n; j++) d[i][j] = Math.min(d[i-1][j] + 1, d[i][j-1] + 1, d[i-1][j-1] + (a[i-1] === b[j-1] ? 0 : 1)); return d[m][n]; }
   function claveDe(tipo, nombre){
     var l = limpio(nombre); if(!l) return '';
+    if(window._filasExtraDe){ var ex = window._filasExtraDe(tipo).find(function(x){ return limpio(x) === l || limpio(x.replace(/\(.*?\)/g, '')) === l; }); if(ex) return 'extra_' + ex; }
     var F = DEST[tipo].F().filter(function(f){ return f.key && !f.cat; });
     if(tipo === 'ant'){ var s = SIN_ANT.find(function(x){ return x[0].test(l); }); if(s && /cintura ?\//.test(l) && s[1] === 'Cintura') s = null; if(s) return s[1]; }
     if(tipo === 'est'){
@@ -41313,7 +41385,8 @@ window._verFotoGrande = function(src){
       if(!tipo) tipo = adivinarDestino(P.rows);
       map = P.rows.map(function(r){ return claveDe(tipo, r.nombre); });
       var D = DEST[tipo], F = D.F(), datos = D.D() || { columnas:[], filas:[] };
-      var opts = function(sel){ return '<option value="">— no cargar —</option>' + F.filter(function(f){ return f.key && !f.cat && !f.calc; }).map(function(f){ return '<option value="' + f.key + '"' + (f.key === sel ? ' selected' : '') + '>' + _esc(f.label) + '</option>'; }).join(''); };
+      var opts = function(sel){ return '<option value="">— no cargar —</option>' + F.filter(function(f){ return f.key && !f.cat && !f.calc; }).map(function(f){ return '<option value="' + f.key + '"' + (f.key === sel ? ' selected' : '') + '>' + _esc(f.label) + '</option>'; }).join('')
+        + (window._filasExtraDe ? window._filasExtraDe(tipo).map(function(l){ return '<option value="extra_' + _esc(l) + '"' + ('extra_' + l === sel ? ' selected' : '') + '>' + _esc(l) + ' (fila agregada)</option>'; }).join('') : ''); };
       var h = '<div class="pl-top"><b>Cargar en</b><select class="pl-dest">' + ['lab','ant','est'].map(function(t){ return '<option value="' + t + '"' + (t === tipo ? ' selected' : '') + '>' + DEST[t].nom + '</option>'; }).join('') + '</select>'
         + '<span style="color:#64748b">' + P.rows.length + ' filas · ' + P.cols.length + ' fechas</span>'
         + (P.hay3 ? '<span style="margin-left:auto;display:inline-flex;gap:6px;align-items:center">Fechas de la planilla: <select class="pl-fmt"><option value="dm"' + (FMT === 'dm' ? ' selected' : '') + '>día/mes/año</option><option value="md"' + (FMT === 'md' ? ' selected' : '') + '>mes/día/año</option></select></span>' : '') + '</div>';
@@ -41374,11 +41447,11 @@ window._verFotoGrande = function(src){
       if(!datos.filas || !datos.filas.length) datos.filas = Array(F.length).fill(null).map(function(){ return []; });
       var n = 0, ultimaCi = 0;
       cols.forEach(function(c){
-        var hayAlgo = P.rows.some(function(r, i){ var k = map[i], f = F.find(function(x){ return x.key === k; }); return k && f && !f.calc && r.vals[c.j] !== ''; });
+        var hayAlgo = P.rows.some(function(r, i){ var k = map[i], f = F.find(function(x){ return x.key === k; }); return k && (/^extra_/.test(k) || (f && !f.calc)) && r.vals[c.j] !== ''; });
         if(!hayAlgo) return;
         var ci = (datos.columnas || []).indexOf(c.fecha); if(ci < 0) ci = insertarColumnaEnOrden(datos, c.fecha);
         P.rows.forEach(function(r, i){
-          var k = map[i]; if(!k) return; var fi = F.findIndex(function(x){ return x.key === k; }); if(fi < 0 || F[fi].calc) return;
+          var k = map[i]; if(!k) return; var fi = window._filaIdx ? window._filaIdx(tipo, k, true) : F.findIndex(function(x){ return x.key === k; }); if(fi < 0 || (F[fi] && F[fi].calc)) return;
           var v = r.vals[c.j]; if(v === '') return;
           while(datos.filas.length <= fi) datos.filas.push([]);
           if(!datos.filas[fi]) datos.filas[fi] = [];
@@ -42391,5 +42464,53 @@ window._verFotoGrande = function(src){
 @media (max-width:900px){ .cf-grid{grid-template-columns:1fr} }
 </style>
 
+<script>
+/* ═══ Filas agregadas para TODOS los pacientes (laboratorio, estudios, antropometría) ═══
+   Se guardan en urcym_agenda_config ('filas_globales'). Cada paciente las ve como filas extra de su tabla
+   (los valores quedan en la tabla del paciente, como cualquier fila extra). */
+(function(){
+  var CLAVE = 'filas_globales', G = { lab: [], est: [], ant: [] }, cargado = false;
+  function datosDe(t){ try { return t === 'lab' ? labDatos : t === 'est' ? estDatos : antDatos; } catch(e){ return null; } }
+  function FDe(t){ return t === 'lab' ? LAB_FILAS : t === 'est' ? EST_FILAS : ANT_FILAS; }
+  function wrapsDe(t){ return t === 'lab' ? ['evlab_wrap', 'lab_tabla_wrap'] : t === 'est' ? ['evest_wrap', 'est_tabla_wrap'] : ['evant_wrap', 'ant_tabla_wrap']; }
+  async function cargar(){
+    try { var r = await (window._sbFromOriginal || sb.from.bind(sb))('urcym_agenda_config').select('value').eq('key', CLAVE).maybeSingle();
+      var v = r && r.data && r.data.value; if(typeof v === 'string') v = JSON.parse(v); if(v){ ['lab','est','ant'].forEach(function(t){ G[t] = Array.isArray(v[t]) ? v[t] : []; }); } cargado = true; aplicar(); } catch(e){ console.warn('filas globales', e); }
+  }
+  async function guardar(){ var r = await (window._sbFromOriginal || sb.from.bind(sb))('urcym_agenda_config').upsert({ key: CLAVE, value: JSON.stringify(G) }, { onConflict: 'key' }); return !r.error; }
+  function aplicar(){ ['lab','est','ant'].forEach(function(t){ var d = datosDe(t); if(!d) return; if(!d.extraFilas) d.extraFilas = []; G[t].forEach(function(l){ if(d.extraFilas.indexOf(l) < 0) d.extraFilas.push(l); }); }); }
+  window._filasExtraDe = function(t){ var d = datosDe(t), l = (d && d.extraFilas || []).slice(); G[t].forEach(function(x){ if(l.indexOf(x) < 0) l.push(x); }); return l; };
+  window._filaIdx = function(t, key, crear){
+    var F = FDe(t), i = F.findIndex(function(f){ return f.key === key; }); if(i >= 0) return i;
+    if(!/^extra_/.test(key || '')) return -1;
+    var d = datosDe(t), lbl = key.slice(6); if(!d) return -1; if(!d.extraFilas) d.extraFilas = [];
+    var k = d.extraFilas.indexOf(lbl); if(k < 0 && crear){ d.extraFilas.push(lbl); k = d.extraFilas.length - 1; }
+    return k < 0 ? -1 : F.length + k;
+  };
+  window._filaGlobalAgregar = async function(t, label){
+    label = String(label || '').trim(); if(!label) return false;
+    if(!cargado) await cargar();
+    if(G[t].indexOf(label) < 0) G[t].push(label);
+    aplicar();
+    try { var w = wrapsDe(t)[0]; if(document.getElementById(w)) renderTablaGenerica(datosDe(t), FDe(t), w); } catch(_){}
+    var ok = await guardar();
+    if(typeof showToast === 'function') showToast(ok ? '➕ Fila «' + label + '» agregada a ' + (t === 'lab' ? 'Laboratorio' : t === 'est' ? 'Estudios' : 'Antropometría') + ' de todos los pacientes' : 'No se pudo guardar la fila para todos (quedó solo en este paciente)', ok ? 'success' : 'warning', 4500);
+    return ok;
+  };
+  // Al abrir un paciente, sus tablas reciben las filas agregadas
+  var oC = window.cargarDatosTablasEvol;
+  if(typeof oC === 'function') window.cargarDatosTablasEvol = cargarDatosTablasEvol = async function(){ var r = await oC.apply(this, arguments); if(!cargado) await cargar(); aplicar(); return r; };
+  // "Agregar fila" en una tabla: queda para todos los pacientes
+  var oA = window.agregarFilaExtra;
+  if(typeof oA === 'function') window.agregarFilaExtra = agregarFilaExtra = function(wrapId){
+    var inp = document.getElementById('new_row_input_' + wrapId), lbl = inp ? inp.value.trim() : '';
+    var r = oA.apply(this, arguments);
+    var t = /lab/.test(wrapId) ? 'lab' : /est/.test(wrapId) ? 'est' : 'ant';
+    if(lbl) window._filaGlobalAgregar(t, lbl);
+    return r;
+  };
+  setTimeout(function(){ if(typeof sb !== 'undefined') cargar(); }, 4000);
+})();
+</script>
 </body>
 </html>
