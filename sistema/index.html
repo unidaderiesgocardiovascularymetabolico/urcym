@@ -2,7 +2,7 @@
 <html lang="es-AR">
 <head>
   <meta charset="UTF-8" />
-  <script>var URCYM_BUILD = '2026-11-14-0010';</script>
+  <script>var URCYM_BUILD = '2026-11-14-0030';</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Evaluaciones cardiometabólicas — Sistema de Historia Clínica</title>
 
@@ -10449,21 +10449,19 @@ async function guardarClinica() {
     // Intentamos el upsert completo primero
     const r1 = await sb.from(tabla).upsert(data, opts);
     if (!r1.error) return r1;
-    // Si falla por columna inexistente, detectamos cuáles existen y reintentamos
-    const missing = r1.error.message.match(/Could not find the '(.+?)' column/);
-    if (!missing) return r1; // otro error, devolver tal cual
-    // Obtener columnas reales haciendo select de 1 fila (o fila vacía)
-    const probe = await sb.from(tabla).select('*').limit(1);
-    if (probe.error || !probe.data) return r1;
-    const knownCols = probe.data.length > 0
-      ? Object.keys(probe.data[0])
-      : Object.keys(data); // si la tabla está vacía, no podemos filtrar — usar todo
-    const filtered = Object.fromEntries(Object.entries(data).filter(([k]) => knownCols.includes(k)));
-    try {
-      const perdidas = Object.keys(data).filter(k => !knownCols.includes(k) && data[k] != null && data[k] !== '' && !(typeof data[k] === 'object' && !Object.keys(data[k]).length));
-      if(perdidas.length && probe.data.length && typeof showToast === 'function') showToast('⚠ No se pudo guardar: ' + perdidas.join(', ') + '. Falta correr el último SQL en Supabase (SQL Editor › Run).', 'warning', 9000);
-    } catch(_e) {}
-    return sb.from(tabla).upsert(filtered, opts);
+    // Si falla por columna inexistente: se saca SOLO esa columna y se reintenta (una por vez),
+    // así no se pierde nada de lo que sí existe en la base.
+    let d = Object.assign({}, data), r = r1, perdidas = [];
+    for (let i = 0; i < 60; i++) {
+      const m = r && r.error && String(r.error.message || '').match(/Could not find the '(.+?)' column/);
+      if (!m || !(m[1] in d)) break;
+      const k = m[1], v = d[k];
+      if (v != null && v !== '' && v !== false && !(typeof v === 'object' && !Object.keys(v).length)) perdidas.push(k);
+      delete d[k];
+      r = await sb.from(tabla).upsert(d, opts);
+    }
+    try { if(perdidas.length && typeof showToast === 'function') showToast('⚠ No se pudo guardar: ' + perdidas.join(', ') + '. Falta correr el SQL 23 en Supabase (SQL Editor › Run).', 'warning', 12000); } catch(_e) {}
+    return r;
   }
 
   try {
@@ -36869,6 +36867,8 @@ function _cargaEstPrec(p){
   function grado(s){ s = String(s || '').toLowerCase(); return /iii|\b3\b/.test(s) ? '3' : /ii|\b2\b/.test(s) ? '2' : /\bi\b|\b1\b|primer/.test(s) ? '1' : ''; }
   function analizarEstudio(texto, cat){
     texto = String(texto || '').replace(/\b\d{1,2}\s+de\s+[a-záéíóú]+(\s+de\s+\d{4})?\s+\d{1,2}:\d{2}\s*[ap]\.?\s?m\.?/gi, ' ');   // fecha/hora de la galería del celular
+    // en tablas la lectura confunde "AI" con "Al": "Al 38" al principio del renglón es la aurícula izquierda
+    texto = texto.replace(/(^|\n)([\s|\[]*)A[l1|]\b(?=\s*[:=|]?\s*\d+(?:[.,]\d+)?(?![\d\wº°]))/g, '$1$2AI');
     var t = window._normalizarDictado(texto), l = sinAc(t).replace(/\s+/g, ' ');
     cat = cat || detectarCat(t);
     var v = {}, put = function(k, x){ if(x != null && x !== '') v[k] = String(x); };
@@ -36926,7 +36926,7 @@ function _cargaEstPrec(p){
         if(!tipos.length && !/aort/.test(win) && !/femoral|subclavi|ilia|poplit|renal/.test(l)) tipos.push('car');   // informe solo de vasos de cuello
         if(/aort/.test(win)) put('dop_PlacaAorta', val);
         tipos.forEach(function(tp){
-          var ambos = /ambas|bilateral|ambos|ambas? lados/.test(win), der = /derech|\bder\.?\b|\ba[cf][a-z]? ?d\b/.test(win), izq = /izquierd|\bizq\.?\b|\ba[cf][a-z]? ?i\b/.test(win);
+          var ambos = /ambas|bilat\w*|ambos|ambas? lados/.test(win), der = /derech|\bder\.?\b|\ba[cf][a-z]? ?d\b/.test(win), izq = /izquierd|\bizq\.?\b|\ba[cf][a-z]? ?i\b/.test(win);
           // sin lado: no pisa lo que el informe ya dijo de cada lado ("ateromatosis carotídea leve" no vuelve Sí al lado que dijo "sin placas")
           if(ambos && !neg){ put(terr[tp][0], val); put(terr[tp][1], val); }
           else if(!der && !izq){ terr[tp].forEach(function(k){ if(neg ? v[k] !== 'Sí' : !v[k]) put(k, val); }); }
