@@ -2,7 +2,7 @@
 <html lang="es-AR">
 <head>
   <meta charset="UTF-8" />
-  <script>var URCYM_BUILD = '2026-11-12-1700';</script>
+  <script>var URCYM_BUILD = '2026-11-13-0830';</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Evaluaciones cardiometabólicas — Sistema de Historia Clínica</title>
 
@@ -13728,6 +13728,7 @@ async function _enviarDocPorMail(opts) {
     alert('✓ ' + (!opts.doc ? 'Material enviado' : opts.tipo === 'receta' ? 'Receta enviada' : 'Indicaciones enviadas') + ' a ' + (j.email || opts.p.email)
       + (opts.doc ? ' con el PDF adjunto' : '') + (nMat ? ' (+ ' + nMat + ' material' + (nMat > 1 ? 'es' : '') + ')' : '') + '.');
     try { _registrarEnvioEnEvolucion(opts.p, j.email || opts.p.email, opts.resumen); } catch(e2) { console.warn('registro de envío', e2); }
+    try { const pd = window._docsMailPendientes; if(pd && pd.ids.length && String(pd.dni) === String(opts.p.dni)) window._docsMailEnviados(pd.dni, pd.ids); window._docsMailPendientes = null; } catch(e3) {}
     if(opts.alTerminar) opts.alTerminar(true);
   } catch(e) {
     fin();
@@ -13861,6 +13862,7 @@ function _modalEnviarMail(o) {
       + '<div style="font-weight:700;font-size:13.5px;margin:6px 0 2px;">📋 Planillas e informes de este paciente</div>'
       + '<div style="font-size:12px;color:#64748b;margin-bottom:4px;">Se arman con lo que tenés cargado en la HC y van en PDF.</div>'
       + _htmlInformesPaciente()
+      + (window._docsMailSeccion ? '<div class="ui-docl-wrap">' + window._docsMailSeccion() + '</div>' : '')
       + '<div style="font-weight:700;font-size:13.5px;margin:12px 0 2px;">📚 Material</div>'
       + '<div class="ui-lista">' + _htmlListaMateriales(lista, true) + '</div>'
       + '<button type="button" class="ui-admin" style="margin-top:6px;border:none;background:none;color:var(--blue);cursor:pointer;font-size:12.5px;padding:0;">⚙ Organizar materiales (subir, mover de categoría, eliminar)</button>'
@@ -13898,8 +13900,10 @@ function _modalEnviarMail(o) {
       if(grandes.length) { alert('"' + grandes[0].name + '" pesa más de 9 MB. Para archivos grandes subilo a la biblioteca (⚙ Cargar o administrar materiales).'); return; }
       const infs = Array.prototype.map.call(m.box.querySelectorAll('.ui-inf:checked'), function(c){ return c.value; });
       const cDoc = m.box.querySelector('.ui-doc'); const incluirDoc = !!(cDoc && cDoc.checked);
-      if(!incluirDoc && !ids.length && !infs.length && !archivos.length) { alert('No marcaste nada para mandar.'); return; }
+      const docsL = window._docsMailElegidos ? window._docsMailElegidos(m.box) : [];
+      if(!incluirDoc && !ids.length && !infs.length && !archivos.length && !docsL.length) { alert('No marcaste nada para mandar.'); return; }
       const extras = archivos.slice();
+      docsL.forEach(function(x){ extras.push(window._docsMailFiles(x)); });
       if(infs.length) {
         const bSi = this, prog = m.box.querySelector('.ui-prog'); bSi.disabled = true;
         const fallas = [];
@@ -13915,9 +13919,13 @@ function _modalEnviarMail(o) {
       if(incluirDoc && o.que) resumen.push(o.que.replace(/^(las|la) /, '').replace(/^./, function(c){ return c.toUpperCase(); }));
       infs.forEach(function(k){ const d = _INFORMES_MAIL.find(function(x){ return x.k === k; }); if(d && extras.some(function(f){ return f.name.indexOf(d.archivo + '_') === 0; })) resumen.push('Informe: ' + d.nombre); });
       ids.forEach(function(id){ const it = lista.find(function(x){ return x.id === id; }); resumen.push('Material: ' + (it ? it.nombre : id)); });
+      docsL.forEach(function(x){ resumen.push(x.tipo); });
       archivos.forEach(function(f){ resumen.push('Archivo: ' + f.name); });
+      window._docsMailPendientes = { dni: pacienteActual && pacienteActual.dni, ids: docsL.map(function(x){ return x.id; }) };
       fin({ incluirDoc: incluirDoc, materiales: ids, extras: extras, resumen: resumen });
     };
+    const bNueva = m.box.querySelector('.ui-docl-nueva');
+    if(bNueva) bNueva.onclick = function(){ if(!pacienteActual) return; fin(null); abrirDocumentoLibre(pacienteActual.dni); const t = document.getElementById('doclibre_tipo'); if(t && !document.getElementById('doclibre_contenido').innerText.trim()) t.value = 'Derivación médica'; };
     m.box.querySelector('.ui-admin').onclick = function(){
       abrirMaterialesManager(async function(){
         const l2 = await _leerMateriales(); lista.splice(0, lista.length); l2.forEach(function(x){ lista.push(x); });
@@ -32101,6 +32109,7 @@ ${profNombre?`<div class="prof"><span class="prof-name">${profNombre}</span>${pr
     <div class="form-actions" style="margin-top:16px;flex-wrap:wrap">
       <button class="btn btn-secondary" style="flex:1;min-width:120px" onclick="cancelarDocLibre()">Cancelar</button>
       <button class="btn btn-secondary" style="flex:1;min-width:140px" onclick="volcarDocLibreAEvolucion()">↑ Volcar a evolución</button>
+      <button class="btn btn-secondary" style="flex:1;min-width:150px;border-color:var(--teal);color:var(--teal)" onclick="_docLibreAgregarAlMail()" title="Queda lista para mandar en ✉️ Enviar por mail, junto con las indicaciones y el material">📎 Agregar al mail</button>
       <button class="btn btn-teal" style="flex:1;min-width:140px" onclick="generarPDFDocLibre()">📄 Descargar PDF</button>
     </div>
   </div>
@@ -32328,9 +32337,10 @@ function generarPDFDocLibre() {
     });
     _pdfFooterOtro(doc, u, PW, PH, direccionPie);
 
-    doc.save(filename);
+    if(window._docLibreCaptura){ const cap = window._docLibreCaptura; window._docLibreCaptura = null; cap(doc, filename); }
+    else { doc.save(filename); if(window._docLibreDescargado) window._docLibreDescargado(doc, filename); }
 
-    // Ya se descargó: ahora sí se limpia el borrador y se cierra el modal.
+    // Ya se descargó (o quedó lista para el mail): ahora sí se limpia el borrador y se cierra el modal.
     if(contenidoEl) contenidoEl.innerHTML = '';
     document.getElementById('modalDocLibre').classList.remove('open');
   });
@@ -34491,6 +34501,8 @@ textarea.nota-chica{min-height:34px;resize:vertical;line-height:1.4}
   var avisado = false;
   async function revisarVersion(){
     if(avisado || !window.URCYM_BUILD) return;
+    // A la secretaría no se le avisa (si cambia algo de la agenda, se le pide que recargue)
+    try { if((window._cu && window._cu.secretaria) || (typeof currentUser !== 'undefined' && currentUser && currentUser.secretaria)) return; } catch(e) {}
     try {
       var url = location.pathname + '?v=' + Date.now();
       var r = await fetch(url, { cache:'no-store', headers:{ Range:'bytes=0-2000' } });
@@ -36230,7 +36242,7 @@ function _cargaEstPrec(p){
   sb._colaInstalada = true;
   var CLAVE = 'urcym_cola_v1';
   var TABLAS = ['evoluciones', 'paciente_tablas', 'paciente_clinica'];
-  var _from = sb.from.bind(sb);
+  var _from = sb.from.bind(sb); window._fromOrig = _from;
   window._sbFromOriginal = _from;
 
   function leer(){ try { return JSON.parse(localStorage.getItem(CLAVE) || '[]') || []; } catch(e) { return []; } }
@@ -39241,5 +39253,255 @@ function copiarEditor(id, btn){
   });
 })();
 </script>
+<script>
+/* ═══ Minimizar sin perder · Borrador de "Datos clínicos" · Aviso de cargas sin guardar al abrir el sistema ═══ */
+(function(){
+  function $(id){ return document.getElementById(id); }
+  function F(t){ return (window._fromOrig || sb.from.bind(sb))(t); }
+  function dniAct(){ return (typeof pacienteActual !== 'undefined' && pacienteActual) ? String(pacienteActual.dni) : null; }
+  function usr(){ return String((typeof selectedUser !== 'undefined' && selectedUser) || ''); }
+  function espera(ms){ return new Promise(function(r){ setTimeout(r, ms); }); }
+  function nomPac(dni){ try { var p = (pacientesData || []).find(function(x){ return String(x.dni) === String(dni); }); if(p) return (p.apellido || '') + ', ' + (p.nombre || ''); } catch(e){} return 'DNI ' + dni; }
+
+  // ── 1) Volver a una ventana minimizada (por la píldora o por el botón que la abre) sin recargarla
+  function minimizadaDe(id){ var ov = $(id); return !!($('chip-min-' + id) && ov && !ov.classList.contains('open') && (!ov.dataset.dniPaciente || ov.dataset.dniPaciente === dniAct())); }
+  var oAbrirCli = window.abrirModalClinica;
+  if(typeof oAbrirCli === 'function'){
+    window.abrirModalClinica = abrirModalClinica = async function(){
+      if(minimizadaDe('modalClinica')){ restaurarModalMinimizado('modalClinica'); return; }
+      var r = await oAbrirCli.apply(this, arguments);
+      setTimeout(baseCli, 400);
+      return r;
+    };
+  }
+  var oAbrirDoc = window.abrirDocumento;
+  if(typeof oAbrirDoc === 'function'){
+    window.abrirDocumento = abrirDocumento = function(tipo, dni){
+      var ov = $('modalIndicaciones');
+      if(tipo !== 'receta' && $('chip-min-modalIndicaciones') && ov && !ov.classList.contains('open') && $('ind_dni') && String($('ind_dni').value) === String(dni)){ restaurarModalMinimizado('modalIndicaciones'); return; }
+      return oAbrirDoc.apply(this, arguments);
+    };
+  }
+
+  // ── 2) Borrador de "Datos clínicos" (solo si se tocó algo y no se guardó ni se cerró)
+  var LISTAS = ['acv_eventos_lista', 'iam_eventos_lista', 'quirurg_filas', 'med_filas', 'otros_med_filas'];
+  var KEY = function(dni){ return 'urcym_draftcli_' + dni; };
+  var base = null, baseDni = null, tCli = null;
+  function congelar(c){
+    c.querySelectorAll('input,select,textarea').forEach(function(el){
+      if(el.tagName === 'TEXTAREA') el.textContent = el.value;
+      else if(el.tagName === 'SELECT') Array.prototype.forEach.call(el.options, function(o){ if(o.selected) o.setAttribute('selected', ''); else o.removeAttribute('selected'); });
+      else if(el.type === 'checkbox' || el.type === 'radio'){ if(el.checked) el.setAttribute('checked', ''); else el.removeAttribute('checked'); }
+      else el.setAttribute('value', el.value);
+    });
+  }
+  function capturar(){
+    var m = $('modalClinica'); if(!m) return null;
+    var d = { ids:{}, radios:{}, listas:{} };
+    m.querySelectorAll('input,select,textarea').forEach(function(el){
+      if(el.type === 'file' || el.type === 'button' || el.type === 'submit') return;
+      if(LISTAS.some(function(l){ var c = $(l); return c && c.contains(el); })) return;
+      if(el.type === 'radio'){ if(el.name && el.checked) d.radios[el.name] = el.value; return; }
+      if(!el.id) return;
+      d.ids[el.id] = el.type === 'checkbox' ? el.checked : el.value;
+    });
+    LISTAS.forEach(function(l){ var c = $(l); if(c){ congelar(c); d.listas[l] = c.innerHTML; } });
+    try { d.hab = (typeof leerTabActAli === 'function') ? leerTabActAli() : null; } catch(e){ d.hab = null; }
+    try { d.sueno = window._suenoLeer ? window._suenoLeer() : null; } catch(e){}
+    try { d.inv = window._invLeer ? window._invLeer() : null; } catch(e){}
+    return d;
+  }
+  function firma(d){ if(!d) return ''; var x = Object.assign({}, d); delete x.ts; return JSON.stringify(x); }
+  function baseCli(){ var m = $('modalClinica'); if(!m || !m.classList.contains('open')) return; baseDni = m.dataset.dniPaciente || dniAct(); base = firma(capturar()); }
+  function guardarCli(){
+    var m = $('modalClinica'), dni = m && (m.dataset.dniPaciente || dniAct());
+    if(!dni || window._readonlyMode || base === null || baseDni !== dni) return;
+    var d = capturar(); if(!d) return;
+    if(firma(d) === base){ try { localStorage.removeItem(KEY(dni)); } catch(e){} return; }
+    d.ts = Date.now(); d.dni = dni; d.u = usr(); d.nombre = nomPac(dni);
+    try { localStorage.setItem(KEY(dni), JSON.stringify(d)); } catch(e){}
+    nube(dni, 'borradorcli_', d);
+  }
+  window._guardarDraftClinica = guardarCli;
+  function limpiarCli(dni){ if(!dni) return; try { localStorage.removeItem(KEY(dni)); } catch(e){} nubeBorrar(dni, 'borradorcli_'); }
+  ['input', 'change', 'click'].forEach(function(ev){
+    document.addEventListener(ev, function(e){ var m = $('modalClinica'); if(!m || !m.classList.contains('open') || !m.contains(e.target)) return; clearTimeout(tCli); tCli = setTimeout(guardarCli, 700); }, true);
+  });
+  // Cerrar la ventana (✕, Cancelar o después de guardar bien) = decisión tomada: ya no es borrador
+  var oCerrar = window.cerrarModal;
+  window.cerrarModal = cerrarModal = function(id){
+    var dni = id === 'modalClinica' ? (($('modalClinica') || {}).dataset || {}).dniPaciente || dniAct() : null;
+    var r = oCerrar.apply(this, arguments);
+    if(id === 'modalClinica'){ clearTimeout(tCli); limpiarCli(dni); base = null; }
+    return r;
+  };
+  async function aplicarCli(d){
+    if(!d) return;
+    LISTAS.forEach(function(l){ var c = $(l); if(c && d.listas && d.listas[l] != null) c.innerHTML = d.listas[l]; });
+    var vacio = $('quirurg_empty'); if(vacio && $('quirurg_filas')) vacio.style.display = $('quirurg_filas').children.length ? 'none' : 'block';
+    Object.keys(d.ids || {}).forEach(function(id){ var el = $(id); if(!el) return; if(el.type === 'checkbox') el.checked = !!d.ids[id]; else el.value = d.ids[id]; });
+    Object.keys(d.radios || {}).forEach(function(n){ document.querySelectorAll('#modalClinica input[type=radio][name="' + n + '"]').forEach(function(r){ r.checked = r.value === d.radios[n]; }); });
+    Object.keys(d.ids || {}).forEach(function(id){ var el = $(id); if(el && (el.tagName === 'SELECT' || el.type === 'checkbox')) el.dispatchEvent(new Event('change', { bubbles:true })); });
+    ['actualizarTabaquismo', 'actualizarAlcohol', 'calcAlcohol', 'calcPackYear', 'macActualizarUI'].forEach(function(f){ try { if(typeof window[f] === 'function') window[f](); } catch(e){} });
+    ['acv', 'iam', 'hta', 'obe', 'menopausia', 'dbt2', 'dbt_otro'].forEach(function(x){ try { if(typeof toggleDxExtra === 'function') toggleDxExtra(x); if(typeof calcDxTiempo === 'function') calcDxTiempo(x); } catch(e){} });
+    // actividad / alimentación / bebidas: se recargan con sus propias funciones
+    try {
+      if(typeof precargarTabActAli === 'function' && typeof evolClinicaSnapshot !== 'undefined'){
+        var snap = evolClinicaSnapshot || (evolClinicaSnapshot = {}); var cl = snap.clinica || (snap.clinica = {});
+        var a0 = cl.hab_actividad_json, l0 = cl.hab_alimentacion_json, tenia = Object.prototype.hasOwnProperty.call(cl, 'hab_actividad_json');
+        cl.hab_actividad_json = d.hab && d.hab.act ? JSON.stringify(d.hab.act) : null;
+        cl.hab_alimentacion_json = d.hab && d.hab.ali ? JSON.stringify(d.hab.ali) : null;
+        try { precargarTabActAli(); } finally { if(tenia || a0 !== undefined) cl.hab_actividad_json = a0; else delete cl.hab_actividad_json; cl.hab_alimentacion_json = l0; }
+      }
+    } catch(e){ console.warn('borrador act/ali', e); }
+    try { if(d.sueno && window._suenoCargar) window._suenoCargar(d.sueno); } catch(e){}
+    try { if(d.inv && window._invCargar) window._invCargar(d.inv); } catch(e){}
+    document.querySelectorAll('#modalClinica .hb-pill').forEach(function(){}); 
+    document.dispatchEvent(new Event('urcym-clinica-restaurada'));
+  }
+  window._aplicarDraftClinica = aplicarCli;
+
+  // ── Nube (para recuperarlo también desde otra compu)
+  function nube(dni, pref, d){ try { if(typeof F !== 'function' || !usr()) return; F('paciente_tablas').upsert({ dni_paciente:dni, tipo:pref + usr(), datos:JSON.stringify(d) }, { onConflict:'dni_paciente,tipo' }).then(function(){}, function(){}); } catch(e){} }
+  function nubeBorrar(dni, pref){ try { if(typeof F !== 'function' || !usr()) return; F('paciente_tablas').delete().eq('dni_paciente', dni).eq('tipo', pref + usr()).then(function(){}, function(){}); } catch(e){} }
+
+  // ── Borrador de la evolución: se guarda al toque (no cada 30 s) y con usuario y nombre
+  var tEv = null;
+  function guardarEv(){ var dni = dniAct(); if(!dni || window._readonlyMode || typeof _guardarDraftLocal !== 'function') return; _guardarDraftLocal(dni);
+    try { var k = 'urcym_draft_' + dni, raw = localStorage.getItem(k); if(raw){ var o = JSON.parse(raw); if(!o.u || !o.nombre){ o.u = o.u || usr(); o.nombre = o.nombre || nomPac(dni); localStorage.setItem(k, JSON.stringify(o)); } } } catch(e){} }
+  ['input', 'change'].forEach(function(ev){
+    document.addEventListener(ev, function(e){ var pg = $('page-evolucion'); if(!dniAct() || (pg && !pg.contains(e.target))) return; clearTimeout(tEv); tEv = setTimeout(guardarEv, 1200); }, true);
+  });
+  function yaMismo(){ try { guardarEv(); } catch(e){} try { var m = $('modalClinica'); if(m && m.classList.contains('open')) guardarCli(); else if($('chip-min-modalClinica')) guardarCli(); } catch(e){} }
+  window.addEventListener('pagehide', yaMismo);
+  document.addEventListener('visibilitychange', function(){ if(document.visibilityState === 'hidden') yaMismo(); });
+  window.addEventListener('offline', yaMismo);
+
+  // ── 3) Al abrir el sistema: "Tenés cargas sin guardar"
+  function locales(){
+    var out = {};
+    try {
+      for(var i = 0; i < localStorage.length; i++){
+        var k = localStorage.key(i), m = /^urcym_draft(cli)?_(.+)$/.exec(k || ''); if(!m) continue;
+        var o = null; try { o = JSON.parse(localStorage.getItem(k)); } catch(e){}
+        if(!o || (o.u && o.u !== usr())) continue;
+        var it = out[m[2]] || (out[m[2]] = { dni:m[2], ts:0, que:[] });
+        it.ts = Math.max(it.ts, o.ts || 0); it.que.push(m[1] ? 'Datos clínicos' : 'Evolución / tablas'); if(o.nombre) it.nombre = o.nombre;
+      }
+    } catch(e){}
+    return out;
+  }
+  async function deLaNube(out){
+    try {
+      if(typeof F !== 'function' || !usr()) return;
+      var r = await F('paciente_tablas').select('dni_paciente,tipo,datos').in('tipo', ['borrador_' + usr(), 'borradorcli_' + usr()]);
+      (r.data || []).forEach(function(x){
+        var cli = /^borradorcli_/.test(x.tipo), k = (cli ? 'urcym_draftcli_' : 'urcym_draft_') + x.dni_paciente;
+        var o = null; try { o = typeof x.datos === 'string' ? JSON.parse(x.datos) : x.datos; } catch(e){} if(!o || !o.ts) return;
+        var loc = null; try { loc = JSON.parse(localStorage.getItem(k) || 'null'); } catch(e){}
+        if(!loc || (loc.ts || 0) < o.ts){ try { localStorage.setItem(k, typeof x.datos === 'string' ? x.datos : JSON.stringify(x.datos)); } catch(e){} }
+        var it = out[x.dni_paciente] || (out[x.dni_paciente] = { dni:String(x.dni_paciente), ts:0, que:[] });
+        it.ts = Math.max(it.ts, o.ts); var q = cli ? 'Datos clínicos' : 'Evolución / tablas'; if(it.que.indexOf(q) < 0) it.que.push(q);
+      });
+    } catch(e){ console.warn('borradores en la nube', e); }
+  }
+  async function recuperar(dni){
+    var hayEv = !!localStorage.getItem('urcym_draft_' + dni), cliRaw = localStorage.getItem(KEY(dni));
+    if(typeof abrirEvolucion === 'function' && dniAct() !== String(dni)) await abrirEvolucion(dni);
+    await espera(600);
+    if(hayEv && typeof restaurarDraftLocal === 'function' && localStorage.getItem('urcym_draft_' + dni)) restaurarDraftLocal();
+    if(cliRaw){
+      var d = null; try { d = JSON.parse(cliRaw); } catch(e){}
+      if(d){ await abrirModalClinica(); await espera(500); await aplicarCli(d); base = '__restaurado__'; baseDni = String(dni); guardarCli();
+        if(typeof showToast === 'function') showToast('📝 Recuperé los datos clínicos sin guardar: revisalos y tocá Guardar.', 'warning', 6000); }
+    }
+  }
+  window._recuperarBorrador = recuperar;
+  function descartar(dni){
+    try { localStorage.removeItem('urcym_draft_' + dni); } catch(e){}
+    limpiarCli(dni); nubeBorrar(dni, 'borrador_');
+    try { sessionStorage.removeItem('urcym_tab_' + dni); } catch(e){}
+  }
+  async function avisar(){
+    if(window._readonlyMode || $('borr-aviso')) return;
+    var out = locales(); await deLaNube(out);
+    var lista = Object.keys(out).map(function(k){ return out[k]; }).filter(function(x){ return x.que.length; }).sort(function(a, b){ return b.ts - a.ts; });
+    if(!lista.length) return;
+    var el = document.createElement('div'); el.id = 'borr-aviso';
+    var f = function(ts){ if(!ts) return ''; var d = new Date(ts); return d.toLocaleDateString('es-AR', { day:'2-digit', month:'2-digit' }) + ' ' + d.toLocaleTimeString('es-AR', { hour:'2-digit', minute:'2-digit' }); };
+    function pintar(){
+      if(!lista.length){ el.remove(); return; }
+      el.innerHTML = '<div class="ba-h"><b>📝 Quedaron cargas sin guardar</b><button type="button" class="ba-x" title="Cerrar (siguen guardadas como borrador)">×</button></div>'
+        + '<div class="ba-s">El sistema se cerró o se cortó internet antes de que eligieras Guardar o No guardar.</div>'
+        + lista.map(function(x, i){ return '<div class="ba-it"><div><b>' + _esc(x.nombre || nomPac(x.dni)) + '</b><small>' + _esc(x.que.join(' + ')) + ' · ' + f(x.ts) + '</small></div>'
+          + '<button type="button" class="ba-si" data-i="' + i + '">Abrir y recuperar</button><button type="button" class="ba-no" data-i="' + i + '" title="Descartar este borrador">🗑</button></div>'; }).join('');
+      el.querySelector('.ba-x').onclick = function(){ el.remove(); };
+      el.querySelectorAll('.ba-si').forEach(function(b){ b.onclick = async function(){ var x = lista[+b.dataset.i]; b.disabled = true; b.textContent = 'Abriendo…'; try { await recuperar(x.dni); } finally { lista.splice(+b.dataset.i, 1); pintar(); } }; });
+      el.querySelectorAll('.ba-no').forEach(function(b){ b.onclick = function(){ var x = lista[+b.dataset.i]; if(!confirm('¿Descartar lo que quedó sin guardar de ' + (x.nombre || nomPac(x.dni)) + '? No se puede deshacer.')) return; descartar(x.dni); lista.splice(+b.dataset.i, 1); pintar(); }; });
+    }
+    pintar(); document.body.appendChild(el);
+  }
+  window._avisarBorradores = avisar;
+  // Una vez por apertura del sistema, cuando ya entró el usuario y cargaron los pacientes
+  var intentos = 0, tA = setInterval(function(){
+    intentos++;
+    var listo = usr() && typeof pacientesData !== 'undefined' && pacientesData && pacientesData.length;
+    if(listo){ clearInterval(tA); setTimeout(avisar, 1200); }
+    if(intentos > 600) clearInterval(tA);
+  }, 1000);
+
+  // ═══ Derivaciones / interconsultas (Documento libre) para mandar por mail ═══
+  var DKEY = function(dni){ return 'urcym_docsmail_' + dni; };
+  function docsLeer(dni){ try { return JSON.parse(sessionStorage.getItem(DKEY(dni)) || '[]'); } catch(e){ return []; } }
+  function docsEscribir(dni, l){ try { sessionStorage.setItem(DKEY(dni), JSON.stringify(l)); } catch(e){ alert('No entra en la memoria del navegador: descargá el PDF y adjuntalo como "Otro archivo".'); } }
+  function aFile(x){ var bin = atob(x.b64), u = new Uint8Array(bin.length); for(var i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return new File([u], x.filename, { type:'application/pdf' }); }
+  window._docLibreAgregarAlMail = function(){
+    var p = typeof _docLibrePaciente !== 'undefined' ? _docLibrePaciente : null; if(!p) return;
+    window._docLibreCaptura = function(doc, filename){
+      var dataUri = doc.output('datauristring'), b64 = dataUri.split(',')[1];
+      var tipo = ($('doclibre_tipo') || {}).value || 'Documento';
+      var l = docsLeer(p.dni); l.push({ id:Date.now(), tipo:tipo, filename:filename, b64:b64, marcado:true, ts:Date.now() }); docsEscribir(p.dni, l);
+      if(typeof showToast === 'function') showToast('📎 ' + tipo + ' lista para mandar: aparece marcada en ✉️ Enviar por mail.', 'success', 5000);
+    };
+    generarPDFDocLibre();
+  };
+  // Al descargar también queda disponible (sin marcar) por si después la querés mandar
+  window._docLibreDescargado = function(doc, filename){
+    try { var p = typeof _docLibrePaciente !== 'undefined' ? _docLibrePaciente : null; if(!p) return;
+      var l = docsLeer(p.dni); l.push({ id:Date.now(), tipo:($('doclibre_tipo') || {}).value || 'Documento', filename:filename, b64:doc.output('datauristring').split(',')[1], marcado:false, ts:Date.now() }); docsEscribir(p.dni, l); } catch(e){}
+  };
+  window._docsMailSeccion = function(){
+    var dni = dniAct(); if(!dni) return '';
+    var l = docsLeer(dni);
+    return '<div style="font-weight:700;font-size:13.5px;margin:12px 0 2px;">📄 Derivaciones, interconsultas y documentos</div>'
+      + (l.length ? '<div style="display:flex;flex-direction:column;gap:5px;">' + l.map(function(x){
+          var h = new Date(x.ts).toLocaleTimeString('es-AR', { hour:'2-digit', minute:'2-digit' });
+          return '<label style="display:flex;align-items:center;gap:8px;padding:7px 10px;border:1px solid #e5e7eb;border-radius:9px;font-size:13px;font-weight:500;text-transform:none;letter-spacing:0;color:#1f2937;cursor:pointer;">'
+            + '<input type="checkbox" class="ui-docl" value="' + x.id + '"' + (x.marcado && !x.enviado ? ' checked' : '') + ' style="width:16px;height:16px;accent-color:var(--teal);">'
+            + '<span style="flex:1;">' + _esc(x.tipo) + ' <span style="color:#94a3b8;font-size:11.5px;">' + h + (x.enviado ? ' · ya enviada' : '') + '</span></span></label>';
+        }).join('') + '</div>'
+        : '<div style="font-size:12px;color:#64748b;">Las armás en <b>📄 Documento libre</b> (elegís Derivación, Interconsulta, etc.) y tocás <b>📎 Agregar al mail</b>.</div>')
+      + '<button type="button" class="ui-docl-nueva" style="margin-top:6px;border:none;background:none;color:var(--blue);cursor:pointer;font-size:12.5px;padding:0;">＋ Hacer una derivación / interconsulta</button>';
+  };
+  window._docsMailElegidos = function(box){
+    var dni = dniAct(); if(!dni) return [];
+    var ids = Array.prototype.map.call(box.querySelectorAll('.ui-docl:checked'), function(c){ return Number(c.value); });
+    return docsLeer(dni).filter(function(x){ return ids.indexOf(x.id) >= 0; });
+  };
+  window._docsMailFiles = aFile;
+  window._docsMailEnviados = function(dni, ids){ var l = docsLeer(dni); l.forEach(function(x){ if(ids.indexOf(x.id) >= 0){ x.enviado = true; x.marcado = false; } }); docsEscribir(dni, l); };
+})();
+</script>
+<style>
+#borr-aviso{position:fixed;right:18px;bottom:18px;z-index:9600;width:min(420px,calc(100vw - 32px));background:#fffbeb;border:1.5px solid #f59e0b;border-radius:14px;box-shadow:0 12px 34px rgba(0,0,0,.18);padding:12px 14px;font-family:var(--font-main);color:#78350f}
+#borr-aviso .ba-h{display:flex;justify-content:space-between;align-items:center;font-size:14px;color:#92400e}
+#borr-aviso .ba-x{border:none;background:none;font-size:20px;cursor:pointer;color:#92400e}
+#borr-aviso .ba-s{font-size:12px;margin:2px 0 8px}
+#borr-aviso .ba-it{display:flex;align-items:center;gap:8px;background:#fff;border:1px solid #fde68a;border-radius:10px;padding:7px 9px;margin-top:6px}
+#borr-aviso .ba-it>div{flex:1;min-width:0}
+#borr-aviso .ba-it small{display:block;color:#a16207;font-size:11.5px}
+#borr-aviso .ba-si{border:none;background:#f59e0b;color:#fff;font-weight:700;border-radius:8px;padding:6px 10px;cursor:pointer;font-family:var(--font-main);font-size:12px;white-space:nowrap}
+#borr-aviso .ba-no{border:1px solid #fecaca;background:#fff;color:#b91c1c;border-radius:8px;padding:5px 8px;cursor:pointer}
+</style>
 </body>
 </html>
