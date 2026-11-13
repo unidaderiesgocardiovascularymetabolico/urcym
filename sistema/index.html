@@ -2,7 +2,7 @@
 <html lang="es-AR">
 <head>
   <meta charset="UTF-8" />
-  <script>var URCYM_BUILD = '2026-11-14-0130';</script>
+  <script>var URCYM_BUILD = '2026-11-14-0200';</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Evaluaciones cardiometabólicas — Sistema de Historia Clínica</title>
 
@@ -41652,6 +41652,18 @@ window._verFotoGrande = function(src){
     return h;
   }
   function fAR(f){ return f ? f.slice(8, 10) + '/' + f.slice(5, 7) + '/' + f.slice(0, 4) : ''; }
+  // ¿La evolución trae resultados de laboratorio o de estudios? (los pedidos/pendientes no cuentan)
+  function extras(txt){
+    var out = { lab: [], est: [] };
+    try {
+      var limpio = String(txt || '').split('\n').filter(function(l){ return !/^(pendientes|derivaciones)\s*:/i.test(l); }).join('\n');
+      var sp = window._pasarATablasSeparar ? window._pasarATablasSeparar(limpio) : null; if(!sp) return out;
+      if(sp.lab && window._labAnalizarTexto){ var rl = window._labAnalizarTexto(sp.lab); out.lab = (rl.items || []).filter(function(it){ return it.key !== 'LPA'; }); out.labFecha = rl.fecha || ''; }
+      (sp.estudios || []).forEach(function(x){ if(!window._estAnalizarTexto) return; var re = window._estAnalizarTexto(x.txt, x.cat); var ks = Object.keys(re.valores || {}).filter(function(k){ return !/_(Com|Nota)$/.test(k); }); if(ks.length) out.est.push({ cat: x.cat, valores: re.valores, fecha: re.fecha || '', keys: ks }); });
+    } catch(e){ console.warn('evi extras', e); }
+    return out;
+  }
+  function etiq(F, k){ var f = F.find(function(x){ return x.key === k; }); return f ? f.label.replace(/\s*\(.*?\)\s*/g, ' ').trim() : k; }
 
   window.evolImportarAbrir = function(textoIni){
     if(typeof pacienteActual === 'undefined' || !pacienteActual){ alert('Abrí primero el paciente.'); return; }
@@ -41673,6 +41685,7 @@ window._verFotoGrande = function(src){
     function pintar(mantener){
       if(!mantener){ A = analizar(ta.value); A.bloques.forEach(function(b){ b.txt = textoDe(b); }); }
       var B = A.bloques;
+      B.forEach(function(b){ if(b._txtX !== b.txt){ b._txtX = b.txt; b.x = extras(b.txt); if(b.xLab == null) b.xLab = true; b.xEst = b.xEst || {}; } });
       if(!B.length){ res.innerHTML = ta.value.trim() ? '<div style="color:#b45309;font-size:12.5px">⚠ No encontré evoluciones. Copiá también las filas que dicen <b>Fecha</b> (con la fecha al lado).</div>' : '<div class="evi-vacio">Acá vas a ver cada evolución para revisarla antes de guardar.</div>'; btn.disabled = true; btn.style.opacity = .5; msg.textContent = ''; return; }
       var hay3 = B.some(function(b){ return b.raw; });
       var h = '<div class="evi-top"><b>' + B.length + ' evolucion' + (B.length > 1 ? 'es' : '') + '</b>'
@@ -41685,11 +41698,15 @@ window._verFotoGrande = function(src){
           + (b.raw ? '<span class="evi-orig">en la planilla: ' + esc(b.raw.join('/')) + '</span>' : '')
           + (ya ? '<span class="evi-ya">⚠ ya hay una evolución ese día</span>' : '') + (!f ? '<span class="evi-ya">⚠ fecha no válida: corregila</span>' : '') + '</div>'
           + '<textarea class="evi-t" data-i="' + i + '" rows="4">' + esc(b.txt) + '</textarea>'
+          + (b.x && b.x.lab.length ? '<label class="evi-x"><input type="checkbox" class="evi-xl" data-i="' + i + '"' + (b.xLab ? ' checked' : '') + '> 🧪 <b>Laboratorio</b> → tabla (' + (b.x.labFecha ? fAR(b.x.labFecha) : 'fecha de la evolución') + '): ' + b.x.lab.map(function(it){ return esc(etiq(LAB_FILAS, it.key)) + ' ' + esc(it.val); }).join(' · ') + '</label>' : '')
+          + (b.x ? b.x.est.map(function(e, k){ return '<label class="evi-x"><input type="checkbox" class="evi-xe" data-i="' + i + '" data-k="' + k + '"' + (b.xEst[k] === false ? '' : ' checked') + '> 🫀 <b>' + esc(e.cat.split(',')[0]) + '</b> → tabla (' + (e.fecha ? fAR(e.fecha) : 'fecha de la evolución') + '): ' + e.keys.map(function(kk){ return esc(etiq(EST_FILAS, kk)) + ' ' + esc(e.valores[kk]); }).join(' · ') + '</label>'; }).join('') : '')
           + (b.tomas.length || b.orto ? '<div class="evi-ta">🩺 TA: ' + b.tomas.map(function(t){ return t[0] + '/' + t[1]; }).join(' · ') + (b.tomas.length ? ' → <b>' + prom(b.tomas) + '</b>' : '') + (b.izq.length ? ' · izq. ' + b.izq.map(function(t){ return t[0] + '/' + t[1]; }).join(' · ') : '') + (b.orto ? ' · ortostática ' + b.orto.join('/') : '') + '</div>' : '')
           + '</div>';
       });
       res.innerHTML = h;
-      res.querySelectorAll('.evi-t').forEach(function(t){ t.style.height = Math.min(t.scrollHeight + 4, 220) + 'px'; t.addEventListener('input', function(){ B[+t.dataset.i].txt = t.value; }); t.addEventListener('keydown', function(e){ e.stopPropagation(); }); });
+      res.querySelectorAll('.evi-t').forEach(function(t){ t.style.height = Math.min(t.scrollHeight + 4, 220) + 'px'; t.addEventListener('input', function(){ B[+t.dataset.i].txt = t.value; }); t.addEventListener('change', function(){ var y = res.scrollTop; pintar(true); res.scrollTop = y; }); t.addEventListener('keydown', function(e){ e.stopPropagation(); }); });
+      res.querySelectorAll('.evi-xl').forEach(function(c){ c.onchange = function(){ B[+c.dataset.i].xLab = c.checked; }; });
+      res.querySelectorAll('.evi-xe').forEach(function(c){ c.onchange = function(){ B[+c.dataset.i].xEst[+c.dataset.k] = c.checked; }; });
       res.querySelectorAll('.evi-on').forEach(function(c){ c.onchange = function(){ var b = B[+c.dataset.i]; b.on = c.checked; b._tocado = true; c.closest('.evi-b').classList.toggle('off', !c.checked); contar(); }; });
       res.querySelectorAll('.evi-f').forEach(function(x){ x.onchange = function(){ var b = B[+x.dataset.i]; b.fechaManual = x.value || null; pintar(true); }; x.addEventListener('keydown', function(e){ e.stopPropagation(); }); });
       var sf = res.querySelector('.evi-fmt'); if(sf) sf.onchange = function(){ A.fmt = sf.value; try { localStorage.setItem('urcym_fmt_planilla', A.fmt); } catch(_){} pintar(true); };
@@ -41710,7 +41727,7 @@ window._verFotoGrande = function(src){
       var fut = lista.filter(function(b){ return fechaDe(b) > hoy; }); if(fut.length && !confirm('Hay fechas futuras (' + fut.map(function(b){ return fAR(fechaDe(b)); }).join(', ') + '). ¿Revisaste si la planilla está en mes/día? ¿Guardar igual?')) return;
       btn.disabled = true; btn.textContent = '⏳ Guardando…';
       var medico = (typeof currentUser !== 'undefined' && currentUser) ? currentUser.titulo + ' — ' + currentUser.mp : 'Registro histórico';
-      var ok = 0, errores = [];
+      var ok = 0, errores = [], aTablas = { lab: [], est: [] };
       for(var i = 0; i < lista.length; i++){
         var b = lista[i], f = fechaDe(b);
         var row = { dni_paciente: dni, fecha_hora: f + 'T12:00:00', contenido_html: htmlDe(b.txt, b), medico: medico };
@@ -41719,9 +41736,35 @@ window._verFotoGrande = function(src){
         if(b.orto){ row.tap_s = b.orto[0]; row.tap_d = b.orto[1]; }
         var r = await sb.from('evoluciones').insert(row);
         if(r.error && /tap_|ta_promedio|ta\d/.test(r.error.message || '')){ ['tap_s','tap_d'].forEach(function(k){ delete row[k]; }); r = await sb.from('evoluciones').insert(row); }
+        if(!r.error && b.x){
+          if(b.xLab && b.x.lab.length) aTablas.lab.push({ fecha: b.x.labFecha || f, items: b.x.lab });
+          b.x.est.forEach(function(e, k){ if(b.xEst[k] !== false) aTablas.est.push({ fecha: e.fecha || f, valores: e.valores, keys: e.keys }); });
+        }
         if(r.error) errores.push(fAR(f) + ': ' + (r.error.message || r.error)); else { ok++; existentes[f] = 1; try { if(!ultimaEvolucionMap[dni] || row.fecha_hora > ultimaEvolucionMap[dni]) ultimaEvolucionMap[dni] = row.fecha_hora; } catch(_){} }
       }
+      // Laboratorio y estudios que venían en las evoluciones → a sus tablas, en su fecha (solo celdas vacías)
+      var nT = 0, choques = [];
+      function poner(datos, F, fecha, key, val, unidad){
+        var fi = F.findIndex(function(x){ return x.key === key; }); if(fi < 0 || F[fi].calc) return;
+        if(!datos.filas) datos.filas = [];
+        var ci = (datos.columnas || []).indexOf(fecha); if(ci < 0) ci = insertarColumnaEnOrden(datos, fecha);
+        while(datos.filas.length <= fi) datos.filas.push([]); if(!datos.filas[fi]) datos.filas[fi] = [];
+        while(datos.filas[fi].length < datos.columnas.length) datos.filas[fi].push('');
+        var ya = datos.filas[fi][ci]; if(ya != null && String(ya).trim() !== ''){ if(String(ya).trim() !== String(val).trim()) choques.push(F[fi].label + ' ' + fAR(fecha) + ' (quedó ' + ya + ', la evolución decía ' + val + ')'); return; }
+        datos.filas[fi][ci] = String(val); nT++;
+        if(unidad && datos === labDatos){ if(!labDatos.unidades) labDatos.unidades = {}; if(!labDatos.unidades[key]) labDatos.unidades[key] = unidad; }
+        return ci;
+      }
+      try {
+        if(aTablas.lab.length && typeof labDatos !== 'undefined'){ var ciL = 0; aTablas.lab.forEach(function(x){ x.items.forEach(function(it){ var c = poner(labDatos, LAB_FILAS, x.fecha, it.key, it.val, it.unidad); if(c != null) ciL = c; }); });
+          try { calcLabValues(labDatos, LAB_FILAS); } catch(_){} try { renderTablaGenerica(labDatos, LAB_FILAS, 'evlab_wrap', ciL); } catch(_){} await guardarDatosPac('lab_tabla_wrap'); }
+        if(aTablas.est.length && typeof estDatos !== 'undefined'){ var ciE = 0; aTablas.est.forEach(function(x){ x.keys.forEach(function(k){ var c = poner(estDatos, EST_FILAS, x.fecha, k, x.valores[k]); if(c != null) ciE = c; }); });
+          try { calcEstValues(estDatos, EST_FILAS); } catch(_){} try { renderTablaGenerica(estDatos, EST_FILAS, 'evest_wrap', ciE); } catch(_){} try { if(typeof renderEstResumen === 'function') renderEstResumen(); } catch(_){} await guardarDatosPac('est_tabla_wrap'); }
+        try { sincronizarRO(); } catch(_){}
+      } catch(e){ console.error('evi tablas', e); errores.push('tablas: ' + (e.message || e)); }
+      if(choques.length) alert('Algunos valores de las evoluciones NO se cargaron porque esa celda ya tenía otro valor (no se pisó nada):\n\n• ' + choques.join('\n• '));
       if(errores.length){ alert('Se guardaron ' + ok + '. No se pudieron guardar:\n\n' + errores.join('\n')); btn.disabled = false; btn.textContent = 'Guardar evoluciones'; return; }
+      if(nT && typeof showToast === 'function') setTimeout(function(){ showToast('🧪 ' + nT + ' valores de laboratorio/estudios de esas evoluciones pasaron a las tablas', 'success', 5000); }, 600);
       if(typeof showToast === 'function') showToast('📅 ' + ok + ' evolucion' + (ok > 1 ? 'es' : '') + ' previa' + (ok > 1 ? 's' : '') + ' guardada' + (ok > 1 ? 's' : '') + ' (quedan ordenadas por fecha en Previas)', 'success', 5000);
       m.cerrar();
       try { if(typeof renderPreviasList === 'function') renderPreviasList(); } catch(_){}
@@ -41767,6 +41810,8 @@ window._verFotoGrande = function(src){
 .evi-ya{color:#b45309;font-size:11.5px;font-weight:700}
 .evi-t{width:100%;padding:7px 9px;border:1.5px solid #e2e8f0;border-radius:8px;font:12.5px/1.45 var(--font-main);resize:vertical}
 .evi-ta{font-size:12px;color:#0e7490;margin-top:4px}
+.evi-x{display:flex;gap:6px;align-items:flex-start;margin-top:5px;font-size:12px;line-height:1.4;color:#334155;background:#f0fdfa;border:1px solid #99f6e4;border-radius:8px;padding:5px 8px;text-transform:none;letter-spacing:0;font-weight:400;cursor:pointer}
+.evi-x input{margin-top:2px}
 @media (max-width:900px){ .evi-cols{grid-template-columns:1fr} }
 </style>
 
