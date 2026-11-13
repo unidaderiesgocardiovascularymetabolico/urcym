@@ -2,7 +2,7 @@
 <html lang="es-AR">
 <head>
   <meta charset="UTF-8" />
-  <script>var URCYM_BUILD = '2026-11-13-0830';</script>
+  <script>var URCYM_BUILD = '2026-11-13-1100';</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Evaluaciones cardiometabólicas — Sistema de Historia Clínica</title>
 
@@ -13118,7 +13118,17 @@ function confirmarModalHabitos() {
   if(hayAli) _habDatos.ali = { hiposodica, edulc, frutas, verduras, lacteos, pescado, c_rojas, legumbres, huevo, frutos_secos, pollo, cerdo, pollo_cerdo, social, cambio: aliCambio, notas: aliNotas,
                                 frutas_nota, verduras_nota, lacteos_nota, pescado_nota, c_rojas_nota, legumbres_nota,
                                 huevo_nota, frutos_secos_nota, pollo_nota, cerdo_nota, nutri };
-  if(!hayAct && !hayAli) _habDatos = null;
+  // No perder lo que este formulario no muestra (patrón alimentario, AUDIT-C, bebidas, etc.)
+  try {
+    const _cl = evolClinicaSnapshot && evolClinicaSnapshot.clinica;
+    const _pA = _cl && _cl.hab_alimentacion_json ? _hj(_cl.hab_alimentacion_json) : null;
+    const _pX = _cl && _cl.hab_actividad_json ? _hj(_cl.hab_actividad_json) : null;
+    if(_habDatos.ali && _pA && !Array.isArray(_pA)) Object.keys(_pA).forEach(k => { if(!(k in _habDatos.ali)) _habDatos.ali[k] = _pA[k]; });
+    if(_habDatos.act && _pX && !Array.isArray(_pX)) Object.keys(_pX).forEach(k => { if(!(k in _habDatos.act)) _habDatos.act[k] = _pX[k]; });
+    const _pu = window._patronUpd;
+    if(_pu && _pu.cambio){ if(!_habDatos.ali) _habDatos.ali = (_pA && !Array.isArray(_pA)) ? JSON.parse(JSON.stringify(_pA)) : {}; _habDatos.ali.patron = _pu.sel.slice(); }
+  } catch(e) { console.warn('[hábitos] merge', e); }
+  if(!_habDatos.act && !_habDatos.ali) _habDatos = null;
 
   // Guardar en paciente_clinica AL INSTANTE
   (async function(){
@@ -38014,6 +38024,24 @@ function _cargaEstPrec(p){
     pintar(); return r;
   };
   if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', crear); else crear();
+
+  // Lo mismo en "Actividad & Alimentación" de la evolución
+  var U = window._patronUpd = { sel:[], cambio:false };
+  function crearU(){
+    var ali = $('hpanel_ali'); if(!ali || $('ali_patron_upd')) return;
+    var d = document.createElement('div'); d.className = 'ali-patron'; d.id = 'ali_patron_upd';
+    d.innerHTML = '<div class="t">🥗 Patrón / condición alimentaria</div><div class="ch">' + PAT.map(function(p){ return '<button type="button" data-p="'+p+'">'+p+'</button>'; }).join('') + '</div>';
+    ali.insertBefore(d, ali.firstChild);
+    d.addEventListener('click', function(e){ var b = e.target.closest('[data-p]'); if(!b) return; var i = U.sel.indexOf(b.dataset.p); if(i >= 0) U.sel.splice(i, 1); else U.sel.push(b.dataset.p); U.cambio = true; pintarU(); });
+  }
+  function pintarU(){ var d = $('ali_patron_upd'); if(d) d.querySelectorAll('[data-p]').forEach(function(b){ b.classList.toggle('sel', U.sel.indexOf(b.dataset.p) >= 0); }); }
+  var oAbrH = window.abrirModalHabitos;
+  if(typeof oAbrH === 'function') window.abrirModalHabitos = abrirModalHabitos = async function(){
+    var r = await oAbrH.apply(this, arguments);
+    crearU(); U.sel = []; U.cambio = false;
+    try { var al = (typeof evolClinicaSnapshot !== 'undefined' && evolClinicaSnapshot && evolClinicaSnapshot.clinica) ? _hj(evolClinicaSnapshot.clinica.hab_alimentacion_json) : null; if(al && Array.isArray(al.patron)) U.sel = al.patron.slice(); } catch(e){}
+    pintarU(); return r;
+  };
 })();
 </script>
 
@@ -38795,6 +38823,24 @@ window._agWaNum = function(tel){
 #fh_nueva_dias{gap:5px!important;flex-wrap:wrap}
 #fh_nueva_dias button{width:auto!important;min-width:34px!important;height:auto!important;padding:4px 9px!important;border-radius:8px!important;font-size:12px!important}
 #fhpanel_ali label:has(> input[type=radio]) svg,#fhpanel_act label:has(> input[type=radio]) svg{display:none}
+/* ── Lo mismo en "Actividad & Alimentación" de la evolución (actualización) ── */
+#hpanel_act label:has(> input[type=radio]),#hpanel_ali label:has(> input[type=radio]){display:inline-flex!important;flex:0 0 auto!important;align-items:center!important;justify-content:center!important;gap:5px!important;padding:5px 12px!important;border:1.5px solid #dde3ec!important;border-radius:999px!important;background:#fff!important;color:#334155!important;font-size:12px!important;font-weight:600!important;text-transform:none!important;letter-spacing:0!important;cursor:pointer!important;white-space:nowrap!important;width:auto!important;margin:0!important}
+#hpanel_act label:has(> input[type=radio]) > input[type=radio],#hpanel_ali label:has(> input[type=radio]) > input[type=radio]{position:absolute;opacity:0;width:0;height:0;pointer-events:none}
+#hpanel_act label:has(> input[type=radio]:checked),#hpanel_ali label:has(> input[type=radio]:checked){background:#2a9496!important;border-color:#2a9496!important;color:#fff!important}
+#hpanel_act label.hab-int-opt:has(input[value=leve]:checked){background:#0369a1!important;border-color:#0369a1!important}
+#hpanel_act label.hab-int-opt:has(input[value=moderada]:checked){background:#d97706!important;border-color:#d97706!important}
+#hpanel_act label.hab-int-opt:has(input[value=intensa]:checked){background:#dc2626!important;border-color:#dc2626!important}
+#hpanel_act label:has(> input[type=radio]:checked) *,#hpanel_ali label:has(> input[type=radio]:checked) *{color:#fff!important}
+#hpanel_act label:has(> input[type=radio]) input[type=number],#hpanel_act label:has(> input[type=radio]) input[type=text]{color:#1e293b!important;background:#fff!important;border-radius:6px!important;padding:2px 6px!important;width:66px!important}
+#hpanel_act div:has(> label > input[name=hab_upd_pausas]){flex-direction:row!important;flex-wrap:wrap!important;gap:6px!important}
+#hpanel_act div:has(> label.hab-int-opt){gap:6px!important;flex-wrap:wrap;height:auto!important}
+#hpanel_act label.hab-int-opt{height:auto!important;min-height:0!important;flex:0 0 auto!important}
+#hab_nueva_dias{gap:5px!important;flex-wrap:wrap}
+#hab_nueva_dias button{width:auto!important;min-width:34px!important;height:auto!important;padding:4px 9px!important;border-radius:8px!important;font-size:12px!important}
+#hpanel_ali label:has(> input[type=radio]) svg,#hpanel_act label:has(> input[type=radio]) svg{display:none}
+#hpanel_act div:has(> label > input[name=hab_upd_act_cambio]),#hpanel_act div:has(> label > input[name=hab_upd_pasos_obj]),#hpanel_ali div:has(> label > input[type=radio]){flex-direction:row!important;flex-wrap:wrap!important;gap:6px!important}
+#hpanel_ali label:has(> input[type=radio]),#hpanel_act label:has(> input[type=radio]){text-transform:none!important;letter-spacing:0!important}
+#fhpanel_ali label:has(> input[type=radio]),#fhpanel_act label:has(> input[type=radio]){text-transform:none!important;letter-spacing:0!important}
 .pasos-q{display:flex;flex-wrap:wrap;gap:4px;margin:2px 0 10px}
 .pasos-q button{border:1.5px solid #dde3ec;background:#fff;border-radius:8px;padding:4px 8px;font-size:12px;font-weight:600;cursor:pointer;font-family:var(--font-main);color:#334155}
 .pasos-q button.sel{background:#2a9496;border-color:#2a9496;color:#fff}
@@ -38822,15 +38868,16 @@ window._agWaNum = function(tel){
 (function(){
   function $(id){ return document.getElementById(id); }
   // ── Pasos: botones rápidos
-  function pasos(){
-    var inp = $('fh_pasos'); if(!inp || inp._q) return; inp._q = true;
-    var q = document.createElement('div'); q.className = 'pasos-q';
+  function pasos(){ pasosDe('fh_pasos'); pasosDe('hab_upd_pasos'); }
+  function pasosDe(id){
+    var inp = $(id); if(!inp || inp._q) return; inp._q = true;
+    var q = document.createElement('div'); q.className = 'pasos-q'; q.dataset.para = id;
     q.innerHTML = [3000, 5000, 7500, 10000, 12000].map(function(n){ return '<button type="button" data-p="' + n + '">' + n.toLocaleString('es-AR') + '</button>'; }).join('');
     inp.parentElement.parentElement.insertBefore(q, inp.parentElement.nextSibling);
     q.addEventListener('click', function(e){ var b = e.target.closest('[data-p]'); if(!b) return; inp.value = (inp.value === b.dataset.p) ? '' : b.dataset.p; inp.dispatchEvent(new Event('input', { bubbles:true })); pintarPasos(); });
     inp.addEventListener('input', pintarPasos);
   }
-  function pintarPasos(){ var inp = $('fh_pasos'); if(!inp) return; document.querySelectorAll('.pasos-q [data-p]').forEach(function(b){ b.classList.toggle('sel', b.dataset.p === String(inp.value)); }); }
+  function pintarPasos(){ document.querySelectorAll('.pasos-q[data-para]').forEach(function(q){ var inp = $(q.dataset.para); if(!inp) return; q.querySelectorAll('[data-p]').forEach(function(b){ b.classList.toggle('sel', b.dataset.p === String(inp.value)); }); }); }
 
   // ── AUDIT-C y bebidas
   var AQ = [
@@ -38930,7 +38977,7 @@ window._agWaNum = function(tel){
   };
   function preparar(){ crearBeb(); pasos(); pintarPasos(); }
   if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function(){ setTimeout(preparar, 60); }); else setTimeout(preparar, 60);
-  document.addEventListener('click', function(){ setTimeout(function(){ if(!$('beb_box') || !($('fh_pasos') || {})._q) preparar(); }, 50); }, true);
+  document.addEventListener('click', function(){ setTimeout(function(){ if(!$('beb_box') || !($('fh_pasos') || {})._q || ($('hab_upd_pasos') && !$('hab_upd_pasos')._q)) preparar(); else pintarPasos(); }, 50); }, true);
 
   // Base para SPSS y Tabla 1
   var oX = window._t1SPSSExtra;
@@ -39386,7 +39433,7 @@ function copiarEditor(id, btn){
         var o = null; try { o = JSON.parse(localStorage.getItem(k)); } catch(e){}
         if(!o || (o.u && o.u !== usr())) continue;
         var it = out[m[2]] || (out[m[2]] = { dni:m[2], ts:0, que:[] });
-        it.ts = Math.max(it.ts, o.ts || 0); it.que.push(m[1] ? 'Datos clínicos' : 'Evolución / tablas'); if(o.nombre) it.nombre = o.nombre;
+        it.ts = Math.max(it.ts, o.ts || 0); it.que.push(m[1] ? 'Datos clínicos' : 'Evolución / tablas'); if(m[1]) it.tsCli = o.ts || 0; else it.tsEv = o.ts || 0; if(o.nombre) it.nombre = o.nombre;
       }
     } catch(e){}
     return out;
@@ -39401,7 +39448,7 @@ function copiarEditor(id, btn){
         var loc = null; try { loc = JSON.parse(localStorage.getItem(k) || 'null'); } catch(e){}
         if(!loc || (loc.ts || 0) < o.ts){ try { localStorage.setItem(k, typeof x.datos === 'string' ? x.datos : JSON.stringify(x.datos)); } catch(e){} }
         var it = out[x.dni_paciente] || (out[x.dni_paciente] = { dni:String(x.dni_paciente), ts:0, que:[] });
-        it.ts = Math.max(it.ts, o.ts); var q = cli ? 'Datos clínicos' : 'Evolución / tablas'; if(it.que.indexOf(q) < 0) it.que.push(q);
+        it.ts = Math.max(it.ts, o.ts); var q = cli ? 'Datos clínicos' : 'Evolución / tablas'; if(it.que.indexOf(q) < 0) it.que.push(q); if(cli) it.tsCli = Math.max(it.tsCli || 0, o.ts); else it.tsEv = Math.max(it.tsEv || 0, o.ts);
       });
     } catch(e){ console.warn('borradores en la nube', e); }
   }
@@ -39422,24 +39469,49 @@ function copiarEditor(id, btn){
     limpiarCli(dni); nubeBorrar(dni, 'borrador_');
     try { sessionStorage.removeItem('urcym_tab_' + dni); } catch(e){}
   }
+  // Evolución guardada DESPUÉS del borrador → ese borrador ya quedó viejo (casi seguro ya está guardado)
+  async function marcarViejos(lista){
+    var dnis = lista.filter(function(x){ return x.tsEv; }).map(function(x){ return x.dni; }); if(!dnis.length) return;
+    try {
+      var r = await F('evoluciones').select('dni_paciente,fecha_hora').in('dni_paciente', dnis).order('fecha_hora', { ascending:false });
+      var ult = {}; (r.data || []).forEach(function(e){ if(!ult[e.dni_paciente]) ult[e.dni_paciente] = Date.parse(e.fecha_hora); });
+      lista.forEach(function(x){ if(x.tsEv && ult[x.dni] && ult[x.dni] > x.tsEv + 60000 && !x.tsCli) x.viejo = true; });
+    } catch(e){}
+  }
   async function avisar(){
-    if(window._readonlyMode || $('borr-aviso')) return;
+    if(window._readonlyMode) return;
     var out = locales(); await deLaNube(out);
     var lista = Object.keys(out).map(function(k){ return out[k]; }).filter(function(x){ return x.que.length; }).sort(function(a, b){ return b.ts - a.ts; });
+    await marcarViejos(lista);
+    var chip = $('nav-borr'); if(chip) chip.remove(); var dd = $('borr-aviso'); if(dd) dd.remove();
     if(!lista.length) return;
-    var el = document.createElement('div'); el.id = 'borr-aviso';
+    chip = document.createElement('div'); chip.id = 'nav-borr'; chip.className = 'nav-tab';
+    var anc = $('nav-tab-cierre'); if(anc && anc.parentNode) anc.parentNode.insertBefore(chip, anc.nextSibling); else return;
+    var el = document.createElement('div'); el.id = 'borr-aviso'; el.style.display = 'none'; document.body.appendChild(el);
+    var verViejos = false;
     var f = function(ts){ if(!ts) return ''; var d = new Date(ts); return d.toLocaleDateString('es-AR', { day:'2-digit', month:'2-digit' }) + ' ' + d.toLocaleTimeString('es-AR', { hour:'2-digit', minute:'2-digit' }); };
+    function fila(x){ var i = lista.indexOf(x); return '<div class="ba-it"><div><b>' + _esc(x.nombre || nomPac(x.dni)) + '</b><small>' + _esc(x.que.join(' + ')) + ' · ' + f(x.ts) + '</small></div>'
+      + '<button type="button" class="ba-si" data-i="' + i + '">Recuperar</button><button type="button" class="ba-no" data-i="' + i + '" title="Descartar este borrador">🗑</button></div>'; }
     function pintar(){
-      if(!lista.length){ el.remove(); return; }
-      el.innerHTML = '<div class="ba-h"><b>📝 Quedaron cargas sin guardar</b><button type="button" class="ba-x" title="Cerrar (siguen guardadas como borrador)">×</button></div>'
-        + '<div class="ba-s">El sistema se cerró o se cortó internet antes de que eligieras Guardar o No guardar.</div>'
-        + lista.map(function(x, i){ return '<div class="ba-it"><div><b>' + _esc(x.nombre || nomPac(x.dni)) + '</b><small>' + _esc(x.que.join(' + ')) + ' · ' + f(x.ts) + '</small></div>'
-          + '<button type="button" class="ba-si" data-i="' + i + '">Abrir y recuperar</button><button type="button" class="ba-no" data-i="' + i + '" title="Descartar este borrador">🗑</button></div>'; }).join('');
-      el.querySelector('.ba-x').onclick = function(){ el.remove(); };
-      el.querySelectorAll('.ba-si').forEach(function(b){ b.onclick = async function(){ var x = lista[+b.dataset.i]; b.disabled = true; b.textContent = 'Abriendo…'; try { await recuperar(x.dni); } finally { lista.splice(+b.dataset.i, 1); pintar(); } }; });
-      el.querySelectorAll('.ba-no').forEach(function(b){ b.onclick = function(){ var x = lista[+b.dataset.i]; if(!confirm('¿Descartar lo que quedó sin guardar de ' + (x.nombre || nomPac(x.dni)) + '? No se puede deshacer.')) return; descartar(x.dni); lista.splice(+b.dataset.i, 1); pintar(); }; });
+      var nuevos = lista.filter(function(x){ return !x.viejo; }), viejos = lista.filter(function(x){ return x.viejo; });
+      if(!lista.length){ chip.remove(); el.remove(); return; }
+      chip.innerHTML = '📝 ' + (nuevos.length ? nuevos.length + ' sin guardar' : 'Borradores');
+      chip.classList.toggle('nb-hay', nuevos.length > 0);
+      chip.title = 'Cargas que quedaron sin guardar porque se cerró el sistema o se cortó internet';
+      el.innerHTML = '<div class="ba-s">Quedaron sin guardar porque se cerró el sistema o se cortó internet antes de elegir Guardar o No guardar.</div>'
+        + (nuevos.length ? nuevos.map(fila).join('') : '<div class="ba-s" style="margin:6px 0">No hay cargas recientes pendientes.</div>')
+        + (viejos.length ? '<div class="ba-v"><button type="button" class="ba-vt">' + (verViejos ? '▾' : '▸') + ' Probablemente ya guardados (' + viejos.length + ')</button>'
+          + (verViejos ? '<div class="ba-s">Después de estos borradores se guardó una evolución del paciente.</div>' + viejos.map(fila).join('') + '<button type="button" class="ba-vall">🗑 Descartar todos estos</button>' : '') + '</div>' : '');
+      el.querySelectorAll('.ba-si').forEach(function(b){ b.onclick = async function(){ var x = lista[+b.dataset.i]; b.disabled = true; b.textContent = 'Abriendo…'; el.style.display = 'none'; try { await recuperar(x.dni); } finally { lista.splice(lista.indexOf(x), 1); pintar(); } }; });
+      el.querySelectorAll('.ba-no').forEach(function(b){ b.onclick = function(e){ e.stopPropagation(); var x = lista[+b.dataset.i]; if(!confirm('¿Descartar lo que quedó sin guardar de ' + (x.nombre || nomPac(x.dni)) + '? No se puede deshacer.')) return; descartar(x.dni); lista.splice(lista.indexOf(x), 1); pintar(); }; });
+      var vt = el.querySelector('.ba-vt'); if(vt) vt.onclick = function(e){ e.stopPropagation(); verViejos = !verViejos; pintar(); };
+      var va = el.querySelector('.ba-vall'); if(va) va.onclick = function(e){ e.stopPropagation(); var v = lista.filter(function(x){ return x.viejo; }); if(!confirm('¿Descartar los ' + v.length + ' borradores viejos? No se puede deshacer.')) return; v.forEach(function(x){ descartar(x.dni); lista.splice(lista.indexOf(x), 1); }); pintar(); };
     }
-    pintar(); document.body.appendChild(el);
+    function ubicar(){ var r = chip.getBoundingClientRect(); el.style.top = (r.bottom + 6) + 'px'; el.style.left = Math.max(10, Math.min(r.left, window.innerWidth - el.offsetWidth - 10)) + 'px'; }
+    chip.onclick = function(e){ e.stopPropagation(); if(el.style.display === 'none'){ el.style.display = 'block'; ubicar(); } else el.style.display = 'none'; };
+    el.addEventListener('click', function(e){ e.stopPropagation(); });
+    document.addEventListener('click', function(){ el.style.display = 'none'; });
+    pintar();
   }
   window._avisarBorradores = avisar;
   // Una vez por apertura del sistema, cuando ya entró el usuario y cargaron los pacientes
@@ -39493,15 +39565,160 @@ function copiarEditor(id, btn){
 })();
 </script>
 <style>
-#borr-aviso{position:fixed;right:18px;bottom:18px;z-index:9600;width:min(420px,calc(100vw - 32px));background:#fffbeb;border:1.5px solid #f59e0b;border-radius:14px;box-shadow:0 12px 34px rgba(0,0,0,.18);padding:12px 14px;font-family:var(--font-main);color:#78350f}
-#borr-aviso .ba-h{display:flex;justify-content:space-between;align-items:center;font-size:14px;color:#92400e}
-#borr-aviso .ba-x{border:none;background:none;font-size:20px;cursor:pointer;color:#92400e}
-#borr-aviso .ba-s{font-size:12px;margin:2px 0 8px}
-#borr-aviso .ba-it{display:flex;align-items:center;gap:8px;background:#fff;border:1px solid #fde68a;border-radius:10px;padding:7px 9px;margin-top:6px}
-#borr-aviso .ba-it>div{flex:1;min-width:0}
-#borr-aviso .ba-it small{display:block;color:#a16207;font-size:11.5px}
-#borr-aviso .ba-si{border:none;background:#f59e0b;color:#fff;font-weight:700;border-radius:8px;padding:6px 10px;cursor:pointer;font-family:var(--font-main);font-size:12px;white-space:nowrap}
-#borr-aviso .ba-no{border:1px solid #fecaca;background:#fff;color:#b91c1c;border-radius:8px;padding:5px 8px;cursor:pointer}
+#nav-borr{color:#a16207 !important;font-size:12.5px}
+#nav-borr.nb-hay{color:#b45309 !important;font-weight:700}
+#nav-borr.nb-hay::after{content:'';display:inline-block;width:7px;height:7px;border-radius:50%;background:#f59e0b;margin-left:6px;vertical-align:middle}
+#borr-aviso{position:fixed;z-index:9600;width:min(380px,calc(100vw - 24px));max-height:65vh;overflow:auto;background:#fff;border:1px solid #fde68a;border-radius:12px;box-shadow:0 12px 30px rgba(0,0,0,.16);padding:10px 12px;font-family:var(--font-main);color:#78350f}
+#borr-aviso .ba-s{font-size:11.5px;color:#a16207;margin:0 0 4px}
+#borr-aviso .ba-it{display:flex;align-items:center;gap:6px;border-top:1px solid #fef3c7;padding:6px 2px}
+#borr-aviso .ba-it>div{flex:1;min-width:0;font-size:13px}
+#borr-aviso .ba-it small{display:block;color:#a16207;font-size:11px}
+#borr-aviso .ba-si{border:1px solid #f59e0b;background:#fffbeb;color:#b45309;font-weight:700;border-radius:7px;padding:4px 9px;cursor:pointer;font-family:var(--font-main);font-size:11.5px;white-space:nowrap}
+#borr-aviso .ba-no{border:none;background:none;color:#b91c1c;cursor:pointer;font-size:13px;padding:2px 4px}
+#borr-aviso .ba-v{margin-top:6px;border-top:1px dashed #fde68a;padding-top:6px}
+#borr-aviso .ba-vt{border:none;background:none;color:#64748b;cursor:pointer;font-size:12px;padding:0;font-family:var(--font-main)}
+#borr-aviso .ba-vall{margin-top:6px;border:1px solid #fecaca;background:#fff;color:#b91c1c;border-radius:7px;padding:4px 9px;cursor:pointer;font-size:11.5px;font-family:var(--font-main)}
 </style>
+<style>
+.dxb{position:relative;margin:0 0 10px;max-width:360px}
+.dxb input{width:100%;padding:7px 10px 7px 30px;border:1.5px solid #e2e8f0;border-radius:9px;font:13px var(--font-main);background:#fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2.5'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='m20 20-3.5-3.5'/%3E%3C/svg%3E") no-repeat 10px center}
+.dxb input:focus{outline:none;border-color:#93c5fd}
+.dxb-l{position:absolute;left:0;right:0;top:calc(100% + 3px);z-index:50;background:#fff;border:1px solid #e2e8f0;border-radius:10px;box-shadow:0 10px 24px rgba(0,0,0,.12);padding:4px;display:none;max-height:260px;overflow:auto}
+.dxb-l div{padding:6px 9px;border-radius:7px;font-size:13px;cursor:pointer;display:flex;justify-content:space-between;gap:8px}
+.dxb-l div.act{background:#eff6ff}
+.dxb-l small{color:#94a3b8;font-size:11px}
+.dxb-l .ok{color:#16a34a;font-weight:700}
+.dx-item.dxb-flash{animation:dxbF 1.2s ease}
+@keyframes dxbF{0%,40%{background:#dcfce7;box-shadow:0 0 0 2px #16a34a}100%{}}
+</style>
+<script>
+/* ═══ Buscador de antecedentes cardiometabólicos: escribís, elegís con ↑↓ y Enter lo tilda ═══ */
+(function(){
+  function $(id){ return document.getElementById(id); }
+  function sinAc(t){ return String(t || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, ''); }
+  var SIN = {
+    dx_acv:'accidente cerebrovascular stroke ictus', dx_ait:'accidente isquemico transitorio', dx_albuminuria:'microalbuminuria proteinuria rac',
+    dx_atero_subcl:'aterosclerosis subclinica placa carotida', dx_dbt1:'diabetes tipo 1 dm1', dx_dbt2:'diabetes tipo 2 dm2 dbt',
+    dx_dbt_otro:'diabetes otra mody lada', dx_dis:'dislipemia colesterol hipercolesterolemia ldl', dx_eap:'enfermedad arterial periferica claudicacion',
+    dx_epoc:'enfermedad pulmonar obstructiva', dx_erc:'enfermedad renal cronica insuficiencia renal irc', dx_fa:'fibrilacion auricular arritmia',
+    dx_hiperu:'hiperuricemia acido urico gota', dx_hta:'hipertension arterial presion alta', dx_hta2:'hipertension secundaria',
+    dx_hvi:'hipertrofia ventricular izquierda', dx_iam:'infarto agudo de miocardio', dx_icc:'insuficiencia cardiaca',
+    dx_masld:'higado graso esteatosis hepatica nafld mafld', dx_ms:'sindrome metabolico', dx_neu_dbt:'neuropatia diabetica',
+    dx_obe:'obesidad', dx_predbt:'prediabetes glucemia alterada intolerancia', dx_rp_dbt:'retinopatia diabetica', dx_sahos:'apnea del sueno aos saos',
+    dx_sob:'sobrepeso', dx_coron:'enfermedad coronaria angina cardiopatia isquemica', dx_aaa:'aneurisma aorta abdominal', dx_valv:'valvulopatia estenosis aortica insuficiencia mitral',
+    dx_tev:'trombosis venosa profunda tromboembolismo pulmonar tvp tep', dx_hta_res:'hipertension resistente refractaria', dx_hf:'hipercolesterolemia familiar hf',
+    dx_lpa:'lipoproteina a lpa', dx_htg:'hipertrigliceridemia trigliceridos', dx_ir:'insulinorresistencia resistencia a la insulina homa', dx_nef_dbt:'nefropatia diabetica', dx_pie_dbt:'pie diabetico ulcera'
+  };
+  function items(){
+    return Array.prototype.map.call(document.querySelectorAll('#tab_cardio label.dx-item'), function(l){
+      var c = l.querySelector('input[type=checkbox]'); if(!c) return null;
+      var nom = l.textContent.trim();
+      return { lbl:l, chk:c, nom:nom, txt:sinAc(nom + ' ' + (SIN[c.id] || '')) };
+    }).filter(Boolean);
+  }
+  function crear(){
+    var tab = $('tab_cardio'); if(!tab || $('dxb_in')) return;
+    var w = document.createElement('div'); w.className = 'dxb';
+    w.innerHTML = '<input id="dxb_in" type="text" autocomplete="off" placeholder="Buscar antecedente (ej: hígado graso, apnea, infarto) y Enter">'
+      + '<div class="dxb-l"></div>';
+    tab.insertBefore(w, tab.firstChild);
+    var inp = w.querySelector('input'), lista = w.querySelector('.dxb-l'), res = [], sel = 0;
+    function buscar(){
+      var q = sinAc(inp.value).trim(); res = [];
+      if(!q){ lista.style.display = 'none'; return; }
+      var pal = q.split(/\s+/);
+      res = items().filter(function(it){ return pal.every(function(p){ return it.txt.indexOf(p) >= 0; }); })
+        .sort(function(a, b){ var na = sinAc(a.nom).indexOf(q) === 0 ? 0 : 1, nb = sinAc(b.nom).indexOf(q) === 0 ? 0 : 1; return na - nb; }).slice(0, 8);
+      sel = 0; pintar();
+    }
+    function pintar(){
+      if(!inp.value.trim()){ lista.style.display = 'none'; return; }
+      lista.innerHTML = res.length ? res.map(function(it, i){ return '<div data-i="' + i + '" class="' + (i === sel ? 'act' : '') + '"><span>' + _esc(it.nom) + '</span>' + (it.chk.checked ? '<span class="ok">✓ ya tildado</span>' : '<small>Enter</small>') + '</div>'; }).join('')
+        : '<div data-otra="1" class="act"><span>Agregar «' + _esc(inp.value.trim()) + '» a Otras enfermedades</span><small>Enter</small></div>';
+      lista.style.display = 'block';
+    }
+    function elegir(i){
+      var it = res[i];
+      if(!it){ // sin coincidencias: va a "Otras enfermedades"
+        var o = $('dx_otras_enfermedades'), t = inp.value.trim();
+        var nv = $('enf_nueva');
+        if(nv && t){ nv.value = t; nv.dispatchEvent(new KeyboardEvent('keydown', { key:'Enter', bubbles:true, cancelable:true })); nv.value = ''; var sg = $('enf_sug'); if(sg) sg.style.display = 'none'; }
+        else if(o && t){ var ya = o.value.split(',').map(function(x){ return sinAc(x).trim(); }); if(ya.indexOf(sinAc(t)) < 0){ o.value = o.value.trim() ? o.value.replace(/[,\s]+$/, '') + ', ' + t : t; o.dispatchEvent(new Event('input', { bubbles:true })); } }
+      } else {
+        if(!it.chk.checked){ it.chk.checked = true; it.chk.dispatchEvent(new Event('change', { bubbles:true })); }
+        it.lbl.classList.remove('dxb-flash'); void it.lbl.offsetWidth; it.lbl.classList.add('dxb-flash');
+      }
+      inp.value = ''; res = []; lista.style.display = 'none'; inp.focus();
+    }
+    inp.addEventListener('input', buscar);
+    inp.addEventListener('keydown', function(e){
+      if(e.key === 'ArrowDown' && res.length){ e.preventDefault(); sel = (sel + 1) % res.length; pintar(); }
+      else if(e.key === 'ArrowUp' && res.length){ e.preventDefault(); sel = (sel - 1 + res.length) % res.length; pintar(); }
+      else if(e.key === 'Enter'){ e.preventDefault(); if(inp.value.trim()) elegir(sel); }
+      else if(e.key === 'Escape'){ e.stopPropagation(); inp.value = ''; lista.style.display = 'none'; }
+    });
+    lista.addEventListener('mousedown', function(e){ var d = e.target.closest('[data-i],[data-otra]'); if(!d) return; e.preventDefault(); elegir(d.dataset.otra ? -1 : +d.dataset.i); });
+    inp.addEventListener('blur', function(){ setTimeout(function(){ lista.style.display = 'none'; }, 150); });
+  }
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', crear); else crear();
+})();
+</script>
+<script>
+/* ═══ Editores: la negrita / subrayado / color se aplican SOLO a lo señalado ═══
+   Antes, al escribir justo después de un título en negrita, el texto nuevo seguía en negrita.
+   Ahora: si señalás algo y le das formato, lo que escribís después sale con el estilo normal.
+   Si tocás N (o S, o un color) sin señalar nada, ahí sí lo que escribís sale con ese formato. */
+(function(){
+  var FMT = /^(bold|underline|italic|forecolor|fontsize|strikethrough)$/i;
+  var explicito = null;   // editor donde se pidió formato "para lo que sigue"
+  var oExec = document.execCommand.bind(document);
+  document.execCommand = function(cmd){
+    var sel = window.getSelection(), ed = editorDe(sel && sel.anchorNode);
+    var colapsada = sel && sel.rangeCount && sel.getRangeAt(0).collapsed;
+    var r = oExec.apply(document, arguments);
+    if(ed && FMT.test(String(cmd))){
+      if(colapsada) explicito = ed;
+      else { explicito = null; try { var rg = sel.getRangeAt(0); rg.collapse(false); sel.removeAllRanges(); sel.addRange(rg); } catch(e){} }
+    }
+    return r;
+  };
+  function editorDe(n){ while(n && n !== document.body){ if(n.nodeType === 1 && n.isContentEditable && (!n.parentElement || !n.parentElement.isContentEditable)) return n; n = n.parentNode; } return null; }
+  function esFormato(el){
+    if(!el || el.nodeType !== 1) return false;
+    if(/^(B|STRONG|U|I|EM|FONT|S|STRIKE)$/.test(el.tagName)) return true;
+    if(el.tagName === 'SPAN'){ var st = el.style; return !!(st.color || st.fontWeight || st.textDecoration || st.textDecorationLine || st.fontSize || st.fontStyle); }
+    return false;
+  }
+  function plano(t, rg, ed){
+    var tn = document.createTextNode(t); rg.insertNode(tn);
+    var s = window.getSelection(), nr = document.createRange(); nr.setStart(tn, tn.length); nr.collapse(true); s.removeAllRanges(); s.addRange(nr);
+    ed.dispatchEvent(new InputEvent('input', { bubbles:true, inputType:'insertText', data:t }));
+  }
+  document.addEventListener('beforeinput', function(e){
+    if(e.inputType !== 'insertText' || !e.data) return;
+    var ed = editorDe(e.target && e.target.nodeType === 1 ? e.target : null) || (e.target && e.target.isContentEditable ? e.target : null);
+    if(!ed || explicito === ed) return;
+    var s = window.getSelection(); if(!s || !s.rangeCount) return;
+    var rg = s.getRangeAt(0); if(!rg.collapsed || !ed.contains(rg.startContainer)) return;
+    // 1) caret al final de un tramo con formato → el texto va después, sin formato
+    var n = rg.startContainer, f = null;
+    while(n && n !== ed){ if(esFormato(n)) f = n; n = n.parentNode; }
+    if(f){
+      var resto = document.createRange(); resto.setStart(rg.startContainer, rg.startOffset); resto.setEnd(f, f.childNodes.length);
+      if(resto.toString() !== '') return;   // está en el medio de la palabra en negrita: se respeta
+      e.preventDefault();
+      var tras = document.createRange(); tras.setStartAfter(f); tras.collapse(true);
+      plano(e.data, tras, ed); return;
+    }
+    // 2) sin tramo con formato pero el navegador "arrastra" la negrita (ej. después de Enter) → texto normal
+    var arrastra = false; try { arrastra = document.queryCommandState('bold') || document.queryCommandState('underline'); } catch(_){}
+    if(arrastra){ e.preventDefault(); plano(e.data, rg, ed); }
+  }, true);
+  // Moverse con el mouse o las flechas = termina el "formato para lo que sigue"
+  document.addEventListener('mousedown', function(e){ if(editorDe(e.target)) explicito = null; }, true);
+  document.addEventListener('keydown', function(e){ if(/^(Arrow|Home|End|Page)/.test(e.key) && editorDe(e.target)) explicito = null; }, true);
+  document.addEventListener('focusin', function(e){ var ed = editorDe(e.target); if(ed !== explicito) explicito = null; });
+})();
+</script>
 </body>
 </html>
