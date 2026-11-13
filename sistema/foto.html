@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<title>URCyM · Enviar fotos</title>
+<style>
+  :root{--teal:#2a9496;--azul:#1e3a5f;--gris:#64748b;--borde:#e2e8f0}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:#f1f5f9;color:#1e293b;min-height:100vh}
+  header{background:var(--azul);color:#fff;padding:18px 18px 16px}
+  header b{font-size:18px;display:block}
+  header span{font-size:13px;opacity:.85}
+  main{padding:16px;max-width:520px;margin:0 auto}
+  .btn{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;border:none;border-radius:14px;padding:18px;font-size:18px;font-weight:700;cursor:pointer;font-family:inherit}
+  .btn-foto{background:var(--teal);color:#fff;box-shadow:0 6px 16px rgba(42,148,150,.35)}
+  .btn-gal{background:#fff;color:var(--azul);border:2px solid var(--borde);margin-top:10px;font-size:15px;padding:14px}
+  .ayuda{font-size:13px;color:var(--gris);text-align:center;margin:12px 0 4px;line-height:1.4}
+  .lista{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:16px}
+  .it{position:relative;border-radius:10px;overflow:hidden;background:#fff;border:1px solid var(--borde);aspect-ratio:3/4}
+  .it img{width:100%;height:100%;object-fit:cover;display:block}
+  .it .st{position:absolute;left:0;right:0;bottom:0;font-size:12px;font-weight:700;text-align:center;padding:4px;background:rgba(255,255,255,.92)}
+  .it .st.ok{color:#15803d}.it .st.err{color:#b91c1c}.it .st.sub{color:var(--gris)}
+  .msg{background:#fff;border-radius:14px;padding:18px;text-align:center;font-size:15px;line-height:1.5;border:1px solid var(--borde)}
+  .msg.err{border-color:#fecaca;background:#fef2f2;color:#991b1b}
+  .cuenta{font-size:14px;font-weight:700;color:var(--azul);text-align:center;margin-top:14px}
+  input[type=file]{display:none}
+</style>
+</head>
+<body>
+<header><b>📷 Fotos del informe</b><span>Unidad de Riesgo Cardiovascular y Metabólico</span></header>
+<main id="app"><div class="msg">Cargando…</div></main>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script>
+(function(){
+  var app = document.getElementById('app');
+  var token = new URLSearchParams(location.search).get('s') || '';
+  var sb = supabase.createClient('https://qdjzetylyojfjdottjrk.supabase.co', 'sb_publishable_qe6L1Uc7mRwsen7lzZlllw_DzOXonwL', { auth: { persistSession:false, autoRefreshToken:false } });
+  var n = 0, enviadas = 0;
+  function error(t){ app.innerHTML = '<div class="msg err">' + t + '</div>'; }
+  async function inicio(){
+    if(token.length < 32){ error('Este link no es válido.<br>Volvé a escanear el código QR de la compu.'); return; }
+    try {
+      var r = await sb.rpc('urcym_foto_token_ok', { t: token });
+      if(r.error || !r.data){ error('Este código QR ya venció o no es válido.<br><br>En la compu tocá de nuevo <b>📱 Desde el celular</b> y escaneá el código nuevo.'); return; }
+    } catch(e){ error('No hay conexión. Revisá internet y volvé a escanear el código.'); return; }
+    app.innerHTML = '<label class="btn btn-foto">📷 Sacar foto<input id="cam" type="file" accept="image/*" capture="environment"></label>'
+      + '<label class="btn btn-gal">🖼 Elegir de la galería (varias)<input id="gal" type="file" accept="image/*" multiple></label>'
+      + '<div class="ayuda">Sacá una foto por hoja, de frente, con buena luz y sin sombra. Podés sacar todas las que necesites: van apareciendo solas en la compu.</div>'
+      + '<div class="cuenta" id="cuenta"></div><div class="lista" id="lista"></div>';
+    document.getElementById('cam').onchange = function(){ subirVarias(this.files); this.value = ''; };
+    document.getElementById('gal').onchange = function(){ subirVarias(this.files); this.value = ''; };
+  }
+  // Se achica a un tamaño que se lee perfecto (lado mayor 2600 px) para que suba rápido
+  function preparar(file){
+    return new Promise(function(ok){
+      var img = new Image(), url = URL.createObjectURL(file);
+      img.onload = function(){
+        var M = 2600, w = img.naturalWidth, h = img.naturalHeight, k = Math.min(1, M / Math.max(w, h));
+        var c = document.createElement('canvas'); c.width = Math.round(w * k); c.height = Math.round(h * k);
+        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+        c.toBlob(function(b){ URL.revokeObjectURL(url); ok(b || file); }, 'image/jpeg', 0.9);
+      };
+      img.onerror = function(){ ok(file); };
+      img.src = url;
+    });
+  }
+  function subirVarias(files){ Array.prototype.forEach.call(files || [], subir); }
+  async function subir(file){
+    var i = ++n, lista = document.getElementById('lista');
+    var it = document.createElement('div'); it.className = 'it';
+    it.innerHTML = '<img alt=""><div class="st sub">Enviando…</div>';
+    it.querySelector('img').src = URL.createObjectURL(file);
+    lista.appendChild(it);
+    var st = it.querySelector('.st');
+    try {
+      var blob = await preparar(file);
+      var nombre = token + '/' + String(i).padStart(4, '0') + '.jpg';   // el número mantiene el orden de las hojas
+      var r = await sb.storage.from('fotos_celular').upload(nombre, blob, { contentType: 'image/jpeg', upsert: false });
+      if(r.error) throw r.error;
+      st.className = 'st ok'; st.textContent = '✓ En la compu';
+      enviadas++;
+      document.getElementById('cuenta').textContent = enviadas + (enviadas === 1 ? ' foto enviada' : ' fotos enviadas') + ' · podés seguir sacando';
+    } catch(e){
+      st.className = 'st err'; st.textContent = '✕ No se envió: tocá para reintentar';
+      it.onclick = function(){ it.remove(); subir(file); };
+      if(/expired|venc|row-level|policy|403|401/i.test(String(e && (e.message || e.statusCode) || ''))) document.getElementById('cuenta').textContent = 'El código QR venció: en la compu generá uno nuevo.';
+    }
+  }
+  inicio();
+})();
+</script>
+</body>
+</html>
