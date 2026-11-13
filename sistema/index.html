@@ -2,7 +2,7 @@
 <html lang="es-AR">
 <head>
   <meta charset="UTF-8" />
-  <script>var URCYM_BUILD = '2026-11-13-1100';</script>
+  <script>var URCYM_BUILD = '2026-11-13-1300';</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Evaluaciones cardiometabólicas — Sistema de Historia Clínica</title>
 
@@ -36632,6 +36632,7 @@ function _cargaEstPrec(p){
           try { textarea.dispatchEvent(new CustomEvent('ft-archivo', { detail: files[i] })); } catch(_){}
           var t = await window._leerArchivoTexto(files[i], function(p, extra){ est.textContent = '⏳ Leyendo ' + (extra ? extra + ' ' : '') + p + '%…'; });
           t = String(t || '').replace(/(\s*\.){4,}\s*/g, ' …… ').replace(/[ \t]{3,}/g, '   ');
+          try { textarea.dispatchEvent(new CustomEvent('ft-leido', { detail: { file: files[i], texto: t } })); } catch(_){}
           textarea.value = (textarea.value.trim() ? textarea.value + '\n' + (window._MD_SEP || '') + '\n' : '') + t;
         }
         est.textContent = '✓ Listo. Revisá lo reconocido abajo.';
@@ -36691,7 +36692,8 @@ function _cargaEstPrec(p){
     ['ECOSTRESS CARDÍACO', /eco\s*stress|ecoestres/], ['TC ENCÉFALO', /tomografia.*(cerebr|encef|craneo)|\btac\b/], ['RNM ENCÉFALO', /resonancia.*(cerebr|encef)|\brmn\b|\brnm\b/],
     ['CARDIOGRAFÍA', /cardiografia/]
   ];
-  function detectarCat(t){ var l = sinAc(t); for(var i = 0; i < CATS.length; i++) if(CATS[i][1].test(l)) return CATS[i][0]; return ''; }
+  // El estudio con más coincidencias gana (antes ganaba el primero de la lista: un "ett" suelto en una eco abdominal la hacía Ecocardio)
+  function detectarCat(t){ var l = sinAc(t), mejor = '', max = 0; for(var i = 0; i < CATS.length; i++){ var n = (l.match(new RegExp(CATS[i][1].source, 'g')) || []).length; if(n > max){ max = n; mejor = CATS[i][0]; } } return mejor; }
   var NUM = '(-?\\d+(?:[.,]\\d+)?)';
   function numTras(l, re, ventana){
     var m = re.exec(l); if(!m) return null;
@@ -36820,6 +36822,7 @@ function _cargaEstPrec(p){
       var lb = barra.querySelector('label'); if(lb) lb.childNodes[0].nodeValue = '📁 Subir foto o PDF'; }
     // pestañas: una por estudio (punto verde = ya tiene registros)
     var ESTC = (typeof EST_CATS !== 'undefined' ? EST_CATS : CATS.map(function(c){ return { label:c[0], icon:'' }; }));
+    ESTC = ESTC.slice().sort(function(a, b){ return nomCorto(a.label).localeCompare(nomCorto(b.label), 'es', { sensitivity:'base' }); });
     (function(){ var o = document.createElement('option'); o.value = '__TEXTO__'; o.textContent = 'Indicaciones / texto'; sel.appendChild(o); })();
     ESTC.forEach(function(c){ if(!Array.prototype.some.call(sel.options, function(o){ return o.value === c.label; })){ var o = document.createElement('option'); o.value = o.textContent = c.label; sel.appendChild(o); } });
     function nomCorto(l){ return String(l).replace(/,? FEMORAL Y OTROS/, '').toLowerCase().replace(/^./, function(x){ return x.toUpperCase(); }).replace(/\b(ecg|mapa|vop|tc|rnm|spect)\b/gi, function(x){ return x.toUpperCase(); }); }
@@ -36836,7 +36839,20 @@ function _cargaEstPrec(p){
     zona.addEventListener('dragover', function(e){ e.preventDefault(); zona.classList.add('sobre'); });
     zona.addEventListener('dragleave', function(){ zona.classList.remove('sobre'); });
     zona.addEventListener('drop', function(e){ e.preventDefault(); zona.classList.remove('sobre'); var fs = Array.prototype.slice.call((e.dataTransfer && e.dataTransfer.files) || []).filter(function(f){ return /^image\/|pdf/.test(f.type) || /\.pdf$/i.test(f.name); }); if(fs.length && ta._leerArchivos) ta._leerArchivos(fs); });
-    ta.addEventListener('ft-archivo', function(e){ var f = e.detail; if(!f) return; var d = document.createElement('div'); d.className = 'ec-th';
+    ta.addEventListener('ft-leido', function(e){ var d = Array.prototype.find.call(thumbs.querySelectorAll('.ec-th'), function(x){ return x._f === e.detail.file; }); if(d){ d._t = e.detail.texto; d.classList.remove('leyendo'); } });
+    thumbs.addEventListener('click', function(e){
+      var x = e.target.closest('.ec-x'); if(!x) return; e.stopPropagation();
+      var d = x.closest('.ec-th'); if(d.classList.contains('leyendo')) return;
+      var ok = ta._md ? ta._md.quitar(d._t) : false;
+      if(!ok){ var k = String(d._t || '').trim(); if(k && ta.value.trim() === k){ ta.value = ''; ok = true; } else if(k && ta.value.indexOf(k) >= 0){ ta.value = ta.value.replace(k, '').trim(); ok = true; } if(ok) ta.dispatchEvent(new Event('input', { bubbles:true })); }
+      d.remove();
+      if(!ok && d._t && ta.value.trim() && !confirm('Saqué la foto, pero no encontré su texto (¿lo corregiste?). ¿Borro todo el texto del recuadro?')) return;
+      if(!ok && d._t){ ta.value = ''; ta.dispatchEvent(new Event('input', { bubbles:true })); }
+      if(!thumbs.querySelector('.ec-th')){ var es = barra && barra.querySelector('.ft-est'); if(es) es.textContent = ''; }
+      pintar();
+    });
+    ta.addEventListener('ft-archivo', function(e){ var f = e.detail; if(!f) return; var d = document.createElement('div'); d.className = 'ec-th leyendo'; d._f = f;
+      var bx = document.createElement('button'); bx.type = 'button'; bx.className = 'ec-x'; bx.title = 'Sacar esta foto (y su texto)'; bx.textContent = '×'; d.appendChild(bx);
       if(/^image\//.test(f.type)){ var im = document.createElement('img'); im.src = URL.createObjectURL(f); im.title = 'Clic para ver grande'; im.onclick = function(){ window.open(im.src, '_blank'); }; d.appendChild(im); }
       else d.textContent = '📄 ' + (f.name || 'PDF');
       thumbs.appendChild(d); });
@@ -36881,7 +36897,7 @@ function _cargaEstPrec(p){
       var ks = Object.keys(res.valores);
       prev.innerHTML = (res.fecha ? '<div style="margin-bottom:4px"><b>Fecha:</b> ' + _fmtFechaCol(res.fecha) + '</div>' : '<div style="margin-bottom:4px;color:#64748b">Sin fecha en el texto: se usa la de hoy (la cambiás en la carga).</div>')
         + (ks.length ? '<div style="display:flex;flex-wrap:wrap;gap:5px">' + ks.map(function(k){ return '<span style="background:#eef6ff;border:1px solid #cfe3fb;border-radius:999px;padding:3px 9px"><b>' + _esc(lbl(k)) + ':</b> ' + _esc(res.valores[k]) + '</span>'; }).join('') + '</div>' : '<div style="color:#b45309">No reconocí datos estructurados: el texto va a Comentarios.</div>')
-        + '<label style="display:flex;gap:6px;align-items:center;margin-top:8px;cursor:pointer"><input type="checkbox" class="ed-com"' + ((!ks.length || res.texto.length > 250) ? ' checked' : '') + '> Guardar también el texto completo en Comentarios</label>';
+        + '<label style="display:flex;gap:6px;align-items:center;margin-top:8px;cursor:pointer"><input type="checkbox" class="ed-com"> Guardar también el texto completo en Comentarios</label>';
       btn.disabled = false; btn.style.opacity = 1;
     }
     var tmr; ta.addEventListener('input', function(){ clearTimeout(tmr); tmr = setTimeout(pintar, 250); });
@@ -39185,6 +39201,14 @@ function copiarEditor(id, btn){
         out.push(seg);
       });
     });
+    if(tipo === 'lab' && out.length > 1){
+      // Varias fotos: una hoja sin fecha es la continuación de la foto anterior (hoja 2 del mismo laboratorio)
+      for(var k = out.length - 1; k > 0; k--){ if(!out[k].fecha){ out[k - 1].txt += '\n' + out[k].txt; if(!out[k - 1].id) out[k - 1].id = out[k].id; out.splice(k, 1); } }
+      // Fotos con la misma fecha = el mismo laboratorio
+      var porF = {}, junt = [];
+      out.forEach(function(sg){ if(sg.fecha && porF[sg.fecha]){ porF[sg.fecha].txt += '\n' + sg.txt; if(sg.id && sg.id.n === 'error') porF[sg.fecha].id = sg.id; } else { if(sg.fecha) porF[sg.fecha] = sg; junt.push(sg); } });
+      out = junt;
+    }
     out.sort(function(a, b){ return (a.fecha || '9999') < (b.fecha || '9999') ? -1 : (a.fecha || '9999') > (b.fecha || '9999') ? 1 : 0; });
     return out;
   }
@@ -39236,6 +39260,21 @@ function copiarEditor(id, btn){
       marcarHecho: function(){ if(st.segs) st.segs[st.idx].hecho = true; pintarBar(); },
       irSiguiente: function(){ if(!st.segs) return false; for(var k = 1; k <= st.segs.length; k++){ var j = (st.idx + k) % st.segs.length; if(!st.segs[j].hecho){ ir(j); return true; } }
         if(typeof showToast === 'function') showToast('✓ Listo: se cargaron los ' + st.segs.length + ' documentos.', 'success', 4500); return false; },
+      quitar: function(t){
+        var k = String(t || '').trim(), igual = function(x){ x = String(x || '').trim(); return x === k || (k.length > 40 && x.indexOf(k.slice(0, 80)) >= 0) || (x.length > 40 && k.indexOf(x.slice(0, 80)) >= 0); };
+        if(st.segs){
+          st.segs[st.idx].txt = ta.value;
+          var j = -1; st.segs.forEach(function(x, i){ if(j < 0 && igual(x.txt)) j = i; }); if(j < 0) return false;
+          st.segs.splice(j, 1);
+          if(st.segs.length <= 1){ ta.value = st.segs.length ? st.segs[0].txt : ''; st.segs = null; st.idx = 0; }
+          else { if(st.idx >= j && st.idx > 0) st.idx--; ta.value = st.segs[st.idx].txt; }
+        } else {
+          var partes = ta.value.split(SEP), q = partes.filter(function(x){ return !igual(x); });
+          if(q.length === partes.length) return false;
+          ta.value = q.map(function(x){ return x.trim(); }).join('\n' + SEP + '\n').trim();
+        }
+        if(alCambiar) alCambiar(); ta._mdIgnorar = true; ta.dispatchEvent(new Event('input', { bubbles:true })); ta._mdIgnorar = false; pintarBar(); return true;
+      },
       estado: function(){ st.segs[st.idx].txt = ta.value; return { segs: JSON.parse(JSON.stringify(st.segs)), idx: st.idx }; },
       restaurar: function(c){ st.segs = c.segs; st.idx = c.idx; if(c.guardado) st.segs[st.idx].hecho = true;
         if(c.guardado){ var hay = false; for(var k = 1; k <= st.segs.length; k++){ var j = (st.idx + k) % st.segs.length; if(!st.segs[j].hecho){ st.idx = j; hay = true; break; } }
@@ -39283,6 +39322,10 @@ function copiarEditor(id, btn){
 .ec-thumbs:empty{display:none}
 .ec-th{border:1px solid #cbd5e1;border-radius:8px;background:#fff;padding:3px;font-size:12px;max-width:150px}
 .ec-th img{display:block;max-height:120px;max-width:140px;border-radius:5px;cursor:zoom-in}
+.ec-th{position:relative}
+.ec-x{position:absolute;top:-8px;right:-8px;width:22px;height:22px;border-radius:50%;border:1.5px solid #fecaca;background:#fff;color:#dc2626;font-size:15px;font-weight:700;line-height:17px;padding:0;cursor:pointer;box-shadow:0 1px 4px rgba(0,0,0,.15)}
+.ec-x:hover{background:#fee2e2}
+.ec-th.leyendo .ec-x{opacity:.35;cursor:wait}
 .ec-txt-lbl{font-size:12px;font-weight:700;color:#475569;margin:2px 0 4px}
 </style>
 <script>
@@ -39718,6 +39761,21 @@ function copiarEditor(id, btn){
   document.addEventListener('mousedown', function(e){ if(editorDe(e.target)) explicito = null; }, true);
   document.addEventListener('keydown', function(e){ if(/^(Arrow|Home|End|Page)/.test(e.key) && editorDe(e.target)) explicito = null; }, true);
   document.addEventListener('focusin', function(e){ var ed = editorDe(e.target); if(ed !== explicito) explicito = null; });
+})();
+</script>
+<script>
+/* Estudios del paciente: tarjetas en orden alfabético */
+(function(){
+  var o = window.renderEstResumen; if(typeof o !== 'function') return;
+  window.renderEstResumen = renderEstResumen = function(){
+    var r = o.apply(this, arguments);
+    try {
+      var g = document.getElementById('est_resumen_grid'); if(!g) return r;
+      var nom = function(c){ var t = c.querySelector('.est-card-titulo'); return t ? t.textContent.replace(/,? FEMORAL Y OTROS/i, '').trim() : ''; };
+      Array.prototype.slice.call(g.querySelectorAll(':scope > .est-card')).sort(function(a, b){ return nom(a).localeCompare(nom(b), 'es', { sensitivity:'base' }); }).forEach(function(c){ g.appendChild(c); });
+    } catch(e){}
+    return r;
+  };
 })();
 </script>
 </body>
