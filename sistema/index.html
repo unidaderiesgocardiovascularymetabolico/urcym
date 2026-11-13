@@ -2,7 +2,7 @@
 <html lang="es-AR">
 <head>
   <meta charset="UTF-8" />
-  <script>var URCYM_BUILD = '2026-11-14-0530';</script>
+  <script>var URCYM_BUILD = '2026-11-14-0630';</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Evaluaciones cardiometabólicas — Sistema de Historia Clínica</title>
 
@@ -36265,7 +36265,10 @@ function _cargaEstPrec(p){
     function pintar(){
       var fechaPrev = (prev.querySelector('.lp-fecha') || {}).value;
       res = (window._labAnalizarTexto || analizar)(ta.value);
-      if(!res.items.length){ prev.innerHTML = ta.value.trim() ? '<div style="color:#b45309;font-size:12.5px">No reconocí parámetros. Probá copiando el informe con los nombres y valores en la misma línea.</div>' : ''; btn.disabled = true; btn.style.opacity = .5; m.box.querySelector('.lp-msg').textContent = ''; return; }
+      // valores escritos a mano (cuando la foto no se pudo leer bien)
+      (ta._manuales || []).forEach(function(mn){ var f0 = fila(mn.key); if(f0) res.items.push({ key: mn.key, label: f0.label, val: mn.val, unidad: '', origen: '✍ escrito a mano', manual: true }); });
+      if(!res.items.length && !ta.value.trim() && !(ta._fuentes || []).length){ prev.innerHTML = ''; btn.disabled = true; btn.style.opacity = .5; return; }
+      if(false){ prev.innerHTML = ta.value.trim() ? '<div style="color:#b45309;font-size:12.5px">No reconocí parámetros. Probá copiando el informe con los nombres y valores en la misma línea.</div>' : ''; btn.disabled = true; btn.style.opacity = .5; m.box.querySelector('.lp-msg').textContent = ''; return; }
       var fecha = fechaPrev || res.fecha || fechaHoy();
       var ci = columnaDe(fecha);
       var html = '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:12.5px;flex-wrap:wrap"><b>Fecha del laboratorio</b> <input type="date" class="lp-fecha" value="' + fecha + '" style="padding:5px 8px;border:1.5px solid #e5e7eb;border-radius:8px;font:inherit">'
@@ -36289,7 +36292,11 @@ function _cargaEstPrec(p){
           + '<td style="padding:5px 6px;font-weight:600">' + _esc(it.label) + '</td><td style="padding:3px 6px;white-space:nowrap"><input class="lp-val' + (duda ? ' lp-duda' : '') + '" data-i="' + i + '" value="' + _esc(it.val) + '" title="' + (duda ? 'Leído con poca seguridad: compará con la foto' : '') + '" style="width:72px;padding:3px 6px;border:1.5px solid ' + (duda ? '#f97316' : '#e5e7eb') + ';' + (duda ? 'background:#fff7ed;' : '') + 'border-radius:6px;font:inherit"> <span style="color:#64748b;font-size:11.5px">' + _esc(it.unidad || '') + '</span></td>'
           + '<td style="padding:5px 6px;font:11.5px/1.35 monospace;color:#475569">' + _esc(it.origen || '') + (aviso ? '<div style="font:600 11.5px var(--font-main);color:#b45309;margin-top:2px">⚠ ' + _esc(aviso) + '</div>' : '') + (qcE ? '<div style="font:700 11.5px var(--font-main);color:#b91c1c;margin-top:2px">⛔ ' + _esc(qcE) + '</div>' : '') + (duda ? '<div style="font:600 11.5px var(--font-main);color:#c2410c;margin-top:2px">🔶 Leído con poca seguridad: compará con la foto</div>' : '') + '</td></tr>';
       });
+      if(!res.items.length) html += '<tr><td colspan="4" style="padding:10px 6px;color:#b45309;font-size:12.5px">No pude leer valores en la foto. <b>Escribilos abajo</b> mirando la foto (parámetro y valor) y se cargan igual.</td></tr>';
       html += '</table>';
+      var opsMan = LAB_FILAS.filter(function(f){ return !f.cat && (!f.calc || f.calcAuto); }).map(function(f){ return f.label; }).concat(window._filasExtraDe ? window._filasExtraDe('lab') : []);
+      html += '<div class="lp-man"><b>✍ Escribir un valor:</b><input class="lp-man-k" list="lp-man-dl" placeholder="parámetro (ej. TSH, T4 libre)"><input class="lp-man-v" placeholder="valor"><button type="button" class="lp-man-add">＋ Agregar</button>'
+        + '<datalist id="lp-man-dl">' + opsMan.map(function(l){ return '<option value="' + _esc(l) + '">'; }).join('') + '</datalist><span class="lp-man-msg"></span></div>';
       var otros = (res.otros || []);
       if(otros.length){
         var opts = '<option value="">— no cargar —</option><option value="-">⛔ No es de mi tabla (no preguntar más)</option>'
@@ -36303,6 +36310,27 @@ function _cargaEstPrec(p){
           + '</div>';
       }
       prev.innerHTML = html;
+      (function(){
+        var kI = prev.querySelector('.lp-man-k'), vI = prev.querySelector('.lp-man-v'), mg = prev.querySelector('.lp-man-msg');
+        function clave(n){
+          n = String(n || '').trim(); if(!n) return '';
+          var nl = n.toLowerCase();
+          var f = LAB_FILAS.find(function(x){ return !x.cat && String(x.label).toLowerCase() === nl; }); if(f) return f.key;
+          var ex = (window._filasExtraDe ? window._filasExtraDe('lab') : []).find(function(x){ return x.toLowerCase() === nl; }); if(ex) return 'extra_' + ex;
+          try { var r0 = (window._labAnalizarTexto || analizar)(n + ' 1'); if(r0.items && r0.items[0]) return r0.items[0].key; } catch(_){}
+          return '';
+        }
+        async function agregar(){
+          var n = kI.value.trim(), v = vI.value.trim().replace(',', '.'); if(!n){ kI.focus(); return; } if(!v || isNaN(parseFloat(v))){ mg.textContent = 'Poné el valor (número)'; vI.focus(); return; }
+          var k = clave(n);
+          if(!k){ if(!confirm('«' + n + '» no es una fila de tu tabla de laboratorio.\n\n¿La agrego como fila nueva para todos los pacientes?')) { mg.textContent = 'Elegí un parámetro de la lista'; return; } await window._filaGlobalAgregar('lab', n); k = 'extra_' + n; }
+          ta._manuales = (ta._manuales || []).filter(function(x){ return x.key !== k; }).concat([{ key: k, val: v }]);
+          pintar(); setTimeout(function(){ var k2 = prev.querySelector('.lp-man-k'); if(k2) k2.focus(); }, 30);
+        }
+        [kI, vI].forEach(function(i){ i.addEventListener('keydown', function(e){ e.stopPropagation(); if(e.key === 'Enter'){ e.preventDefault(); if(i === kI && kI.value.trim()) vI.focus(); else agregar(); } }); });
+        prev.querySelector('.lp-man-add').onclick = agregar;
+      })();
+      if(!res.items.length){ btn.disabled = true; btn.style.opacity = .5; m.box.querySelector('.lp-msg').textContent = 'Sin valores todavía: escribilos o elegilos en «No reconocí».'; }
       prev.querySelectorAll('.lp-ens').forEach(function(sl){ sl.onchange = async function(){
         var o = otros[+sl.dataset.i]; if(!sl.value) return;
         if(sl.value === '__nueva'){
@@ -36330,8 +36358,8 @@ function _cargaEstPrec(p){
       lpF.onchange = function(){ var a = document.activeElement; if(lpF._foco || (a && a.classList && a.classList.contains('fe-esc'))){ lpF._pend = true; return; } pintar(); };
       lpF.addEventListener('blur', function(){ lpF._foco = false; setTimeout(function(){ var a = document.activeElement; if(lpF._pend && !(a && a.classList && a.classList.contains('fe-esc'))){ lpF._pend = false; pintar(); } }, 0); });
       lpF.addEventListener('keydown', function(e){ e.stopPropagation(); if(e.key === 'Enter'){ e.preventDefault(); lpF.blur(); } });
-      btn.disabled = false; btn.style.opacity = 1;
-      m.box.querySelector('.lp-msg').textContent = res.items.length + ' parámetro' + (res.items.length === 1 ? '' : 's') + ' reconocido' + (res.items.length === 1 ? '' : 's') + '. Revisá antes de cargar.';
+      btn.disabled = !res.items.length; btn.style.opacity = res.items.length ? 1 : .5;
+      if(res.items.length) m.box.querySelector('.lp-msg').textContent = res.items.length + ' parámetro' + (res.items.length === 1 ? '' : 's') + (res.items.some(function(x){ return x.manual; }) ? ' (algunos escritos a mano)' : ' reconocido' + (res.items.length === 1 ? '' : 's')) + '. Revisá antes de cargar.';
     }
     var tmr; ta.addEventListener('input', function(){ clearTimeout(tmr); tmr = setTimeout(pintar, 250); });
     window._labSinonimosCargar().then(function(){ if(ta.value.trim()) pintar(); });
@@ -37805,6 +37833,16 @@ function _cargaEstPrec(p){
     pill.innerHTML = d ? '🕓 Carga diferida · consulta del <b>' + dd(d.fecha) + ' ' + esc(d.hora) + '</b> <button type="button" title="Quitar" onclick="_evolDiferidaQuitar()">✕</button>' : '';
   }
   window._evolDiferidaQuitar = function(){ window._evolDiferida = null; pintarPill(); };
+  // Marca discreta al lado de Guardar: "🕓 carga diferida" (sin fecha: carga general)
+  function marcaGeneral(){
+    var g = $('btnGuardarEvol'); if(!g || $('dif_gen_ck')) return;
+    var l = document.createElement('label'); l.className = 'dif-gen'; l.title = 'Marcá esto si estás cargando después (carga general): la evolución queda marcada como carga diferida, con la fecha y hora reales en que la escribiste. Si corresponde a una consulta puntual, usá el botón 🕓 Carga diferida de arriba.';
+    l.innerHTML = '<input type="checkbox" id="dif_gen_ck"> 🕓 carga diferida';
+    l.querySelector('input').onchange = function(){ l.classList.toggle('on', this.checked); };
+    g.parentNode.insertBefore(l, g);
+  }
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', marcaGeneral); else marcaGeneral();
+  setTimeout(marcaGeneral, 2000);
   function turnosDelPaciente(dni){
     var out = [], T = (typeof turnos !== 'undefined' && turnos) || {}, h = hoy();
     Object.keys(T).forEach(function(k){ var t = T[k]; if(!t || String(t.dni_paciente) !== String(dni)) return;
@@ -37837,7 +37875,16 @@ function _cargaEstPrec(p){
   };
   // Al guardar: fecha de la consulta + leyenda con la fecha/hora real de carga
   window._evolDiferidaAplicar = function(base, dni){
-    var d = window._evolDiferida; if(!d || d.dni !== String(dni)) return base;
+    var d = window._evolDiferida;
+    var gen = $('dif_gen_ck');
+    if((!d || d.dni !== String(dni)) && gen && gen.checked){
+      // Carga diferida general: se marca, sin fecha de consulta (queda con la fecha y hora reales de carga)
+      var ah = new Date(), fh0 = ah.toLocaleDateString('es-AR', { day:'2-digit', month:'2-digit', year:'numeric', timeZone:'America/Argentina/Buenos_Aires' }) + ' a las ' + ah.toLocaleTimeString('es-AR', { hour:'2-digit', minute:'2-digit', hour12:false, timeZone:'America/Argentina/Buenos_Aires' });
+      base.contenido_html = '<div class="bloque-diferida" contenteditable="false" style="background:#fff7ed;border-left:3px solid #d97706;padding:6px 10px;margin:0 0 8px;font-size:12px;color:#92400e">🕓 <b>Carga diferida</b> · registrada el ' + fh0 + ' (carga general, no corresponde a una consulta del día)</div>' + (base.contenido_html || '');
+      gen.checked = false; gen.closest('.dif-gen').classList.remove('on');
+      return base;
+    }
+    if(!d || d.dni !== String(dni)) return base;
     var ahora = new Date(), fh = ahora.toLocaleDateString('es-AR', { day:'2-digit', month:'2-digit', year:'numeric', timeZone:'America/Argentina/Buenos_Aires' }) + ' a las ' + ahora.toLocaleTimeString('es-AR', { hour:'2-digit', minute:'2-digit', hour12:false, timeZone:'America/Argentina/Buenos_Aires' }) + ' h';
     var consulta = new Date(d.fecha + 'T' + d.hora + ':00-03:00').toISOString();
     var leyenda = '<div class="bloque-diferida" contenteditable="false" style="background:#fff7ed;border-left:3px solid #d97706;padding:6px 10px;margin:0 0 8px;font-size:12px;color:#92400e">🕓 <b>Carga diferida</b> · registrada el ' + fh + ' · corresponde a la consulta del ' + dd(d.fecha) + ' a las ' + esc(d.hora) + ' h.</div>';
@@ -37855,6 +37902,9 @@ function _cargaEstPrec(p){
 })();
 </script>
 <style>
+.dif-gen{display:inline-flex;align-items:center;gap:4px;font:600 11.5px var(--font-main);color:#94a3b8;margin-right:10px;cursor:pointer;text-transform:none;letter-spacing:0;user-select:none;white-space:nowrap}
+.dif-gen input{margin:0;accent-color:#d97706}
+.dif-gen.on{color:#b45309;background:#fff7ed;border:1.5px solid #fdba74;border-radius:999px;padding:2px 9px}
 #evol_diferida_pill{font-size:11.5px;font-weight:600;background:#fff7ed;color:#b45309;border:1.5px solid #fdba74;border-radius:999px;padding:3px 10px}
 #evol_diferida_pill button{background:none;border:none;color:inherit;cursor:pointer;font-size:11px;padding:0 0 0 4px}
 .dif-bg{position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:10500;display:flex;align-items:center;justify-content:center;padding:16px}
@@ -40299,6 +40349,11 @@ function copiarEditor(id, btn){
 .lp-vista button{border:1.5px solid #e2e8f0;background:#fff;border-radius:8px;padding:4px 10px;font-size:12px;font-weight:600;cursor:pointer;font-family:var(--font-main);color:#475569}
 .lp-vista button.act{background:#1e3a5f;border-color:#1e3a5f;color:#fff}
 .lp-vista button:disabled{opacity:.4;cursor:default}
+.lp-man{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:10px;padding:8px 10px;background:#f0fdfa;border:1.5px solid #99f6e4;border-radius:10px;font-size:12.5px;color:#134e4a}
+.lp-man input{padding:5px 8px;border:1.5px solid #cbd5e1;border-radius:7px;font:12.5px var(--font-main)}
+.lp-man .lp-man-k{flex:1;min-width:160px}.lp-man .lp-man-v{width:90px}
+.lp-man button{border:none;background:#0d9488;color:#fff;border-radius:7px;padding:6px 12px;font:700 12px var(--font-main);cursor:pointer}
+.lp-man-msg{color:#b45309;font-size:11.5px}
 .lp-fnav{font-size:12.5px;color:#1e3a5f;background:#eef2ff;border:1px solid #c7d2fe;border-radius:10px;padding:7px 10px;margin-bottom:8px;line-height:1.6}
 .lp-fnav:empty{display:none}
 .lp-fn-b{display:inline-flex;gap:5px;margin-left:6px}
@@ -40571,7 +40626,7 @@ function copiarEditor(id, btn){
           if(!tr.querySelector('.lp-ck, .lp-ens')) return; tot++;
           var celdas = tr.querySelectorAll('td'), orig = celdas.length ? celdas[celdas.length - 1].textContent : tr.textContent;
           var o = norm(orig.split(/⛔|◆|🔶/)[0]).slice(0, 28);
-          var mostrar = !sel || (o && clave.indexOf(o) >= 0);
+          var mostrar = !sel || /✍/.test(orig) || (o && clave.indexOf(o) >= 0);
           tr.style.display = mostrar ? '' : 'none'; if(mostrar) n++;
         });
         prevEl.querySelectorAll('.lp-ens').forEach(function(s){ var row = s.closest('tr, div'); if(!row || row.tagName === 'TR') return; var o = norm(row.textContent).slice(0, 28); row.style.display = !sel || clave.indexOf(o) >= 0 ? '' : 'none'; });
