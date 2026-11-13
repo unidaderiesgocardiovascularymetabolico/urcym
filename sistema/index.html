@@ -2,7 +2,7 @@
 <html lang="es-AR">
 <head>
   <meta charset="UTF-8" />
-  <script>var URCYM_BUILD = '2026-11-14-0200';</script>
+  <script>var URCYM_BUILD = '2026-11-14-0300';</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Evaluaciones cardiometabólicas — Sistema de Historia Clínica</title>
 
@@ -41890,6 +41890,267 @@ window._verFotoGrande = function(src){
 .ac-mal b{color:#b91c1c}.ac-mal span{color:#dc2626}
 .ac-eq b{color:#64748b}
 .ac-na{color:#cbd5e1}
+</style>
+
+<script>
+/* ═══ Enfermedad coronaria: eventos con fecha (stent y cantidad, re-angioplastia, by-pass…) → dx_detalle_json.coron ═══ */
+(function(){
+  function $(id){ return document.getElementById(id); }
+  function esc(t){ return String(t == null ? '' : t).replace(/[&<>"]/g, function(c){ return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' }[c]; }); }
+  var TIPOS = ['Angioplastia con stent', 'Re-angioplastia / nuevo stent', 'Angioplastia con balón (sin stent)', 'Cirugía de revascularización (by-pass)', 'Cinecoronariografía diagnóstica', 'Angina estable', 'SCA sin IAM / angina inestable', 'Otro'];
+  function fNorm(t){ t = String(t || '').trim(); var m;
+    if((m = /^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{4})$/.exec(t))) return m[3] + '-' + String(+m[2]).padStart(2, '0') + '-' + String(+m[1]).padStart(2, '0');
+    if((m = /^(\d{1,2})[\/.-](\d{4})$/.exec(t))) return m[2] + '-' + String(+m[1]).padStart(2, '0');
+    if(/^(19|20)\d{2}$/.test(t)) return t; if(/^\d{4}-\d{2}(-\d{2})?$/.test(t)) return t; return t; }
+  function fVer(f){ f = String(f || ''); var p = f.split('-'); return p.length === 3 ? p[2] + '/' + p[1] + '/' + p[0] : p.length === 2 ? p[1] + '/' + p[0] : f; }
+  function fila(ev){
+    ev = ev || {};
+    var d = document.createElement('div'); d.className = 'cor-ev';
+    d.innerHTML = '<input type="text" class="cor-f" placeholder="año o mm/aaaa" value="' + esc(fVer(ev.fecha)) + '" title="Fecha: año (2019), mes y año (03/2019) o fecha completa">'
+      + '<select class="cor-t">' + TIPOS.map(function(t){ return '<option' + (t === ev.tipo ? ' selected' : '') + '>' + t + '</option>'; }).join('') + '</select>'
+      + '<label class="cor-st">Stents <input type="number" min="1" max="12" class="cor-n" value="' + esc(ev.stents || '') + '"></label>'
+      + '<label class="cor-bp">Puentes <input type="number" min="1" max="6" class="cor-p" value="' + esc(ev.puentes || '') + '"></label>'
+      + '<input type="text" class="cor-v" placeholder="vasos (DA, Cx, CD…)" value="' + esc(ev.vasos || '') + '">'
+      + '<input type="text" class="cor-nt" placeholder="nota" value="' + esc(ev.nota || '') + '">'
+      + '<button type="button" class="cor-x" title="Quitar">×</button>';
+    function vis(){ var t = d.querySelector('.cor-t').value; d.querySelector('.cor-st').style.display = /stent/i.test(t) ? '' : 'none'; d.querySelector('.cor-bp').style.display = /by-pass/.test(t) ? '' : 'none'; }
+    d.querySelector('.cor-t').onchange = vis; vis();
+    d.querySelector('.cor-x').onclick = function(){ d.remove(); avisar(); };
+    d.querySelectorAll('input').forEach(function(i){ i.addEventListener('keydown', function(e){ e.stopPropagation(); }); });
+    d.querySelector('.cor-f').addEventListener('blur', function(){ var x = this; var n = fNorm(x.value); x.classList.toggle('mal', !!x.value.trim() && !/^\d{4}(-\d{2}(-\d{2})?)?$/.test(n)); });
+    return d;
+  }
+  function avisar(){ var b = $('dx_extra_coron'); if(b) b.dispatchEvent(new Event('input', { bubbles:true })); }
+  function crear(){
+    if($('dx_extra_coron')) return;
+    var iam = $('dx_extra_iam'); if(!iam) return;
+    var b = document.createElement('div'); b.id = 'dx_extra_coron'; b.style.cssText = 'display:none;background:#f0f4fa;border-radius:10px;padding:10px 14px;margin-top:10px;font-size:12px';
+    b.innerHTML = '<div style="font-weight:600;color:var(--blue);margin-bottom:8px">Enfermedad coronaria — eventos y procedimientos (puede registrar más de uno)</div>'
+      + '<div id="cor_lista" style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px"></div>'
+      + '<button type="button" class="cor-add">＋ Agregar evento / procedimiento</button>';
+    iam.after(b);
+    b.querySelector('.cor-add').onclick = function(){ $('cor_lista').appendChild(fila()); avisar(); var f = $('cor_lista').lastChild.querySelector('.cor-f'); if(f) f.focus(); };
+    var c = $('dx_coron'); if(c) c.addEventListener('change', vis);
+  }
+  function vis(){ var b = $('dx_extra_coron'); if(!b) return; var c = $('dx_coron'); b.style.display = ((c && c.checked) || ($('cor_lista') && $('cor_lista').children.length)) ? 'block' : 'none'; }
+  function leer(){
+    var l = $('cor_lista'); if(!l) return null;
+    var evs = Array.prototype.map.call(l.children, function(d){
+      var t = d.querySelector('.cor-t').value, o = { fecha: fNorm(d.querySelector('.cor-f').value), tipo: t };
+      var n = parseInt(d.querySelector('.cor-n').value, 10); if(/stent/i.test(t) && n) o.stents = n;
+      var p = parseInt(d.querySelector('.cor-p').value, 10); if(/by-pass/.test(t) && p) o.puentes = p;
+      var v = d.querySelector('.cor-v').value.trim(); if(v) o.vasos = v; var nt = d.querySelector('.cor-nt').value.trim(); if(nt) o.nota = nt;
+      return o;
+    }).filter(function(o){ return o.fecha || o.stents || o.vasos || o.nota || o.puentes; });
+    return evs.length ? { eventos: evs } : null;
+  }
+  window._coronLeer = leer;
+  var oL = window._dxdLeer, oC = window._dxdCargar, oT = window._dxdTexto, oX = window._t1SPSSExtra, oA = window.abrirModalClinica;
+  if(typeof oL === 'function') window._dxdLeer = function(){ var o = oL.apply(this, arguments); if(o === undefined) return o; crear(); var c = leer(); if(c){ o = o || {}; o.coron = c; } return o; };
+  if(typeof oC === 'function') window._dxdCargar = function(j){
+    var r = oC.apply(this, arguments); crear();
+    var o = j; try { if(typeof o === 'string') o = JSON.parse(o); } catch(e){ o = null; } o = o || {};
+    var l = $('cor_lista'); if(l){ l.innerHTML = ''; ((o.coron && o.coron.eventos) || []).forEach(function(ev){ l.appendChild(fila(ev)); }); }
+    vis(); return r;
+  };
+  if(typeof oT === 'function') window._dxdTexto = function(j){
+    var out = oT.apply(this, arguments) || [];
+    var o = j; try { if(typeof o === 'string') o = JSON.parse(o); } catch(e){ o = null; }
+    if(o && o.coron && o.coron.eventos && o.coron.eventos.length) out.push(['Enf. coronaria', o.coron.eventos.map(function(e){ return (e.fecha ? fVer(e.fecha) + ' ' : '') + e.tipo.toLowerCase() + (e.stents ? ' (' + e.stents + ' stent' + (e.stents > 1 ? 's' : '') + ')' : '') + (e.puentes ? ' (' + e.puentes + ' puente' + (e.puentes > 1 ? 's' : '') + ')' : '') + (e.vasos ? ' en ' + e.vasos : '') + (e.nota ? ' — ' + e.nota : ''); }).join(' · ')]);
+    return out;
+  };
+  if(typeof oX === 'function') window._t1SPSSExtra = function(V, num, b01, SN, cols, D){
+    oX.apply(this, arguments);
+    var ev = function(f){ var c = D.cli[f.dni]; if(!c || !c.dx_detalle_json) return []; try { var o = typeof c.dx_detalle_json === 'string' ? JSON.parse(c.dx_detalle_json) : c.dx_detalle_json; return (o && o.coron && o.coron.eventos) || []; } catch(e){ return []; } };
+    cols.push(V('coron_eventos', 'Enf. coronaria: eventos/procedimientos (n)', '', function(f){ var e = ev(f); return e.length || null; }));
+    cols.push(V('coron_stents', 'Enf. coronaria: stents colocados (total)', '', function(f){ var e = ev(f); if(!e.length) return null; return e.reduce(function(a, x){ return a + (x.stents || 0); }, 0); }));
+    cols.push(V('coron_angioplastias', 'Enf. coronaria: angioplastias (n)', '', function(f){ var e = ev(f); if(!e.length) return null; return e.filter(function(x){ return /angioplastia/i.test(x.tipo); }).length; }));
+    cols.push(V('coron_bypass', 'Enf. coronaria: cirugía de revascularización', SN, function(f){ var e = ev(f); if(!e.length) return null; return e.some(function(x){ return /by-pass/.test(x.tipo); }) ? 1 : 0; }));
+    cols.push(V('coron_primer_anio', 'Enf. coronaria: año del primer evento', '', function(f){ var a = ev(f).map(function(x){ return parseInt(String(x.fecha || '').slice(0, 4), 10); }).filter(Boolean); return a.length ? Math.min.apply(null, a) : null; }));
+  };
+  if(typeof oA === 'function') window.abrirModalClinica = abrirModalClinica = async function(){ crear(); var r = await oA.apply(this, arguments); setTimeout(vis, 60); return r; };
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', crear); else crear();
+})();
+
+/* ═══ Datos clínicos: los recuadros de detalles se abren y cierran (cerrados por defecto, con aviso de qué falta) ═══ */
+(function(){
+  function cajas(){ return Array.prototype.slice.call(document.querySelectorAll('#modalClinica [id^="dx_extra_"]:not(.dx-extra-mini), #modalClinica .dxd-box')).filter(function(b){ return !(b.parentElement && b.parentElement.closest('[id^="dx_extra_"], .dxd-box')); }); }
+  function titulo(b){ return b.querySelector(':scope > .t') || b.querySelector(':scope > div'); }
+  function cuenta(b){
+    var n = 0;
+    b.querySelectorAll('input, textarea, select').forEach(function(i){ if(i.type === 'checkbox' || i.type === 'button') return; if(i.tagName === 'SELECT' && i.closest('.cor-ev')) return; if(String(i.value || '').trim()) n++; });
+    n += b.querySelectorAll('#acv_eventos_lista > *, #iam_eventos_lista > *').length;
+    return n;
+  }
+  function armar(b){
+    if(b._plg) return; var t = titulo(b); if(!t) return; b._plg = true;
+    b.classList.add('plg-box', 'plg-cerrado'); t.classList.add('plg-h');
+    var ins = document.createElement('span'); ins.className = 'plg-est'; t.appendChild(ins);
+    t.addEventListener('click', function(){ b.classList.toggle('plg-cerrado'); });
+    b.addEventListener('input', function(){ estado(b); }); b.addEventListener('click', function(e){ if(!e.target.closest('.plg-h')) setTimeout(function(){ estado(b); }, 0); });
+    estado(b);
+  }
+  function estado(b){ var e = b.querySelector('.plg-est'); if(!e) return; var n = cuenta(b); e.textContent = n ? n + ' dato' + (n > 1 ? 's' : '') + ' cargado' + (n > 1 ? 's' : '') : 'sin completar · tocá para cargar'; e.classList.toggle('vacio', !n); }
+  function todo(cerrar){ cajas().forEach(function(b){ armar(b); if(cerrar) b.classList.add('plg-cerrado'); estado(b); }); }
+  window._plgArmar = todo;
+  var oA = window.abrirModalClinica;
+  if(typeof oA === 'function') window.abrirModalClinica = abrirModalClinica = async function(){ var r = await oA.apply(this, arguments); setTimeout(function(){ todo(true); }, 150); return r; };
+  // al tildar un diagnóstico aparece su recuadro cerrado, con aviso
+  document.addEventListener('change', function(e){ if(e.target && /^dx_/.test(e.target.id || '') && e.target.type === 'checkbox' && e.target.closest('#modalClinica')) setTimeout(function(){ todo(false); cajas().forEach(function(b){ if(b.offsetParent && !b._visto){ b._visto = true; b.classList.add('plg-nuevo'); setTimeout(function(){ b.classList.remove('plg-nuevo'); }, 1600); } }); }, 60); }, true);
+})();
+</script>
+<style>
+.cor-ev{display:flex;gap:6px;align-items:center;background:#dce8f8;border-radius:8px;padding:6px 8px;flex-wrap:wrap}
+.cor-ev input,.cor-ev select{padding:4px 7px;border:1.5px solid var(--border);border-radius:7px;font:12px var(--font-main);background:#fff}
+.cor-ev .cor-f{width:100px}.cor-ev .cor-f.mal{border-color:#f87171;background:#fef2f2}
+.cor-ev .cor-n,.cor-ev .cor-p{width:52px}
+.cor-ev .cor-v{width:140px}.cor-ev .cor-nt{flex:1;min-width:120px}
+.cor-ev label{display:flex;gap:4px;align-items:center;font-size:11.5px;color:#334155;text-transform:none;letter-spacing:0;font-weight:600;margin:0}
+.cor-x{margin-left:auto;background:var(--red-light);color:var(--red);border:none;border-radius:6px;width:24px;height:24px;cursor:pointer;font-size:16px;line-height:1}
+.cor-add{font-size:11px;padding:4px 12px;border:1.5px dashed var(--blue);border-radius:7px;background:white;color:var(--blue);cursor:pointer}
+.plg-h{cursor:pointer;user-select:none;display:flex !important;align-items:center;gap:8px;margin-bottom:6px}
+.plg-h::before{content:'▾';font-size:11px;color:#64748b;transition:transform .15s}
+.plg-cerrado > .plg-h{margin-bottom:0 !important}
+.plg-cerrado > .plg-h::before{transform:rotate(-90deg)}
+.plg-cerrado > :not(.plg-h){display:none !important}
+.plg-est{font-size:11px;font-weight:600;color:#15803d;background:#dcfce7;border-radius:999px;padding:1px 9px;margin-left:auto}
+.plg-est.vacio{color:#b45309;background:#fef3c7}
+.plg-box.plg-cerrado{padding-top:8px !important;padding-bottom:8px !important}
+.plg-nuevo{animation:plgN 1.6s ease}
+@keyframes plgN{0%,40%{box-shadow:0 0 0 3px #fbbf24}100%{box-shadow:0 0 0 0 transparent}}
+</style>
+
+<script>
+/* ═══ 📋 Copiar última evaluación: un texto de corrido (evolución, PA, antropometría, laboratorio, estudios…)
+   para pegar en la historia clínica de otros lugares de trabajo ═══ */
+(function(){
+  function $(id){ return document.getElementById(id); }
+  var SECC = [['enc','Encabezado (nombre, DNI, edad)', false], ['dx','Diagnósticos', true], ['med','Medicación actual', true], ['evo','Evolución', true], ['pa','Presión arterial', true], ['ant','Peso, IMC y cintura', true], ['lab','Laboratorio (el último)', true], ['est','Estudios (último de cada uno, del último año)', true], ['ind','Indicaciones', false]];
+  function pref(){ try { return JSON.parse(localStorage.getItem('urcym_copiar_secc') || 'null') || {}; } catch(_){ return {}; } }
+  function fAR(f){ return typeof _fmtFechaCol === 'function' ? _fmtFechaCol(f) : f; }
+  function n(v){ return String(v == null ? '' : v).trim().replace(/\.0+$/, '').replace(/(\.\d*?)0+$/, '$1').replace('.', ','); }
+  function plano(html){ var d = document.createElement('div'); d.innerHTML = String(html || '').replace(/<br\s*\/?>/gi, '\n').replace(/<\/(p|div|li|h\d)>/gi, '\n'); return d.textContent.replace(/ /g, ' ').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim(); }
+  function sinUni(l){ return String(l || '').replace(/\s*\(([^)]*)\)\s*$/, function(m0, x){ return /mg|mm|%|\/|kg|cm|lpm|mmhg|ui|ng|pg|seg|kpa|ml|db|g\b|mets/i.test(x) ? '' : m0; }).trim(); }
+  var NOMBRE_EST = { 'ECOCARDIO':'Ecocardiograma', 'DOPPLER CAROTÍDEO, FEMORAL Y OTROS':'Doppler vascular', 'ECG':'ECG', 'MAPA':'MAPA', 'HOLTER':'Holter', 'ERGOMETRÍA':'Ergometría', 'ECO ABDOMINAL':'Ecografía abdominal' };
+  function edad(){ try { var f = pacienteActual.fecha_nacimiento; if(!f) return ''; var d = new Date(f + 'T12:00:00'), h = new Date(), a = h.getFullYear() - d.getFullYear(); if(h.getMonth() < d.getMonth() || (h.getMonth() === d.getMonth() && h.getDate() < d.getDate())) a--; return a + ' años'; } catch(e){ return ''; } }
+  function ultimaCol(D, F, desde, hasta){
+    var mejor = -1, mf = '';
+    (D.columnas || []).forEach(function(c, ci){ var hay = false; for(var fi = desde; fi < hasta; fi++){ var f = F[fi]; if(!f || f.cat) continue; var v = D.filas[fi] && D.filas[fi][ci]; if(v != null && String(v).trim() !== ''){ hay = true; break; } } if(hay && String(c) > mf){ mf = String(c); mejor = ci; } });
+    return mejor;
+  }
+  function textoLab(){
+    if(typeof labDatos === 'undefined' || !labDatos || !labDatos.columnas) return '';
+    var ci = ultimaCol(labDatos, LAB_FILAS, 0, LAB_FILAS.length); if(ci < 0) return '';
+    var it = [];
+    LAB_FILAS.forEach(function(f, fi){ if(f.cat || !f.key) return; var v = labDatos.filas[fi] && labDatos.filas[fi][ci]; if(v == null || String(v).trim() === '') return; var u = (labDatos.unidades && labDatos.unidades[f.key]) || (f.unidades || [''])[0] || ''; it.push(sinUni(f.label) + ' ' + n(v) + (u ? ' ' + u : '')); });
+    return it.length ? 'Laboratorio (' + fAR(labDatos.columnas[ci]) + '): ' + it.join('; ') + '.' : '';
+  }
+  function textoEst(){
+    if(typeof estDatos === 'undefined' || !estDatos || !estDatos.columnas) return '';
+    var limite = new Date(); limite.setFullYear(limite.getFullYear() - 1); var lim = limite.toISOString().slice(0, 10);
+    var out = [], ini = -1, nom = '';
+    var cerrar = function(fin){
+      if(ini < 0) return; var ci = ultimaCol(estDatos, EST_FILAS, ini + 1, fin); if(ci < 0) return;
+      var c = String(estDatos.columnas[ci]); if((c.length === 4 ? c + '-12-31' : c.length === 7 ? c + '-31' : c) < lim) return;
+      var it = [];
+      for(var fi = ini + 1; fi < fin; fi++){ var f = EST_FILAS[fi]; if(!f || f.cat) continue; var v = estDatos.filas[fi] && estDatos.filas[fi][ci]; if(v == null || String(v).trim() === '') continue; v = String(v).trim();
+        if(f.nota){ if(v.length <= 220) it.push(v.replace(/\s*\n\s*/g, ' ')); continue; }
+        var u = (f.unidades || [''])[0] || ''; it.push(sinUni(f.label) + ' ' + (isNaN(parseFloat(v)) ? v : n(v) + (u && !/^[%]$/.test(u) ? ' ' + u : u === '%' ? '%' : ''))); }
+      if(it.length) out.push((NOMBRE_EST[nom] || (nom.charAt(0) + nom.slice(1).toLowerCase())) + ' (' + fAR(c) + '): ' + it.join(', '));
+    };
+    EST_FILAS.forEach(function(f, fi){ if(f.cat){ cerrar(fi); ini = fi; nom = f.label; } });
+    cerrar(EST_FILAS.length);
+    return out.length ? 'Estudios: ' + out.join('. ') + '.' : '';
+  }
+  async function datos(){
+    var p = pacienteActual, dni = String(p.dni), r = await sb.from('evoluciones').select('*').eq('dni_paciente', dni).order('fecha_hora', { ascending:false }).limit(1);
+    var e = (r.data || [])[0] || null;
+    return e;
+  }
+  function armar(e, S){
+    var p = pacienteActual, L = [];
+    var fecha = e ? String(e.fecha_hora || '').slice(0, 10) : (typeof fechaHoy === 'function' ? fechaHoy() : '');
+    L.push('Evaluación ' + fAR(fecha) + (S.enc ? ' — ' + (p.apellido || '') + ', ' + (p.nombre || '') + (p.dni ? ' (DNI ' + p.dni + ')' : '') + (edad() ? ', ' + edad() : '') : ''));
+    if(S.dx){ var dx = Array.prototype.map.call(document.querySelectorAll('#evh_dx > *'), function(x){ return x.textContent.trim(); }).filter(function(t){ return t && /^[A-Za-zÁÉÍÓÚÑáéíóúñ]/.test(t) && t.length < 60 && !/sin registrar/i.test(t); });
+      var fam = dx.filter(function(t){ return /-F$/.test(t); }).map(function(t){ return t.replace(/-F$/, ''); }), pr = dx.filter(function(t){ return !/-F$/.test(t); });
+      if(pr.length) L.push('Diagnósticos: ' + pr.join(', ') + '.'); if(fam.length) L.push('Antecedentes familiares: ' + fam.join(', ') + '.'); }
+    if(S.med){ var meds = (typeof _ttoMedsActuales === 'function' ? _ttoMedsActuales() : []); if(meds.length) L.push('Medicación: ' + meds.map(function(m){ return [m.farmaco, m.dosis, m.frecuencia].filter(Boolean).join(' '); }).join('; ') + '.'); }
+    if(S.evo && e && e.contenido_html){ var t = plano(e.contenido_html); if(t) L.push('Evolución: ' + t); }
+    if(S.pa && e){
+      var tom = [1,2,3,4,5].map(function(k){ return e['ta' + k + 's'] && e['ta' + k + 'd'] ? e['ta' + k + 's'] + '/' + e['ta' + k + 'd'] : null; }).filter(Boolean);
+      var fcs = [1,2,3,4,5].map(function(k){ return e['fc' + k]; }).filter(Boolean);
+      if(tom.length) L.push('PA: ' + tom.join(', ') + ' mmHg' + (e.ta_promedio && tom.length > 1 ? ' (promedio ' + e.ta_promedio + ')' : '') + (e.fc_promedio || fcs.length ? '. FC ' + (e.fc_promedio || fcs[0]) + ' lpm' : '') + (e.tap_s && e.tap_d ? '. Ortostatismo: ' + e.tap_s + '/' + e.tap_d + ' mmHg' : '') + '.');
+    }
+    if(S.ant){
+      var a = [];
+      var pe = e && e.peso, ta = e && e.talla, ci = e && e.cintura;
+      if(!pe && typeof antDatos !== 'undefined' && antDatos && antDatos.columnas){ var iP = ANT_FILAS.findIndex(function(f){ return f.key === 'Peso'; }), cP = ultimaCol(antDatos, ANT_FILAS, iP, iP + 1); if(cP >= 0) pe = antDatos.filas[iP][cP]; }
+      if(!ci && typeof antDatos !== 'undefined' && antDatos && antDatos.columnas){ var iC = ANT_FILAS.findIndex(function(f){ return f.key === 'Cintura'; }), cC = ultimaCol(antDatos, ANT_FILAS, iC, iC + 1); if(cC >= 0) ci = antDatos.filas[iC][cC]; }
+      if(!ta && typeof antDatos !== 'undefined' && antDatos && antDatos.columnas){ var iT = ANT_FILAS.findIndex(function(f){ return f.key === 'Altura'; }), cT = ultimaCol(antDatos, ANT_FILAS, iT, iT + 1); if(cT >= 0) ta = antDatos.filas[iT][cT]; }
+      if(pe) a.push('peso ' + n(pe) + ' kg'); var t2 = parseFloat(String(ta || '').replace(',', '.')); if(t2 > 3) t2 = t2 / 100;
+      if(pe && t2) a.push('IMC ' + n((parseFloat(String(pe).replace(',', '.')) / (t2 * t2)).toFixed(1)) + ' kg/m²'); if(ci) a.push('cintura ' + n(ci) + ' cm');
+      if(a.length) L.push(a.join(', ').replace(/^./, function(c){ return c.toUpperCase(); }) + '.');
+    }
+    if(S.lab){ var tl = textoLab(); if(tl) L.push(tl); }
+    if(S.est){ var te = textoEst(); if(te) L.push(te); }
+    if(S.ind && e && e.indicaciones){ L.push('Indicaciones: ' + plano(e.indicaciones)); }
+    return L.join('\n');
+  }
+  window.copiarEvaluacionAbrir = async function(){
+    if(typeof pacienteActual === 'undefined' || !pacienteActual){ alert('Abrí primero el paciente.'); return; }
+    var e = null; try { e = await datos(); } catch(err){ console.warn(err); }
+    var P = pref(), S = {}; SECC.forEach(function(s){ S[s[0]] = P[s[0]] != null ? P[s[0]] : s[2]; });
+    var m = _uiModal('📋 Copiar última evaluación',
+      '<div style="font-size:12.5px;color:#475569;margin-bottom:6px">Un texto de corrido para pegar en la historia clínica de otro lugar. ' + (e ? 'Toma la última evolución guardada (<b>' + fAR(String(e.fecha_hora).slice(0, 10)) + '</b>).' : '<b>No hay evoluciones guardadas</b>: se arma con las tablas.') + ' Podés corregir el texto antes de copiar.</div>'
+      + '<div class="cop-secc">' + SECC.map(function(s){ return '<label><input type="checkbox" data-k="' + s[0] + '"' + (S[s[0]] ? ' checked' : '') + '> ' + s[1] + '</label>'; }).join('') + '</div>'
+      + '<textarea class="cop-tx"></textarea>'
+      + '<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:10px;align-items:center"><span class="cop-msg" style="font-size:12px;color:#16a34a;font-weight:600;margin-right:auto"></span><button type="button" class="cop-no" style="padding:8px 14px;border-radius:9px;border:1.5px solid #e5e7eb;background:#fff;cursor:pointer">Cerrar</button><button type="button" class="cop-si" style="padding:8px 18px;border-radius:9px;border:none;background:var(--teal);color:#fff;font-weight:700;cursor:pointer">📋 Copiar</button></div>');
+    try { m.box.parentNode.style.maxWidth = '900px'; m.box.parentNode.style.width = '94vw'; } catch(_){}
+    var tx = m.box.querySelector('.cop-tx'), msg = m.box.querySelector('.cop-msg');
+    tx.addEventListener('keydown', function(ev){ ev.stopPropagation(); });
+    function rehacer(){ tx.value = armar(e, S); tx.style.height = 'auto'; tx.style.height = Math.min(tx.scrollHeight + 6, window.innerHeight * 0.55) + 'px'; msg.textContent = ''; }
+    m.box.querySelectorAll('.cop-secc input').forEach(function(c){ c.onchange = function(){ S[c.dataset.k] = c.checked; try { localStorage.setItem('urcym_copiar_secc', JSON.stringify(S)); } catch(_){} rehacer(); }; });
+    m.box.querySelector('.cop-no').onclick = m.cerrar;
+    m.box.querySelector('.cop-si').onclick = function(){
+      var t = tx.value;
+      var ok = function(){ msg.textContent = '✓ Copiado: pegalo con Ctrl + V'; };
+      (navigator.clipboard && navigator.clipboard.writeText ? navigator.clipboard.writeText(t) : Promise.reject()).then(ok, function(){ tx.select(); try { document.execCommand('copy'); ok(); } catch(_){ msg.textContent = 'Seleccioná el texto y copialo con Ctrl + C'; } });
+    };
+    rehacer();
+  };
+  function boton(){
+    var ed = document.querySelector('.btn-edit-header'); if(!ed || ed._cop) return; ed._cop = true;
+    var b = document.createElement('button'); b.type = 'button'; b.className = 'btn-edit-header cop-btn'; b.title = 'Texto de corrido con la última evaluación (evolución, PA, laboratorio, estudios…) para pegar en otra historia clínica';
+    b.textContent = '📋 Copiar evaluación'; b.onclick = window.copiarEvaluacionAbrir;
+    ed.after(b);
+  }
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boton); else boton();
+  setTimeout(boton, 2000);
+  // Al guardar la evolución, se ofrece copiarla
+  var oG = window.guardarEvolucion;
+  if(typeof oG === 'function') window.guardarEvolucion = guardarEvolucion = async function(){
+    var dni = typeof pacienteActual !== 'undefined' && pacienteActual ? String(pacienteActual.dni) : '';
+    var r = await oG.apply(this, arguments);
+    setTimeout(function(){
+      if(!dni || !pacienteActual || String(pacienteActual.dni) !== dni || window._readonlyMode) return;
+      var v = $('cop_oferta'); if(v) v.remove();
+      v = document.createElement('div'); v.id = 'cop_oferta'; v.innerHTML = '¿Trabajás este paciente en otro lugar? <button type="button">📋 Copiar la evaluación</button><span class="x" title="Cerrar">×</span>';
+      v.querySelector('button').onclick = function(){ v.remove(); window.copiarEvaluacionAbrir(); };
+      v.querySelector('.x').onclick = function(){ v.remove(); };
+      document.body.appendChild(v); setTimeout(function(){ if(v.parentNode) v.remove(); }, 20000);
+    }, 1200);
+    return r;
+  };
+})();
+</script>
+<style>
+.cop-btn{margin-left:6px}
+.cop-secc{display:flex;flex-wrap:wrap;gap:6px 14px;margin-bottom:8px}
+.cop-secc label{display:flex;gap:5px;align-items:center;font-size:12px;color:#334155;text-transform:none;letter-spacing:0;font-weight:500;cursor:pointer}
+.cop-tx{width:100%;min-height:220px;padding:10px 12px;border:1.5px solid #e2e8f0;border-radius:10px;font:13px/1.55 var(--font-main);resize:vertical;color:#1e293b}
+#cop_oferta{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);z-index:100040;background:#1e3a5f;color:#fff;border-radius:12px;padding:9px 12px 9px 16px;font:600 13px var(--font-main);display:flex;align-items:center;gap:10px;box-shadow:0 10px 30px rgba(0,0,0,.25)}
+#cop_oferta button{border:none;background:#2a9496;color:#fff;border-radius:8px;padding:6px 12px;font:700 12.5px var(--font-main);cursor:pointer}
+#cop_oferta .x{cursor:pointer;font-size:18px;opacity:.7;padding:0 4px}
 </style>
 
 </body>
