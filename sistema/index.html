@@ -2,7 +2,7 @@
 <html lang="es-AR">
 <head>
   <meta charset="UTF-8" />
-  <script>var URCYM_BUILD = '2026-11-14-0030';</script>
+  <script>var URCYM_BUILD = '2026-11-14-0100';</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Evaluaciones cardiometabólicas — Sistema de Historia Clínica</title>
 
@@ -36847,6 +36847,7 @@ function _cargaEstPrec(p){
     ['CARDIOGRAFÍA', /cardiografia/]
   ];
   // El estudio con más coincidencias gana (antes ganaba el primero de la lista: un "ett" suelto en una eco abdominal la hacía Ecocardio)
+  window._estCats = CATS;
   function detectarCat(t){ var l = sinAc(t), mejor = '', max = 0; for(var i = 0; i < CATS.length; i++){ var n = (l.match(new RegExp(CATS[i][1].source, 'g')) || []).length; if(n > max){ max = n; mejor = CATS[i][0]; } } return mejor; }
   var NUM = '(-?\\d+(?:[.,]\\d+)?)';
   function numTras(l, re, ventana){
@@ -36872,7 +36873,8 @@ function _cargaEstPrec(p){
     var t = window._normalizarDictado(texto), l = sinAc(t).replace(/\s+/g, ' ');
     cat = cat || detectarCat(t);
     var v = {}, put = function(k, x){ if(x != null && x !== '') v[k] = String(x); };
-    var fecha = ''; var mf = /(?:fecha|realizad\w*|inicio de la prueba)[^\n\d]{0,40}?(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})\b/i.exec(t) || t.match(/\b(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})\b/); if(mf){ var y = mf[3].length === 2 ? '20' + mf[3] : mf[3]; fecha = y + '-' + String(mf[2]).padStart(2, '0') + '-' + String(mf[1]).padStart(2, '0'); if(isNaN(new Date(fecha + 'T12:00:00'))) fecha = ''; }
+    var fecha = ''; var mf = /(?:fecha|realizad\w*|inicio de la prueba)[^\n\d]{0,40}?(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})\b/i.exec(t) || t.match(/\b(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})\b/);
+    if(!mf){ var mmy = /(?:fecha|realizad\w*)\s*:?\s*(\d{1,2})[\/\-.](\d{4})\b/i.exec(t); if(mmy && +mmy[1] >= 1 && +mmy[1] <= 12) fecha = mmy[2] + '-' + String(+mmy[1]).padStart(2, '0'); }   /* "Fecha: 10/2025" → solo mes y año */ if(mf){ var y = mf[3].length === 2 ? '20' + mf[3] : mf[3]; fecha = y + '-' + String(mf[2]).padStart(2, '0') + '-' + String(mf[1]).padStart(2, '0'); if(isNaN(new Date(fecha + 'T12:00:00'))) fecha = ''; }
     l = l.replace(/\b\d{1,2}[\/\-.]\d{1,2}[\/\-.]\d{2,4}\b/g, ' ');   // las fechas no son valores (02/04/2026 ≠ 02/04 mmHg)
     if(cat === 'ECOCARDIO'){
       var mm = function(x, lim){ if(x == null) return null; var n = parseFloat(x); return (n > 0 && n < lim) ? String(Math.round(n * 100) / 10) : x; };   // 3,8 cm → 38 mm
@@ -41041,7 +41043,46 @@ window._verFotoGrande = function(src){
 .pl-t td.v.igual{color:#94a3b8}
 .pl-t td.orig{color:#64748b;font-size:11px}
 .pl-ley{font-size:11.5px;color:#64748b;margin-top:6px;line-height:1.5}
+.pl-fmt{padding:3px 6px;border:1.5px solid #c7d2fe;border-radius:7px;font:12px var(--font-main);background:#eef2ff}
+.pl-bls{display:flex;flex-direction:column;gap:6px;margin-top:8px;max-height:52vh;overflow:auto}
+.pl-bl{border:1.5px solid #e2e8f0;border-radius:10px;padding:8px 10px;font-size:12.5px;line-height:1.45}
+.pl-bl div{color:#475569;font-size:12px;margin-top:2px}
 </style>
+<script>
+/* ═══ Planillas: lector de celdas copiadas (Google Sheets / Excel) y formato de fecha ═══ */
+(function(){
+  // TSV con comillas: una celda con varios renglones viene entre comillas
+  window._tsv = function(txt){
+    txt = String(txt || '').replace(/\r\n?/g, '\n');
+    var filas = [], fila = [], celda = '', q = false, i = 0;
+    while(i < txt.length){
+      var ch = txt[i];
+      if(q){ if(ch === '"'){ if(txt[i + 1] === '"'){ celda += '"'; i += 2; continue; } q = false; i++; continue; } celda += ch; i++; continue; }
+      if(ch === '"' && celda === ''){ q = true; i++; continue; }
+      if(ch === '\t'){ fila.push(celda); celda = ''; i++; continue; }
+      if(ch === '\n'){ fila.push(celda); filas.push(fila); fila = []; celda = ''; i++; continue; }
+      celda += ch; i++;
+    }
+    if(celda !== '' || fila.length){ fila.push(celda); filas.push(fila); }
+    return filas;
+  };
+  // ¿Las fechas están como día/mes/año o mes/día/año? (Google Sheets en inglés las muestra mes/día)
+  window._fmtFechas = function(textos){
+    var dm = 0, md = 0;
+    (textos || []).forEach(function(t){ var re = /\b(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{2,4})\b/g, m; while((m = re.exec(String(t || '')))){ if(+m[1] > 12 && +m[2] <= 12) dm++; else if(+m[2] > 12 && +m[1] <= 12) md++; } });
+    var r = md > dm ? 'md' : dm > md ? 'dm' : null;
+    if(r){ try { localStorage.setItem('urcym_fmt_planilla', r); } catch(_){} }
+    return r || (function(){ try { return localStorage.getItem('urcym_fmt_planilla') || 'dm'; } catch(_){ return 'dm'; } })();
+  };
+  window._fechaISO = function(a, b, c, fmt){
+    var d = +a, mo = +b; if(fmt === 'md'){ d = +b; mo = +a; }
+    var y = +c; if(String(c).length <= 2) y += 2000;
+    if(mo < 1 || mo > 12 || d < 1 || d > 31 || y < 1900 || y > 2100) return null;
+    var f = y + '-' + String(mo).padStart(2, '0') + '-' + String(d).padStart(2, '0');
+    var x = new Date(f + 'T12:00:00'); return (isNaN(x) || x.getDate() !== d) ? null : f;
+  };
+})();
+</script>
 <script>
 /* ═══ 📋 Pegar desde planilla (Google Sheets / Excel): una columna por fecha, todas de una vez ═══
    Se copian las celdas (fila de fechas + nombres + valores) y se pegan en Laboratorio, Antropometría o Estudios.
@@ -41050,16 +41091,17 @@ window._verFotoGrande = function(src){
   function $(id){ return document.getElementById(id); }
   function sinAc(t){ return String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim(); }
   function limpio(t){ return sinAc(t).replace(/\(.*?\)/g, ' ').replace(/[^a-z0-9%/ ]+/g, ' ').replace(/\s+/g, ' ').trim(); }
+  var FMT = 'dm', FMTfijo = false;
   function fISO(c){
     c = String(c || '').trim(); var m;
-    if((m = /^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{2,4})$/.exec(c))){ var y = +m[3]; if(y < 100) y += 2000; var mo = +m[2], d = +m[1]; if(mo < 1 || mo > 12 || d < 1 || d > 31) return null; return y + '-' + String(mo).padStart(2, '0') + '-' + String(d).padStart(2, '0'); }
+    if((m = /^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{2,4})$/.exec(c))) return window._fechaISO(m[1], m[2], m[3], FMT);
     if((m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(c))) return c;
     if((m = /^(\d{1,2})[\/.-](\d{2,4})$/.exec(c))){ var yy = +m[2]; if(yy < 100) yy += 2000; if(+m[1] < 1 || +m[1] > 12) return null; return yy + '-' + String(+m[1]).padStart(2, '0'); }
     if((m = /^(19|20)\d{2}$/.exec(c))) return c;
     return null;
   }
   function valor(c){
-    var t = String(c || '').trim(); if(!t || /^[-—–.]+$/.test(t)) return '';
+    var t = String(c || '').trim().replace(/[,;.\s]+$/, ''); if(!t || /^[-—–.]+$/.test(t)) return '';
     if(/^-?\d{1,3}(\.\d{3})+(,\d+)?$/.test(t)) t = t.replace(/\./g, '').replace(',', '.');
     else if(/^-?\d+(,\d+)?$/.test(t)) t = t.replace(',', '.');
     return t;
@@ -41093,11 +41135,40 @@ window._verFotoGrande = function(src){
     if(md <= (l.length > 6 ? 2 : 0)) return mejor;
     return '';
   }
+  // Estudios en bloques (una fila por estudio con su informe al lado, como en la planilla de Estudios complementarios)
+  function bloquesEst(filas){
+    var CATS = window._estCats || [], out = [], cur = null;
+    var catDe = function(t){ var l = sinAc(t); if(l.length > 60) return ''; for(var i = 0; i < CATS.length; i++) if(CATS[i][1].test(l)) return CATS[i][0]; return ''; };
+    filas.forEach(function(r){
+      var celdas = r.map(function(c){ return String(c || '').trim(); });
+      var ix = celdas.findIndex(function(c){ return c; }); if(ix < 0) return;
+      var cat = ix <= 3 ? catDe(celdas[ix]) : '';
+      if(cat){ cur = { nombre: celdas[ix], cat: cat, lineas: [] }; out.push(cur); celdas = celdas.slice(ix + 1); }
+      else if(/^estudios?$/i.test(celdas[ix]) && !cur) return;
+      if(!cur) return;
+      var l = celdas.filter(function(c){ return c; }).join(' ').trim(); if(l) cur.lineas.push(l);
+    });
+    return out.filter(function(b){ return b.lineas.length; });
+  }
+  // "BT/FAL  0,58/152" → dos filas
+  function separarPares(rows){
+    var out = [];
+    rows.forEach(function(r){
+      var ns = r.nombre.split('/').map(function(x){ return x.trim(); });
+      if(ns.length === 2 && ns[0] && ns[1] && r.vals.some(function(v){ return /\d\s*\/\s*\d/.test(v); })){
+        [0, 1].forEach(function(k){ out.push({ nombre: ns[k], vals: r.vals.map(function(v){ var p = String(v).split('/'); return p.length === 2 ? valor(p[k]) : (k === 0 ? v : ''); }), orig: r.nombre }); });
+      } else out.push(r);
+    });
+    return out;
+  }
   function parsear(txt){
-    var filas = String(txt || '').replace(/\r/g, '').split('\n').filter(function(l){ return l.trim(); }).map(function(l){ return l.split('\t'); });
+    var filas = window._tsv(txt).filter(function(r){ return r.some(function(c){ return String(c).trim(); }); });
     if(filas.length < 2) return null;
+    if(!FMTfijo) FMT = window._fmtFechas(filas.map(function(r){ return r.join(' '); }));
+    var bl = bloquesEst(filas);
     var hi = -1, hn = 0;
     filas.forEach(function(r, i){ var n = r.filter(function(c){ return fISO(c); }).length; if(n > hn){ hn = n; hi = i; } });
+    if(bl.length && (hi < 0 || !hn || bl.length >= 2)) return { bloques: bl };
     if(hi < 0 || !hn) return { error: 'No encontré la fila de fechas. Copiá también la fila donde están las fechas de cada columna.' };
     var head = filas[hi], ancho = Math.max.apply(null, filas.map(function(r){ return r.length; }));
     var primeraFecha = head.findIndex(function(c){ return fISO(c); });
@@ -41114,7 +41185,7 @@ window._verFotoGrande = function(src){
       if(!nombre || !vals.some(function(v){ return v !== ''; })) return;
       rows.push({ nombre: nombre, vals: vals });
     });
-    return { cols: cols, rows: rows };
+    return { cols: cols, rows: separarPares(rows), hay3: filas.some(function(r){ return r.some(function(c){ return /^\d{1,2}[\/.-]\d{1,2}[\/.-]\d{2,4}$/.test(String(c).trim()); }); }) };
   }
   function adivinarDestino(rows){
     var best = 'lab', bn = -1;
@@ -41139,12 +41210,21 @@ window._verFotoGrande = function(src){
       P = parsear(ta.value);
       if(!P){ res.innerHTML = ''; btn.disabled = true; btn.style.opacity = .5; msg.textContent = ''; return; }
       if(P.error){ res.innerHTML = '<div style="color:#b45309;font-size:12.5px;margin-top:6px">⚠ ' + P.error + '</div>'; btn.disabled = true; btn.style.opacity = .5; return; }
+      if(P.bloques){
+        var hb = '<div class="pl-top"><b>' + P.bloques.length + ' estudio' + (P.bloques.length > 1 ? 's' : '') + ' en la planilla</b><span style="color:#64748b">se abren en <b>Cargar estudio</b>, una solapa por estudio, con lo reconocido para revisar</span></div><div class="pl-bls">';
+        P.bloques.forEach(function(b){ hb += '<div class="pl-bl"><b>' + _esc(b.nombre) + '</b> <span style="color:#64748b">→ ' + _esc(b.cat) + '</span><div>' + _esc(b.lineas.join(' · ')).slice(0, 260) + '</div></div>'; });
+        res.innerHTML = hb + '</div>';
+        btn.textContent = 'Revisar y cargar en Estudios →'; btn.disabled = false; btn.style.opacity = 1; msg.textContent = '';
+        return;
+      }
+      btn.textContent = 'Cargar en la tabla';
       if(!tipo) tipo = adivinarDestino(P.rows);
       map = P.rows.map(function(r){ return claveDe(tipo, r.nombre); });
       var D = DEST[tipo], F = D.F(), datos = D.D() || { columnas:[], filas:[] };
       var opts = function(sel){ return '<option value="">— no cargar —</option>' + F.filter(function(f){ return f.key && !f.cat && !f.calc; }).map(function(f){ return '<option value="' + f.key + '"' + (f.key === sel ? ' selected' : '') + '>' + _esc(f.label) + '</option>'; }).join(''); };
       var h = '<div class="pl-top"><b>Cargar en</b><select class="pl-dest">' + ['lab','ant','est'].map(function(t){ return '<option value="' + t + '"' + (t === tipo ? ' selected' : '') + '>' + DEST[t].nom + '</option>'; }).join('') + '</select>'
-        + '<span style="color:#64748b">' + P.rows.length + ' filas · ' + P.cols.length + ' fechas</span></div>';
+        + '<span style="color:#64748b">' + P.rows.length + ' filas · ' + P.cols.length + ' fechas</span>'
+        + (P.hay3 ? '<span style="margin-left:auto;display:inline-flex;gap:6px;align-items:center">Fechas de la planilla: <select class="pl-fmt"><option value="dm"' + (FMT === 'dm' ? ' selected' : '') + '>día/mes/año</option><option value="md"' + (FMT === 'md' ? ' selected' : '') + '>mes/día/año</option></select></span>' : '') + '</div>';
       h += '<div class="pl-wrap"><table class="pl-t"><thead><tr><th style="text-align:left">En la planilla → va a</th>';
       P.cols.forEach(function(c, j){ h += '<th><label style="display:flex;gap:4px;align-items:center;justify-content:center;font-size:11px;color:#64748b;text-transform:none;letter-spacing:0"><input type="checkbox" class="pl-on" data-j="' + j + '"' + (c.on ? ' checked' : '') + '> ' + (c.orig ? _esc(c.orig) : '<i>sin fecha</i>') + '</label>'
         + (/^\d{4}-\d{2}-\d{2}$/.test(c.fecha) || !c.fecha ? '<input type="date" class="pl-f' + (c.fecha ? '' : ' falta') + '" data-j="' + j + '" value="' + c.fecha + '">' : '<input type="text" class="pl-f" data-j="' + j + '" value="' + c.fecha + '" style="width:80px" title="Mes o año">') + '</th>'; });
@@ -41174,6 +41254,7 @@ window._verFotoGrande = function(src){
       msg.textContent = (sinF ? '⚠ ' + sinF + ' columna' + (sinF > 1 ? 's' : '') + ' sin fecha · ' : '') + (sinK ? sinK + ' fila' + (sinK > 1 ? 's' : '') + ' sin asignar · ' : '') + (avisos ? avisos + ' valor' + (avisos > 1 ? 'es' : '') + ' reemplaza' + (avisos > 1 ? 'n' : '') + ' · ' : '') + (malos ? malos + ' imposible' + (malos > 1 ? 's' : '') : '');
       btn.disabled = false; btn.style.opacity = 1;
       res.querySelector('.pl-dest').onchange = function(){ tipo = this.value; pintar(); };
+      var sf = res.querySelector('.pl-fmt'); if(sf) sf.onchange = function(){ FMT = this.value; FMTfijo = true; try { localStorage.setItem('urcym_fmt_planilla', FMT); } catch(_){} var t0 = tipo; pintar(); tipo = t0; };
       res.querySelectorAll('.pl-k').forEach(function(s){ s.onchange = function(){ map[+s.dataset.i] = s.value; s.classList.toggle('no', !s.value); }; });
       res.querySelectorAll('.pl-on').forEach(function(c){ c.onchange = function(){ P.cols[+c.dataset.j].on = c.checked; }; });
       res.querySelectorAll('.pl-f').forEach(function(i){ i.onchange = function(){ var v = i.value.trim(); P.cols[+i.dataset.j].fecha = fISO(v) || (/^\d{4}(-\d{2})?(-\d{2})?$/.test(v) ? v : ''); i.classList.toggle('falta', !P.cols[+i.dataset.j].fecha); }; });
@@ -41181,6 +41262,15 @@ window._verFotoGrande = function(src){
     var tm; ta.addEventListener('input', function(){ clearTimeout(tm); tm = setTimeout(function(){ tipo = tipoIni || ''; pintar(); }, 150); });
     m.box.querySelector('.pl-no').onclick = m.cerrar;
     btn.onclick = async function(){
+      if(P && P.bloques){
+        var SEPX = window._MD_SEP || '════════ siguiente archivo ════════';
+        var txt = P.bloques.map(function(b){ return b.nombre + '\n' + b.lineas.join('\n'); }).join('\n' + SEPX + '\n');
+        m.cerrar();
+        try { if(typeof switchPacMainTab === 'function') switchPacMainTab('est'); } catch(_){}
+        window.estDictadoAbrir(null);
+        setTimeout(function(){ var t = document.querySelector('.ed-txt'); if(t){ t.value = txt; t.dispatchEvent(new Event('input', { bubbles:true })); } }, 80);
+        return;
+      }
       if(!P || !P.rows) return;
       if(!pacienteActual || String(pacienteActual.dni) !== dniModal){ alert('Cambió el paciente abierto: no se cargó nada.'); m.cerrar(); return; }
       var cols = P.cols.map(function(c, j){ return Object.assign({ j: j }, c); }).filter(function(c){ return c.on; });
@@ -41412,5 +41502,200 @@ window._verFotoGrande = function(src){
 .conv-auto{background:#f0fdf4;border-radius:8px;box-shadow:0 0 0 4px #f0fdf4}
 .conv-auto::after{content:'por convención (podés cambiarlo)';display:block;font-size:10.5px;color:#15803d;margin-top:2px}
 </style>
+<script>
+/* ═══ 📅 Evoluciones previas desde planilla o foto: varias de una vez ═══
+   Planilla tipo: bloques "Fecha | Evolución | Modificaciones | Pendientes | Derivaciones" y al costado la PA (brazo derecho/izquierdo).
+   Se copian las celdas (o se pega/sube la foto) y se revisa cada evolución antes de guardar. */
+(function(){
+  function $(id){ return document.getElementById(id); }
+  function esc(t){ return String(t == null ? '' : t).replace(/[&<>"]/g, function(c){ return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' }[c]; }); }
+  function sinAc(t){ return String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim(); }
+  var SECS = [['fecha', /^fecha\b/], ['evo', /^(evolucion|motivo( de consulta)?|mc|consulta|evol)\b/], ['mod', /^(modificaciones?|cambios?( de tratamiento)?|tratamiento|plan)\b/], ['ind', /^indicaciones?\b/], ['pen', /^pendientes?\b/], ['der', /^derivaci(on|ones)\b/]];
+  var NOMBRE = { evo:'', mod:'Modificaciones', ind:'Indicaciones', pen:'Pendientes', der:'Derivaciones' };
+  var PA = /^(presion arterial|pa|brazo (derecho|izquierdo)|ortostatismo|sis|dia|fc|tas|tad|pas|pad|promedio|prom\.?|toma \d|derecho|izquierdo|\-+)$/;
+  var RE_F = /^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{2,4})$/;
+  function etiqueta(cell){
+    var l = sinAc(cell).replace(/[:.]+$/, '');
+    for(var i = 0; i < SECS.length; i++){
+      var m = SECS[i][1].exec(l); if(!m) continue;
+      var tras = l.slice(m[0].length), solo = !tras.trim(), dosp = /^\s*:/.test(tras);
+      if(!solo && !dosp && SECS[i][0] !== 'fecha') continue;      // "Consulta para tratamiento…" es texto, no un título
+      var cl = String(cell).trim();
+      return { sec: SECS[i][0], resto: dosp ? cl.replace(/^[^:]*:\s*/, '') : cl.slice(m[0].length).replace(/^\s*[.\-–]?\s*/, ''), dosp: dosp };
+    }
+    return null;
+  }
+  function analizar(texto){
+    var SEPX = window._MD_SEP || '════════';
+    texto = String(texto || '').split(SEPX).join('\n');
+    var filas = texto.indexOf('\t') >= 0 ? window._tsv(texto) : texto.split(/\r?\n/).map(function(l){ return [l]; });
+    var bloques = [], b = null, sec = 'evo', fechas = [];
+    filas.forEach(function(r){
+      var nums = [], orto = false;
+      r.forEach(function(c0){
+        var c = String(c0 == null ? '' : c0).trim(); if(!c) return;
+        var e = etiqueta(c);
+        if(e){
+          sec = e.sec;
+          if(!e.resto) return;
+          c = (e.sec === 'evo' && e.dosp) ? c : e.resto;     // "MC: control…" queda como está dentro de la evolución
+        }
+        var mf = RE_F.exec(c) || (sec === 'fecha' ? /(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{2,4})/.exec(c) : null);
+        if(mf && (sec === 'fecha' || RE_F.test(c))){
+          b = { raw: [mf[1], mf[2], mf[3]], secs: { evo:[], mod:[], ind:[], pen:[], der:[] }, tomas: [], izq: [], orto: null, on: true };
+          bloques.push(b); fechas.push(mf[0]); sec = 'evo'; return;
+        }
+        var l = sinAc(c);
+        if(/ortostatismo/.test(l)){ orto = true; return; }
+        if(PA.test(l)) return;
+        if(/^\d{2,3}$/.test(c)){ var n = +c; if(n >= 30 && n <= 280) nums.push(n); return; }
+        if(/^\d+([.,]\d+)?$/.test(c)) return;                        // promedios con decimales: se recalculan
+        if(!b) return;
+        if(/^[-–—.]+$/.test(c)) return;
+        var s = sec === 'fecha' ? 'evo' : sec;
+        b.secs[s].push(c);
+      });
+      // texto de foto: "161 105" en un renglón
+      if(!nums.length && r.length === 1){ var lt = String(r[0] || '').trim(); if(/^\d{2,3}(\s*[\/\s]\s*\d{2,3}){1,3}$/.test(lt)) nums = lt.split(/[\/\s]+/).map(Number).filter(function(n){ return n >= 30 && n <= 280; }); if(nums.length && b){ var u = b.secs[sec === 'fecha' ? 'evo' : sec]; if(u.length && u[u.length - 1] === lt) u.pop(); } }
+      if(b && nums.length >= 2){
+        if(orto) b.orto = nums.slice(0, 2);
+        else { b.tomas.push(nums.slice(0, 2)); if(nums.length >= 4) b.izq.push(nums.slice(2, 4)); }
+      }
+    });
+    return { bloques: bloques, fmt: window._fmtFechas(fechas) };
+  }
+  function prom(t){ if(!t.length) return null; var s = 0, d = 0; t.forEach(function(x){ s += x[0]; d += x[1]; }); return Math.round(s / t.length) + '/' + Math.round(d / t.length); }
+  function textoDe(b){
+    var out = [];
+    if(b.secs.evo.length) out.push(b.secs.evo.join('\n'));
+    ['mod','ind','pen','der'].forEach(function(k){ if(b.secs[k].length) out.push(NOMBRE[k] + ': ' + b.secs[k].join('\n')); });
+    return out.join('\n');
+  }
+  function htmlDe(txt, b){
+    var h = esc(txt).split('\n').map(function(l){ return l.replace(/^(Modificaciones|Indicaciones|Pendientes|Derivaciones):/, '<b>$1:</b>'); }).join('<br>');
+    if(b.tomas.length) h += '<br><b>TA</b>' + (b.izq.length ? ' (brazo derecho)' : '') + ': ' + b.tomas.map(function(t){ return t[0] + '/' + t[1]; }).join(' · ') + ' → promedio ' + prom(b.tomas) + ' mmHg';
+    if(b.izq.length) h += '<br><b>TA brazo izquierdo:</b> ' + b.izq.map(function(t){ return t[0] + '/' + t[1]; }).join(' · ') + ' → promedio ' + prom(b.izq) + ' mmHg';
+    if(b.orto) h += '<br><b>TA ortostática:</b> ' + b.orto[0] + '/' + b.orto[1] + ' mmHg';
+    return h;
+  }
+  function fAR(f){ return f ? f.slice(8, 10) + '/' + f.slice(5, 7) + '/' + f.slice(0, 4) : ''; }
+
+  window.evolImportarAbrir = function(textoIni){
+    if(typeof pacienteActual === 'undefined' || !pacienteActual){ alert('Abrí primero el paciente.'); return; }
+    if(window._readonlyMode) return;
+    try { if(typeof cerrarEvolucionHistorica === 'function') cerrarEvolucionHistorica(); } catch(_){}
+    var dni = String(pacienteActual.dni);
+    var m = _uiModal('📅 Evoluciones previas desde planilla o foto',
+      '<div style="font-size:12.5px;color:#475569;line-height:1.5">En Google Sheets o Excel seleccioná las evoluciones (con las filas de <b>Fecha</b>, <b>Evolución</b>, <b>Modificaciones</b>, <b>Pendientes</b>, <b>Derivaciones</b> y, si querés, la presión arterial de al lado), <b>Ctrl + C</b> y pegalas acá. También podés pegar o subir una foto.</div>'
+      + '<div class="evi-cols"><div><textarea class="evi-tx" placeholder="Pegá acá (Ctrl + V)…"></textarea></div><div class="evi-res"></div></div>'
+      + '<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:10px;align-items:center"><span class="evi-msg" style="font-size:12px;color:#64748b;margin-right:auto"></span><button type="button" class="evi-no" style="padding:8px 14px;border-radius:9px;border:1.5px solid #e5e7eb;background:#fff;cursor:pointer">Cancelar</button><button type="button" class="evi-si" disabled style="padding:8px 16px;border-radius:9px;border:none;background:var(--teal);color:#fff;font-weight:700;cursor:pointer;opacity:.5">Guardar evoluciones</button></div>');
+    try { m.box.parentNode.style.maxWidth = '1250px'; m.box.parentNode.style.width = '96vw'; } catch(_){}
+    var ta = m.box.querySelector('.evi-tx'), res = m.box.querySelector('.evi-res'), btn = m.box.querySelector('.evi-si'), msg = m.box.querySelector('.evi-msg');
+    ta.addEventListener('keydown', function(e){ e.stopPropagation(); });
+    // foto: pegar, subir o desde el celular
+    try { if(window._botonFotoTexto){ window._botonFotoTexto(ta); var barra = Array.prototype.find.call(ta.parentNode.children, function(ch){ return ch !== ta && ch.querySelector && ch.querySelector('input[type=file]'); }); if(window._zonaFotos){ var z = window._zonaFotos(ta, barra || null, 'Pegá acá la <b>foto</b> de las evoluciones (o subila)'); var cols = m.box.querySelector('.evi-cols'); cols.parentNode.insertBefore(z, cols); } } } catch(e){ console.warn('evi foto', e); }
+    var A = null, existentes = {};
+    sb.from('evoluciones').select('fecha_hora').eq('dni_paciente', dni).then(function(r){ (r.data || []).forEach(function(e){ existentes[String(e.fecha_hora || '').slice(0, 10)] = 1; }); if(A) pintar(true); });
+    function fechaDe(b){ return b.fechaManual || window._fechaISO(b.raw[0], b.raw[1], b.raw[2], A.fmt); }
+    function pintar(mantener){
+      if(!mantener){ A = analizar(ta.value); A.bloques.forEach(function(b){ b.txt = textoDe(b); }); }
+      var B = A.bloques;
+      if(!B.length){ res.innerHTML = ta.value.trim() ? '<div style="color:#b45309;font-size:12.5px">⚠ No encontré evoluciones. Copiá también las filas que dicen <b>Fecha</b> (con la fecha al lado).</div>' : '<div class="evi-vacio">Acá vas a ver cada evolución para revisarla antes de guardar.</div>'; btn.disabled = true; btn.style.opacity = .5; msg.textContent = ''; return; }
+      var hay3 = B.some(function(b){ return b.raw; });
+      var h = '<div class="evi-top"><b>' + B.length + ' evolucion' + (B.length > 1 ? 'es' : '') + '</b>'
+        + (hay3 ? '<span>Fechas: <select class="evi-fmt"><option value="dm"' + (A.fmt === 'dm' ? ' selected' : '') + '>día/mes/año</option><option value="md"' + (A.fmt === 'md' ? ' selected' : '') + '>mes/día/año</option></select></span>' : '') + '</div>';
+      B.forEach(function(b, i){
+        var f = fechaDe(b), ya = f && existentes[f];
+        if(b.on === true && ya && !b._tocado){ b.on = false; }
+        h += '<div class="evi-b' + (b.on ? '' : ' off') + (f ? '' : ' sinf') + '"><div class="evi-bh"><label><input type="checkbox" class="evi-on" data-i="' + i + '"' + (b.on ? ' checked' : '') + '> Guardar</label>'
+          + '<input type="date" class="evi-f" data-i="' + i + '" value="' + (f || '') + '">'
+          + (b.raw ? '<span class="evi-orig">en la planilla: ' + esc(b.raw.join('/')) + '</span>' : '')
+          + (ya ? '<span class="evi-ya">⚠ ya hay una evolución ese día</span>' : '') + (!f ? '<span class="evi-ya">⚠ fecha no válida: corregila</span>' : '') + '</div>'
+          + '<textarea class="evi-t" data-i="' + i + '" rows="4">' + esc(b.txt) + '</textarea>'
+          + (b.tomas.length || b.orto ? '<div class="evi-ta">🩺 TA: ' + b.tomas.map(function(t){ return t[0] + '/' + t[1]; }).join(' · ') + (b.tomas.length ? ' → <b>' + prom(b.tomas) + '</b>' : '') + (b.izq.length ? ' · izq. ' + b.izq.map(function(t){ return t[0] + '/' + t[1]; }).join(' · ') : '') + (b.orto ? ' · ortostática ' + b.orto.join('/') : '') + '</div>' : '')
+          + '</div>';
+      });
+      res.innerHTML = h;
+      res.querySelectorAll('.evi-t').forEach(function(t){ t.style.height = Math.min(t.scrollHeight + 4, 220) + 'px'; t.addEventListener('input', function(){ B[+t.dataset.i].txt = t.value; }); t.addEventListener('keydown', function(e){ e.stopPropagation(); }); });
+      res.querySelectorAll('.evi-on').forEach(function(c){ c.onchange = function(){ var b = B[+c.dataset.i]; b.on = c.checked; b._tocado = true; c.closest('.evi-b').classList.toggle('off', !c.checked); contar(); }; });
+      res.querySelectorAll('.evi-f').forEach(function(x){ x.onchange = function(){ var b = B[+x.dataset.i]; b.fechaManual = x.value || null; pintar(true); }; x.addEventListener('keydown', function(e){ e.stopPropagation(); }); });
+      var sf = res.querySelector('.evi-fmt'); if(sf) sf.onchange = function(){ A.fmt = sf.value; try { localStorage.setItem('urcym_fmt_planilla', A.fmt); } catch(_){} pintar(true); };
+      contar();
+    }
+    function contar(){
+      var n = A.bloques.filter(function(b){ return b.on; }).length, malas = A.bloques.filter(function(b){ return b.on && !fechaDe(b); }).length;
+      msg.textContent = n + ' para guardar' + (malas ? ' · ⚠ ' + malas + ' sin fecha válida' : '');
+      btn.disabled = !n; btn.style.opacity = n ? 1 : .5;
+    }
+    var tm; ta.addEventListener('input', function(){ clearTimeout(tm); tm = setTimeout(function(){ pintar(false); }, 200); });
+    m.box.querySelector('.evi-no').onclick = m.cerrar;
+    btn.onclick = async function(){
+      if(!pacienteActual || String(pacienteActual.dni) !== dni){ alert('Cambió el paciente abierto: no se guardó nada.'); m.cerrar(); return; }
+      var lista = A.bloques.filter(function(b){ return b.on; });
+      var malas = lista.filter(function(b){ return !fechaDe(b); }); if(malas.length){ alert('Hay ' + malas.length + ' evolución(es) tildada(s) sin fecha válida. Corregí la fecha o destildalas.'); return; }
+      var hoy = (typeof fechaHoy === 'function') ? fechaHoy() : new Date().toISOString().slice(0, 10);
+      var fut = lista.filter(function(b){ return fechaDe(b) > hoy; }); if(fut.length && !confirm('Hay fechas futuras (' + fut.map(function(b){ return fAR(fechaDe(b)); }).join(', ') + '). ¿Revisaste si la planilla está en mes/día? ¿Guardar igual?')) return;
+      btn.disabled = true; btn.textContent = '⏳ Guardando…';
+      var medico = (typeof currentUser !== 'undefined' && currentUser) ? currentUser.titulo + ' — ' + currentUser.mp : 'Registro histórico';
+      var ok = 0, errores = [];
+      for(var i = 0; i < lista.length; i++){
+        var b = lista[i], f = fechaDe(b);
+        var row = { dni_paciente: dni, fecha_hora: f + 'T12:00:00', contenido_html: htmlDe(b.txt, b), medico: medico };
+        b.tomas.slice(0, 3).forEach(function(t, k){ row['ta' + (k + 1) + 's'] = t[0]; row['ta' + (k + 1) + 'd'] = t[1]; });
+        if(b.tomas.length) row.ta_promedio = prom(b.tomas);
+        if(b.orto){ row.tap_s = b.orto[0]; row.tap_d = b.orto[1]; }
+        var r = await sb.from('evoluciones').insert(row);
+        if(r.error && /tap_|ta_promedio|ta\d/.test(r.error.message || '')){ ['tap_s','tap_d'].forEach(function(k){ delete row[k]; }); r = await sb.from('evoluciones').insert(row); }
+        if(r.error) errores.push(fAR(f) + ': ' + (r.error.message || r.error)); else { ok++; existentes[f] = 1; try { if(!ultimaEvolucionMap[dni] || row.fecha_hora > ultimaEvolucionMap[dni]) ultimaEvolucionMap[dni] = row.fecha_hora; } catch(_){} }
+      }
+      if(errores.length){ alert('Se guardaron ' + ok + '. No se pudieron guardar:\n\n' + errores.join('\n')); btn.disabled = false; btn.textContent = 'Guardar evoluciones'; return; }
+      if(typeof showToast === 'function') showToast('📅 ' + ok + ' evolucion' + (ok > 1 ? 'es' : '') + ' previa' + (ok > 1 ? 's' : '') + ' guardada' + (ok > 1 ? 's' : '') + ' (quedan ordenadas por fecha en Previas)', 'success', 5000);
+      m.cerrar();
+      try { if(typeof renderPreviasList === 'function') renderPreviasList(); } catch(_){}
+    };
+    if(textoIni){ ta.value = textoIni; pintar(false); } else { pintar(false); setTimeout(function(){ ta.focus(); }, 60); }
+  };
+  // Botón en "Cargar evolución histórica"
+  function boton(){
+    var mo = $('modal_evol_historica'); if(!mo || mo._evi) return; mo._evi = true;
+    var cab = mo.querySelector('div > div > div'); if(!cab) return;
+    var b = document.createElement('button'); b.type = 'button'; b.className = 'evi-btn'; b.innerHTML = '📋 Varias desde planilla o foto';
+    b.onclick = function(){ window.evolImportarAbrir(); };
+    var x = cab.querySelector('button[onclick="cerrarEvolucionHistorica()"]'); if(x) cab.insertBefore(b, x); else cab.appendChild(b);
+  }
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boton); else boton();
+  // Pegar (Ctrl + V) la planilla de evoluciones con la pestaña Evolución abierta → se abre solo
+  document.addEventListener('paste', function(ev){
+    if(window._readonlyMode || document.querySelector('.ui-modal-bg, .modal-overlay.open')) return;
+    var a = document.activeElement; if(a && (a.tagName === 'INPUT' || a.tagName === 'TEXTAREA' || a.isContentEditable)) return;
+    var t = ev.clipboardData && ev.clipboardData.getData('text/plain'); if(!t || t.indexOf('\t') < 0) return;
+    if(!/(^|\t|\n)\s*fecha\s*(\t|\n)/i.test(t) || !/evoluci/i.test(t)) return;
+    if(typeof pacienteActual === 'undefined' || !pacienteActual) return;
+    ev.preventDefault(); window.evolImportarAbrir(t);
+  });
+})();
+</script>
+<style>
+.evi-btn{border:1.5px solid #c4b5fd;background:#f5f3ff;color:#6d28d9;border-radius:9px;padding:6px 12px;font:700 12px var(--font-main);cursor:pointer;margin-left:auto;margin-right:10px}
+.evi-btn:hover{background:#ede9fe}
+.evi-cols{display:grid;grid-template-columns:minmax(0,.8fr) minmax(0,1.2fr);gap:14px;margin-top:8px;align-items:start}
+.evi-tx{width:100%;height:56vh;min-height:260px;padding:10px;border:1.5px solid #e5e7eb;border-radius:10px;font:12px/1.45 monospace;resize:vertical}
+.evi-res{max-height:62vh;overflow:auto;display:flex;flex-direction:column;gap:8px}
+.evi-vacio{color:#94a3b8;font-size:12.5px;padding:20px;text-align:center;border:1.5px dashed #e2e8f0;border-radius:10px}
+.evi-top{display:flex;gap:12px;align-items:center;font-size:12.5px;flex-wrap:wrap;position:sticky;top:0;background:#fff;padding-bottom:4px;z-index:1}
+.evi-top select{padding:3px 6px;border:1.5px solid #c7d2fe;border-radius:7px;font:12px var(--font-main);background:#eef2ff}
+.evi-b{border:1.5px solid #e2e8f0;border-radius:10px;padding:8px 10px}
+.evi-b.off{opacity:.5}
+.evi-b.sinf{border-color:#fca5a5}
+.evi-bh{display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:12px;margin-bottom:6px}
+.evi-bh label{display:flex;gap:5px;align-items:center;font-weight:700;text-transform:none;letter-spacing:0;font-size:12px;color:#334155}
+.evi-bh input[type=date]{padding:4px 7px;border:1.5px solid #e2e8f0;border-radius:7px;font:12.5px var(--font-main);font-weight:700}
+.evi-orig{color:#94a3b8;font-size:11px}
+.evi-ya{color:#b45309;font-size:11.5px;font-weight:700}
+.evi-t{width:100%;padding:7px 9px;border:1.5px solid #e2e8f0;border-radius:8px;font:12.5px/1.45 var(--font-main);resize:vertical}
+.evi-ta{font-size:12px;color:#0e7490;margin-top:4px}
+@media (max-width:900px){ .evi-cols{grid-template-columns:1fr} }
+</style>
+
 </body>
 </html>
