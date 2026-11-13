@@ -2,7 +2,7 @@
 <html lang="es-AR">
 <head>
   <meta charset="UTF-8" />
-  <script>var URCYM_BUILD = '2026-11-14-0630';</script>
+  <script>var URCYM_BUILD = '2026-11-14-0715';</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Evaluaciones cardiometabólicas — Sistema de Historia Clínica</title>
 
@@ -24173,7 +24173,7 @@ function openReprog(key){
   }
 
   turnos[newKey]={
-    paciente:(function(v){ v=v.trim().replace(/\s+/g,' '); return (v && (v===v.toLowerCase()||v===v.toUpperCase()) && typeof _capNombrePropio==='function') ? _capNombrePropio(v) : v; })(document.getElementById('ag-f-paciente').value),
+    paciente:(function(v){ v=v.trim().replace(/\s+/g,' '); return (v && typeof _capNombrePropio==='function') ? _capNombrePropio(v) : v; })(document.getElementById('ag-f-paciente').value),
     dni_paciente:_agPacDni||undefined,
     prof:profVal,
     estado:document.getElementById('ag-f-estado').value,
@@ -37841,8 +37841,6 @@ function _cargaEstPrec(p){
     l.querySelector('input').onchange = function(){ l.classList.toggle('on', this.checked); };
     g.parentNode.insertBefore(l, g);
   }
-  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', marcaGeneral); else marcaGeneral();
-  setTimeout(marcaGeneral, 2000);
   function turnosDelPaciente(dni){
     var out = [], T = (typeof turnos !== 'undefined' && turnos) || {}, h = hoy();
     Object.keys(T).forEach(function(k){ var t = T[k]; if(!t || String(t.dni_paciente) !== String(dni)) return;
@@ -37876,12 +37874,12 @@ function _cargaEstPrec(p){
   // Al guardar: fecha de la consulta + leyenda con la fecha/hora real de carga
   window._evolDiferidaAplicar = function(base, dni){
     var d = window._evolDiferida;
-    var gen = $('dif_gen_ck');
-    if((!d || d.dni !== String(dni)) && gen && gen.checked){
+    var gen = { checked: !!window._difGeneral };
+    if((!d || d.dni !== String(dni)) && gen.checked){
       // Carga diferida general: se marca, sin fecha de consulta (queda con la fecha y hora reales de carga)
       var ah = new Date(), fh0 = ah.toLocaleDateString('es-AR', { day:'2-digit', month:'2-digit', year:'numeric', timeZone:'America/Argentina/Buenos_Aires' }) + ' a las ' + ah.toLocaleTimeString('es-AR', { hour:'2-digit', minute:'2-digit', hour12:false, timeZone:'America/Argentina/Buenos_Aires' });
       base.contenido_html = '<div class="bloque-diferida" contenteditable="false" style="background:#fff7ed;border-left:3px solid #d97706;padding:6px 10px;margin:0 0 8px;font-size:12px;color:#92400e">🕓 <b>Carga diferida</b> · registrada el ' + fh0 + ' (carga general, no corresponde a una consulta del día)</div>' + (base.contenido_html || '');
-      gen.checked = false; gen.closest('.dif-gen').classList.remove('on');
+      window._difGeneral = false;
       return base;
     }
     if(!d || d.dni !== String(dni)) return base;
@@ -42269,7 +42267,8 @@ window._verFotoGrande = function(src){
     var ed = document.querySelector('.btn-edit-header'); if(!ed || ed._cop) return; ed._cop = true;
     var b = document.createElement('button'); b.type = 'button'; b.className = 'btn-edit-header cop-btn'; b.title = 'Texto de corrido con la última evaluación (evolución, PA, laboratorio, estudios…) para pegar en otra historia clínica';
     b.textContent = '📋 Copiar evaluación'; b.onclick = window.copiarEvaluacionAbrir;
-    ed.after(b);
+    var col = document.createElement('div'); col.className = 'evh-acc';
+    ed.parentNode.insertBefore(col, ed); col.appendChild(ed); col.appendChild(b);
   }
   if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boton); else boton();
   setTimeout(boton, 2000);
@@ -42291,7 +42290,8 @@ window._verFotoGrande = function(src){
 })();
 </script>
 <style>
-.cop-btn{margin-left:6px}
+.evh-acc{display:flex;flex-direction:column;gap:6px;align-self:center;flex-shrink:0}
+.evh-acc .btn-edit-header{align-self:stretch;text-align:left;margin:0}
 .cop-secc{display:flex;flex-wrap:wrap;gap:6px 14px;margin-bottom:8px}
 .cop-secc label{display:flex;gap:5px;align-items:center;font-size:12px;color:#334155;text-transform:none;letter-spacing:0;font-weight:500;cursor:pointer}
 .cop-tx{width:100%;min-height:220px;padding:10px 12px;border:1.5px solid #e2e8f0;border-radius:10px;font:13px/1.55 var(--font-main);resize:vertical;color:#1e293b}
@@ -42567,5 +42567,48 @@ window._verFotoGrande = function(src){
   setTimeout(function(){ if(typeof sb !== 'undefined') cargar(); }, 4000);
 })();
 </script>
+
+<script>
+/* ══ Al guardar: "¿Es carga diferida?" en naranja, ahí mismo sobre el botón ══
+   No pregunta si ya se eligió la consulta con 🕓 Carga diferida (arriba).
+   No = guarda normal (Enter). Sí = marca "Carga diferida" general (sin fecha de consulta). */
+(function(){
+  var oG = window.guardarEvolucion; if(typeof oG !== 'function') return;
+  var resp = false;
+  function cerrar(){ var p = document.getElementById('dif_preg'); if(p){ document.removeEventListener('keydown', p._k, true); p.remove(); } }
+  window.guardarEvolucion = guardarEvolucion = function(){
+    var self = this, args = arguments;
+    if(resp){ resp = false; return oG.apply(self, args); }
+    var dni = (typeof pacienteActual !== 'undefined' && pacienteActual) ? String(pacienteActual.dni) : '';
+    var b = document.getElementById('btnGuardarEvol');
+    if(!dni || window._readonlyMode || !b || b.offsetParent === null || b.disabled || (window._evolDiferida && window._evolDiferida.dni === dni)) return oG.apply(self, args);
+    if(document.getElementById('dif_preg')) return;
+    var p = document.createElement('div'); p.id = 'dif_preg';
+    p.innerHTML = '<div class="dp-t">🕓 ¿Es carga diferida?</div><div class="dp-b"><button type="button" class="dp-no">No, guardar</button><button type="button" class="dp-si">Sí, carga diferida</button></div>';
+    document.body.appendChild(p);
+    var r = b.getBoundingClientRect();
+    p.style.top = (r.bottom + 6) + 'px'; p.style.left = Math.max(8, r.right - p.offsetWidth) + 'px';
+    var seguir = function(dif){ cerrar(); window._difGeneral = !!dif; resp = true; window.guardarEvolucion.apply(self, args); };
+    p.querySelector('.dp-no').onclick = function(){ seguir(false); };
+    p.querySelector('.dp-si').onclick = function(){ seguir(true); };
+    p._k = function(e){
+      if(e.key === 'Escape'){ e.preventDefault(); e.stopPropagation(); cerrar(); }
+      else if(e.key === 'Enter'){ e.preventDefault(); e.stopPropagation(); seguir(false); }
+      else if(e.key === 'd' || e.key === 'D' || e.key === 's' || e.key === 'S'){ if(!(e.ctrlKey || e.metaKey)){ e.preventDefault(); e.stopPropagation(); seguir(true); } }
+    };
+    document.addEventListener('keydown', p._k, true);
+    setTimeout(function(){ document.addEventListener('mousedown', function f(e){ var q = document.getElementById('dif_preg'); if(!q){ document.removeEventListener('mousedown', f, true); return; } if(!q.contains(e.target)){ cerrar(); document.removeEventListener('mousedown', f, true); } }, true); }, 0);
+    p.querySelector('.dp-no').focus();
+  };
+})();
+</script>
+<style>
+#dif_preg{position:fixed;z-index:100050;background:#fff7ed;border:2px solid #f59e0b;border-radius:12px;padding:9px 11px;box-shadow:0 8px 24px rgba(217,119,6,.25);font-family:var(--font-main)}
+#dif_preg .dp-t{font:700 13px var(--font-main);color:#b45309;margin-bottom:7px}
+#dif_preg .dp-b{display:flex;gap:6px}
+#dif_preg button{border-radius:8px;padding:7px 12px;font:700 12.5px var(--font-main);cursor:pointer}
+#dif_preg .dp-no{background:#fff;border:1.5px solid #fdba74;color:#92400e}
+#dif_preg .dp-si{background:#d97706;border:1.5px solid #d97706;color:#fff}
+</style>
 </body>
 </html>
