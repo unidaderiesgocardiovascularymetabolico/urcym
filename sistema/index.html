@@ -2,7 +2,7 @@
 <html lang="es-AR">
 <head>
   <meta charset="UTF-8" />
-  <script>var URCYM_BUILD = '2026-11-13-1300';</script>
+  <script>var URCYM_BUILD = '2026-11-13-2000';</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Evaluaciones cardiometabólicas — Sistema de Historia Clínica</title>
 
@@ -3610,7 +3610,7 @@
                 <div id="upd_modo_medactual" style="display:none">
                   <select id="upd_tto_medactual" onchange="checkPanelActivo()" style="display:none"><option value="">—</option></select>
                   <div class="med-ay-t">¿Qué se suspende?</div><div class="med-chips" id="tto_susp_meds"></div>
-                  <div id="tto_susp_motivo" style="display:none"><div class="med-ay-t">Motivo <span>(opcional · sirve para la base de datos)</span></div><div class="med-chips" id="tto_susp_motivos"></div></div>
+                  <div id="tto_susp_motivo" style="display:none"><div class="med-ay-t">¿Por qué se suspende? <span>(queda en la base de datos)</span></div><div class="med-chips" id="tto_susp_motivos"></div></div>
                 </div>
                 <!-- Modo CAMBIA DOSIS: tocar el medicamento y escribir/elegir la nueva dosis -->
                 <div id="upd_modo_cambiadosis" style="display:none">
@@ -5847,6 +5847,10 @@ let pacHistoriaDni = null;
 const LAB_FILAS = [
   {label:'Hb', key:'Hb', unidades:['g/dL'], defU:0,
     ref:(v,s)=>parseFloat(v)<(s==='F'?12:13), refTxt:'<12(M)/<13(H) g/dL'},
+  {label:'Hematocrito', key:'Hto', unidades:['%'], defU:0,
+    ref:(v,s)=>{const n=parseFloat(v);return s==='F'?(n<36||n>46):(n<40||n>52)}, refTxt:'36-46(M)/40-52(H) %'},
+  {label:'Leucocitos', key:'Leuco', unidades:['/mm³'], defU:0,
+    ref:(v)=>parseFloat(v)<4000||parseFloat(v)>11000, refTxt:'4.000-11.000 /mm³'},
   {label:'Rto plaquetas', key:'Rto_plaquetas', unidades:['mil/µL'], defU:0,
     ref:(v)=>parseFloat(v)<150||parseFloat(v)>400, refTxt:'150-400 mil/µL'},
   {label:'Glucemia', key:'Glucemia', unidades:['mg/dL','mmol/L'], defU:0,
@@ -5891,6 +5895,8 @@ const LAB_FILAS = [
     ref:(v,s,u)=>u==='mg/mmol'?parseFloat(v)>3.4:parseFloat(v)>30, refTxt:'>30 mg/g'},
   {label:'PRCus', key:'PRCus', unidades:['mg/L'], defU:0,
     ref:(v)=>parseFloat(v)>3, refTxt:'>3 mg/L'},
+  {label:'NT-proBNP', key:'NTproBNP', unidades:['pg/mL'], defU:0,
+    ref:(v)=>parseFloat(v)>125, refTxt:'>125 pg/mL (<75 años) · >450 (≥75)'},
   {label:'Renina', key:'Renina', unidades:['ng/mL/h','µUI/mL'], defU:0, ref:null},
   {label:'Aldosterona', key:'Aldosterona', unidades:['pg/mL','ng/dL'], defU:0, ref:null},
   {label:'RAR (Aldo/Renina)', key:'RAR', unidades:['ratio'], defU:0, calc:'rar',
@@ -6107,7 +6113,28 @@ const EST_FILAS = [
   {label:'Comentarios',        key:'dmo_Com',      unidades:[''],     defU:0, ref:null, nota:true},
   // ── FONDO DE OJO
   {cat:true, label:'FONDO DE OJO'},
+  {label:'Retinopatía diabética', key:'fdo_RD',    unidades:[''],     defU:0, ref:(v)=>{v=String(v).trim();return !!v && v!=='Sin retinopatía';}, refTxt:'retinopatía', opciones:['','Sin retinopatía','No proliferativa leve','No proliferativa moderada','No proliferativa severa','Proliferativa']},
+  {label:'Edema macular',      key:'fdo_EM',       unidades:[''],     defU:0, ref:(v)=>String(v).trim()==='Sí', refTxt:'presente', opciones:['','Sí','No']},
+  {label:'Retinopatía hipertensiva', key:'fdo_RH', unidades:[''],     defU:0, ref:(v)=>{v=String(v).trim();return !!v && v!=='Grado 0';}, refTxt:'grado ≥ I', opciones:['','Grado 0','Grado I','Grado II','Grado III','Grado IV']},
   {label:'Nota',               key:'fdo_Nota',     unidades:[''],     defU:0, ref:null, nota:true},
+  // ── ELASTOGRAFÍA HEPÁTICA (FibroScan u otra)
+  {cat:true, label:'ELASTOGRAFÍA HEPÁTICA'},
+  {label:'Rigidez hepática (kPa)', key:'elas_kPa', unidades:['kPa'],  defU:0, ref:(v)=>parseFloat(v)>=8, refTxt:'≥8 kPa'},
+  {label:'CAP (dB/m)',         key:'elas_CAP',     unidades:['dB/m'], defU:0, ref:(v)=>parseFloat(v)>=275, refTxt:'≥275 dB/m'},
+  {label:'IQR/mediana (%)',    key:'elas_IQR',     unidades:['%'],    defU:0, ref:(v)=>parseFloat(v)>30, refTxt:'>30% (poco confiable)'},
+  {label:'Método',             key:'elas_Met',     unidades:[''],     defU:0, ref:null, opciones:['','FibroScan (transitoria)','2D-SWE','pSWE / ARFI','Otro']},
+  {label:'Nota',               key:'elas_Nota',    unidades:[''],     defU:0, ref:null, nota:true},
+  // ── MONITOREO CONTINUO DE GLUCOSA (sensor)
+  {cat:true, label:'MONITOREO CONTINUO DE GLUCOSA'},
+  {label:'Tiempo en rango 70-180 (%)', key:'cgm_TIR', unidades:['%'], defU:0, ref:(v)=>parseFloat(v)<70, refTxt:'<70%'},
+  {label:'Debajo de 70 (%)',   key:'cgm_TBR',      unidades:['%'],    defU:0, ref:(v)=>parseFloat(v)>4, refTxt:'>4%'},
+  {label:'Debajo de 54 (%)',   key:'cgm_TBR54',    unidades:['%'],    defU:0, ref:(v)=>parseFloat(v)>1, refTxt:'>1%'},
+  {label:'Arriba de 180 (%)',  key:'cgm_TAR',      unidades:['%'],    defU:0, ref:(v)=>parseFloat(v)>25, refTxt:'>25%'},
+  {label:'Glucosa media (mg/dL)', key:'cgm_Media', unidades:['mg/dL'],defU:0, ref:(v)=>parseFloat(v)>154, refTxt:'>154 mg/dL'},
+  {label:'GMI (%)',            key:'cgm_GMI',      unidades:['%'],    defU:0, ref:(v)=>parseFloat(v)>7, refTxt:'>7%'},
+  {label:'Variabilidad CV (%)',key:'cgm_CV',       unidades:['%'],    defU:0, ref:(v)=>parseFloat(v)>36, refTxt:'>36%'},
+  {label:'Días con datos',     key:'cgm_Dias',     unidades:['días'], defU:0, ref:null},
+  {label:'Nota',               key:'cgm_Nota',     unidades:[''],     defU:0, ref:null, nota:true},
   // ── TC ENCÉFALO
   {cat:true, label:'TC ENCÉFALO'},
   {label:'Nota',               key:'tc_enc_Nota',  unidades:[''],     defU:0, ref:null, nota:true},
@@ -10148,6 +10175,7 @@ function generarTextoClinico(c, meds) {
   }
   if(habParts.length) lines.push('<b>Hábitos:</b> '+habParts.join(' · '));
   if(window._suenoTexto){ const _st = window._suenoTexto(c.sueno_json); if(_st) lines.push('<b>Sueño:</b> '+_st); }
+  if(window._dxdTexto){ window._dxdTexto(c.dx_detalle_json).forEach(function(t){ lines.push('<b>' + t[0] + ':</b> ' + t[1]); }); }
   if(window._bebTexto){ const _bt = window._bebTexto(c.hab_alimentacion_json); if(_bt) lines.push('<b>Bebidas:</b> '+_bt); }
   if(window._invTexto) window._invTexto(c).forEach(function(l){ lines.push(l); });
   if(c.otras_enfermedades) lines.push('<b>Otras enfermedades:</b> '+c.otras_enfermedades);
@@ -10305,6 +10333,7 @@ function generarTextoCambiosClinicos(nuevo, anterior, medsNuevo, medsAnterior) {
     if(nuevo.vapeo && cambio(nuevo.vapeo, anterior.vapeo)) lines.push('Vapeo: '+(VP[nuevo.vapeo]||nuevo.vapeo)+'.'); }
   if(window._invCambios) window._invCambios(nuevo, anterior).forEach(function(l){ lines.push(l); });
   if(window._suenoTexto){ const _sn = window._suenoTexto(nuevo.sueno_json), _sa = window._suenoTexto(anterior.sueno_json); if(_sn && _sn !== _sa) lines.push('Sueño: '+_sn); }
+  if(window._dxdTexto){ const _da = {}; window._dxdTexto(anterior.dx_detalle_json).forEach(function(t){ _da[t[0]] = t[1]; }); window._dxdTexto(nuevo.dx_detalle_json).forEach(function(t){ if(_da[t[0]] !== t[1]) lines.push(t[0] + ': ' + t[1]); }); }
   if(cambio(nuevo.tto_alternativos, anterior.tto_alternativos) && txt(nuevo.tto_alternativos)) lines.push('Tratamientos alternativos: '+txt(nuevo.tto_alternativos));
 
   if(!lines.length) return '';
@@ -10392,6 +10421,7 @@ async function guardarClinica() {
     med_notas:document.getElementById('med_notas_generales')?.value||null,
     tto_alternativos:(document.getElementById('tto_alternativos')?.value||'').trim()||null,
     sueno_json:(window._suenoLeer ? window._suenoLeer() : undefined),
+    dx_detalle_json:(window._dxdLeer ? window._dxdLeer() : undefined),
     ...(window._invLeer ? (window._invLeer() || {}) : {}),
     act_notas:document.getElementById('act_notas_generales')?.value||null,
     tox_notas:document.getElementById('tox_notas_generales')?.value||null,
@@ -10407,7 +10437,7 @@ async function guardarClinica() {
   //  en cada guardado porque esos recuadros ya no existen en la ventana.)
   Object.keys(clinicaData).forEach(function(k){
     let id = null;
-    if(/^(dx_|fam_|gpac_)/.test(k) && !/_eventos$/.test(k)) id = k;
+    if(/^(dx_|fam_|gpac_)/.test(k) && !/_eventos$/.test(k) && k !== 'dx_detalle_json') id = k;
     else if(/_notas$/.test(k) && k !== 'quirurg_notas') id = k.replace(/_notas$/, '_notas_generales');
     if(id && !document.getElementById(id)) delete clinicaData[k];
   });
@@ -10426,6 +10456,10 @@ async function guardarClinica() {
       ? Object.keys(probe.data[0])
       : Object.keys(data); // si la tabla está vacía, no podemos filtrar — usar todo
     const filtered = Object.fromEntries(Object.entries(data).filter(([k]) => knownCols.includes(k)));
+    try {
+      const perdidas = Object.keys(data).filter(k => !knownCols.includes(k) && data[k] != null && data[k] !== '' && !(typeof data[k] === 'object' && !Object.keys(data[k]).length));
+      if(perdidas.length && probe.data.length && typeof showToast === 'function') showToast('⚠ No se pudo guardar: ' + perdidas.join(', ') + '. Falta correr el último SQL en Supabase (SQL Editor › Run).', 'warning', 9000);
+    } catch(_e) {}
     return sb.from(tabla).upsert(filtered, opts);
   }
 
@@ -10528,6 +10562,8 @@ async function cargarDatosClinica(dni) {
   ['hta','hta2','dis','erc','obe','sob','masld','dbt2','dbt1','dbt_otro','predbt','hiperu','atero_subcl','eap','iam','acv','fa','sahos','epoc','icc','hvi','albuminuria','rp_dbt','neu_dbt','ms','pe','rciu','ppt','sop','dbtg','htag','ms_gineco','menopausia','macrosomia','coron','ait','aaa','valv','tev','hta_res','hf','lpa','htg','ir','nef_dbt','pie_dbt'].forEach(d=>{const el=document.getElementById('dx_'+d);if(el)el.checked=false;});
   ['hta','dbt','obe','dis','iam','acv','erc','ms'].forEach(d=>{const el=document.getElementById('fam_'+d);if(el)el.checked=false;});
   if(window._famDetalleCargar) window._famDetalleCargar(null);
+  if(window._dxdCargar) window._dxdCargar(null);
+  if(window._suenoCargar) window._suenoCargar(null);
   ['g','p','a','c'].forEach(f=>{const el=document.getElementById('gpac_'+f);if(el)el.value='';});
   ['acv','iam','hta','obe','menopausia'].forEach(dx=>{
     const fecha=document.getElementById('dx_'+dx+'_fecha');if(fecha)fecha.value='';
@@ -10667,6 +10703,7 @@ async function cargarDatosClinica(dni) {
   if(medNotes) medNotes.value = data.med_notas || '';
   { const tAlt = document.getElementById('tto_alternativos'); if(tAlt) tAlt.value = data.tto_alternativos || ''; }
   if(window._suenoCargar) window._suenoCargar(data.sueno_json || null);
+  if(window._dxdCargar) window._dxdCargar(data.dx_detalle_json || null);
   if(window._invCargar) window._invCargar(data);
   const actNotes = document.getElementById('act_notas_generales');
   if(actNotes) actNotes.value = data.act_notas || '';
@@ -10909,6 +10946,8 @@ const EST_CATS = [
   {label:'DENSITOMETRÍA',          icon:'🦴'},
   {label:'ECOSTRESS CARDÍACO',     icon:'💓'},
   {label:'FONDO DE OJO',           icon:'👁️'},
+  {label:'ELASTOGRAFÍA HEPÁTICA',  icon:'🟫'},
+  {label:'MONITOREO CONTINUO DE GLUCOSA', icon:'📟'},
   {label:'POLISOMNOGRAFÍA',        icon:'😴'},
   {label:'RNM ENCÉFALO',           icon:'🧠'},
   {label:'SCORE CALCIO CORONARIO', icon:'🦴'},
@@ -12357,8 +12396,7 @@ function actualizarModoPanelTto() {
     _ttoChipsMeds('tto_susp_meds', 'upd_tto_medactual', function(){
       const box = document.getElementById('tto_susp_motivo'), mc = document.getElementById('tto_susp_motivos');
       box.style.display = 'block';
-      mc.innerHTML = MED_MOTIVOS.map(function(m){ return '<button type="button" class="med-chip" data-m="'+_medEsc(m)+'">'+_medEsc(m)+'</button>'; }).join('') + '<button type="button" class="med-chip" data-m="">Sin motivo</button>';
-      mc.querySelectorAll('[data-m]').forEach(function(b){ b.onclick = function(){ window._ttoMotivo = b.dataset.m; agregarTtoUpd(); }; });
+      _medPreguntarMotivo(mc, '', function(mot){ window._ttoMotivo = mot; agregarTtoUpd(); }, true);
     });
   }
   if(cd) cd.style.display = accion === 'se cambia dosis' ? 'block' : 'none';
@@ -14423,7 +14461,31 @@ const MED_GRUPO_INFO = {
 };
 const MED_FRECS = ['cada 4 h','cada 6 h','cada 8 h','cada 12 h','cada 24 h','cada 48 h','cada 7 días','cada 15 días','cada 30 días'];
 const MED_MARCAS = { 'Ozempic':'Semaglutida', 'Rybelsus':'Semaglutida', 'Wegovy':'Semaglutida (OBE)', 'Mounjaro':'Tirzepatida', 'Zepbound':'Tirzepatida', 'Saxenda':'Liraglutida (OBE)', 'Victoza':'Liraglutida', 'Trulicity':'Dulaglutida', 'Xenical':'Orlistat', 'Jardiance':'Empagliflozina', 'Forxiga':'Dapagliflozina', 'Januvia':'Sitagliptina', 'Galvus':'Vildagliptina', 'Crestor':'Rosuvastatina', 'Lipitor':'Atorvastatina', 'Eliquis':'Apixabán', 'Xarelto':'Rivaroxabán', 'Pradaxa':'Dabigatrán', 'Plavix':'Clopidogrel', 'Brilinta':'Ticagrelor', 'Lotrial':'Enalapril', 'Bayaspirina':'AAS 100mg', 'Aspirina':'AAS 100mg' };
-const MED_MOTIVOS = ['Efecto adverso', 'Meta lograda', 'Costo / acceso', 'Decisión del paciente', 'Cambio de esquema', 'Interacción / contraindicación', 'Otro'];
+const MED_MOTIVOS = ['Efecto adverso', 'Falta de eficacia', 'Meta lograda', 'Costo / acceso', 'Decisión del paciente', 'Cambio de esquema', 'Interacción / contraindicación', 'Embarazo / búsqueda', 'Otro'];
+const MED_EA = ['Mialgias', 'Tos', 'Edema', 'Hipotensión / mareo', 'Hiperpotasemia', 'Deterioro de la función renal', 'Náuseas / vómitos / diarrea', 'Hipoglucemia', 'Infección urinaria / genital', 'Alergia / rash', 'Disfunción sexual', 'Aumento de transaminasas', 'Otro'];
+// Pregunta el motivo de suspensión: Efecto adverso → cuál; Otro → texto. Llama listo(motivo).
+function _medPreguntarMotivo(cont, actual, listo, conNoConsta){
+  const esc = _medEsc, sel = actual || '';
+  let h = '<div class="med-chips">' + MED_MOTIVOS.map(m => '<button type="button" class="med-chip' + (sel === m || sel.indexOf(m + ':') === 0 ? ' sel' : '') + '" data-m="' + esc(m) + '">' + esc(m) + '</button>').join('')
+    + (conNoConsta ? '<button type="button" class="med-chip" data-m="No consta" title="No se sabe por qué lo dejó">No consta</button>' : '') + '</div><div class="med-sub"></div>';
+  cont.innerHTML = h;
+  const sub = cont.querySelector('.med-sub');
+  const pedirTexto = (pre, ph) => {
+    sub.innerHTML = '<div style="display:flex;gap:6px;margin-top:6px;align-items:center"><input type="text" class="med-mot-tx" placeholder="' + ph + '" style="flex:1;padding:5px 8px;border:1.5px solid #dde3ec;border-radius:7px;font:inherit;font-size:12px"><button type="button" class="med-chip sel med-mot-ok">OK</button></div>';
+    const i = sub.querySelector('input'); i.focus();
+    const ok = () => { const t = i.value.trim(); listo(pre + (t ? (pre ? ': ' : '') + t : '')); };
+    sub.querySelector('.med-mot-ok').onclick = ok; i.onkeydown = (e) => { e.stopPropagation(); if (e.key === 'Enter') { e.preventDefault(); ok(); } };
+  };
+  cont.querySelectorAll('[data-m]').forEach(b => b.onclick = () => {
+    const m = b.dataset.m;
+    cont.querySelectorAll('[data-m]').forEach(x => x.classList.toggle('sel', x === b));
+    if (m === 'Efecto adverso') {
+      sub.innerHTML = '<div class="med-ay-t" style="margin-top:6px">¿Qué efecto adverso?</div><div class="med-chips">' + MED_EA.map(e => '<button type="button" class="med-chip" data-e="' + esc(e) + '">' + esc(e) + '</button>').join('') + '</div>';
+      sub.querySelectorAll('[data-e]').forEach(x => x.onclick = () => { if (x.dataset.e === 'Otro') pedirTexto('Efecto adverso', '¿Cuál?'); else listo('Efecto adverso: ' + x.dataset.e.toLowerCase()); });
+    } else if (m === 'Otro') pedirTexto('', 'Escribí el motivo');
+    else listo(m);
+  });
+}
 function _medSinAc(t){ return String(t||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').trim(); }
 function _medEsc(v){ return String(v==null?'':v).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 function _medGrupoInfo(g){
@@ -14658,10 +14720,9 @@ function medSuspender(div){
   div.dataset.susp = '1'; div.classList.add('med-susp');
   div.querySelectorAll('input[type=text]').forEach(i => i.disabled = true);
   const a = div.querySelector('.med-ayuda'); a.classList.add('on');
-  a.innerHTML = '<div class="med-ay-t">⏸ Suspendida · ¿motivo? <span>(opcional, sirve para la base de datos)</span></div><div class="med-chips">'
-    + MED_MOTIVOS.map(m => '<button type="button" class="med-chip' + (div.dataset.motivo === m ? ' sel' : '') + '" data-m="' + _medEsc(m) + '">' + _medEsc(m) + '</button>').join('')
-    + '<button type="button" class="med-chip med-deshacer">↩ Deshacer</button></div>';
-  a.querySelectorAll('[data-m]').forEach(b => b.onclick = () => { div.dataset.motivo = div.dataset.motivo === b.dataset.m ? '' : b.dataset.m; medSuspender(div); });
+  a.innerHTML = '<div class="med-ay-t">⏸ Suspendida · ¿por qué? <span>(queda en la base de datos)</span>' + (div.dataset.motivo ? ' · <b style="color:#0f766e">' + _medEsc(div.dataset.motivo) + '</b>' : '') + '</div><div class="med-mot"></div>'
+    + '<div class="med-chips" style="margin-top:4px"><button type="button" class="med-chip med-deshacer">↩ Deshacer</button></div>';
+  _medPreguntarMotivo(a.querySelector('.med-mot'), div.dataset.motivo || '', (mot) => { div.dataset.motivo = mot; medSuspender(div); }, true);
   a.querySelector('.med-deshacer').onclick = () => {
     delete div.dataset.susp; delete div.dataset.motivo; div.classList.remove('med-susp');
     div.querySelectorAll('input[type=text]').forEach(i => i.disabled = false); _medCerrarAyuda(div);
@@ -30129,8 +30190,15 @@ window.cargarProxConsultas = cargarProxConsultas;
     var fin = ciFinAtencion(fecha, prof); if(fin == null) return null;
     var ahora = new Date(), min = ahora.getHours() * 60 + ahora.getMinutes();
     if(min >= fin) return null;
+    // Si todos los turnos del día ya están marcados (atendido o ausente), se puede cerrar aunque sea más temprano
+    var T = (typeof turnos !== 'undefined' && turnos) || {}, total = 0, faltan = 0;
+    Object.keys(T).forEach(function(k){ var p = k.split('_'); if(p[0] !== fecha || p[2] !== prof) return; var t = T[k] || {};
+      if(!t.paciente && !t.dni_paciente) return;
+      if(/cancel|anulad/i.test(String(t.estado || ''))) return;
+      total++; if(!/^(atendido|asistio|presente|ausente)$/.test(String(t.asistencia || ''))) faltan++; });
+    if(total && !faltan) return null;
     var hh = String(Math.floor(fin / 60)).padStart(2, '0') + ':' + String(fin % 60).padStart(2, '0');
-    return 'La atención de hoy todavía no terminó (último turno hasta las ' + hh + ' h). El cierre se habilita a esa hora; mientras tanto los números son parciales.';
+    return 'La atención de hoy todavía no terminó: ' + (faltan === 1 ? 'falta marcar 1 turno' : 'faltan marcar ' + faltan + ' turnos') + ' como atendido o ausente en la agenda. Cuando estén todos marcados se habilita el cierre (o a las ' + hh + ' h); mientras tanto los números son parciales.';
   }
   window.ciBloqueoTemporal = ciBloqueoTemporal;
   window.cierreCargarDia = async function(){
@@ -35982,6 +36050,9 @@ function _cargaEstPrec(p){
     [/creatinin/, 'Creatinina'],
     [/(tolerancia|ptog|sobrecarga).*(120|2\s*h)|glucemia\s+(a\s+las\s+)?(2\s*h|120)/, 'PTOG'],
     [/glucemia|glucosa/, 'Glucemia'],
+    [/hematocrito|\bhto\b|\bhct\b/, 'Hto'],
+    [/leucocit|globulos\s+blancos|\bwbc\b/, 'Leuco'],
+    [/nt\s*-?\s*pro\s*-?\s*bnp|\bprobnp\b|pro\s*-?\s*peptido\s+natriuretico/, 'NTproBNP'],
     [/hemoglobina|\bhb\b|\bhgb\b/, 'Hb'],
     [/plaquetas|trombocitos/, 'Rto_plaquetas'],
     [/acido\s+urico|uricemia/, 'AcidoUrico'],
@@ -36030,7 +36101,7 @@ function _cargaEstPrec(p){
   function numero(t, key){
     t = t.trim().replace(/[.,]$/, '');
     // "250.000" es miles solo en plaquetas; en el resto el punto es decimal ("0.929")
-    if(key === 'Rto_plaquetas' && /^\d{1,3}(\.\d{3})+$/.test(t)) return t.replace(/\./g, '');
+    if((key === 'Rto_plaquetas' || key === 'Leuco') && /^\d{1,3}(\.\d{3})+$/.test(t)) return t.replace(/\./g, '');
     if(/^\d{1,3}(\.\d{3})+,\d+$/.test(t)) return t.replace(/\./g, '').replace(',', '.');
     return t.replace(',', '.');
   }
@@ -36117,6 +36188,7 @@ function _cargaEstPrec(p){
         var unidad = '';
         (f.unidades || []).forEach(function(u){ if(u && uTxt && normU(uTxt).indexOf(normU(u)) === 0) unidad = u; });
         if(key === 'Rto_plaquetas' && parseFloat(val) > 1000) val = String(Math.round(parseFloat(val) / 1000));
+        if(key === 'Leuco' && parseFloat(val) > 0 && parseFloat(val) < 100) val = String(Math.round(parseFloat(val) * 1000));   // 7,5 (×10³/µL) → 7500
         if(key === 'SatTransf') unidad = '%';
         out.push({ key:key, label:f.label, val:val, unidad:unidad, origen:origen });
         usadas[key] = 1;
@@ -36166,9 +36238,11 @@ function _cargaEstPrec(p){
           var tieneDatos = (labDatos.filas[fi] || []).some(function(x){ return x != null && String(x).trim() !== ''; });
           if(it.unidad && it.unidad !== uAct && tieneDatos){ aviso = (aviso ? aviso + ' · ' : '') + 'viene en ' + it.unidad + ' y la tabla usa ' + uAct; marcar = false; }
         }
-        html += '<tr style="border-bottom:1px solid #f1f5f9;vertical-align:top' + (aviso ? ';background:#fffbeb' : '') + '"><td style="padding:5px 6px"><input type="checkbox" class="lp-ck" data-i="' + i + '"' + (marcar ? ' checked' : '') + '></td>'
-          + '<td style="padding:5px 6px;font-weight:600">' + _esc(it.label) + '</td><td style="padding:3px 6px;white-space:nowrap"><input class="lp-val" data-i="' + i + '" value="' + _esc(it.val) + '" style="width:72px;padding:3px 6px;border:1.5px solid #e5e7eb;border-radius:6px;font:inherit"> <span style="color:#64748b;font-size:11.5px">' + _esc(it.unidad || '') + '</span></td>'
-          + '<td style="padding:5px 6px;font:11.5px/1.35 monospace;color:#475569">' + _esc(it.origen || '') + (aviso ? '<div style="font:600 11.5px var(--font-main);color:#b45309;margin-top:2px">⚠ ' + _esc(aviso) + '</div>' : '') + '</td></tr>';
+        var qcE = '', duda = false;
+        try { var qv = window._qcValor && window._qcValor('lab', it.key, it.val, it.unidad || ((labDatos.unidades && labDatos.unidades[it.key]) || ((fila(it.key) || {}).unidades || [''])[0])); if(qv) qcE = qv.msg; duda = !!(window._qcDudoso && window._qcDudoso(ta, it.val)); } catch(_){}
+        html += '<tr style="border-bottom:1px solid #f1f5f9;vertical-align:top' + (qcE ? ';background:#fef2f2' : aviso ? ';background:#fffbeb' : '') + '"><td style="padding:5px 6px"><input type="checkbox" class="lp-ck" data-i="' + i + '"' + (marcar ? ' checked' : '') + '></td>'
+          + '<td style="padding:5px 6px;font-weight:600">' + _esc(it.label) + '</td><td style="padding:3px 6px;white-space:nowrap"><input class="lp-val' + (duda ? ' lp-duda' : '') + '" data-i="' + i + '" value="' + _esc(it.val) + '" title="' + (duda ? 'Leído con poca seguridad: compará con la foto' : '') + '" style="width:72px;padding:3px 6px;border:1.5px solid ' + (duda ? '#f97316' : '#e5e7eb') + ';' + (duda ? 'background:#fff7ed;' : '') + 'border-radius:6px;font:inherit"> <span style="color:#64748b;font-size:11.5px">' + _esc(it.unidad || '') + '</span></td>'
+          + '<td style="padding:5px 6px;font:11.5px/1.35 monospace;color:#475569">' + _esc(it.origen || '') + (aviso ? '<div style="font:600 11.5px var(--font-main);color:#b45309;margin-top:2px">⚠ ' + _esc(aviso) + '</div>' : '') + (qcE ? '<div style="font:700 11.5px var(--font-main);color:#b91c1c;margin-top:2px">⛔ ' + _esc(qcE) + '</div>' : '') + (duda ? '<div style="font:600 11.5px var(--font-main);color:#c2410c;margin-top:2px">🔶 Leído con poca seguridad: compará con la foto</div>' : '') + '</td></tr>';
       });
       html += '</table>';
       var otros = (res.otros || []);
@@ -36208,8 +36282,9 @@ function _cargaEstPrec(p){
       if(!pacienteActual || String(pacienteActual.dni) !== dniModal){ alert('Cambió el paciente abierto: no se cargó nada. Volvé a abrir el paciente y repetí.'); m.cerrar(); return; }
       var fecha = prev.querySelector('.lp-fecha').value; if(!fecha){ alert('Elegí la fecha del laboratorio.'); return; }
       var elegidos = [];
-      prev.querySelectorAll('.lp-ck').forEach(function(c){ if(c.checked){ var it = res.items[+c.dataset.i]; var v = prev.querySelector('.lp-val[data-i="' + c.dataset.i + '"]').value.trim().replace(',', '.'); if(v) elegidos.push({ key:it.key, val:v, unidad:it.unidad }); } });
+      prev.querySelectorAll('.lp-ck').forEach(function(c){ if(c.checked){ var it = res.items[+c.dataset.i]; var v = prev.querySelector('.lp-val[data-i="' + c.dataset.i + '"]').value.trim().replace(',', '.'); if(v) elegidos.push({ key:it.key, val:v, unidad:it.unidad, orig:it.val, origen:it.origen }); } });
       if(!elegidos.length){ alert('No hay nada tildado para cargar.'); return; }
+      if(window._qcAntesDeGuardar && !window._qcAntesDeGuardar('lab', { fecha: fecha, sinFecha: !res.fecha, elegidos: elegidos, ta: ta })) return;
       var ci = columnaDe(fecha);
       if(ci < 0) ci = insertarColumnaEnOrden(labDatos, fecha);
       if(!labDatos.unidades) labDatos.unidades = {};
@@ -36541,7 +36616,16 @@ function _cargaEstPrec(p){
     await script(CDN.tess);
     var worker = await Tesseract.createWorker('spa', 1, { workerPath:CDN.tessWorker, corePath:CDN.tessCore, langPath:CDN.tessLang,
       logger:function(m){ if(m.status === 'recognizing text' && progreso) progreso(Math.round(m.progress * 100)); } });
-    try { var r = await worker.recognize(await mejorarImagen(imagen)); return limpiarOCR(r.data.text || ''); } finally { await worker.terminate(); }
+    try {
+      var can = await mejorarImagen(imagen), esc = (can && can._esc) || 1;
+      var r = await worker.recognize(can, {}, { text:true, blocks:true });
+      try {
+        var ws = r.data.words || [];
+        if(!ws.length && r.data.blocks) r.data.blocks.forEach(function(b){ (b.paragraphs || []).forEach(function(p){ (p.lines || []).forEach(function(l){ (l.words || []).forEach(function(w){ ws.push(w); }); }); }); });
+        window._ocrUltimo = { words: ws.map(function(w){ return { t:w.text, c:Math.round(w.confidence), b:[w.bbox.x0 / esc, w.bbox.y0 / esc, w.bbox.x1 / esc, w.bbox.y1 / esc] }; }), w: (can.width || 0) / esc, h: (can.height || 0) / esc };
+      } catch(_){ window._ocrUltimo = null; }
+      return limpiarOCR(r.data.text || '');
+    } finally { await worker.terminate(); }
   }
   // Renglones basura (logos, sellos, bordes de la foto): sin ninguna palabra de 4+ letras ni número de 2+ cifras
   function limpiarOCR(t){ return String(t).split('\n').filter(function(l){ return !l.trim() || /[A-Za-zÁÉÍÓÚáéíóúÑñ]{4,}|\d{2,}/.test(l); }).join('\n').replace(/\n{3,}/g, '\n\n').trim(); }
@@ -36582,6 +36666,7 @@ function _cargaEstPrec(p){
       var bl = caja(g, 2);
       for(i = 0; i < n; i++){ var q = g[i] + 1.5 * (g[i] - bl[i]); q = q < 0 ? 0 : q > 255 ? 255 : q; p[i*4] = p[i*4+1] = p[i*4+2] = q; p[i*4+3] = 255; }
       cx.putImageData(id, 0, 0);
+      cv._esc = esc;
       return cv;
     } catch(e){ console.warn('[ocr] sin mejora de imagen:', e && e.message); return img; }
   }
@@ -36630,8 +36715,15 @@ function _cargaEstPrec(p){
         for(var i = 0; i < files.length; i++){
           est.textContent = '⏳ Leyendo ' + files[i].name + '…';
           try { textarea.dispatchEvent(new CustomEvent('ft-archivo', { detail: files[i] })); } catch(_){}
+          window._ocrUltimo = null;
           var t = await window._leerArchivoTexto(files[i], function(p, extra){ est.textContent = '⏳ Leyendo ' + (extra ? extra + ' ' : '') + p + '%…'; });
           t = String(t || '').replace(/(\s*\.){4,}\s*/g, ' …… ').replace(/[ \t]{3,}/g, '   ');
+          try {
+            var oc = window._ocrUltimo, esImg = /^image\//.test(files[i].type);
+            var fu = { file: files[i], texto: t, url: esImg ? URL.createObjectURL(files[i]) : null, words: (esImg && oc) ? oc.words : [], w: oc ? oc.w : 0, h: oc ? oc.h : 0 };
+            (textarea._fuentes = textarea._fuentes || []).push(fu);
+            if(esImg && oc) oc.words.forEach(function(w){ if(w.c < 75 && /\d/.test(w.t)) (textarea._dudas = textarea._dudas || []).push({ t: w.t, c: w.c, f: files[i] }); });
+          } catch(_){}
           try { textarea.dispatchEvent(new CustomEvent('ft-leido', { detail: { file: files[i], texto: t } })); } catch(_){}
           textarea.value = (textarea.value.trim() ? textarea.value + '\n' + (window._MD_SEP || '') + '\n' : '') + t;
         }
@@ -36687,7 +36779,7 @@ function _cargaEstPrec(p){
     ['ECO ABDOMINAL', /ecografia\s+abdominal|eco\s+abdominal|ecografia\s+de\s+abdomen|higado|vesicula/],
     ['DENSITOMETRÍA', /densitometr|\bdmo\b|t\s*-?\s*score/],
     ['ECG', /electrocardiogra|\becg\b|\bekg\b/],
-    ['FONDO DE OJO', /fondo\s+de\s+ojo/], ['SCORE CALCIO CORONARIO', /score\s+de\s+calcio|calcio\s+coronario|agatston/],
+    ['FONDO DE OJO', /fondo\s+de\s+ojo|retinopatia|fundoscop/], ['ELASTOGRAFÍA HEPÁTICA', /elastograf|fibroscan|rigidez\s+hepatica|\bkpa\b|\bcap\b[^.]{0,20}db/], ['MONITOREO CONTINUO DE GLUCOSA', /tiempo\s+en\s+rango|\btir\b|monitoreo\s+continuo|sensor\s+de\s+glucosa|freestyle|dexcom|\bgmi\b|\bagp\b/], ['SCORE CALCIO CORONARIO', /score\s+de\s+calcio|calcio\s+coronario|agatston/],
     ['VOP', /velocidad\s+de\s+(la\s+)?onda\s+de\s+pulso|\bvop\b/], ['SPECT CARDÍACO', /\bspect\b|perfusion\s+miocardica|camara\s+gamma/],
     ['ECOSTRESS CARDÍACO', /eco\s*stress|ecoestres/], ['TC ENCÉFALO', /tomografia.*(cerebr|encef|craneo)|\btac\b/], ['RNM ENCÉFALO', /resonancia.*(cerebr|encef)|\brmn\b|\brnm\b/],
     ['CARDIOGRAFÍA', /cardiografia/]
@@ -36774,6 +36866,28 @@ function _cargaEstPrec(p){
       if(/colecistectom/.test(l)) put('ecoabd_Colecis', 'Sí');
       var otras = []; if(/\bpan[a-z]{3,5}s\b[^.]{0,120}(esteatos\w*|lipomatosis|infiltracion grasa)|(esteatosis|lipomatosis)[^.]{0,30}pancrea/.test(l)) otras.push('Pancreática'); if(/(esteatosis|infiltracion grasa|lipomatosis)[^.]{0,30}renal/.test(l)) otras.push('Renal'); if(/(esteatosis|infiltracion grasa)[^.]{0,30}(bazo|esplen)/.test(l)) otras.push('Esplénica');
       if(otras.length) put('ecoabd_EstOtras', otras.join(', '));
+    } else if(cat === 'FONDO DE OJO'){
+      if(/sin (signos de )?retinopatia|no se observa(n)? (signos de )?retinopatia|retinopatia diabetica\s*:?\s*(no(?!\s*prolif)\b|ausente|negativ)/.test(l)) put('fdo_RD', 'Sin retinopatía');
+      else if(/retinopatia diabetica proliferativa|\brdp\b|neovasos|neovascular/.test(l)) put('fdo_RD', 'Proliferativa');
+      else { var rd = /(retinopatia diabetica|\brdnp\b)[^.]{0,40}(leve|moderada|severa|grave)|(leve|moderada|severa|grave)[^.]{0,25}retinopatia diabetica/.exec(l); if(rd){ var gr = rd[2] || rd[3]; put('fdo_RD', 'No proliferativa ' + (gr === 'grave' ? 'severa' : gr)); } }
+      var em = /edema macular/.exec(l); if(em) put('fdo_EM', negado(l, em.index) ? 'No' : 'Sí');
+      var rh = /retinopatia hipertensiva[^.]{0,40}(grado|estadio)\s*(iv|iii|ii|i|[0-4])|(keith|kw)[^.]{0,25}(iv|iii|ii|i|[0-4])\b/.exec(l);
+      if(rh){ var gg = (rh[2] || rh[4] || '').toUpperCase(); var mp = { '0':'Grado 0', 'I':'Grado I', '1':'Grado I', 'II':'Grado II', '2':'Grado II', 'III':'Grado III', '3':'Grado III', 'IV':'Grado IV', '4':'Grado IV' }; if(mp[gg]) put('fdo_RH', mp[gg]); }
+    } else if(cat === 'ELASTOGRAFÍA HEPÁTICA'){
+      var kp = /(\d{1,2}(?:[.,]\d{1,2})?)\s*kpa/.exec(l); put('elas_kPa', kp ? kp[1].replace(',', '.') : numTras(l, /rigidez|elasticidad|\be\s*med/));
+      var cp = /(\d{3})\s*db\s*\/?\s*m/.exec(l); put('elas_CAP', cp ? cp[1] : numTras(l, /\bcap\b/));
+      put('elas_IQR', numTras(l, /iqr\s*\/?\s*(med|mediana)?/));
+      if(/fibroscan|transitoria/.test(l)) put('elas_Met', 'FibroScan (transitoria)'); else if(/2d[\s-]*swe/.test(l)) put('elas_Met', '2D-SWE'); else if(/pswe|arfi/.test(l)) put('elas_Met', 'pSWE / ARFI');
+    } else if(cat === 'MONITOREO CONTINUO DE GLUCOSA'){
+      var pct = function(re){ var m = new RegExp('(?:' + re.source + ')[^\\d]{0,25}(\\d{1,3}(?:[.,]\\d)?)\\s*%').exec(l); return m ? m[m.length - 1].replace(',', '.') : null; };
+      put('cgm_TIR', pct(/tiempo en rango|\btir\b|70\s*-\s*180/));
+      put('cgm_TBR54', pct(/(<|menor(es)? (a|de)|debajo de|por debajo de)\s*54/));
+      put('cgm_TBR', pct(/(<|menor(es)? (a|de)|debajo de|por debajo de)\s*70/));
+      put('cgm_TAR', pct(/(>|mayor(es)? (a|de)|arriba de|por encima de)\s*180/));
+      put('cgm_Media', numTras(l, /(glucosa|glucemia) (media|promedio)/));
+      put('cgm_GMI', numTras(l, /\bgmi\b|indicador de manejo de (la )?glucosa/));
+      put('cgm_CV', numTras(l, /coeficiente de variacion|\bcv\b|variabilidad/));
+      put('cgm_Dias', numTras(l, /dias (con datos|de uso|activos|de sensor)/, 12) || (function(){ var d = /(\d{1,2})\s*dias/.exec(l); return d ? d[1] : null; })());
     } else if(cat === 'ERGOMETRÍA'){
       var mets = /(\d{1,2}(?:[.,]\d)?)\s*mets?\b/.exec(l); put('ergo_METS', mets ? mets[1].replace(',', '.') : numTras(l, /\bmets?\b/)); put('ergo_FCbas', numTras(l, /(fc|frecuencia cardiaca) (basal|de reposo|inicial)/));
       put('ergo_FCmax', numTras(l, /(fc|frecuencia cardiaca) maxima( alcanzada)?|(max\.?|maxima) (fc|frec\w*\.? cardiaca)( alcanzada)?/)); var pc = /(\d{2,3})\s*%[^.]{0,30}(teoric|maxim|predich)/.exec(l) || /alcanz\w*\s+(?:el\s+)?(\d{2,3})\s*%/.exec(l) || /(\d{2,3})\s*%\s*de\s*la\s*fc/.exec(l); if(pc) put('ergo_FCpct', pc[1]);
@@ -36835,6 +36949,11 @@ function _cargaEstPrec(p){
       btn.style.display = sel.value === '__TEXTO__' ? 'none' : '';
     }
     tabsEl.addEventListener('click', function(e){ var b = e.target.closest('[data-c]'); if(!b) return; sel.value = b.dataset.c; elegidaAMano = true; ta._sinSegmentar = sel.value === '__TEXTO__'; if(ta._md && ta._md.actual()) ta._md.actual().cat = sel.value; pintar(); });
+    (function(){ var a = document.createElement('div'); a.style.cssText = 'text-align:right;margin-top:6px'; a.innerHTML = '<button type="button" class="ec-corr" style="border:none;background:none;color:#94a3b8;font-size:11px;cursor:pointer;font-family:var(--font-main)">📊 Descargar las correcciones de lectura (para mejorar el reconocimiento)</button>'; m.box.appendChild(a);
+      a.querySelector('button').onclick = async function(){ var l = window._correccionesLectura ? await window._correccionesLectura() : []; if(!l.length){ alert('Todavía no hay correcciones registradas.'); return; }
+        var esc = function(x){ return '"' + String(x == null ? '' : x).replace(/"/g, '""') + '"'; };
+        var csv = 'fecha;usuario;tipo;estudio;parametro;leido;quedo;renglon\n' + l.map(function(c){ return [c.ts, c.u, c.tipo, c.cat || '', c.key, c.leido, c.quedo, c.renglon || ''].map(esc).join(';'); }).join('\n');
+        var b = new Blob(['\ufeff' + csv], { type:'text/csv' }), u = URL.createObjectURL(b), k = document.createElement('a'); k.href = u; k.download = 'correcciones_lectura.csv'; document.body.appendChild(k); k.click(); k.remove(); }; })();
     m.box.querySelector('.ed-man').onclick = function(){ var c = sel.value; if(!c) return; window._edCola = null; m.cerrar(); abrirCargaRapidaEstudio(c); };
     zona.addEventListener('dragover', function(e){ e.preventDefault(); zona.classList.add('sobre'); });
     zona.addEventListener('dragleave', function(){ zona.classList.remove('sobre'); });
@@ -36846,6 +36965,7 @@ function _cargaEstPrec(p){
       var ok = ta._md ? ta._md.quitar(d._t) : false;
       if(!ok){ var k = String(d._t || '').trim(); if(k && ta.value.trim() === k){ ta.value = ''; ok = true; } else if(k && ta.value.indexOf(k) >= 0){ ta.value = ta.value.replace(k, '').trim(); ok = true; } if(ok) ta.dispatchEvent(new Event('input', { bubbles:true })); }
       d.remove();
+      try { ta._fuentes = (ta._fuentes || []).filter(function(f){ return f.file !== d._f; }); ta._dudas = (ta._dudas || []).filter(function(x){ return x.f !== d._f; }); } catch(_){}
       if(!ok && d._t && ta.value.trim() && !confirm('Saqué la foto, pero no encontré su texto (¿lo corregiste?). ¿Borro todo el texto del recuadro?')) return;
       if(!ok && d._t){ ta.value = ''; ta.dispatchEvent(new Event('input', { bubbles:true })); }
       if(!thumbs.querySelector('.ec-th')){ var es = barra && barra.querySelector('.ft-est'); if(es) es.textContent = ''; }
@@ -36908,6 +37028,8 @@ function _cargaEstPrec(p){
       if(!pacienteActual || String(pacienteActual.dni) !== dniModal){ alert('Cambió el paciente abierto: no se cargó nada.'); m.cerrar(); return; }
       var conTexto = !!(m.box.querySelector('.ed-com') || {}).checked;
       if(ta._md && ta._md.multi()) window._edCola = Object.assign(ta._md.estado(), { dni: dniModal, esperando: true }); else window._edCola = null;
+      try { var txS = ta.value; window._cargaDesdeLectura = { cat: cat, vals: Object.assign({}, res.valores), sinFecha: !res.fecha, dudas: (ta._dudas || []).slice(),
+        fuentes: (ta._fuentes || []).filter(function(f){ var k = String(f.texto).trim(); return f.url && k && (txS.indexOf(k) >= 0 || (k.length > 300 && txS.indexOf(k.slice(0, 300)) >= 0)); }) }; } catch(_){ window._cargaDesdeLectura = null; }
       m.cerrar();
       abrirCargaRapidaEstudio(cat);
       setTimeout(function(){
@@ -36930,6 +37052,7 @@ function _cargaEstPrec(p){
           });
           if(window._estCondicionales) window._estCondicionales();
           if(typeof showToast === 'function') showToast('Revisá lo marcado en amarillo y tocá Guardar.', 'info', 5000);
+          try { document.dispatchEvent(new CustomEvent('carga-est-lista')); } catch(_){}
         }, 120);
       }, 80);
     };
@@ -39264,8 +39387,12 @@ function copiarEditor(id, btn){
         var k = String(t || '').trim(), igual = function(x){ x = String(x || '').trim(); return x === k || (k.length > 40 && x.indexOf(k.slice(0, 80)) >= 0) || (x.length > 40 && k.indexOf(x.slice(0, 80)) >= 0); };
         if(st.segs){
           st.segs[st.idx].txt = ta.value;
-          var j = -1; st.segs.forEach(function(x, i){ if(j < 0 && igual(x.txt)) j = i; }); if(j < 0) return false;
-          st.segs.splice(j, 1);
+          var j = -1, parcial = false;
+          st.segs.forEach(function(x, i){ if(j >= 0) return; var xs = String(x.txt || '').trim(); if(xs === k){ j = i; } else if(k && xs.indexOf(k) >= 0){ j = i; parcial = true; } });
+          if(j < 0) st.segs.forEach(function(x, i){ var xs = String(x.txt || '').trim(); if(j < 0 && igual(xs) && xs.length < k.length * 1.4) j = i; });
+          if(j < 0) return false;
+          if(parcial){ var sg = st.segs[j]; sg.txt = String(sg.txt).replace(k, '').replace(/\n{3,}/g, '\n\n').trim(); try { sg.fecha = fechaDe(sg.txt, tipo) || sg.fecha; sg.id = identidad(sg.txt) || sg.id; } catch(_){} if(!sg.txt) st.segs.splice(j, 1); }
+          else st.segs.splice(j, 1);
           if(st.segs.length <= 1){ ta.value = st.segs.length ? st.segs[0].txt : ''; st.segs = null; st.idx = 0; }
           else { if(st.idx >= j && st.idx > 0) st.idx--; ta.value = st.segs[st.idx].txt; }
         } else {
@@ -39432,7 +39559,7 @@ function copiarEditor(id, btn){
     Object.keys(d.ids || {}).forEach(function(id){ var el = $(id); if(!el) return; if(el.type === 'checkbox') el.checked = !!d.ids[id]; else el.value = d.ids[id]; });
     Object.keys(d.radios || {}).forEach(function(n){ document.querySelectorAll('#modalClinica input[type=radio][name="' + n + '"]').forEach(function(r){ r.checked = r.value === d.radios[n]; }); });
     Object.keys(d.ids || {}).forEach(function(id){ var el = $(id); if(el && (el.tagName === 'SELECT' || el.type === 'checkbox')) el.dispatchEvent(new Event('change', { bubbles:true })); });
-    ['actualizarTabaquismo', 'actualizarAlcohol', 'calcAlcohol', 'calcPackYear', 'macActualizarUI'].forEach(function(f){ try { if(typeof window[f] === 'function') window[f](); } catch(e){} });
+    ['actualizarTabaquismo', 'actualizarAlcohol', 'calcAlcohol', 'calcPackYear', 'macActualizarUI', '_dxdPintar'].forEach(function(f){ try { if(typeof window[f] === 'function') window[f](); } catch(e){} });
     ['acv', 'iam', 'hta', 'obe', 'menopausia', 'dbt2', 'dbt_otro'].forEach(function(x){ try { if(typeof toggleDxExtra === 'function') toggleDxExtra(x); if(typeof calcDxTiempo === 'function') calcDxTiempo(x); } catch(e){} });
     // actividad / alimentación / bebidas: se recargan con sus propias funciones
     try {
@@ -39774,6 +39901,831 @@ function copiarEditor(id, btn){
       var nom = function(c){ var t = c.querySelector('.est-card-titulo'); return t ? t.textContent.replace(/,? FEMORAL Y OTROS/i, '').trim() : ''; };
       Array.prototype.slice.call(g.querySelectorAll(':scope > .est-card')).sort(function(a, b){ return nom(a).localeCompare(nom(b), 'es', { sensitivity:'base' }); }).forEach(function(c){ g.appendChild(c); });
     } catch(e){}
+    return r;
+  };
+})();
+</script>
+<style>
+.dict-duda{background:#ffedd5!important;box-shadow:0 0 0 4px #ffedd5!important}
+.dict-duda::after{content:'🔶 leído con poca seguridad: compará con la foto';display:block;font-size:11px;font-weight:700;color:#c2410c;margin-top:3px}
+.qc-mal input,.qc-mal select{border-color:#dc2626!important;background:#fef2f2!important}
+.qc-msg{display:block;font-size:11px;font-weight:700;color:#b91c1c;margin-top:3px}
+.qv{display:flex;flex-direction:column;gap:10px}
+.qv-h{font-size:11.5px;color:#64748b;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.qv-h button{border:1px solid #cbd5e1;background:#fff;border-radius:7px;padding:2px 8px;font-size:11.5px;cursor:pointer;font-family:var(--font-main)}
+.qv-pg{position:relative;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;background:#fff}
+.qv-pg img{display:block;width:100%;height:auto}
+.qv-b{position:absolute;border:2.5px solid #f97316;background:rgba(249,115,22,.18);border-radius:3px;pointer-events:none;box-shadow:0 0 0 3px rgba(249,115,22,.25)}
+.qv.zoom .qv-pg img{width:200%}
+.qv.zoom .qv-pg{overflow:auto}
+#modalCargaEstudio .modal.ce-con-foto{max-width:1180px!important;width:96vw;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,560px);grid-template-rows:auto minmax(0,1fr) auto}
+#modalCargaEstudio .modal.ce-con-foto > :not(.ce-foto){grid-column:2}
+#modalCargaEstudio .ce-foto{grid-column:1;grid-row:1 / 4;overflow:auto;max-height:88vh;padding:14px;background:#f8fafc;border-right:1px solid #e2e8f0}
+@media (max-width:900px){#modalCargaEstudio .modal.ce-con-foto{display:block}#modalCargaEstudio .ce-foto{max-height:40vh;border-right:none;border-bottom:1px solid #e2e8f0}}
+.lp-vista{display:flex;gap:4px;margin-bottom:6px}
+.lp-vista button{border:1.5px solid #e2e8f0;background:#fff;border-radius:8px;padding:4px 10px;font-size:12px;font-weight:600;cursor:pointer;font-family:var(--font-main);color:#475569}
+.lp-vista button.act{background:#1e3a5f;border-color:#1e3a5f;color:#fff}
+.lp-vista button:disabled{opacity:.4;cursor:default}
+.lp-foto{height:58vh;min-height:300px;overflow:auto;border:1.5px solid #e5e7eb;border-radius:10px;padding:8px;background:#f8fafc}
+</style>
+<script>
+/* ═══ Control de calidad de lo que se carga (laboratorio y estudios) ═══
+   · Valores imposibles e incoherencias clínicas → aviso antes de guardar
+   · Valores leídos con poca seguridad → naranja
+   · Fecha futura, anterior al nacimiento o no leída → se confirma
+   · Estudio ya cargado en esa fecha con otros valores → se confirma
+   · La foto al lado, con el valor resaltado donde se leyó
+   · Correcciones registradas (para mejorar la lectura) */
+(function(){
+  function $(id){ return document.getElementById(id); }
+  function num(v){ if(v == null) return null; var t = String(v).trim().replace(/\s/g, ''); if(!/^-?[\d.,]+$/.test(t)) return null; if(/^\d{1,3}(\.\d{3})+$/.test(t)) t = t.replace(/\./g, ''); var n = parseFloat(t.replace(',', '.')); return isNaN(n) ? null : n; }
+  function fFmt(f){ return (typeof _fmtFechaCol === 'function') ? _fmtFechaCol(f) : f; }
+  function hoyISO(){ return (typeof fechaHoy === 'function') ? fechaHoy() : new Date().toISOString().slice(0, 10); }
+  function edad(){ try { return pacienteActual && pacienteActual.fecha_nacimiento && typeof edadDesde === 'function' ? edadDesde(pacienteActual.fecha_nacimiento) : null; } catch(e){ return null; } }
+
+  // ── Rangos POSIBLES (no de referencia): fuera de esto es casi seguro un error de lectura o de unidad
+  var LAB = { Hb:[3,25,'g/dL'], Hto:[10,75], Leuco:[300,150000], Rto_plaquetas:[5,2000], Glucemia:[20,1200], Creatinina:[0.1,25], AcidoUrico:[0.5,25], TGO:[1,10000], TGP:[1,10000], FAL:[5,5000], BT:[0.05,50], GGT:[1,5000], PeptidoC:[0.01,30],
+    CT:[40,1500], HDL:[5,200], TG:[10,10000], ApoB:[10,400], HbA1c:[3,20], PTOG:[20,1200], PRCus:[0,500], NTproBNP:[5,70000], Sodio:[100,185], Potasio:[1.5,9.5], TSH:[0.001,300], Calcio:[4,18], Fosforo:[0.5,15], Magnesio:[0.4,7], Albumina:[0.8,7],
+    Ferremia:[5,1000], Ferritina:[1,20000], SatTransf:[1,100], B12:[30,10000], D3:[1,250], AcFolico:[0.3,100], Zinc:[10,500], PTH:[1,3000] };
+  var EST = { eco_FE:[5,90], eco_DDVI:[20,95], eco_AI:[15,90], eco_SIV:[3,40], eco_PP:[3,40], dop_EIM:[0.2,4], dop_Esten:[0,100], ergo_FCpct:[20,150], ergo_FCmax:[50,240], ergo_FCbas:[30,180], ergo_PAmax:[70,320], ergo_METS:[0.5,25],
+    mapa_TAS24:[70,260], mapa_TASd:[70,260], mapa_TASn:[60,260], mapa_TAD24:[30,160], mapa_TADd:[30,160], mapa_TADn:[25,160], mapa_FC24:[30,180], mapa_Dip:[-50,60], hol_FCmin:[20,200], hol_FCmed:[30,220], hol_FCmax:[40,300],
+    elas_kPa:[1.5,80], elas_CAP:[100,400], elas_IQR:[0,100], cgm_Media:[40,400], cgm_GMI:[4,14], cgm_Dias:[1,120],
+    psg_IAH:[0,150], psg_IDO:[0,150], psg_SatB:[50,100], psg_SatMin:[30,100], psg_T90:[0,100], psg_Ef:[0,100] };
+  var UNI = { 'mmHg':[30,320], 'lpm':[20,300], 'mm':[0.1,150], '%':[0,100], 'ev/h':[0,150], 'min':[0,1000], 'kg':[15,400], 'cm':[40,250] };
+  function filaDe(tipo, key){ var F = tipo === 'lab' ? (typeof LAB_FILAS !== 'undefined' ? LAB_FILAS : []) : (typeof EST_FILAS !== 'undefined' ? EST_FILAS : []); return F.find(function(f){ return f.key === key; }) || null; }
+  window._qcValor = function(tipo, key, val, unidad){
+    var n = num(val); if(n == null) return null;
+    var f = filaDe(tipo, key), lbl = f ? f.label : key, r = null;
+    if(tipo === 'lab'){
+      var u0 = f && f.unidades ? f.unidades[0] : '';
+      if(unidad && u0 && unidad !== u0) return null;   // en otra unidad: no se controla el rango
+      r = LAB[key];
+      if(key === 'Hb' && n > 30 && n < 250) return { nivel:'error', msg: lbl + ' ' + val + ': ¿no será ' + (n / 10).toFixed(1) + ' g/dL? (parece g/L)' };
+      if(key === 'Glucemia' && n < 25) return { nivel:'error', msg: 'Glucemia ' + val + ': ¿está en mmol/L? (' + Math.round(n * 18) + ' mg/dL)' };
+      if((key === 'CT' || key === 'TG' || key === 'HDL') && n < 15) return { nivel:'error', msg: lbl + ' ' + val + ': ¿está en mmol/L?' };
+      if(key === 'Creatinina' && n > 25) return { nivel:'error', msg: 'Creatinina ' + val + ': ¿está en µmol/L? (' + (n / 88.4).toFixed(2) + ' mg/dL)' };
+    } else {
+      r = EST[key] || (f && f.unidades && UNI[f.unidades[0]]) || null;
+    }
+    if(r && (n < r[0] || n > r[1])) return { nivel:'error', msg: lbl + ' ' + val + ' es un valor imposible (esperable entre ' + r[0] + ' y ' + r[1] + '): revisá si se leyó bien' };
+    return null;
+  };
+  // Incoherencias entre valores del mismo estudio / laboratorio
+  function coherencia(tipo, V){
+    var out = [], g = function(k){ return num(V[k]); };
+    if(tipo === 'lab'){
+      if(g('HDL') != null && g('CT') != null && g('HDL') >= g('CT')) out.push('HDL (' + V.HDL + ') no puede ser mayor o igual que el colesterol total (' + V.CT + ')');
+      if(g('Hb') != null && g('Hto') != null){ var q = g('Hto') / g('Hb'); if(q < 2.3 || q > 3.9) out.push('Hematocrito ' + V.Hto + ' % no cierra con Hb ' + V.Hb + ' g/dL (suele ser ≈ 3 × Hb = ' + Math.round(g('Hb') * 3) + ' %)'); }
+    } else {
+      [['TAS24','TAD24','24 h'],['TASd','TADd','diurna'],['TASn','TADn','nocturna']].forEach(function(p){ var a = g('mapa_' + p[0]), b = g('mapa_' + p[1]); if(a != null && b != null && b >= a) out.push('MAPA ' + p[2] + ': la diastólica (' + b + ') no puede ser ≥ la sistólica (' + a + ')'); });
+      var fc = g('ergo_FCmax'), pc = g('ergo_FCpct'), ed = edad();
+      if(fc != null && pc != null && ed){ var esp = Math.round((220 - ed) * pc / 100); if(Math.abs(esp - fc) > 12) out.push('Ergometría: FC máx ' + fc + ' con ' + pc + ' % de la teórica no cierra para ' + ed + ' años (sería ≈ ' + esp + ' lpm)'); }
+      var mn = g('hol_FCmin'), md = g('hol_FCmed'), mx = g('hol_FCmax');
+      if((mn != null && md != null && mn > md) || (md != null && mx != null && md > mx) || (mn != null && mx != null && mn > mx)) out.push('Holter: la FC mínima, media y máxima no están en orden');
+      var sb = g('psg_SatB'), sm = g('psg_SatMin'); if(sb != null && sm != null && sm > sb) out.push('Polisomnografía: la saturación mínima (' + sm + ') no puede ser mayor que la basal (' + sb + ')');
+    }
+    return out;
+  }
+  // ── Valor leído con poca seguridad (el lector marcó ese número como dudoso)
+  window._qcDudoso = function(ta, val){
+    var d = ta && ta._dudas; if(!d || !d.length) return false;
+    var n = num(val); if(n == null) return false;
+    return d.some(function(x){ var m = String(x.t).match(/-?\d+(?:[.,]\d+)*/g) || []; return m.some(function(z){ var k = num(z); return k != null && Math.abs(k - n) < 1e-9; }); });
+  };
+
+  // ── Registro de correcciones (lo leído vs lo que quedó): sirve para mejorar las reglas de lectura
+  var colaCorr = [], tCorr = null;
+  function registrar(tipo, cambios){
+    if(!cambios.length) return;
+    var u = (typeof selectedUser !== 'undefined' && selectedUser) || '';
+    cambios.forEach(function(c){ colaCorr.push(Object.assign({ ts: new Date().toISOString(), u: u, tipo: tipo }, c)); });
+    clearTimeout(tCorr); tCorr = setTimeout(subir, 1500);
+  }
+  async function subir(){
+    if(!colaCorr.length || window._readonlyMode) return;
+    var nuevos = colaCorr.splice(0), F = window._sbFromOriginal || (window._fromOrig) || sb.from.bind(sb);
+    try {
+      var r = await F('urcym_agenda_config').select('value').eq('key', 'lectura_correcciones').maybeSingle();
+      var v = r && r.data && r.data.value, arr = []; try { arr = (typeof v === 'string' ? JSON.parse(v || '[]') : v) || []; } catch(e){}
+      arr = arr.concat(nuevos).slice(-3000);
+      await F('urcym_agenda_config').upsert({ key: 'lectura_correcciones', value: JSON.stringify(arr) }, { onConflict: 'key' });
+    } catch(e){ colaCorr = nuevos.concat(colaCorr); }
+  }
+  window._correccionesLectura = async function(){ var F = window._sbFromOriginal || window._fromOrig || sb.from.bind(sb); var r = await F('urcym_agenda_config').select('value').eq('key', 'lectura_correcciones').maybeSingle(); var v = r && r.data && r.data.value; try { return (typeof v === 'string' ? JSON.parse(v || '[]') : v) || []; } catch(e){ return []; } };
+
+  // ── Controles de fecha
+  function controlFecha(fecha, sinFecha, que){
+    var hoy = hoyISO();
+    if(fecha > hoy && !confirm('⚠ La fecha de ' + que + ' (' + fFmt(fecha) + ') es FUTURA.\n\n¿Guardar igual?')) return false;
+    var fn = pacienteActual && pacienteActual.fecha_nacimiento;
+    if(fn && fecha < String(fn).slice(0, 10) && !confirm('⛔ La fecha de ' + que + ' (' + fFmt(fecha) + ') es ANTERIOR al nacimiento del paciente (' + fFmt(String(fn).slice(0, 10)) + ').\n\n¿Guardar igual?')) return false;
+    if(sinFecha && fecha === hoy && !confirm('No se leyó la fecha en el informe y quedó la de HOY (' + fFmt(hoy) + ').\n\n¿' + que.charAt(0).toUpperCase() + que.slice(1) + ' es de hoy? (Si no, Cancelar y elegí la fecha correcta.)')) return false;
+    return true;
+  }
+
+  // ── Antes de guardar desde la lectura de laboratorio
+  window._qcAntesDeGuardar = function(tipo, o){
+    if(tipo !== 'lab') return true;
+    if(!controlFecha(o.fecha, o.sinFecha, 'este laboratorio')) return false;
+    var V = {}, errores = [];
+    try { var ci = (labDatos.columnas || []).indexOf(o.fecha); if(ci >= 0) LAB_FILAS.forEach(function(f, fi){ var x = labDatos.filas[fi] && labDatos.filas[fi][ci]; if(x != null && String(x).trim() !== '') V[f.key] = x; }); } catch(e){}
+    o.elegidos.forEach(function(e){ V[e.key] = e.val; var q = window._qcValor('lab', e.key, e.val, e.unidad); if(q) errores.push(q.msg); });
+    errores = errores.concat(coherencia('lab', V));
+    if(errores.length && !confirm('Revisá antes de cargar:\n\n• ' + errores.join('\n• ') + '\n\n¿Cargar igual?')) return false;
+    registrar('lab', o.elegidos.filter(function(e){ return e.orig != null && String(e.orig).replace(',', '.') !== String(e.val); }).map(function(e){ return { key: e.key, leido: e.orig, quedo: e.val, renglon: e.origen || '' }; }));
+    return true;
+  };
+
+  // ── Visor de la foto con resaltado
+  function normT(t){ return String(t || '').toLowerCase().replace(/[^\w.,%-]/g, ''); }
+  function crearVisor(fuentes){
+    var w = document.createElement('div'); w.className = 'qv';
+    w.innerHTML = '<div class="qv-h">📷 Informe original · tocá un valor para ver dónde se leyó <button type="button" class="qv-z">🔍 Agrandar</button></div>';
+    fuentes.forEach(function(f){ var pg = document.createElement('div'); pg.className = 'qv-pg'; pg._f = f; pg.innerHTML = '<img src="' + f.url + '" alt="">'; w.appendChild(pg); });
+    w.querySelector('.qv-z').onclick = function(){ w.classList.toggle('zoom'); this.textContent = w.classList.contains('zoom') ? '🔍 Achicar' : '🔍 Agrandar'; };
+    w.resaltar = function(val){
+      w.querySelectorAll('.qv-b').forEach(function(b){ b.remove(); });
+      var n = num(val), t = normT(val), primero = null; if(n == null && t.length < 2) return;
+      w.querySelectorAll('.qv-pg').forEach(function(pg){
+        var f = pg._f; if(!f.words || !f.w) return;
+        f.words.forEach(function(x){
+          var ok = false;
+          if(n != null){ (String(x.t).match(/-?\d+(?:[.,]\d+)*/g) || []).forEach(function(z){ var k = num(z); if(k != null && Math.abs(k - n) < 1e-9) ok = true; }); }
+          else ok = normT(x.t) === t;
+          if(!ok) return;
+          var b = document.createElement('div'); b.className = 'qv-b';
+          b.style.left = (x.b[0] / f.w * 100) + '%'; b.style.top = (x.b[1] / f.h * 100) + '%'; b.style.width = ((x.b[2] - x.b[0]) / f.w * 100) + '%'; b.style.height = ((x.b[3] - x.b[1]) / f.h * 100) + '%';
+          pg.appendChild(b); if(!primero) primero = b;
+        });
+      });
+      if(primero) try { primero.scrollIntoView({ block:'center', behavior:'smooth' }); } catch(e){}
+    };
+    return w;
+  }
+  window._qcVisor = crearVisor;
+
+  // ── Estudios: foto al lado, dudosos en naranja, valores leídos protegidos al cambiar la fecha
+  function grupoDe(key){ var fi = EST_FILAS.findIndex(function(x){ return x.key === key; }); var el = $('carga_est_f_' + fi); return el ? { el: el, g: el.closest('.form-group') } : null; }
+  function marcarCarga(){
+    var L = window._cargaDesdeLectura; if(!L) return;
+    var ta = { _dudas: L.dudas };
+    Object.keys(L.vals || {}).forEach(function(k){ var x = grupoDe(k); if(x && x.g && window._qcDudoso(ta, L.vals[k])) x.g.classList.add('dict-duda'); });
+    validarCampos();
+  }
+  function quitarFoto(){ var md = document.querySelector('#modalCargaEstudio .modal'); if(!md) return; md.classList.remove('ce-con-foto'); var p = md.querySelector('.ce-foto'); if(p) p.remove(); }
+  document.addEventListener('carga-est-lista', function(){
+    var L = window._cargaDesdeLectura, md = document.querySelector('#modalCargaEstudio .modal'); if(!L || !md) return;
+    quitarFoto();
+    if(L.fuentes && L.fuentes.length){
+      var p = document.createElement('div'); p.className = 'ce-foto'; var v = crearVisor(L.fuentes); p.appendChild(v); md.insertBefore(p, md.firstChild); md.classList.add('ce-con-foto'); md._visor = v;
+    }
+    marcarCarga();
+  });
+  document.addEventListener('focusin', function(e){
+    var md = document.querySelector('#modalCargaEstudio .modal.ce-con-foto'); if(md && md.contains(e.target) && /^carga_est_f_/.test(e.target.id || '') && md._visor) md._visor.resaltar(e.target.value);
+    var lp = e.target.closest && e.target.closest('.lp-prev'); if(lp && e.target.classList.contains('lp-val')){ var box = lp.closest('.ui-modal-box, [class*="modal"]') || document; var vs = document.querySelector('.lp-foto .qv'); if(vs && vs.offsetParent) vs.resaltar(e.target.value); }
+  });
+  // Rango por campo mientras se escribe en la carga de estudio
+  function validarCampos(){
+    if(typeof _cargaEstStartFi === 'undefined') return;
+    for(var fi = _cargaEstStartFi + 1; fi < _cargaEstEndFi; fi++){
+      var f = EST_FILAS[fi], el = $('carga_est_f_' + fi); if(!f || !el) continue;
+      var g = el.closest('.form-group'); if(!g) continue;
+      var q = window._qcValor('est', f.key, el.value), m = g.querySelector('.qc-msg');
+      g.classList.toggle('qc-mal', !!q);
+      if(q){ if(!m){ m = document.createElement('span'); m.className = 'qc-msg'; g.appendChild(m); } m.textContent = '⛔ ' + q.msg; } else if(m) m.remove();
+    }
+  }
+  document.addEventListener('input', function(e){ if(/^carga_est_f_/.test((e.target && e.target.id) || '')){ validarCampos(); var g = e.target.closest('.form-group'); if(g) g.classList.remove('dict-duda'); } }, true);
+  // Si se cambia la fecha, lo leído del informe no se pierde
+  var oRender = window._renderCargaEstCampos;
+  if(typeof oRender === 'function') window._renderCargaEstCampos = _renderCargaEstCampos = function(){
+    var guardados = {};
+    if(window._cargaDesdeLectura) document.querySelectorAll('#carga_est_campos .dict-auto [id^="carga_est_f_"]').forEach(function(el){ guardados[el.id] = { v: el.value, duda: el.closest('.form-group').classList.contains('dict-duda') }; });
+    var r = oRender.apply(this, arguments);
+    Object.keys(guardados).forEach(function(id){ var el = $(id); if(!el) return; el.value = guardados[id].v; var g = el.closest('.form-group'); if(g){ g.classList.add('dict-auto'); if(guardados[id].duda) g.classList.add('dict-duda'); }
+      var w = el.nextElementSibling; if(w && w.classList && w.classList.contains('est-pills')){ var lista = String(el.value).split(/\s*,\s*/); w.querySelectorAll('button').forEach(function(b){ b.classList.toggle('sel', el.tagName === 'SELECT' ? b.dataset.v === el.value : lista.indexOf(b.textContent) >= 0); }); } });
+    validarCampos();
+    return r;
+  };
+  var oCerrarCE = window.cerrarCargaEstudio;
+  if(typeof oCerrarCE === 'function') window.cerrarCargaEstudio = cerrarCargaEstudio = function(){ var r = oCerrarCE.apply(this, arguments); quitarFoto(); window._cargaDesdeLectura = null; return r; };
+  var oAbrirCE = window.abrirCargaRapidaEstudio;
+  if(typeof oAbrirCE === 'function') window.abrirCargaRapidaEstudio = abrirCargaRapidaEstudio = function(){ quitarFoto(); var r = oAbrirCE.apply(this, arguments); setTimeout(validarCampos, 0); return r; };
+  // Antes de guardar un estudio
+  var oGuardarCE = window.guardarCargaEstudio;
+  if(typeof oGuardarCE === 'function') window.guardarCargaEstudio = guardarCargaEstudio = function(){
+    try {
+      var fecha = ($('carga_est_fecha') || {}).value, L = window._cargaDesdeLectura, cat = ($('carga_est_titulo') || {}).textContent || 'el estudio';
+      if(fecha && !controlFecha(fecha, !!(L && L.sinFecha), 'este estudio')) return;
+      var V = {}, nuevos = {}, errores = [];
+      for(var fi = _cargaEstStartFi + 1; fi < _cargaEstEndFi; fi++){ var f = EST_FILAS[fi], el = $('carga_est_f_' + fi); if(!f || !el || f.calc) continue; nuevos[f.key] = el.value.trim(); if(el.value.trim()) V[f.key] = el.value.trim(); var q = window._qcValor('est', f.key, el.value); if(q) errores.push(q.msg); }
+      errores = errores.concat(coherencia('est', V));
+      if(errores.length && !confirm('Revisá antes de guardar:\n\n• ' + errores.join('\n• ') + '\n\n¿Guardar igual?')) return;
+      // Ya cargado en esa fecha con otros valores (solo cuando viene de una foto / PDF / dictado)
+      if(L){
+        var ci = (estDatos.columnas || []).indexOf(fecha), difs = [];
+        if(ci >= 0) for(var fj = _cargaEstStartFi + 1; fj < _cargaEstEndFi; fj++){ var g = EST_FILAS[fj]; if(!g || g.calc || g.nota) continue; var ant = estDatos.filas[fj] && estDatos.filas[fj][ci]; if(ant != null && String(ant).trim() !== '' && String(ant).trim() !== String(nuevos[g.key] || '')) difs.push(g.label + ': ' + ant + ' → ' + (nuevos[g.key] || '(vacío)')); }
+        if(difs.length && !confirm('Ya hay ' + cat + ' cargado el ' + fFmt(fecha) + ' con otros valores:\n\n• ' + difs.slice(0, 12).join('\n• ') + '\n\n¿Reemplazarlos por los de este informe?')) return;
+        registrar('est', Object.keys(L.vals || {}).filter(function(k){ var a = String(L.vals[k]).trim(), b = String(nuevos[k] == null ? '' : nuevos[k]).trim(); return a !== b && !/(_Com|Nota)$/.test(k); }).map(function(k){ return { cat: L.cat, key: k, leido: L.vals[k], quedo: nuevos[k] || '' }; }));
+      }
+    } catch(e){ console.warn('[control de carga]', e); }
+    return oGuardarCE.apply(this, arguments);
+  };
+
+  // ── Laboratorio: ver la foto en vez del texto, con el valor resaltado
+  var oLab = window.labPegarAbrir;
+  if(typeof oLab === 'function') window.labPegarAbrir = function(){
+    var r = oLab.apply(this, arguments);
+    setTimeout(function(){
+      var tas = document.querySelectorAll('.lp-txt'), ta = tas[tas.length - 1]; if(!ta || ta._vista) return; ta._vista = true;
+      var col = ta.closest('.lp-col'); if(!col) return;
+      var bar = document.createElement('div'); bar.className = 'lp-vista'; bar.innerHTML = '<button type="button" data-v="txt" class="act">📝 Texto</button><button type="button" data-v="foto" disabled>📷 Foto</button>';
+      var foto = document.createElement('div'); foto.className = 'lp-foto'; foto.style.display = 'none';
+      col.insertBefore(bar, col.firstChild); col.appendChild(foto);
+      var oculto = [];
+      function fuentesActuales(){ var tx = ta.value; return (ta._fuentes || []).filter(function(f){ var k = String(f.texto).trim(); return f.url && k && (tx.indexOf(k) >= 0 || (k.length > 300 && tx.indexOf(k.slice(0, 300)) >= 0)); }); }
+      function ver(v){
+        bar.querySelectorAll('button').forEach(function(b){ b.classList.toggle('act', b.dataset.v === v); });
+        var esFoto = v === 'foto';
+        Array.prototype.forEach.call(col.children, function(ch){ if(ch !== bar && ch !== foto) ch.style.display = esFoto ? 'none' : ''; });
+        foto.style.display = esFoto ? '' : 'none';
+        if(esFoto){ foto.innerHTML = ''; foto.appendChild(crearVisor(fuentesActuales())); }
+      }
+      bar.addEventListener('click', function(e){ var b = e.target.closest('[data-v]'); if(b && !b.disabled) ver(b.dataset.v); });
+      var tm; ta.addEventListener('input', function(){ clearTimeout(tm); tm = setTimeout(function(){ var hay = fuentesActuales().length > 0; bar.querySelector('[data-v=foto]').disabled = !hay; if(foto.style.display !== 'none') ver(hay ? 'foto' : 'txt'); }, 300); });
+      ta.addEventListener('ft-leido', function(){ setTimeout(function(){ if(fuentesActuales().length){ bar.querySelector('[data-v=foto]').disabled = false; ver('foto'); } }, 350); });
+    }, 0);
+    return r;
+  };
+
+  // ── Tablas: al escribir a mano un valor imposible, se marca en rojo y avisa
+  document.addEventListener('change', function(e){
+    var el = e.target; if(!el || !el.dataset || el.dataset.fi == null || !el.dataset.wrap || el.tagName !== 'INPUT') return;
+    var tipo = /lab/.test(el.dataset.wrap) ? 'lab' : /est/.test(el.dataset.wrap) ? 'est' : null; if(!tipo) return;
+    var F = tipo === 'lab' ? LAB_FILAS : EST_FILAS, f = F[+el.dataset.fi]; if(!f) return;
+    var u = tipo === 'lab' ? ((labDatos.unidades && labDatos.unidades[f.key]) || (f.unidades || [''])[0]) : null;
+    var q = window._qcValor(tipo, f.key, el.value, u);
+    el.style.outline = q ? '2px solid #dc2626' : ''; el.title = q ? q.msg : '';
+    if(q && typeof showToast === 'function') showToast('⛔ ' + q.msg, 'warning', 6000);
+  }, true);
+})();
+</script>
+<style>
+.qr-btn{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border:1.5px solid #0f766e;border-radius:9px;color:#0f766e;background:#ecfdf5;font-size:12.5px;font-weight:700;cursor:pointer;font-family:var(--font-main)}
+.qr-btn:hover{background:#d1fae5}
+.qr-panel{display:flex;gap:16px;align-items:center;justify-content:center;flex-wrap:wrap;margin:10px auto 4px;padding:12px 14px;border:1.5px solid #a7f3d0;background:#f0fdf9;border-radius:12px;max-width:620px;text-align:left}
+.qr-panel .qr-img{background:#fff;padding:8px;border-radius:10px;box-shadow:0 1px 4px rgba(0,0,0,.08);line-height:0}
+.qr-panel .qr-img img,.qr-panel .qr-img canvas{width:170px!important;height:170px!important}
+.qr-panel .qr-tx{flex:1;min-width:220px;font-size:12.5px;color:#334155;line-height:1.5}
+.qr-panel .qr-tx b.t{display:block;font-size:14px;color:#065f46;margin-bottom:4px}
+.qr-panel .qr-est{margin-top:8px;font-weight:700;color:#0f766e}
+.qr-panel .qr-est.err{color:#b91c1c}
+.qr-panel .qr-x{margin-top:8px;border:1px solid #cbd5e1;background:#fff;border-radius:8px;padding:4px 10px;font-size:12px;cursor:pointer;font-family:var(--font-main)}
+</style>
+<script>
+/* ═══ 📱 Fotos desde el celular con código QR ═══
+   La compu muestra un QR; el celular lo escanea (sistema/foto.html), saca una o varias fotos
+   y van apareciendo solas acá, en calidad completa. Cada foto se borra de la nube apenas se lee. */
+(function(){
+  var QR_LIB = 'https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js';
+  var VIDA_MIN = 30;
+  function cargarLib(){ return new Promise(function(ok, mal){ if(window.QRCode) return ok(); var s = document.createElement('script'); s.src = QR_LIB; s.onload = ok; s.onerror = function(){ mal(new Error('No se pudo cargar el generador de QR')); }; document.head.appendChild(s); }); }
+  function nuevoToken(){ var a = new Uint8Array(24); crypto.getRandomValues(a); return Array.prototype.map.call(a, function(b){ return ('0' + b.toString(16)).slice(-2); }).join(''); }
+  function F(t){ return (window._sbFromOriginal || sb.from.bind(sb))(t); }
+  function urlCelular(token){ var base = location.origin + location.pathname.replace(/[^\/]*$/, ''); return base + 'foto.html?s=' + token; }
+  // Limpieza: fotos de sesiones viejas que nadie leyó, y sesiones vencidas
+  async function limpiar(actual){
+    try {
+      await F('foto_sesiones').delete().lt('expira', new Date(Date.now() - 3600e3).toISOString());
+      var r = await sb.storage.from('fotos_celular').list('', { limit: 100 }); if(!r || !r.data) return;
+      var vivas = {}; try { var s = await F('foto_sesiones').select('token').gt('expira', new Date().toISOString()); (s.data || []).forEach(function(x){ vivas[x.token] = 1; }); } catch(e){}
+      for(var i = 0; i < r.data.length; i++){ var c = r.data[i].name; if(c === actual || vivas[c]) continue; var l = await sb.storage.from('fotos_celular').list(c, { limit: 100 }); var ps = (l.data || []).map(function(f){ return c + '/' + f.name; }); if(ps.length) await sb.storage.from('fotos_celular').remove(ps); }
+    } catch(e){}
+  }
+  function abrirPanel(textarea, barra){
+    var cont = barra.parentNode; if(!cont) return;
+    var viejo = cont.querySelector('.qr-panel'); if(viejo){ if(viejo._cerrar) viejo._cerrar(); return; }
+    var p = document.createElement('div'); p.className = 'qr-panel';
+    p.innerHTML = '<div class="qr-img"><div style="width:170px;height:170px;display:flex;align-items:center;justify-content:center;font-size:12px;color:#64748b">Generando…</div></div>'
+      + '<div class="qr-tx"><b class="t">📱 Escaneá este código con la cámara del celular</b>'
+      + 'Se abre una página para <b>sacar las fotos</b> del informe (una por hoja, todas las que necesites). Van apareciendo solas acá, en calidad completa.'
+      + '<div class="qr-est">Esperando fotos…</div><button type="button" class="qr-x">Listo, cerrar</button></div>';
+    barra.insertAdjacentElement('afterend', p);
+    var est = p.querySelector('.qr-est'), token = nuevoToken(), vivo = true, vistos = {}, recibidas = 0, tm = null, vence = Date.now() + VIDA_MIN * 60e3, esperado = 1, espera0 = 0;
+    function cerrar(){ vivo = false; clearTimeout(tm); p.remove(); }
+    p._cerrar = cerrar;
+    p.querySelector('.qr-x').onclick = cerrar;
+    (async function(){
+      try {
+        var r = await F('foto_sesiones').insert({ token: token, creado_por: (typeof selectedUser !== 'undefined' && selectedUser) || '', expira: new Date(vence).toISOString() });
+        if(r && r.error) throw r.error;
+        await cargarLib();
+        var box = p.querySelector('.qr-img'); box.innerHTML = '';
+        new QRCode(box, { text: urlCelular(token), width: 340, height: 340, correctLevel: QRCode.CorrectLevel.M });
+        box.title = urlCelular(token);
+        limpiar(token);
+        revisar();
+      } catch(e){
+        est.className = 'qr-est err';
+        est.innerHTML = /foto_sesiones|relation|does not exist|schema cache/i.test(String(e && (e.message || e))) ? 'Falta correr en Supabase el archivo <b>21_foto_celular.sql</b>.' : 'No se pudo generar el código: ' + _esc(String(e && (e.message || e)));
+      }
+    })();
+    async function revisar(){
+      if(!vivo) return;
+      if(!document.contains(textarea)){ cerrar(); return; }
+      if(Date.now() > vence){ est.className = 'qr-est err'; est.textContent = 'El código venció (30 min). Cerrá y tocá de nuevo 📱 para uno nuevo.'; return; }
+      try {
+        var l = await sb.storage.from('fotos_celular').list(token, { limit: 100, sortBy: { column: 'name', order: 'asc' } });
+        // Se leen en el orden en que se sacaron (0001, 0002…): si falta una del medio, se la espera unos segundos
+        var hay = {}; (l.data || []).forEach(function(f){ var k = parseInt(f.name, 10); if(f.name && !vistos[f.name] && !isNaN(k)) hay[k] = f; });
+        var nuevos = [];
+        while(true){
+          if(hay[esperado]){ nuevos.push(hay[esperado]); delete hay[esperado]; esperado++; espera0 = 0; continue; }
+          var mayores = Object.keys(hay).length;
+          if(mayores){ if(!espera0) espera0 = Date.now(); if(Date.now() - espera0 > 8000){ esperado++; espera0 = 0; continue; } }
+          break;
+        }
+        for(var i = 0; i < nuevos.length; i++){
+          var f = nuevos[i]; vistos[f.name] = 1;
+          var ruta = token + '/' + f.name;
+          var d = await sb.storage.from('fotos_celular').download(ruta);
+          if(d.error || !d.data){ vistos[f.name] = 0; continue; }
+          recibidas++;
+          est.textContent = '✓ ' + recibidas + (recibidas === 1 ? ' foto recibida' : ' fotos recibidas') + ' · podés seguir sacando';
+          var file = new File([d.data], 'celular-' + String(recibidas).padStart(2, '0') + '.jpg', { type: d.data.type || 'image/jpeg' });
+          sb.storage.from('fotos_celular').remove([ruta]).then(function(){}, function(){});
+          if(textarea._leerArchivos) await textarea._leerArchivos([file]);
+        }
+      } catch(e){}
+      tm = setTimeout(revisar, 2000);
+    }
+  }
+  var oBoton = window._botonFotoTexto;
+  if(typeof oBoton === 'function') window._botonFotoTexto = function(textarea){
+    var w = oBoton.apply(this, arguments);
+    try {
+      if(w && !window._readonlyMode){
+        var b = document.createElement('button'); b.type = 'button'; b.className = 'qr-btn'; b.innerHTML = '📱 Desde el celular';
+        b.title = 'Mostrar un código QR para sacar las fotos con el celular';
+        var lbl = w.querySelector('label'); if(lbl && lbl.nextSibling) w.insertBefore(b, lbl.nextSibling); else w.appendChild(b);
+        b.onclick = function(){ abrirPanel(textarea, w); };
+      }
+    } catch(e){}
+    return w;
+  };
+})();
+</script>
+<style>
+.dxd-box{background:#f0f4fa;border-radius:10px;padding:10px 14px;margin-top:10px;font-size:12px}
+.dxd-box .t{font-weight:700;color:var(--blue);margin-bottom:6px}
+.dxd-row{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;margin-top:6px}
+.dxd-row label{font-size:11px;color:#475569;font-weight:600;display:flex;flex-direction:column;gap:3px}
+.dxd-row input[type=number],.dxd-row input[type=text],.dxd-row input[type=date]{padding:5px 8px;border:1.5px solid var(--border);border-radius:7px;font:12.5px var(--font-main);width:110px}
+.dxd-row input[type=text]{width:180px}
+.dxd-p{display:flex;gap:4px;flex-wrap:wrap}
+.dxd-p button{border:1.5px solid #dde3ec;background:#fff;border-radius:999px;padding:4px 10px;font-size:11.5px;font-weight:600;cursor:pointer;font-family:var(--font-main);color:#334155}
+.dxd-p button.sel{background:#2a9496;border-color:#2a9496;color:#fff}
+.dxd-res{font-weight:700;color:#0f766e;font-size:12px;margin-top:6px}
+.dxd-res.mal{color:#b91c1c}
+.dxd-nota{font-size:11px;color:#64748b;margin-top:6px}
+.dxd-mg{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 10px;align-items:center;margin-top:4px}
+.dxd-mg span{font-size:11.5px;color:#334155}
+</style>
+<script>
+/* ═══ Detalles por enfermedad para investigación (Datos clínicos › Cardiometabólicos) ═══
+   Diabetes: hipoglucemias, pie (monofilamento) · Obesidad: peso máximo, EOSS ·
+   Dislipemia: LDL basal, xantomas, arco corneal, intolerancia a estatinas, score holandés ·
+   AOS: adherencia al CPAP · HTA: adherencia (Morisky-Green).
+   Se guarda en paciente_clinica.dx_detalle_json (SQL 22) y se vuelca a la evolución.
+   El tiempo en rango del sensor, el fondo de ojo con grado y la elastografía van en Estudios (con fecha). */
+(function(){
+  function $(id){ return document.getElementById(id); }
+  function pills(id, ops, tit){ return '<div class="dxd-p" data-for="' + id + '">' + ops.map(function(o){ var v = Array.isArray(o) ? o[0] : o, t = Array.isArray(o) ? o[1] : o, h = Array.isArray(o) && o[2] ? ' title="' + o[2] + '"' : ''; return '<button type="button" data-v="' + v + '"' + h + '>' + t + '</button>'; }).join('') + '</div><input type="hidden" id="' + id + '">'; }
+  var MG = ['¿Se olvida alguna vez de tomar los medicamentos?', '¿Toma los medicamentos a la hora indicada?', 'Cuando se encuentra bien, ¿deja de tomarlos?', 'Si alguna vez le sientan mal, ¿deja de tomarlos?'];
+  var MG_OK = ['No', 'Sí', 'No', 'No'];
+  var EOSS = [['0','0','Sin factores de riesgo, síntomas ni limitación'],['1','1','Factores de riesgo subclínicos, síntomas leves o limitación leve'],['2','2','Enfermedad crónica establecida (HTA, DBT2, AOS, artrosis…) o limitación moderada'],['3','3','Daño de órgano blanco (IAM, ACV, IC…) o limitación significativa'],['4','4','Discapacidad severa / terminal']];
+  function crear(){
+    var tab = $('tab_cardio'); if(!tab || $('dxd_dbt')) return;
+    var otras = $('dx_otras_enfermedades'); var ancla = otras ? otras.closest('div[style*="fdf1ef"]') || null : null;
+    var cont = document.createElement('div'); cont.id = 'dxd_cont';
+    cont.innerHTML =
+      '<div class="dxd-box" id="dxd_dbt" style="display:none"><div class="t">Diabetes — detalles</div>'
+      + '<div class="dxd-row"><label>Hipoglucemias (últimos 12 meses)<input type="number" min="0" id="dxd_hipo_n" placeholder="cantidad"></label>'
+      + '<label>Graves (necesitó ayuda de otra persona)<input type="number" min="0" id="dxd_hipo_g" placeholder="cantidad"></label></div>'
+      + '<div class="dxd-row"><label>Pie: monofilamento' + pills('dxd_pie', ['No evaluado','Normal','Alterado']) + '</label><label>Fecha del examen<input type="date" id="dxd_pie_f"></label></div>'
+      + '<div class="dxd-nota">El tiempo en rango del sensor y el fondo de ojo (con grado) se cargan en <b>Estudios</b>, con su fecha.</div></div>'
+      + '<div class="dxd-box" id="dxd_dis" style="display:none"><div class="t">Dislipemia — detalles</div>'
+      + '<div class="dxd-row"><label>LDL basal sin tratamiento (mg/dL)<input type="number" min="0" id="dxd_ldl" placeholder="mg/dL"></label><label>Año<input type="number" min="1900" max="2100" id="dxd_ldl_a" placeholder="año"></label></div>'
+      + '<div class="dxd-row"><label>Xantomas tendinosos' + pills('dxd_xant', ['No','Sí']) + '</label><label>Arco corneal antes de los 45 años' + pills('dxd_arco', ['No','Sí']) + '</label></div>'
+      + '<div class="dxd-row"><label>Intolerancia a estatinas' + pills('dxd_int', ['No','Parcial','Total']) + '</label><label>¿A cuál/es? / síntoma<input type="text" id="dxd_int_c" placeholder="Ej: atorvastatina 40, mialgias"></label></div>'
+      + '<div class="dxd-row"><label title="Familiar de 1er grado con enfermedad coronaria/vascular prematura o LDL >p95 = 1 · con xantomas/arco corneal, o hijo <18 años con LDL >p95 = 2">Score holandés · antecedente familiar' + pills('dxd_dl_fam', [['0','0'],['1','1','Familiar 1er grado con enf. coronaria/vascular prematura o LDL > p95'],['2','2','Familiar con xantomas o arco corneal, o hijo < 18 años con LDL > p95']]) + '</label>'
+      + '<label>Antecedente personal' + pills('dxd_dl_per', [['0','0'],['1','1','Enfermedad cerebral o arterial periférica prematura'],['2','2','Enfermedad coronaria prematura (H < 55, M < 60)']]) + '</label></div>'
+      + '<div class="dxd-res" id="dxd_dlcn"></div></div>'
+      + '<div class="dxd-box" id="dxd_aos" style="display:none"><div class="t">AOS — adherencia al CPAP</div>'
+      + '<div class="dxd-row"><label>Uso promedio (horas/noche)<input type="number" min="0" max="24" step="0.1" id="dxd_cpap_h"></label><label>Noches con ≥ 4 h (%)<input type="number" min="0" max="100" id="dxd_cpap_p"></label><label>Fecha de la descarga<input type="date" id="dxd_cpap_f"></label></div>'
+      + '<div class="dxd-res" id="dxd_cpap_r"></div></div>';
+    if(ancla) ancla.parentNode.insertBefore(cont, ancla); else tab.appendChild(cont);
+    // Obesidad: dentro de su recuadro
+    var obe = $('dx_extra_obe');
+    if(obe){ var d = document.createElement('div'); d.id = 'dxd_obe';
+      d.innerHTML = '<div class="dxd-row"><label>Peso máximo alcanzado (kg)<input type="number" min="0" step="0.1" id="dxd_pmax"></label><label>Año o edad<input type="number" min="0" max="2100" id="dxd_pmax_a" placeholder="año o edad"></label>'
+        + '<label title="Edmonton Obesity Staging System">Estadio EOSS' + pills('dxd_eoss', EOSS) + '</label></div><div class="dxd-nota">La cirugía bariátrica (técnica y fecha) se registra en la pestaña <b>Adiposidad</b> › nuevo tratamiento › Bariátrica.</div>';
+      obe.appendChild(d); }
+    // HTA: Morisky-Green dentro de su recuadro
+    var hta = $('dx_extra_hta');
+    if(hta){ var h = document.createElement('div'); h.id = 'dxd_hta'; h.style.marginTop = '8px';
+      h.innerHTML = '<div style="font-weight:600;color:var(--blue)">Adherencia al tratamiento (Morisky-Green)</div><div class="dxd-mg">' + MG.map(function(q, i){ return '<span>' + q + '</span>' + pills('dxd_mg' + i, ['Sí','No']); }).join('') + '</div><div class="dxd-res" id="dxd_mg_r"></div><input type="hidden" id="dxd_mg_f">';
+      hta.appendChild(h); }
+    document.getElementById('modalClinica').addEventListener('click', function(e){
+      var b = e.target.closest('.dxd-p [data-v]'); if(!b) return;
+      var w = b.parentNode, inp = $(w.dataset.for); if(!inp) return;
+      inp.value = inp.value === b.dataset.v ? '' : b.dataset.v;
+      if(/^dxd_mg/.test(inp.id)) $('dxd_mg_f').value = (typeof fechaHoy === 'function') ? fechaHoy() : new Date().toISOString().slice(0, 10);
+      inp.dispatchEvent(new Event('input', { bubbles:true })); pintar();
+    });
+    tab.addEventListener('input', function(e){ if(/^dxd_/.test(e.target.id || '')) calc(); });
+    tab.addEventListener('change', function(e){ if(/^dx_/.test(e.target.id || '')) visibles(); });
+  }
+  var DBT = ['dx_dbt1','dx_dbt2','dx_dbt_otro','dx_nef_dbt','dx_pie_dbt','dx_neu_dbt','dx_rp_dbt'], DIS = ['dx_dis','dx_hf','dx_htg','dx_lpa'], AOS = ['dx_sahos'];
+  function alguno(l){ return l.some(function(id){ var c = $(id); return c && c.checked; }); }
+  function tieneDatos(sec){ var b = $(sec); return b && Array.prototype.some.call(b.querySelectorAll('input'), function(i){ return i.value; }); }
+  function visibles(){
+    var m = [['dxd_dbt', DBT], ['dxd_dis', DIS], ['dxd_aos', AOS]];
+    m.forEach(function(x){ var b = $(x[0]); if(b) b.style.display = (alguno(x[1]) || tieneDatos(x[0])) ? 'block' : 'none'; });
+  }
+  function pintar(){ document.querySelectorAll('#modalClinica .dxd-p').forEach(function(w){ var v = ($(w.dataset.for) || {}).value || ''; w.querySelectorAll('[data-v]').forEach(function(b){ b.classList.toggle('sel', b.dataset.v === v); }); }); calc(); }
+  window._dxdPintar = function(){ crear(); pintar(); visibles(); };
+  function n(id){ var v = parseFloat(String(($(id) || {}).value || '').replace(',', '.')); return isNaN(v) ? null : v; }
+  function v(id){ return (($(id) || {}).value || '').trim(); }
+  function dlcn(){
+    var ldl = n('dxd_ldl'), p = 0, partes = 0;
+    if(ldl != null){ partes++; p += ldl >= 330 ? 8 : ldl >= 250 ? 5 : ldl >= 190 ? 3 : ldl >= 155 ? 1 : 0; }
+    if(v('dxd_xant')){ partes++; if(v('dxd_xant') === 'Sí') p += 6; }
+    if(v('dxd_arco')){ partes++; if(v('dxd_arco') === 'Sí') p += 4; }
+    if(v('dxd_dl_fam') !== ''){ partes++; p += +v('dxd_dl_fam'); }
+    if(v('dxd_dl_per') !== ''){ partes++; p += +v('dxd_dl_per'); }
+    if(!partes) return null;
+    return { pts: p, cat: p > 8 ? 'HF definida' : p >= 6 ? 'HF probable' : p >= 3 ? 'HF posible' : 'HF improbable', completo: partes === 5 };
+  }
+  function cpap(){ var h = n('dxd_cpap_h'), pc = n('dxd_cpap_p'); if(h == null && pc == null) return null; var ok = (h == null || h >= 4) && (pc == null || pc >= 70); return { adherente: ok }; }
+  function morisky(){ var r = [0,1,2,3].map(function(i){ return v('dxd_mg' + i); }); if(r.some(function(x){ return !x; })) return null; return { adherente: r.every(function(x, i){ return x === MG_OK[i]; }) }; }
+  function calc(){
+    var d = dlcn(), e = $('dxd_dlcn'); if(e){ e.textContent = d ? 'Score holandés: ' + d.pts + ' puntos · ' + d.cat + (d.completo ? '' : ' (faltan datos)') : ''; e.className = 'dxd-res' + (d && d.pts >= 6 ? ' mal' : ''); }
+    var c = cpap(), ec = $('dxd_cpap_r'); if(ec){ ec.textContent = c ? (c.adherente ? '✓ Adherente al CPAP (≥ 4 h/noche en ≥ 70 % de las noches)' : '✕ No adherente al CPAP') : ''; ec.className = 'dxd-res' + (c && !c.adherente ? ' mal' : ''); }
+    var mg = morisky(), em = $('dxd_mg_r'); if(em){ em.textContent = mg ? (mg.adherente ? '✓ Adherente' : '✕ No adherente') : ''; em.className = 'dxd-res' + (mg && !mg.adherente ? ' mal' : ''); }
+  }
+  // ── Leer / cargar
+  window._dxdLeer = function(){
+    if(!$('dxd_dbt')) return undefined;
+    var o = {}, put = function(sec, k, val){ if(val === '' || val == null) return; (o[sec] = o[sec] || {})[k] = val; };
+    put('dbt', 'hipo_n', n('dxd_hipo_n')); put('dbt', 'hipo_graves', n('dxd_hipo_g')); put('dbt', 'pie_mono', v('dxd_pie')); put('dbt', 'pie_fecha', v('dxd_pie_f'));
+    put('obe', 'peso_max', n('dxd_pmax')); put('obe', 'peso_max_cuando', n('dxd_pmax_a')); put('obe', 'eoss', v('dxd_eoss') === '' ? null : +v('dxd_eoss'));
+    put('dis', 'ldl_basal', n('dxd_ldl')); put('dis', 'ldl_basal_anio', n('dxd_ldl_a')); put('dis', 'xantomas', v('dxd_xant')); put('dis', 'arco_corneal', v('dxd_arco'));
+    put('dis', 'intol_estatinas', v('dxd_int')); put('dis', 'intol_cual', v('dxd_int_c')); put('dis', 'dlcn_fam', v('dxd_dl_fam') === '' ? null : +v('dxd_dl_fam')); put('dis', 'dlcn_pers', v('dxd_dl_per') === '' ? null : +v('dxd_dl_per'));
+    var d = dlcn(); if(d){ put('dis', 'dlcn_puntos', d.pts); put('dis', 'dlcn_cat', d.cat); put('dis', 'dlcn_completo', d.completo); }
+    put('aos', 'cpap_horas', n('dxd_cpap_h')); put('aos', 'cpap_pct4h', n('dxd_cpap_p')); put('aos', 'cpap_fecha', v('dxd_cpap_f')); var c = cpap(); if(c) put('aos', 'cpap_adherente', c.adherente);
+    var mr = [0,1,2,3].map(function(i){ return v('dxd_mg' + i); }); if(mr.some(Boolean)){ put('hta', 'morisky', mr); var mg = morisky(); if(mg) put('hta', 'morisky_adherente', mg.adherente); put('hta', 'morisky_fecha', v('dxd_mg_f')); }
+    return Object.keys(o).length ? o : null;
+  };
+  window._dxdCargar = function(j){
+    crear();
+    var o = j; try { if(typeof o === 'string') o = JSON.parse(o); } catch(e){ o = null; } o = o || {};
+    var set = function(id, val){ var e = $(id); if(e) e.value = val == null ? '' : String(val); };
+    var g = function(sec, k){ return o[sec] ? o[sec][k] : null; };
+    set('dxd_hipo_n', g('dbt', 'hipo_n')); set('dxd_hipo_g', g('dbt', 'hipo_graves')); set('dxd_pie', g('dbt', 'pie_mono')); set('dxd_pie_f', g('dbt', 'pie_fecha'));
+    set('dxd_pmax', g('obe', 'peso_max')); set('dxd_pmax_a', g('obe', 'peso_max_cuando')); set('dxd_eoss', g('obe', 'eoss'));
+    set('dxd_ldl', g('dis', 'ldl_basal')); set('dxd_ldl_a', g('dis', 'ldl_basal_anio')); set('dxd_xant', g('dis', 'xantomas')); set('dxd_arco', g('dis', 'arco_corneal'));
+    set('dxd_int', g('dis', 'intol_estatinas')); set('dxd_int_c', g('dis', 'intol_cual')); set('dxd_dl_fam', g('dis', 'dlcn_fam')); set('dxd_dl_per', g('dis', 'dlcn_pers'));
+    set('dxd_cpap_h', g('aos', 'cpap_horas')); set('dxd_cpap_p', g('aos', 'cpap_pct4h')); set('dxd_cpap_f', g('aos', 'cpap_fecha'));
+    var mr = g('hta', 'morisky') || []; [0,1,2,3].forEach(function(i){ set('dxd_mg' + i, mr[i] || ''); }); set('dxd_mg_f', g('hta', 'morisky_fecha'));
+    pintar(); visibles();
+  };
+  function fAR(f){ if(!f) return ''; var p = String(f).split('-'); return p.length === 3 ? p[2] + '/' + p[1] + '/' + p[0] : f; }
+  // Texto para la evolución: [[título, texto], …]
+  window._dxdTexto = function(j){
+    var o = j; try { if(typeof o === 'string') o = JSON.parse(o); } catch(e){ o = null; } if(!o) return [];
+    var out = [], a;
+    if(o.dbt){ a = []; var b = o.dbt;
+      if(b.hipo_n != null) a.push('hipoglucemias en 12 meses: ' + b.hipo_n + (b.hipo_graves ? ' (' + b.hipo_graves + ' grave' + (b.hipo_graves > 1 ? 's' : '') + ')' : ''));
+      if(b.pie_mono) a.push('monofilamento: ' + b.pie_mono.toLowerCase() + (b.pie_fecha ? ' (' + fAR(b.pie_fecha) + ')' : ''));
+      if(a.length) out.push(['Diabetes', a.join(' · ')]); }
+    if(o.obe){ a = []; b = o.obe;
+      if(b.peso_max != null) a.push('peso máximo ' + String(b.peso_max).replace('.', ',') + ' kg' + (b.peso_max_cuando ? (b.peso_max_cuando >= 1900 ? ' (' + b.peso_max_cuando + ')' : ' (a los ' + b.peso_max_cuando + ' años)') : ''));
+      if(b.eoss != null) a.push('EOSS ' + b.eoss);
+      if(a.length) out.push(['Obesidad', a.join(' · ')]); }
+    if(o.dis){ a = []; b = o.dis;
+      if(b.ldl_basal != null) a.push('LDL basal sin tratamiento ' + b.ldl_basal + ' mg/dL' + (b.ldl_basal_anio ? ' (' + b.ldl_basal_anio + ')' : ''));
+      if(b.xantomas === 'Sí') a.push('xantomas tendinosos'); if(b.arco_corneal === 'Sí') a.push('arco corneal < 45 años');
+      if(b.intol_estatinas && b.intol_estatinas !== 'No') a.push('intolerancia ' + b.intol_estatinas.toLowerCase() + ' a estatinas' + (b.intol_cual ? ' (' + b.intol_cual + ')' : '')); else if(b.intol_estatinas === 'No') a.push('tolera estatinas');
+      if(b.dlcn_puntos != null) a.push('score holandés ' + b.dlcn_puntos + ' (' + b.dlcn_cat + (b.dlcn_completo ? '' : ', incompleto') + ')');
+      if(a.length) out.push(['Dislipemia', a.join(' · ')]); }
+    if(o.aos){ a = []; b = o.aos;
+      if(b.cpap_horas != null) a.push(String(b.cpap_horas).replace('.', ',') + ' h/noche'); if(b.cpap_pct4h != null) a.push(b.cpap_pct4h + ' % de noches ≥ 4 h');
+      if(a.length) out.push(['CPAP', a.join(', ') + (b.cpap_adherente != null ? (b.cpap_adherente ? ' (adherente)' : ' (no adherente)') : '') + (b.cpap_fecha ? ' · descarga ' + fAR(b.cpap_fecha) : '')]); }
+    if(o.hta && o.hta.morisky_adherente != null) out.push(['Adherencia (Morisky-Green)', o.hta.morisky_adherente ? 'adherente' : 'no adherente']);
+    return out;
+  };
+  // Al abrir Datos clínicos de un paciente sin datos, queda todo limpio
+  var oAbr = window.abrirModalClinica;
+  if(typeof oAbr === 'function') window.abrirModalClinica = abrirModalClinica = async function(){ crear(); var r = await oAbr.apply(this, arguments); setTimeout(function(){ pintar(); visibles(); }, 50); return r; };
+  // ── Base para SPSS
+  var oX = window._t1SPSSExtra;
+  if(typeof oX === 'function') window._t1SPSSExtra = function(V, num, b01, SN, cols, D){
+    oX.apply(this, arguments);
+    var J = function(f){ var c = D.cli[f.dni]; if(!c || !c.dx_detalle_json) return {}; try { return (typeof c.dx_detalle_json === 'string' ? JSON.parse(c.dx_detalle_json) : c.dx_detalle_json) || {}; } catch(e){ return {}; } };
+    var g = function(sec, k){ return function(f){ var o = J(f); return o[sec] && o[sec][k] != null && o[sec][k] !== '' ? o[sec][k] : null; }; };
+    var sn = function(sec, k){ return function(f){ var x = g(sec, k)(f); return x == null ? null : (x === true || x === 'Sí') ? 1 : 0; }; };
+    var cod = function(sec, k, ops){ return function(f){ var x = g(sec, k)(f); var i = ops.indexOf(x); return i < 0 ? null : i; }; };
+    cols.push(V('dbt_hipo_12m', 'Hipoglucemias en 12 meses (n)', '', g('dbt', 'hipo_n')));
+    cols.push(V('dbt_hipo_graves_12m', 'Hipoglucemias graves en 12 meses (n)', '', g('dbt', 'hipo_graves')));
+    cols.push(V('dbt_monofilamento', 'Monofilamento (0 no evaluado, 1 normal, 2 alterado)', '', cod('dbt', 'pie_mono', ['No evaluado','Normal','Alterado'])));
+    cols.push(V('obe_peso_max', 'Peso máximo (kg)', '', g('obe', 'peso_max')));
+    cols.push(V('obe_eoss', 'EOSS (0-4)', '', g('obe', 'eoss')));
+    cols.push(V('dis_ldl_basal', 'LDL basal sin tratamiento (mg/dL)', '', g('dis', 'ldl_basal')));
+    cols.push(V('dis_xantomas', 'Xantomas tendinosos', SN, sn('dis', 'xantomas')));
+    cols.push(V('dis_arco', 'Arco corneal < 45 años', SN, sn('dis', 'arco_corneal')));
+    cols.push(V('dis_intol_estatinas', 'Intolerancia a estatinas (0 no, 1 parcial, 2 total)', '', cod('dis', 'intol_estatinas', ['No','Parcial','Total'])));
+    cols.push(V('dis_dlcn', 'Score holandés (puntos)', '', g('dis', 'dlcn_puntos')));
+    cols.push(V('dis_dlcn_cat', 'Score holandés (0 improbable, 1 posible, 2 probable, 3 definida)', '', cod('dis', 'dlcn_cat', ['HF improbable','HF posible','HF probable','HF definida'])));
+    cols.push(V('aos_cpap_horas', 'CPAP: horas por noche', '', g('aos', 'cpap_horas')));
+    cols.push(V('aos_cpap_adherente', 'CPAP adherente', SN, sn('aos', 'cpap_adherente')));
+    cols.push(V('hta_morisky_adherente', 'Adherencia Morisky-Green', SN, sn('hta', 'morisky_adherente')));
+  };
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', crear); else crear();
+})();
+</script>
+<script>
+/* Al guardar Datos clínicos: si hay medicación suspendida sin motivo, se pregunta */
+(function(){
+  var oG = window.guardarClinica; if(typeof oG !== 'function') return;
+  window.guardarClinica = guardarClinica = async function(){
+    try {
+      var sin = Array.prototype.filter.call(document.querySelectorAll('#med_filas .med-row[data-susp="1"], #otros_med_filas .med-row[data-susp="1"]'), function(d){ return !d.dataset.motivo; })
+        .map(function(d){ var i = d.querySelector('input[type=text]'); return i ? i.value.trim() : ''; }).filter(Boolean);
+      if(sin.length && !confirm('Falta el motivo de suspensión de: ' + sin.join(', ') + '.\n\nTocá el fármaco suspendido y elegí el motivo (o "No consta").\n\n¿Guardar igual sin motivo?')) return;
+    } catch(e){}
+    return oG.apply(this, arguments);
+  };
+})();
+</script>
+<style>
+#dict-sug{display:none;margin:0 0 8px;padding:9px 12px;border:1.5px solid #fcd34d;background:#fffbeb;border-radius:12px;font-family:var(--font-main)}
+#dict-sug .ds-h{display:flex;align-items:center;gap:8px;font-size:12.5px;font-weight:700;color:#92400e;flex-wrap:wrap}
+#dict-sug .ds-h .sp{margin-left:auto;display:flex;gap:6px}
+#dict-sug .ds-l{display:flex;flex-wrap:wrap;gap:6px;margin-top:7px}
+#dict-sug label{display:inline-flex;align-items:center;gap:5px;background:#fff;border:1.5px solid #fde68a;border-radius:999px;padding:3px 10px 3px 6px;font-size:12px;font-weight:600;color:#78350f;cursor:pointer;text-transform:none;letter-spacing:0}
+#dict-sug label input{accent-color:#d97706;margin:0}
+#dict-sug label.off{opacity:.5}
+#dict-sug button{border:none;border-radius:8px;padding:5px 12px;font-size:12px;font-weight:700;cursor:pointer;font-family:var(--font-main)}
+#dict-sug .ds-si{background:#d97706;color:#fff}
+#dict-sug .ds-no{background:#fff;color:#92400e;border:1px solid #fcd34d}
+</style>
+<script>
+/* ═══ 🎙 Lo dictado en la evolución se carga solo (con un clic de confirmación) ═══
+   Signos vitales ("presión 132 84, 128 80, frecuencia 72, peso 81,5, cintura 98"),
+   cambios de tratamiento ("agrego losartán 50 cada 12", "suspendo atorvastatina por mialgias",
+   "aumento metformina a 1000") y hábitos ("fuma 10 por día", "dejó de fumar", "camina 30 minutos 3 veces por semana"). */
+(function(){
+  function $(id){ return document.getElementById(id); }
+  function sinAc(t){ return String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase(); }
+  function nu(x){ return x == null ? null : parseFloat(String(x).replace(',', '.')); }
+  var aplicados = {};   // por paciente: firmas ya cargadas o descartadas
+  function dni(){ return (typeof pacienteActual !== 'undefined' && pacienteActual) ? String(pacienteActual.dni) : ''; }
+  function textoEditor(){
+    var ed = $('evol_editor'); if(!ed) return '';
+    var c = ed.cloneNode(true); c.querySelectorAll('[class^="bloque-"], [class*=" bloque-"]').forEach(function(b){ b.remove(); });
+    c.querySelectorAll('div, p, br, li').forEach(function(n){ n.insertAdjacentText('beforebegin', '\n'); });
+    var t = c.textContent || '';
+    if(window._normalizarDictado) t = window._normalizarDictado(t);
+    return sinAc(t);
+  }
+  // ── Fármacos
+  function farmacoDe(txt){
+    var pal = sinAc(txt).replace(/[^a-z\s]/g, ' ').trim().split(/\s+/).filter(Boolean); if(!pal.length) return '';
+    var cands = []; if(pal.length > 1) cands.push(pal[0] + ' ' + pal[1]); cands.push(pal[0]);
+    for(var i = 0; i < cands.length; i++){
+      var n = (typeof _medNombreCat === 'function') ? _medNombreCat(cands[i]) : ''; if(n) return n;
+      try { var s = (typeof _medSugerencias === 'function') ? _medSugerencias(cands[i]) : []; var h = s.find(function(x){ return sinAc(x.n) === cands[i] || (x.marca && sinAc(x.marca) === cands[i]); }); if(h) return h.n; } catch(e){}
+    }
+    return '';
+  }
+  function medActual(txt){
+    var meds = (typeof _ttoMedsActuales === 'function') ? _ttoMedsActuales() : [];
+    var pal = sinAc(txt).replace(/[^a-z\s]/g, ' ').trim().split(/\s+/)[0] || ''; if(pal.length < 3) return null;
+    return meds.find(function(m){ var f = sinAc(m.farmaco); return f === pal || f.indexOf(pal) === 0 || pal.indexOf(f.split(' ')[0]) === 0; }) || null;
+  }
+  function frecDe(r){
+    var m;
+    if((m = /cada\s*(\d{1,3})\s*(h|hs|horas?|dias?)?/.exec(r))) return 'cada ' + m[1] + (/^d/.test(m[2] || '') ? ' días' : ' h');
+    if(/(dos|2)\s*veces\s*(al|por)\s*dia/.test(r)) return 'cada 12 h';
+    if(/(tres|3)\s*veces\s*(al|por)\s*dia/.test(r)) return 'cada 8 h';
+    if(/(una vez\s*)?(al|por)\s*dia|diari|a la noche|a la manana|en ayunas/.test(r)) return 'cada 24 h';
+    if(/semanal|por semana|a la semana/.test(r)) return 'cada 7 días';
+    return '';
+  }
+  function dosisDe(n, u){ if(!n) return ''; return String(n).replace('.', ',') .replace(',', '.') + (u ? (u === 'ug' ? 'mcg' : u) : 'mg'); }
+  var EA = [[/mialgia|dolor(es)? muscular|calambre/, 'mialgias'], [/\btos\b/, 'tos'], [/edema|hinchaz/, 'edema'], [/mareo|hipotension|baja(da)? de presion/, 'hipotensión / mareo'], [/potasio|hiperpotasemia|hiperkalemia/, 'hiperpotasemia'], [/renal|creatinina|filtrado/, 'deterioro de la función renal'],
+    [/nausea|vomito|diarrea|gastr|intestin|estomac/, 'náuseas / vómitos / diarrea'], [/hipoglucemia/, 'hipoglucemia'], [/infeccion urinaria|candidiasis|micosis genital|genital/, 'infección urinaria / genital'], [/alergia|rash|urticaria|picazon|erupcion/, 'alergia / rash'], [/sexual|ereccion|libido/, 'disfunción sexual'], [/transaminasa|hepat|higado/, 'aumento de transaminasas']];
+  function motivoDe(r){
+    r = (r || '').trim(); if(!r) return '';
+    for(var i = 0; i < EA.length; i++) if(EA[i][0].test(r)) return 'Efecto adverso: ' + EA[i][1];
+    if(/efecto adverso|intoleran|no lo tolera|le cae mal/.test(r)) return 'Efecto adverso';
+    if(/meta|objetivo|normaliz|controlad/.test(r)) return 'Meta lograda';
+    if(/costo|caro|precio|no consigue|no hay|obra social|cobertura/.test(r)) return 'Costo / acceso';
+    if(/embaraz/.test(r)) return 'Embarazo / búsqueda';
+    if(/no (le )?(funciona|sirve|hace efecto)|sin respuesta|ineficaz|eficacia/.test(r)) return 'Falta de eficacia';
+    if(/no quiere|prefiere|decision|decidio/.test(r)) return 'Decisión del paciente';
+    if(/interacci|contraindic/.test(r)) return 'Interacción / contraindicación';
+    return 'Otro: ' + r.replace(/\s+/g, ' ').slice(0, 60);
+  }
+  // ── Detectar
+  function detectar(t){
+    var out = [];
+    // Presión arterial: palabra clave + pares
+    var reTA = /(presion(es)?( arterial)?|tension( arterial)?|\bta\b|\bpa\b|toma(s)?( de presion)?)\s*(de\s*|:\s*)?((?:\d{2,3}\s*(?:\/|-|con|y)?\s*\d{2,3}[\s,;y]*)+)/g, m, pares = [];
+    while((m = reTA.exec(t))){ var rp = /(\d{2,3})\s*(?:\/|-|con)?\s*(\d{2,3})/g, q; while((q = rp.exec(m[8]))){ var s = +q[1], d = +q[2]; if(s >= 70 && s <= 260 && d >= 30 && d <= 160 && s > d) pares.push([s, d]); } }
+    if(pares.length) out.push({ k:'ta', txt:'TA ' + pares.map(function(p){ return p[0] + '/' + p[1]; }).join(', '), v:pares });
+    var reFC = /(frecuencia( cardiaca)?|\bfc\b|pulso)\s*(de\s*|:\s*)?((?:\d{2,3}[\s,;y]*)+)/g, fcs = [];
+    while((m = reFC.exec(t))){ (m[4].match(/\d{2,3}/g) || []).forEach(function(x){ x = +x; if(x >= 30 && x <= 200) fcs.push(x); }); }
+    if(fcs.length) out.push({ k:'fc', txt:'FC ' + fcs.join(', '), v:fcs });
+    if((m = /\bpeso\s*(actual\s*)?(de\s*|:\s*)?(\d{2,3}(?:[.,]\d{1,2})?)\s*(kg|kilos?)?/.exec(t)) && nu(m[3]) >= 25 && nu(m[3]) <= 350) out.push({ k:'peso', txt:'Peso ' + m[3] + ' kg', v:m[3].replace('.', ',') });
+    if((m = /(cintura|perimetro (abdominal|de cintura)|circunferencia (abdominal|de (la )?cintura))\s*(de\s*|:\s*)?(\d{2,3}(?:[.,]\d)?)/.exec(t)) && nu(m[6]) >= 40 && nu(m[6]) <= 220) out.push({ k:'cintura', txt:'Cintura ' + m[6] + ' cm', v:m[6].replace('.', ',') });
+    // Tratamiento (frase por frase)
+    t.split(/[.;\n]|,\s*(?=(?:y\s+)?(?:agreg|suspend|inici|indic|aument|baj|sub|reduz|cambi|dej|retir|sac|discontinu))/).forEach(function(fr){
+      fr = fr.trim(); var x;
+      if((x = /(?:^|\s)(?:agrego|agregamos|se agrega|agregar|agrega|inicio|iniciamos|inicia|indico|indicamos|se indica|comienza con|empieza con|arranca con|comenzar con)\s+(?:con\s+|el\s+|la\s+)?([a-z]+(?:\s+[a-z]+)?)\s*(\d+(?:[.,]\d+)?)?\s*(mg|mcg|ug|g|ui)?(.*)$/.exec(fr))){
+        var f = farmacoDe(x[1]); if(f){ var ds = dosisDe(x[2], x[3]), fq = frecDe(x[4] || ''); out.push({ k:'agrega', txt:'Se agrega ' + f + (ds ? ' ' + ds : '') + (fq ? ' ' + fq : ''), v:{ f:f, d:ds, q:fq } }); }
+      }
+      if((x = /(?:^|\s)(?:suspendo|suspendemos|se suspende|suspender|suspende|discontinuo|discontinuamos|retiro|retiramos|saco|sacamos|dejo|dejamos|se deja)\s+(?:de\s+tomar\s+)?(?:el\s+|la\s+|los\s+|las\s+)?([a-z]+(?:\s+[a-z]+)?)(?:\s+(?:por|debido a|ya que|porque)\s+(.+))?$/.exec(fr))){
+        var ma = medActual(x[1]); if(ma) out.push({ k:'suspende', txt:'Se suspende ' + ma.farmaco + (x[2] ? ' (' + motivoDe(x[2]).toLowerCase() + ')' : ''), v:{ f:ma.farmaco, mot:motivoDe(x[2] || '') } });
+      }
+      if((x = /(?:^|\s)(?:aumento|aumentamos|subo|subimos|bajo|bajamos|reduzco|reducimos|ajusto|ajustamos|paso|pasamos|cambio|cambiamos)\s+(?:la\s+dosis\s+de\s+|el\s+|la\s+)?([a-z]+(?:\s+[a-z]+)?)\s+(?:de\s+\d+(?:[.,]\d+)?\s*(?:mg|mcg|ug|g)?\s+)?a\s+(\d+(?:[.,]\d+)?)\s*(mg|mcg|ug|g|ui)?(.*)$/.exec(fr))){
+        var mc = medActual(x[1]); if(mc){ var dn = dosisDe(x[2], x[3]), qn = frecDe(x[4] || ''); out.push({ k:'dosis', txt:'Cambia dosis ' + mc.farmaco + ' → ' + dn + (qn ? ' ' + qn : ''), v:{ f:mc.farmaco, d:dn, q:qn } }); }
+      }
+    });
+    // Hábitos
+    if((m = /\bfuma\s+(\d{1,3})\s*(cigarrillos?|cig|puchos?|por dia|diarios|al dia)?/.exec(t))) out.push({ k:'tabaco', txt:'Tabaquismo actual: ' + m[1] + ' cig/día', v:{ e:'actual', n:m[1] } });
+    else if(/(dejo de fumar|ya no fuma|no fuma mas|ex ?tabaquista|ex ?fumador)/.test(t)) out.push({ k:'tabaco', txt:'Ex fumador', v:{ e:'ex' } });
+    if(/(dejo (el alcohol|de tomar alcohol)|ya no toma alcohol|no toma mas alcohol)/.test(t)) out.push({ k:'alcohol', txt:'Ex consumidor de alcohol', v:{ e:'ex' } });
+    var ACT = [[/\bcamin(a|ar|ata)\b/, 'Caminata'], [/\b(corre|trota|running|trote)\b/, 'Running / Trote'], [/\b(nada|natacion|pileta)\b/, 'Natación'], [/\bspinning\b/, 'Spinning'], [/\b(bici|bicicleta|ciclismo)\b/, 'Ciclismo'],
+      [/\b(pesas|musculacion)\b/, 'Gym – Fuerza'], [/\b(gimnasio|gym)\b/, 'Gym – Mixto'], [/\bpilates\b/, 'Pilates'], [/\byoga\b/, 'Yoga'], [/\b(baila|baile|zumba)\b/, 'Baile / Zumba / ritmos'], [/\bfutbol\b/, 'Fútbol'], [/\bpadel\b/, 'Pádel'], [/\btenis\b/, 'Tenis'], [/\b(crossfit|funcional)\b/, 'Funcional / CrossFit']];
+    var segs = t.split(/[.;\n]|\sy\s|,\s/), vistos = {};
+    segs.forEach(function(w){ ACT.forEach(function(a){
+      if(vistos[a[1]] || !a[0].test(w)) return;
+      var mi = /(\d{1,3})\s*(min|minutos)/.exec(w), ho = /(\d(?:[.,]5)?)\s*(h|hs|hora|horas)\b/.exec(w), di = /(\d)\s*(veces|dias|x)\s*(por|a la|\/|en la)?\s*semana/.exec(w);
+      var min = mi ? +mi[1] : ho ? Math.round(nu(ho[1]) * 60) : 0, dias = di ? +di[1] : /todos los dias|diariamente|a diario/.test(w) ? 7 : 0;
+      if(min || dias){ vistos[a[1]] = 1; out.push({ k:'act', txt:a[1] + (min ? ' ' + min + ' min' : '') + (dias ? ' · ' + dias + ' días/sem' : ''), v:{ tipo:a[1], min:min, dias:dias } }); }
+    }); });
+    return out;
+  }
+  // ── Aplicar
+  function setV(id, v){ var e = $(id); if(!e) return; e.value = v; e.dispatchEvent(new Event('input', { bubbles:true })); e.dispatchEvent(new Event('change', { bubbles:true })); }
+  function aplicarVitales(items){
+    var filasUsadas = [];
+    items.forEach(function(it){
+      if(it.k === 'ta') it.v.forEach(function(p){
+        for(var i = 1; i <= 5; i++){
+          var s = $('evol_ta' + i + 's'); if(!s) continue;
+          if(i >= 4){ var fila = s.closest('tr'); if(fila && fila.style.display === 'none'){ var b = $('btn_ta_mas'); if(b) b.click(); } }
+          if(!s.value){ setV('evol_ta' + i + 's', p[0]); setV('evol_ta' + i + 'd', p[1]); filasUsadas.push(i); break; }
+        }
+      });
+    });
+    items.forEach(function(it){
+      if(it.k === 'fc'){ var orden = filasUsadas.length ? filasUsadas : [1,2,3,4,5]; var j = 0;
+        it.v.forEach(function(x){ while(j < orden.length && $('evol_fc' + orden[j]) && $('evol_fc' + orden[j]).value) j++; if(j < orden.length) { setV('evol_fc' + orden[j], x); j++; } else { for(var i = 1; i <= 5; i++){ if($('evol_fc' + i) && !$('evol_fc' + i).value){ setV('evol_fc' + i, x); break; } } } }); }
+      if(it.k === 'peso') setV('evol_peso', it.v);
+      if(it.k === 'cintura') setV('evol_cintura', it.v);
+    });
+  }
+  function accion(a){ var s = $('upd_tto_accion'); if(!s) return; s.value = a; if(typeof actualizarModoPanelTto === 'function') actualizarModoPanelTto(); }
+  function opcion(selId, farmaco){ var s = $(selId); if(!s) return false; var o = Array.prototype.find.call(s.options, function(x){ return sinAc(x.value.split('|')[0]) === sinAc(farmaco); }); if(o){ s.value = o.value; return true; } return false; }
+  function esperarAplicado(){ return new Promise(function(ok){ var t0 = Date.now(); (function mira(){ var n = (typeof updTtoItems !== 'undefined' && updTtoItems) ? updTtoItems.length : 0; if(!n || Date.now() - t0 > 4000) setTimeout(ok, 700); else setTimeout(mira, 150); })(); }); }
+  async function aplicarTto(items){
+    for(var k = 0; k < items.length; k++){ var it = items[k];
+      try {
+        if(it.k === 'agrega'){ accion('se agrega'); setV('upd_tto_farmaco', it.v.f); var g = $('upd_tto_grupo'); if(g && typeof _medGrupoDe === 'function') g.value = _medGrupoDe(it.v.f) || 'Otro'; $('upd_tto_dosis').value = it.v.d || ''; $('upd_tto_frecuencia').value = it.v.q || ''; agregarTtoUpd(); }
+        if(it.k === 'suspende'){ accion('se suspende'); if(opcion('upd_tto_medactual', it.v.f)){ window._ttoMotivo = it.v.mot || 'No consta'; agregarTtoUpd(); } }
+        if(it.k === 'dosis'){ accion('se cambia dosis'); if(opcion('upd_tto_medcambio', it.v.f)){ var dn = $('upd_tto_dosisnueva'); if(dn){ if(dn.tagName === 'SELECT' && !Array.prototype.some.call(dn.options, function(o){ return o.value === it.v.d; })) dn.add(new Option(it.v.d, it.v.d)); dn.value = it.v.d; } if(it.v.q && $('upd_tto_frecnueva')) $('upd_tto_frecnueva').value = it.v.q; agregarTtoUpd(); } }
+      } catch(e){ console.warn('[dictado tto]', e); }
+      await esperarAplicado();
+    }
+    accion('se agrega');
+  }
+  async function aplicarHabitos(items){
+    if(!items.length) return;
+    if(typeof abrirModalClinica === 'function') await abrirModalClinica();
+    await new Promise(function(r){ setTimeout(r, 500); });
+    var marcar = function(id){ var e = $(id); var g = e && (e.closest('.form-group') || e.parentElement); if(g) g.classList.add('dict-auto'); };
+    items.forEach(function(it){
+      if(it.k === 'tabaco'){ setV('hab_tabaquismo', it.v.e); if(it.v.n) setV('hab_cig_dia', it.v.n); marcar('hab_tabaquismo'); }
+      if(it.k === 'alcohol'){ setV('hab_alcohol', it.v.e); marcar('hab_alcohol'); }
+    });
+    if(window._habPintar) try { window._habPintar(); } catch(e){}
+    var acts = items.filter(function(x){ return x.k === 'act'; });
+    if(acts.length){
+      try { switchTab('actali'); if(typeof switchFHTab === 'function') switchFHTab('act'); } catch(e){}
+      acts.forEach(function(a){
+        var sel = $('fh_nueva_tipo'); if(!sel) return;
+        if(!Array.prototype.some.call(sel.options, function(o){ return o.value === a.v.tipo; })) sel.add(new Option(a.v.tipo, a.v.tipo));
+        sel.value = a.v.tipo; try { if(typeof onFHTipoActividadChange === 'function') onFHTipoActividadChange(); } catch(e){}
+        if(a.v.min) $('fh_nueva_min').value = a.v.min;
+        document.querySelectorAll('#fh_nueva_dias button').forEach(function(b){ b.dataset.active = (+b.dataset.val === a.v.dias) ? '1' : ''; });
+        try { agregarActividadFH(); } catch(e){ console.warn('[dictado act]', e); }
+      });
+    } else { try { switchTab('hab'); } catch(e){} }
+    if(typeof showToast === 'function') showToast('🎙 Cargué los hábitos dictados: revisalos y tocá Guardar.', 'info', 5000);
+  }
+  // ── Barra de sugerencias
+  var pend = [];
+  function barra(){
+    var b = $('dict-sug'); if(b) return b;
+    var ed = $('evol_editor'); if(!ed) return null;
+    b = document.createElement('div'); b.id = 'dict-sug';
+    var host = ed.closest('.evol-editor-wrap, .editor-wrap') || ed.parentElement;
+    host.parentNode.insertBefore(b, host);
+    return b;
+  }
+  function pintar(){
+    var b = barra(); if(!b) return;
+    if(!pend.length){ b.style.display = 'none'; b.innerHTML = ''; return; }
+    var grupos = { vit:'🩺', tto:'💊', hab:'🏃' };
+    b.innerHTML = '<div class="ds-h">🎙 Detecté en lo dictado — tocá Cargar y se completa solo:<span class="sp"><button type="button" class="ds-si">Cargar</button><button type="button" class="ds-no">Ignorar</button></span></div>'
+      + '<div class="ds-l">' + pend.map(function(it, i){ var g = /^(ta|fc|peso|cintura)$/.test(it.k) ? grupos.vit : /^(agrega|suspende|dosis)$/.test(it.k) ? grupos.tto : it.k === 'tabaco' ? '🚬' : it.k === 'alcohol' ? '🍷' : grupos.hab; return '<label><input type="checkbox" data-i="' + i + '" checked> ' + g + ' ' + _esc(it.txt) + '</label>'; }).join('') + '</div>';
+    b.style.display = 'block';
+    b.querySelectorAll('input[type=checkbox]').forEach(function(c){ c.onchange = function(){ c.parentNode.classList.toggle('off', !c.checked); }; });
+    b.querySelector('.ds-no').onclick = function(){ pend.forEach(function(it){ (aplicados[dni()] = aplicados[dni()] || {})[it.sig] = 1; }); pend = []; pintar(); };
+    b.querySelector('.ds-si').onclick = async function(){
+      var elegidos = pend.filter(function(it, i){ var c = b.querySelector('input[data-i="' + i + '"]'); return c && c.checked; });
+      pend.forEach(function(it){ (aplicados[dni()] = aplicados[dni()] || {})[it.sig] = 1; }); pend = []; pintar();
+      aplicarVitales(elegidos.filter(function(x){ return /^(ta|fc|peso|cintura)$/.test(x.k); }));
+      await aplicarTto(elegidos.filter(function(x){ return /^(agrega|suspende|dosis)$/.test(x.k); }));
+      await aplicarHabitos(elegidos.filter(function(x){ return /^(tabaco|alcohol|act)$/.test(x.k); }));
+      if(elegidos.length && typeof showToast === 'function' && !elegidos.some(function(x){ return /^(tabaco|alcohol|act)$/.test(x.k); })) showToast('✓ Cargado lo dictado (' + elegidos.length + ')', 'success', 3000);
+    };
+  }
+  var tm = null;
+  function revisar(){
+    var d = dni(); if(!d || window._readonlyMode) return;
+    var t = textoEditor(); if(!t.trim()){ pend = []; pintar(); return; }
+    var ya = aplicados[d] || {};
+    pend = detectar(t).map(function(it){ it.sig = it.k + '|' + it.txt; return it; }).filter(function(it){ return !ya[it.sig]; });
+    pintar();
+  }
+  document.addEventListener('input', function(e){ if(e.target && e.target.id === 'evol_editor'){ clearTimeout(tm); tm = setTimeout(revisar, 1500); } }, true);
+  // Al cambiar de paciente, se limpia
+  var oAbrirEv = window.abrirEvolucion;
+  if(typeof oAbrirEv === 'function') window.abrirEvolucion = abrirEvolucion = async function(){ pend = []; var b = $('dict-sug'); if(b){ b.style.display = 'none'; } var r = await oAbrirEv.apply(this, arguments); return r; };
+  window._dictadoEvolDetectar = function(t){ return detectar(sinAc(window._normalizarDictado ? window._normalizarDictado(t) : t)); };
+})();
+</script>
+<script>
+/* ═══ Cargar laboratorio: la misma zona que en estudios (pegar con Ctrl+V, arrastrar, subir, celular,
+   miniaturas con ✕ para sacar una foto equivocada) ═══ */
+(function(){
+  function $(id){ return document.getElementById(id); }
+  function zona(ta, barra, titulo){
+    var z = document.createElement('div'); z.className = 'ec-zona';
+    z.innerHTML = '<div class="ec-z-ttl">📋 ' + titulo + '</div><div class="ec-z-sub">Copiá la foto o captura y apretá <b>Ctrl + V</b> acá. También podés arrastrar la foto o el PDF, subirlo o sacarlo con el celular.</div><div class="ec-z-btns"></div><div class="ec-thumbs"></div>';
+    if(barra){ barra.style.margin = '0'; var ay = barra.querySelector('.ft-est'); if(ay) ay.textContent = ''; var lb = barra.querySelector('label'); if(lb && lb.childNodes[0] && lb.childNodes[0].nodeType === 3) lb.childNodes[0].nodeValue = '📁 Subir foto o PDF'; z.querySelector('.ec-z-btns').appendChild(barra); }
+    var thumbs = z.querySelector('.ec-thumbs');
+    z.addEventListener('dragover', function(e){ e.preventDefault(); z.classList.add('sobre'); });
+    z.addEventListener('dragleave', function(){ z.classList.remove('sobre'); });
+    z.addEventListener('drop', function(e){ e.preventDefault(); z.classList.remove('sobre'); var fs = Array.prototype.slice.call((e.dataTransfer && e.dataTransfer.files) || []).filter(function(f){ return /^image\/|pdf/.test(f.type) || /\.pdf$/i.test(f.name); }); if(fs.length && ta._leerArchivos) ta._leerArchivos(fs); });
+    ta.addEventListener('ft-archivo', function(e){ var f = e.detail; if(!f) return; var d = document.createElement('div'); d.className = 'ec-th leyendo'; d._f = f;
+      var bx = document.createElement('button'); bx.type = 'button'; bx.className = 'ec-x'; bx.title = 'Sacar esta foto (y su texto)'; bx.textContent = '×'; d.appendChild(bx);
+      if(/^image\//.test(f.type)){ var im = document.createElement('img'); im.src = URL.createObjectURL(f); im.title = 'Clic para ver grande'; im.onclick = function(){ window.open(im.src, '_blank'); }; d.appendChild(im); }
+      else d.appendChild(document.createTextNode('📄 ' + (f.name || 'PDF')));
+      thumbs.appendChild(d); });
+    ta.addEventListener('ft-leido', function(e){ var d = Array.prototype.find.call(thumbs.querySelectorAll('.ec-th'), function(x){ return x._f === e.detail.file; }); if(d){ d._t = e.detail.texto; d.classList.remove('leyendo'); } });
+    thumbs.addEventListener('click', function(e){
+      var x = e.target.closest('.ec-x'); if(!x) return; e.stopPropagation();
+      var d = x.closest('.ec-th'); if(d.classList.contains('leyendo')) return;
+      var ok = ta._md ? ta._md.quitar(d._t) : false;
+      if(!ok){ var k = String(d._t || '').trim(); if(k && ta.value.trim() === k){ ta.value = ''; ok = true; } else if(k && ta.value.indexOf(k) >= 0){ ta.value = ta.value.replace(k, '').trim(); ok = true; } if(ok) ta.dispatchEvent(new Event('input', { bubbles:true })); }
+      d.remove();
+      try { ta._fuentes = (ta._fuentes || []).filter(function(f){ return f.file !== d._f; }); ta._dudas = (ta._dudas || []).filter(function(q){ return q.f !== d._f; }); } catch(_){}
+      if(!ok && d._t && ta.value.trim() && confirm('Saqué la foto, pero no encontré su texto (¿lo corregiste?). ¿Borro todo el texto del recuadro?')){ ta.value = ''; ta.dispatchEvent(new Event('input', { bubbles:true })); }
+      ta.dispatchEvent(new Event('input', { bubbles:true }));
+    });
+    return z;
+  }
+  window._zonaFotos = zona;
+  var oLab = window.labPegarAbrir;
+  if(typeof oLab === 'function') window.labPegarAbrir = function(){
+    var r = oLab.apply(this, arguments);
+    setTimeout(function(){
+      var tas = document.querySelectorAll('.lp-txt'), ta = tas[tas.length - 1]; if(!ta || ta._zona) return; ta._zona = true;
+      var grid = ta.closest('.lp-grid'); if(!grid) return;
+      var col = ta.closest('.lp-col');
+      var barra = Array.prototype.find.call(col.children, function(ch){ return ch.querySelector && ch.querySelector('input[type=file]'); }) || null;
+      var z = zona(ta, barra, 'Pegá acá la foto o captura del <b>laboratorio</b>');
+      grid.parentNode.insertBefore(z, grid);
+      var lbl = document.createElement('div'); lbl.className = 'ec-txt-lbl'; lbl.textContent = 'Texto del informe (leído de la foto, pegado o dictado) · podés corregirlo';
+      var vista = col.querySelector('.lp-vista'); col.insertBefore(lbl, vista ? vista.nextSibling : col.firstChild);
+      ta.style.height = '46vh';
+    }, 30);
     return r;
   };
 })();
