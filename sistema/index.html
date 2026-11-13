@@ -2,7 +2,7 @@
 <html lang="es-AR">
 <head>
   <meta charset="UTF-8" />
-  <script>var URCYM_BUILD = '2026-11-13-2310';</script>
+  <script>var URCYM_BUILD = '2026-11-14-0010';</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Evaluaciones cardiometabólicas — Sistema de Historia Clínica</title>
 
@@ -5877,6 +5877,8 @@ const LAB_FILAS = [
     ref:(v,s,u)=>{const n=parseFloat(v),f=s==='F';return u==='mmol/L'?(f?n<1.29:n<1.03):(f?n<50:n<40)}, refTxt:'<40(H)/<50(M) mg/dL'},
   {label:'TG', key:'TG', unidades:['mg/dL','mmol/L'], defU:0,
     ref:(v,s,u)=>u==='mmol/L'?parseFloat(v)>1.69:parseFloat(v)>150, refTxt:'>150 mg/dL'},
+  {label:'LDL (informado)', key:'LDLd', unidades:['mg/dL','mmol/L'], defU:0,
+    ref:(v,s,u)=>u==='mmol/L'?parseFloat(v)>2.59:parseFloat(v)>100, refTxt:'>100 mg/dL'},
   {label:'LDL (Martin-Hopkins)', key:'LDL_MH', unidades:['mg/dL'], defU:0, calc:'ldl_mh',
     ref:(v)=>parseFloat(v)>100, refTxt:'>100 mg/dL'},
   {label:'LDL (Sampson)', key:'LDL_S', unidades:['mg/dL'], defU:0, calc:'ldl_s',
@@ -20251,7 +20253,7 @@ function _lipSeccionNutri(d) {
   const lab = d?.lab;
   const riesgoCV = d ? dbtClasificarRiesgoCV(d) : { cat:'sin_dato', label:'Sin datos suficientes' };
   const metasLip = DBT_METAS_LIP_POR_RIESGO[riesgoCV.cat] || DBT_METAS_LIP_POR_RIESGO.sin_dato;
-  const ldlActual = lab?.LDL_MH?.actual?.valor;
+  const ldlActual = lab?.LDL_MH?.actual?.valor ?? lab?.LDLd?.actual?.valor;
   const tgActual   = lab?.TG?.actual?.valor;
   const hdlActual  = lab?.HDL?.actual?.valor;
   const sexo = d?.sexo;
@@ -20336,7 +20338,7 @@ function _lipSeccionCierre(d, opts) {
   if(d) {
     const riesgoCV = dbtClasificarRiesgoCV(d);
     const metasLip = DBT_METAS_LIP_POR_RIESGO[riesgoCV.cat] || DBT_METAS_LIP_POR_RIESGO.sin_dato;
-    const ldlActual = d.lab?.LDL_MH?.actual?.valor;
+    const ldlActual = d.lab?.LDL_MH?.actual?.valor ?? d.lab?.LDLd?.actual?.valor;
     if(ldlActual != null && ldlActual > metasLip.ldl) compromisos.push('Sostener el tratamiento hipolipemiante indicado y la adherencia a la dieta acordada para alcanzar tu meta de LDL (&lt;'+metasLip.ldl+' mg/dL).');
     const pTA = d.taActual ? dbtParametro('TAS', d.taPrevio?d.taPrevio.s:null, d.taActual.s, 'menor') : null;
     if(pTA && pTA.estado!=='en_meta') compromisos.push('Reforzar la adherencia al tratamiento para la presión arterial, incluyendo el control de la sal.');
@@ -20457,7 +20459,7 @@ async function lipMostrarPreview() {
     const riesgoCV = dbtClasificarRiesgoCV(d);
     const metasLip = DBT_METAS_LIP_POR_RIESGO[riesgoCV.cat] || DBT_METAS_LIP_POR_RIESGO.sin_dato;
     const badge = DBT_RIESGO_CV_BADGE[riesgoCV.cat] || DBT_RIESGO_CV_BADGE.sin_dato;
-    const ldlActual = d.lab?.LDL_MH?.actual?.valor;
+    const ldlActual = d.lab?.LDL_MH?.actual?.valor ?? d.lab?.LDLd?.actual?.valor;
     const apoBActual = d.lab?.ApoB?.actual?.valor;
     const ldlOk = ldlActual != null ? (ldlActual <= metasLip.ldl) : null;
     cont.innerHTML = `
@@ -36049,9 +36051,9 @@ function _cargaEstPrec(p){
     [/(micro)?albumin\w*\s+(en\s+)?orina|microalbuminuria|albuminuria/, 'AlbUr'],
     [/creatinin\w*\s+(en\s+)?orina|creatininuria/, 'CrUr'],
     [/creatinin|^[\s|\[\]—_-]*creat?\b|^[\s|\[\]—_-]*cr\b/, 'Creatinina'],
-    [/(tolerancia|ptog|sobrecarga).*(120|2\s*h)|glucemia\s+(a\s+las\s+)?(2\s*h|120)/, 'PTOG'],
-    [/glucemia|glucosa|^[\s|\[\]—_-]*(gluc|glu|glc)\b/, 'Glucemia'],
-    [/hematocrito|\bhto\b|\bhct\b/, 'Hto'],
+    [/(tolerancia|ptog|sobrecarga)[^\d\n]{0,30}(120|2\s*h)\b['´’"]*|glucemia\s+(a\s+las\s+)?(2\s*h|120)\b['´’"]*|\bp\.?\s?t\.?\s?o\.?\s?g\b(?![^\d\n]{0,15}basal)/, 'PTOG'],
+    [/glucemia|glucosa|^[\s|\[\]—_-]*(gluc|glu|glc)\b|\bga\b(?=\s*[:=]?\s*\d)|\bp\.?\s?t\.?\s?o\.?\s?g\b[^\d\n]{0,15}basal/, 'Glucemia'],
+    [/hematocrito|\bhto(?=\b|\d)|\bhct(?=\b|\d)/, 'Hto'],
     [/leucocit|globulos\s+blancos|\bwbc\b|^[\s|\[\]—_-]*gb\b/, 'Leuco'],
     [/nt\s*-?\s*pro\s*-?\s*bnp|\bprobnp\b|pro\s*-?\s*peptido\s+natriuretico/, 'NTproBNP'],
     [/hemoglobina|\bhb\b|\bhgb\b/, 'Hb'],
@@ -36064,9 +36066,10 @@ function _cargaEstPrec(p){
     [/gam+a\s*-?\s*g|\bggt\b|\bgama\b/, 'GGT'],
     [/peptido\s*c/, 'PeptidoC'],
     [/no\s*-?\s*hdl/, 'noHDL'],
+    [/(colesterol\s+ldl|\bc\s*-?\s*ldl\b|\bldl\b)(?!\s*-?\s*\(?\s*(calc|estim|martin|sampson|friedewald|segun|formula))/, 'LDLd'],
     [/hdl/, 'HDL'],
-    [/colesterol\s+total|colesterolemia|^\s*colesterol\b(?!\s+(ldl|hdl|no))|^[\s|\[\]—_-]*ct\b|\bcol(est)?\.?\s*tot(al)?\b|^[\s|\[\]—_-]*col\.?\s*t\b/, 'CT'],
-    [/triglic|trigliceridemia|^[\s|\[\]—_-]*(tg|tgl|trig)\b/, 'TG'],
+    [/colesterol\s+total|colesterolemia|^\s*colesterol\b(?!\s+(ldl|hdl|no))|^[\s|\[\]—_-]*ct\b|\bct\b(?=\s*[:=]?\s*\d)|\bcol(est)?\.?\s*tot(al)?\b|^[\s|\[\]—_-]*col\.?\s*t\b/, 'CT'],
+    [/triglic|trigliceridemia|^[\s|\[\]—_-]*(tg|tgl|trig)\b|\b(tag|tgl|tg)\b(?=\s*[:=]?\s*\d)/, 'TG'],
     [/apo\w*\s*-?\s*b\b|apob/, 'ApoB'],
     [/lp\s*\(\s*a\s*\)|lipoproteina\s*\(?\s*a\b\s*\)?|\blpa\b|\blp\s+a\b/, 'LPA'],
     [/\bpcr\b|proteina\s+c\s+reactiva/, 'PRCus'],
@@ -36121,16 +36124,37 @@ function _cargaEstPrec(p){
       var v = r && r.data && r.data.value; return (typeof v === 'string' ? JSON.parse(v || '{}') : v) || {}; } catch(e) { return null; }
   }
   window._labSinonimosCargar = async function(){ var o = await leerSinonimos(); if(o) aplicarSinonimos(o); return o; };
+  window._labSinonimosIgnorar = async function(nombres){
+    nombres = (nombres || []).filter(Boolean); if(!nombres.length) return true;
+    var o = (await leerSinonimos()) || {}, n = 0;
+    nombres.forEach(function(x){ if(!o[x]){ o[x] = '-'; n++; } });
+    if(!n) return true;
+    var ks = Object.keys(o).filter(function(k){ return o[k] === '-'; }); if(ks.length > 2500) ks.slice(0, ks.length - 2500).forEach(function(k){ delete o[k]; });
+    aplicarSinonimos(o);
+    var r = await (window._sbFromOriginal || sb.from.bind(sb))('urcym_agenda_config').upsert({ key:'lab_sinonimos', value:JSON.stringify(o) }, { onConflict:'key' });
+    return !r.error;
+  };
   window._labSinonimoGuardar = async function(nombre, key){
     var o = (await leerSinonimos()) || {}; o[nombre] = key; aplicarSinonimos(o);
     var r = await (window._sbFromOriginal || sb.from.bind(sb))('urcym_agenda_config').upsert({ key:'lab_sinonimos', value:JSON.stringify(o) }, { onConflict:'key' });
     return !r.error;
   };
   var NO_PARAM_LINEA = /(protocolo|paciente|documento|obra social|dr\.?\s*\/\s*dra|fecha\s*:|matricula|\bm\.?\s?p\.?\s*\d)/;
-  var NO_PARAM = /^(colesterol ldl|ldl|directa|indirecta|mp|tel|whatsapp|documento|dni|protocolo|fecha|paciente|dr|dra|medico|metodo|v\.? ?ref|valor(es)? de ref|ref|hombres?|mujer(es)?|ninos|adultos|en adultos|riesgo (ecv|grado)|ayuno|verano|invierno|obra social|avda|av|calle|contador|formula|aspecto|edad|sexo|pagina|hoja|\d)/;
+  var NO_PARAM = /^((colesterol )?ldl (calc|estim|segun|por formula)|directa|indirecta|mp|tel|whatsapp|documento|dni|protocolo|fecha|paciente|dr|dra|medico|metodo|v\.? ?ref|valor(es)? de ref|ref|hombres?|mujer(es)?|ninos|adultos|en adultos|riesgo (ecv|grado)|ayuno|verano|invierno|obra social|avda|av|calle|contador|formula|aspecto|edad|sexo|pagina|hoja|\d)/;
   function analizar(texto){
     var out = [], usadas = {}, fecha = '', otros = [];
-    var mf = texto.match(/\b(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})\b/);
+    function desconocidos(seg, origen){
+      var re = /([a-z][a-z0-9 .\/()'+-]{0,32}?)\s*[:=]?\s*(-?\d+(?:[.,]\d+)*)(?!\s*\/\s*\d)/g, mm;
+      while((mm = re.exec(seg))){
+        var nombre = mm[1].replace(/^((mg|g|ml|dl|l|ui|u|meq|mmol|umol|ng|pg|mm3|mm|cel|x)\b[\s\/.]*|%\s*)+/g, '').replace(/[.:%\-–_/()]+/g, ' ').replace(/\s+/g, ' ').trim();
+        if(!nombre || nombre.length < 2 || nombre.length > 40 || !/^[a-z]/.test(nombre) || /^\d/.test(nombre)) continue;
+        if(NO_PARAM.test(nombre) || IGNORAR[nombre] || otros.some(function(o){ return o.nombre === nombre; })) continue;
+        otros.push({ nombre:nombre, val:numero(mm[2]), origen:origen });
+      }
+    }
+    var tF = String(texto).replace(/(nacimiento|nac\.|f\.?\s*nac\w*|edad)[^\n\d]{0,20}\d{1,2}[\/\-.]\d{1,2}[\/\-.]\d{2,4}/gi, ' ');
+    var mf = /(?:fecha|extracci\w*|ingreso|recepci\w*|toma de (la )?muestra|protocolo)[^\n\d]{0,30}?(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})\b/i.exec(tF);
+    if(mf) mf = [mf[0], mf[2], mf[3], mf[4]]; else mf = tF.match(/\b(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})\b/);
     if(mf){ var y = mf[3].length === 2 ? '20' + mf[3] : mf[3]; fecha = y + '-' + String(mf[2]).padStart(2, '0') + '-' + String(mf[1]).padStart(2, '0'); if(isNaN(new Date(fecha + 'T12:00:00'))) fecha = ''; }
     var seccion = '', desdeSeccion = 99;
     texto.split(/\r?\n/).forEach(function(lineaEntera){
@@ -36153,6 +36177,8 @@ function _cargaEstPrec(p){
         if(!mejor || mm.index < mejor.m.index) mejor = { m:mm, key:kk };
         if(mm.index === 0) break;
       }
+      // lo que hay ANTES del próximo parámetro conocido ("... HDL 61 LDL 248 TAG 125"): si tiene nombre y número, se pregunta
+      if(vueltas > 1 || (mejor && mejor.m.index > 0)) desconocidos(mejor ? l.slice(0, mejor.m.index) : l, origen);
       if(!mejor){
         // renglón con nombre y número que no es de la tabla conocida: se ofrece para enseñarlo
         if(vueltas === 1){
@@ -36191,6 +36217,10 @@ function _cargaEstPrec(p){
         if(key === 'Rto_plaquetas' && parseFloat(val) > 1000) val = String(Math.round(parseFloat(val) / 1000));
         if(key === 'Leuco' && parseFloat(val) > 0 && parseFloat(val) < 100) val = String(Math.round(parseFloat(val) * 1000));   // 7,5 (×10³/µL) → 7500
         if(key === 'SatTransf') unidad = '%';
+        // en g/L ("GA 0,81", "CT 2,31 g/l") → mg/dL
+        var nv = parseFloat(val), enGL = /^g\s*\/\s*l/i.test(uTxt);
+        if((key === 'Glucemia' || key === 'PTOG') && nv > 0 && nv < 3.5 && !/mmol/i.test(uTxt)){ val = String(Math.round(nv * 100)); unidad = 'mg/dL'; }
+        else if(['CT','HDL','TG','LDL_MH','LDL_S','noHDL','AcidoUrico'].indexOf(key) >= 0 && enGL && nv < 30){ val = String(Math.round(nv * 100)); unidad = 'mg/dL'; }
         out.push({ key:key, label:f.label, val:val, unidad:unidad, origen:origen });
         usadas[key] = 1;
         return siguiente;
@@ -36252,7 +36282,7 @@ function _cargaEstPrec(p){
           + LAB_FILAS.filter(function(f){ return !f.cat && (!f.calc || f.calcAuto); }).map(function(f){ return '<option value="' + f.key + '">' + _esc(f.label) + '</option>'; }).join('');
         html += '<div style="margin-top:12px;padding:10px;border:1.5px dashed #cbd5e1;border-radius:10px;background:#f8fafc">'
           + '<div style="font-weight:700;font-size:12.5px;margin-bottom:6px">🤔 No reconocí estos renglones (' + otros.length + ')</div>'
-          + '<div style="font-size:11.5px;color:#64748b;margin-bottom:6px">Si alguno es un parámetro de tu tabla, elegí cuál: se carga y el sistema lo aprende para la próxima vez (con este y otros laboratorios). <button type="button" class="lp-ign-todos" style="margin-left:4px;border:1.5px solid #cbd5e1;background:white;border-radius:7px;padding:2px 8px;font:600 11.5px var(--font-main);cursor:pointer">⛔ Ninguno es de mi tabla</button></div>'
+          + '<div style="font-size:11.5px;color:#64748b;margin-bottom:6px">Si alguno es un parámetro de tu tabla, elegí cuál: se carga y el sistema lo aprende para la próxima vez (con este y otros laboratorios). Lo que dejes en <b>no cargar</b> no se vuelve a preguntar. <button type="button" class="lp-ign-todos" style="margin-left:4px;border:1.5px solid #cbd5e1;background:white;border-radius:7px;padding:2px 8px;font:600 11.5px var(--font-main);cursor:pointer">⛔ Ninguno es de mi tabla</button></div>'
           + otros.map(function(o, i){ return '<div style="display:grid;grid-template-columns:minmax(0,1fr) 190px;gap:8px;align-items:center;padding:3px 0;border-top:1px solid #eef2f7"><span style="font:11.5px/1.35 monospace;color:#475569">' + _esc(o.origen) + '</span><select class="lp-ens" data-i="' + i + '" style="padding:4px 6px;border:1.5px solid #e5e7eb;border-radius:7px;font:12px var(--font-main)">' + opts + '</select></div>'; }).join('')
           + '</div>';
       }
@@ -36267,11 +36297,15 @@ function _cargaEstPrec(p){
       if(ign) ign.onclick = async function(){
         ign.disabled = true;
         var o = {}; try { o = (await window._labSinonimosCargar()) || {}; } catch(_) {}
-        otros.forEach(function(x){ if(!o[x.nombre]) o[x.nombre] = '-'; });
-        for(var k in o){ if(o[k] === '-' && otros.some(function(x){ return x.nombre === k; })) { await window._labSinonimoGuardar(k, '-'); } }
+        await window._labSinonimosIgnorar(otros.map(function(x){ return x.nombre; }));
         pintar();
       };
-      prev.querySelector('.lp-fecha').onchange = pintar;
+      var lpF = prev.querySelector('.lp-fecha');
+      // mientras se escribe la fecha no se redibuja (si no, se pierde el foco a cada número); se actualiza al salir
+      lpF.addEventListener('focus', function(){ lpF._foco = true; });
+      lpF.onchange = function(){ var a = document.activeElement; if(lpF._foco || (a && a.classList && a.classList.contains('fe-esc'))){ lpF._pend = true; return; } pintar(); };
+      lpF.addEventListener('blur', function(){ lpF._foco = false; setTimeout(function(){ var a = document.activeElement; if(lpF._pend && !(a && a.classList && a.classList.contains('fe-esc'))){ lpF._pend = false; pintar(); } }, 0); });
+      lpF.addEventListener('keydown', function(e){ e.stopPropagation(); if(e.key === 'Enter'){ e.preventDefault(); lpF.blur(); } });
       btn.disabled = false; btn.style.opacity = 1;
       m.box.querySelector('.lp-msg').textContent = res.items.length + ' parámetro' + (res.items.length === 1 ? '' : 's') + ' reconocido' + (res.items.length === 1 ? '' : 's') + '. Revisá antes de cargar.';
     }
@@ -36285,6 +36319,7 @@ function _cargaEstPrec(p){
       var elegidos = [];
       prev.querySelectorAll('.lp-ck').forEach(function(c){ if(c.checked){ var it = res.items[+c.dataset.i]; var v = prev.querySelector('.lp-val[data-i="' + c.dataset.i + '"]').value.trim().replace(',', '.'); if(v) elegidos.push({ key:it.key, val:v, unidad:it.unidad, orig:it.val, origen:it.origen }); } });
       if(!elegidos.length){ alert('No hay nada tildado para cargar.'); return; }
+      var noCargar = []; prev.querySelectorAll('.lp-ens').forEach(function(sl){ var o = (res.otros || [])[+sl.dataset.i]; if(o && !sl.value && !sl.disabled) noCargar.push(o.nombre); });
       if(window._qcAntesDeGuardar && !window._qcAntesDeGuardar('lab', { fecha: fecha, sinFecha: !res.fecha, elegidos: elegidos, ta: ta })) return;
       var ci = columnaDe(fecha);
       if(ci < 0) ci = insertarColumnaEnOrden(labDatos, fecha);
@@ -36307,6 +36342,7 @@ function _cargaEstPrec(p){
       guardarDatosPac('lab_tabla_wrap');
       if(lpaNueva){ try { if(typeof renderLpa === 'function') renderLpa(); volcarLpaAlEditor(); } catch(_) {} }
       if(typeof showToast === 'function') showToast('Laboratorio cargado: ' + elegidos.length + ' valores (' + _fmtFechaCol(fecha) + ')', 'success', 4000);
+      if(noCargar.length) window._labSinonimosIgnorar(noCargar).catch(function(){});
       if(ta._md && ta._md.multi()){ ta._md.marcarHecho(); if(ta._md.irSiguiente()){ prev.innerHTML = ''; pintar(); return; } }
       m.cerrar();
     };
@@ -36599,7 +36635,7 @@ function _cargaEstPrec(p){
   // El reconocedor de laboratorio también entiende el texto dictado
   if(typeof window._labAnalizarTexto === 'function'){
     var oa = window._labAnalizarTexto;
-    window._labAnalizarTexto = function(t){ t = String(t || '').replace(/\b([A-Za-z]{2,6})\s*\/\s*([A-Za-z]{2,6})\b([^\d\n]{0,8})(\d+(?:[.,]\d+)?)\s*\/\s*(\d+(?:[.,]\d+)?)/g, '$1 $4\n$2 $5'); return oa(window._normalizarDictado(t).replace(/[,;]\s+(?=[A-Za-zÁÉÍÓÚáéíóúñ])/g, '\n').replace(/\.\s+(?=[A-Za-zÁÉÍÓÚáéíóúñ])/g, '.\n').replace(/\s+y\s+(?=(un|una|el|la)?\s*[A-Za-zÁÉÍÓÚáéíóúñ]{2,}[^\n]{0,25}?\d)/g, '\n')); };
+    window._labAnalizarTexto = function(t){ t = String(t || '').replace(/\b\d{1,2}\s+de\s+[a-záéíóú]+(\s+de\s+\d{4})?\s+\d{1,2}\s?:\s?\d{2}\s*([ap]\.?\s?m\.?)?/gi, ' ').replace(/\b([A-Za-z]{2,6})\s*\/\s*([A-Za-z]{2,6})\b([^\d\n]{0,8})(\d+(?:[.,]\d+)?)\s*\/\s*(\d+(?:[.,]\d+)?)/g, '$1 $4\n$2 $5'); return oa(window._normalizarDictado(t).replace(/[,;]\s+(?=[A-Za-zÁÉÍÓÚáéíóúñ])/g, '\n').replace(/\.\s+(?=[A-Za-zÁÉÍÓÚáéíóúñ])/g, '.\n').replace(/\s+y\s+(?=(un|una|el|la)?\s*[A-Za-zÁÉÍÓÚáéíóúñ]{2,}[^\n]{0,25}?\d)/g, '\n')); };
   }
 
   // ── Leer foto / PDF → texto (todo local)
@@ -36845,6 +36881,8 @@ function _cargaEstPrec(p){
       put('eco_SIV', mm(numTras(l, /\bsiv\b|\bsivd\b|\bivs\w*\b|septum( interventricular)?|septo( interventricular)?|tabique( interventricular)?|\bsept\.?\b/), 2));
       put('eco_PP', mm(numTras(l, /pared posterior( del? (vi|ventriculo izquierdo))?|\bpp ?vi\b|\bpp\b|\bppd\b|\blvpw\w*\b|\bpared post\.?\b/), 2));
       put('eco_FE', numTras(l, /fraccion de eyeccion( del? (vi|ventriculo izquierdo))?( \(?(simpson|teichholz|biplano)\)?)?|\bfe ?vi\b|\bfey?\b|\bfevi\b|\blvef\b|\bef\b(?= ?[:(]?\s*\d)|\bsimpson\b/)); put('eco_Ee', numTras(l, /e\s*\/\s*e'?\s*(promedio|medio)?|relacion e sobre e|\be ?\/ ?e prima/));
+      var ps = numTras(l, /\bpeso\b/, 15); if(ps && parseFloat(ps) >= 25 && parseFloat(ps) <= 300) put('eco_Peso', ps);
+      var tl = numTras(l, /\btalla\b|\baltura\b|\bestatura\b/, 15); if(tl){ var tn = parseFloat(tl); if(tn > 1 && tn < 2.5) tl = String(Math.round(tn * 100)); if(parseFloat(tl) >= 100 && parseFloat(tl) <= 230) put('eco_Talla', tl); }
       put('eco_GLS', numTras(l, /strain (longitudinal )?global|\bgls\b/)); put('eco_SAI', numTras(l, /strain (de |de la )?(auricula|ai)\b|reservorio/));
       var vv = /valvulopatia|insuficiencia (mitral|aortica|tricuspidea)|estenosis (aortica|mitral)/.exec(l); if(vv) put('eco_Valv', negado(l, vv.index) ? 'No' : (/leve|trivial|minima/.test(l.slice(vv.index, vv.index + 40)) && /insuficiencia/.test(vv[0]) ? 'Sí' : 'Sí'));
       var dd = /disfuncion diastolica\s*(de\s*)?(grado\s*)?(iii|ii|i|1|2|3)?/.exec(l);
@@ -40124,9 +40162,15 @@ function copiarEditor(id, btn){
 .qv-h button{border:1px solid #cbd5e1;background:#fff;border-radius:7px;padding:2px 8px;font-size:11.5px;cursor:pointer;font-family:var(--font-main)}
 .qv-pg{position:relative;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;background:#fff}
 .qv-pg img{display:block;width:100%;height:auto}
+.qv-pg{overflow-x:auto}
+.qv-in{position:relative;width:100%;transition:transform .2s;transform-origin:center}
+.qv-pg.girada{padding:16% 0}
+.qv-n{font-size:11px;font-weight:700;color:#475569;padding:3px 8px;background:#f1f5f9;border-bottom:1px solid #e2e8f0}
+.qv-h{justify-content:space-between}
+.qv-bt{display:inline-flex;gap:3px}
+.qv-bt button{min-width:28px;font-weight:700;font-size:13px !important}
 .qv-b{position:absolute;border:2.5px solid #f97316;background:rgba(249,115,22,.18);border-radius:3px;pointer-events:none;box-shadow:0 0 0 3px rgba(249,115,22,.25)}
-.qv.zoom .qv-pg img{width:200%}
-.qv.zoom .qv-pg{overflow:auto}
+
 #modalCargaEstudio .modal.ce-con-foto{max-width:1180px!important;width:96vw;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,560px);grid-template-rows:auto minmax(0,1fr) auto}
 #modalCargaEstudio .modal.ce-con-foto > :not(.ce-foto){grid-column:2}
 #modalCargaEstudio .ce-foto{grid-column:1;grid-row:1 / 4;overflow:auto;max-height:88vh;padding:14px;background:#f8fafc;border-right:1px solid #e2e8f0}
@@ -40135,7 +40179,7 @@ function copiarEditor(id, btn){
 .lp-vista button{border:1.5px solid #e2e8f0;background:#fff;border-radius:8px;padding:4px 10px;font-size:12px;font-weight:600;cursor:pointer;font-family:var(--font-main);color:#475569}
 .lp-vista button.act{background:#1e3a5f;border-color:#1e3a5f;color:#fff}
 .lp-vista button:disabled{opacity:.4;cursor:default}
-.lp-foto{height:58vh;min-height:300px;overflow:auto;border:1.5px solid #e5e7eb;border-radius:10px;padding:8px;background:#f8fafc}
+.lp-foto{height:66vh;min-height:300px;overflow:auto;border:1.5px solid #e5e7eb;border-radius:10px;padding:8px;background:#f8fafc}
 </style>
 <script>
 /* ═══ Control de calidad de lo que se carga (laboratorio y estudios) ═══
@@ -40154,7 +40198,7 @@ function copiarEditor(id, btn){
 
   // ── Rangos POSIBLES (no de referencia): fuera de esto es casi seguro un error de lectura o de unidad
   var LAB = { Hb:[3,25,'g/dL'], Hto:[10,75], Leuco:[300,150000], Rto_plaquetas:[5,2000], Glucemia:[20,1200], Creatinina:[0.1,25], AcidoUrico:[0.5,25], TGO:[1,10000], TGP:[1,10000], FAL:[5,5000], BT:[0.05,50], GGT:[1,5000], PeptidoC:[0.01,30],
-    CT:[40,1500], HDL:[5,200], TG:[10,10000], ApoB:[10,400], HbA1c:[3,20], PTOG:[20,1200], PRCus:[0,500], NTproBNP:[5,70000], Sodio:[100,185], Potasio:[1.5,9.5], TSH:[0.001,300], Calcio:[4,18], Fosforo:[0.5,15], Magnesio:[0.4,7], Albumina:[0.8,7],
+    CT:[40,1500], HDL:[5,200], TG:[10,10000], ApoB:[10,400], HbA1c:[3,20], PTOG:[20,1200], LDLd:[5,1000], PRCus:[0,500], NTproBNP:[5,70000], Sodio:[100,185], Potasio:[1.5,9.5], TSH:[0.001,300], Calcio:[4,18], Fosforo:[0.5,15], Magnesio:[0.4,7], Albumina:[0.8,7],
     Ferremia:[5,1000], Ferritina:[1,20000], SatTransf:[1,100], B12:[30,10000], D3:[1,250], AcFolico:[0.3,100], Zinc:[10,500], PTH:[1,3000] };
   var EST = { eco_FE:[5,90], eco_DDVI:[20,95], eco_AI:[15,90], eco_SIV:[3,40], eco_PP:[3,40], dop_EIM:[0.2,4], dop_Esten:[0,100], ergo_FCpct:[20,150], ergo_FCmax:[50,240], ergo_FCbas:[30,180], ergo_PAmax:[70,320], ergo_METS:[0.5,25],
     mapa_TAS24:[70,260], mapa_TASd:[70,260], mapa_TASn:[60,260], mapa_TAD24:[30,160], mapa_TADd:[30,160], mapa_TADn:[25,160], mapa_FC24:[30,180], mapa_Dip:[-50,60], hol_FCmin:[20,200], hol_FCmed:[30,220], hol_FCmax:[40,300],
@@ -40252,10 +40296,19 @@ function copiarEditor(id, btn){
   // ── Visor de la foto con resaltado
   function normT(t){ return String(t || '').toLowerCase().replace(/[^\w.,%-]/g, ''); }
   function crearVisor(fuentes){
-    var w = document.createElement('div'); w.className = 'qv';
-    w.innerHTML = '<div class="qv-h">📷 Informe original · tocá un valor para ver dónde se leyó <button type="button" class="qv-z">🔍 Agrandar</button></div>';
-    fuentes.forEach(function(f){ var pg = document.createElement('div'); pg.className = 'qv-pg'; pg._f = f; pg.innerHTML = '<img src="' + f.url + '" alt="">'; w.appendChild(pg); });
-    w.querySelector('.qv-z').onclick = function(){ w.classList.toggle('zoom'); this.textContent = w.classList.contains('zoom') ? '🔍 Achicar' : '🔍 Agrandar'; };
+    var w = document.createElement('div'); w.className = 'qv', zoom = 1;
+    w.innerHTML = '<div class="qv-h"><span>📷 ' + (fuentes.length > 1 ? fuentes.length + ' hojas' : 'Informe original') + ' · tocá un valor para ver dónde se leyó · doble clic acerca</span>'
+      + '<span class="qv-bt"><button type="button" data-z="-" title="Achicar">−</button><button type="button" data-z="0" title="Ajustar al ancho">↔</button><button type="button" data-z="+" title="Agrandar">+</button><button type="button" data-z="r" title="Girar">⟳</button><button type="button" data-z="f" title="Ver en pantalla completa">⛶</button></span></div>';
+    fuentes.forEach(function(f, i){ var pg = document.createElement('div'); pg.className = 'qv-pg'; pg._f = f; pg._g = 0;
+      pg.innerHTML = (fuentes.length > 1 ? '<div class="qv-n">Hoja ' + (i + 1) + ' de ' + fuentes.length + '</div>' : '') + '<div class="qv-in"><img src="' + f.url + '" alt=""></div>'; w.appendChild(pg); });
+    function aplicar(){ w.querySelectorAll('.qv-pg').forEach(function(pg){ var inn = pg.querySelector('.qv-in'); inn.style.width = (zoom * 100) + '%'; inn.style.transform = pg._g ? 'rotate(' + pg._g + 'deg)' : ''; pg.classList.toggle('girada', !!(pg._g % 180)); }); }
+    w.querySelector('.qv-bt').onclick = function(e){ var b = e.target.closest('[data-z]'); if(!b) return; var z = b.dataset.z;
+      if(z === 'f'){ if(window._verFotoGrande) window._verFotoGrande(fuentes.map(function(f){ return f.url; })); return; }
+      if(z === 'r'){ w.querySelectorAll('.qv-pg').forEach(function(pg){ pg._g = (pg._g + 90) % 360; }); }
+      else zoom = z === '+' ? Math.min(4, zoom * 1.35) : z === '-' ? Math.max(0.5, zoom / 1.35) : 1;
+      aplicar(); };
+    w.addEventListener('dblclick', function(e){ var inn = e.target.closest('.qv-in'); if(!inn) return; var pg = inn.parentNode, rc = inn.getBoundingClientRect(), fx = (e.clientX - rc.left) / rc.width, fy = (e.clientY - rc.top) / rc.height;
+      zoom = zoom >= 2 ? 1 : 2.2; aplicar(); pg.scrollLeft = fx * inn.offsetWidth - pg.clientWidth / 2; try { var sc = w.closest('.lp-foto, .ce-foto') || w.parentNode; var r2 = inn.getBoundingClientRect(), rs = sc.getBoundingClientRect(); sc.scrollTop += (r2.top + fy * r2.height) - (rs.top + sc.clientHeight / 2); } catch(_){} });
     w.resaltar = function(val){
       w.querySelectorAll('.qv-b').forEach(function(b){ b.remove(); });
       var n = num(val), t = normT(val), primero = null; if(n == null && t.length < 2) return;
@@ -40268,7 +40321,7 @@ function copiarEditor(id, btn){
           if(!ok) return;
           var b = document.createElement('div'); b.className = 'qv-b';
           b.style.left = (x.b[0] / f.w * 100) + '%'; b.style.top = (x.b[1] / f.h * 100) + '%'; b.style.width = ((x.b[2] - x.b[0]) / f.w * 100) + '%'; b.style.height = ((x.b[3] - x.b[1]) / f.h * 100) + '%';
-          pg.appendChild(b); if(!primero) primero = b;
+          pg.querySelector('.qv-in').appendChild(b); if(!primero) primero = b;
         });
       });
       if(primero) try { primero.scrollIntoView({ block:'center', behavior:'smooth' }); } catch(e){}
@@ -40363,6 +40416,8 @@ function copiarEditor(id, btn){
         var esFoto = v === 'foto';
         Array.prototype.forEach.call(col.children, function(ch){ if(ch !== bar && ch !== foto) ch.style.display = esFoto ? 'none' : ''; });
         foto.style.display = esFoto ? '' : 'none';
+        var grid = col.closest('.lp-grid'); if(grid) grid.style.gridTemplateColumns = esFoto ? 'minmax(0,1.35fr) minmax(0,1fr)' : '';
+        try { var caja = col.closest('.ui-body').parentNode; caja.style.maxWidth = esFoto ? '1500px' : '1200px'; } catch(_){}
         if(esFoto){ foto.innerHTML = ''; foto.appendChild(crearVisor(fuentesActuales())); }
       }
       bar.addEventListener('click', function(e){ var b = e.target.closest('[data-v]'); if(b && !b.disabled) ver(b.dataset.v); });
@@ -40664,6 +40719,8 @@ function copiarEditor(id, btn){
     cols.push(V('aos_cpap_horas', 'CPAP: horas por noche', '', g('aos', 'cpap_horas')));
     cols.push(V('aos_cpap_adherente', 'CPAP adherente', SN, sn('aos', 'cpap_adherente')));
     cols.push(V('hta_morisky_adherente', 'Adherencia Morisky-Green', SN, sn('hta', 'morisky_adherente')));
+    cols.push(V('tab_edad_inicio', 'Tabaquismo: edad de inicio (años)', '', g('tab', 'edad_inicio')));
+    cols.push(V('tab_edad_cese', 'Tabaquismo: edad en que dejó (años)', '', g('tab', 'edad_cese')));
   };
   if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', crear); else crear();
 })();
@@ -40946,10 +41003,12 @@ function copiarEditor(id, btn){
 <script>
 /* Ver una foto en grande sin abrir otra pestaña (Esc o clic afuera para cerrar) */
 window._verFotoGrande = function(src){
+  var lista = Array.isArray(src) ? src : [src];
   var bg = document.createElement('div'); bg.className = 'vfg';
-  bg.innerHTML = '<div class="vfg-b"><button type="button" data-z="-">−</button><button type="button" data-z="+">+</button><button type="button" data-z="r">⟳</button><button type="button" data-z="x">✕ Cerrar</button></div><div class="vfg-sc"><img alt=""></div>';
-  var im = bg.querySelector('img'), z = 1, g = 0; im.src = src;
-  function ap(){ im.style.width = (z * 100) + '%'; im.style.transform = g ? 'rotate(' + g + 'deg)' : ''; }
+  bg.innerHTML = '<div class="vfg-b"><span style="color:#cbd5e1;font:600 13px var(--font-main);margin-right:auto;align-self:center">' + (lista.length > 1 ? lista.length + ' hojas · bajá para ver las demás' : '') + '</span><button type="button" data-z="-">−</button><button type="button" data-z="+">+</button><button type="button" data-z="r">⟳</button><button type="button" data-z="x">✕ Cerrar</button></div><div class="vfg-sc"></div>';
+  var sc = bg.querySelector('.vfg-sc'), z = window.innerWidth > 1100 ? 0.6 : 1, g = 0;
+  lista.forEach(function(u){ var im = document.createElement('img'); im.alt = ''; im.src = u; sc.appendChild(im); });
+  function ap(){ sc.querySelectorAll('img').forEach(function(im){ im.style.width = (z * 100) + '%'; im.style.transform = g ? 'rotate(' + g + 'deg)' : ''; im.style.margin = g % 180 ? '20% auto' : '0 auto 14px'; }); }
   function cerrar(){ bg.remove(); document.removeEventListener('keydown', tecla, true); }
   function tecla(e){ if(e.key === 'Escape'){ e.stopPropagation(); cerrar(); } }
   bg.addEventListener('click', function(e){ var b = e.target.closest('[data-z]'); if(b){ var k = b.dataset.z; if(k === 'x') return cerrar(); if(k === 'r') g = (g + 90) % 360; else z = k === '+' ? Math.min(4, z * 1.35) : Math.max(0.4, z / 1.35); ap(); return; } if(e.target === bg || e.target.classList.contains('vfg-sc')) cerrar(); });
@@ -40961,7 +41020,7 @@ window._verFotoGrande = function(src){
 .vfg-b{display:flex;gap:6px;justify-content:flex-end;padding:10px 14px}
 .vfg-b button{min-width:36px;height:32px;border-radius:8px;border:1px solid #475569;background:#334155;color:#fff;font-weight:700;cursor:pointer;font-family:var(--font-main)}
 .vfg-sc{flex:1;overflow:auto;padding:0 16px 16px;text-align:center}
-.vfg-sc img{max-width:none;width:100%;border-radius:6px;background:#fff}
+.vfg-sc img{max-width:none;width:100%;border-radius:6px;background:#fff;display:block;margin:0 auto 14px}
 .pl-btn{padding:5px 12px;border:1.5px solid #7c3aed;border-radius:7px;background:#f5f3ff;color:#6d28d9;font-size:12px;cursor:pointer;font-family:var(--font-main);font-weight:700;margin-right:6px;white-space:nowrap}
 .pl-tx{width:100%;height:90px;padding:8px;border:1.5px dashed #a78bfa;border-radius:10px;font:12px monospace;background:#faf5ff;resize:vertical}
 .pl-top{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:8px 0;font-size:12.5px}
@@ -41178,5 +41237,180 @@ window._verFotoGrande = function(src){
   });
 })();
 </script>
+<script>
+/* ═══ Ecocardiograma: peso y talla de Antropometría (del mismo año del estudio; si no hay, la última) ═══
+   Solo completa si el informe no los trae. Si la medición está a más de 3 años del estudio, lo anota en Comentarios. */
+(function(){
+  function $(id){ return document.getElementById(id); }
+  var NOTA = /\s*\[Peso y talla de Antropometría del [^\]]*\]/;
+  function fiDe(k){ return EST_FILAS.findIndex(function(f){ return f.key === k; }); }
+  function medicion(fechaEst){
+    if(typeof antDatos === 'undefined' || !antDatos || !antDatos.columnas) return null;
+    var iP = ANT_FILAS.findIndex(function(f){ return f.key === 'Peso'; }), iT = ANT_FILAS.findIndex(function(f){ return f.key === 'Altura'; });
+    var val = function(fi, ci){ var x = antDatos.filas && antDatos.filas[fi] && antDatos.filas[fi][ci]; x = x == null ? '' : String(x).trim().replace(',', '.'); return x && !isNaN(parseFloat(x)) ? parseFloat(x) : null; };
+    var cols = antDatos.columnas.map(function(c, ci){ return { f: String(c).slice(0, 10), p: val(iP, ci), t: val(iT, ci) }; }).filter(function(c){ return /^\d{4}/.test(c.f) && (c.p != null || c.t != null); });
+    if(!cols.length) return null;
+    cols.sort(function(a, b){ return a.f < b.f ? -1 : 1; });
+    var ultimo = function(campo, lista){ for(var i = lista.length - 1; i >= 0; i--) if(lista[i][campo] != null) return lista[i]; return null; };
+    var anio = String(fechaEst || '').slice(0, 4);
+    var mismoAnio = cols.filter(function(c){ return c.f.slice(0, 4) === anio; });
+    // del mismo año: la más cercana a la fecha del estudio
+    var cerca = function(campo){ var c = mismoAnio.filter(function(x){ return x[campo] != null; }); if(!c.length) return null; var d = new Date(fechaEst + 'T12:00:00'); c.sort(function(a, b){ return Math.abs(new Date(a.f + 'T12:00:00') - d) - Math.abs(new Date(b.f + 'T12:00:00') - d); }); return c[0]; };
+    var p = cerca('p') || ultimo('p', cols), t = cerca('t') || ultimo('t', cols);
+    var tv = t ? t.t : null; if(tv != null && tv < 3) tv = Math.round(tv * 100);
+    return { peso: p ? p.p : null, fp: p ? p.f : null, talla: tv, ft: t ? t.f : null };
+  }
+  function anios(a, b){ return Math.abs(new Date(a + 'T12:00:00') - new Date(b + 'T12:00:00')) / (365.25 * 864e5); }
+  function fmt(f){ return typeof _fmtFechaCol === 'function' ? _fmtFechaCol(f) : f; }
+  function completar(){
+    var tit = ($('carga_est_titulo') || {}).textContent || ''; if(!/ECOCARDIO/i.test(tit) || /STRESS|ESTRES/i.test(tit)) return;
+    var fecha = ($('carga_est_fecha') || {}).value; if(!fecha) return;
+    var elP = $('carga_est_f_' + fiDe('eco_Peso')), elT = $('carga_est_f_' + fiDe('eco_Talla')), elC = $('carga_est_f_' + fiDe('eco_Com'));
+    if(!elP || !elT) return;
+    var m = medicion(fecha), usadas = [];
+    [[elP, m && m.peso, m && m.fp], [elT, m && m.talla, m && m.ft]].forEach(function(x){
+      var el = x[0];
+      if(el.value.trim() && !el._autoAnt) return;            // lo trae el informe o lo escribiste vos
+      if(x[1] == null){ if(el._autoAnt){ el.value = ''; el._autoAnt = false; } return; }
+      el.value = String(x[1]).replace('.', ','); el._autoAnt = true; el.title = 'Tomado de Antropometría (' + fmt(x[2]) + ')';
+      var g = el.closest('.form-group'); if(g) g.classList.add('ant-auto');
+      usadas.push(x[2]);
+    });
+    if(!elC) return;
+    var lejos = usadas.filter(function(f){ return anios(f, fecha) > 3; });
+    var c = elC.value.replace(NOTA, '');
+    if(lejos.length){ var fs = usadas.filter(function(f, i){ return usadas.indexOf(f) === i; }).map(fmt).join(' y ');
+      c = (c ? c + ' ' : '') + '[Peso y talla de Antropometría del ' + fs + ': más de 3 años de diferencia con el estudio]'; }
+    if(c !== elC.value){ elC.value = c; elC.dispatchEvent(new Event('input', { bubbles:true })); }
+  }
+  window._ecoPesoTalla = completar;
+  document.addEventListener('input', function(e){ var id = e.target && e.target.id || ''; if(/^carga_est_f_/.test(id) && e.isTrusted){ e.target._autoAnt = false; var g = e.target.closest('.form-group'); if(g) g.classList.remove('ant-auto'); } }, true);
+  document.addEventListener('change', function(e){ if(e.target && e.target.id === 'carga_est_fecha') setTimeout(completar, 30); }, true);
+  var oA = window.abrirCargaRapidaEstudio;
+  if(typeof oA === 'function') window.abrirCargaRapidaEstudio = abrirCargaRapidaEstudio = function(){ var r = oA.apply(this, arguments); setTimeout(completar, 60); return r; };
+  var oR = window._renderCargaEstCampos;
+  if(typeof oR === 'function') window._renderCargaEstCampos = _renderCargaEstCampos = function(){ var r = oR.apply(this, arguments); setTimeout(completar, 0); return r; };
+  document.addEventListener('carga-est-lista', function(){ setTimeout(completar, 30); });
+})();
+
+/* ═══ Fechas viejas: al lado del calendario se puede escribir la fecha (9/3/2019) ═══ */
+(function(){
+  function fISO(t){ var m = /^\s*(\d{1,2})[\/\-. ](\d{1,2})[\/\-. ](\d{2,4})\s*$/.exec(t || ''); if(!m) return ''; var y = +m[3]; if(m[3].length === 2) y += y > 40 ? 1900 : 2000; var d = new Date(Date.UTC(y, m[2] - 1, m[1])); if(d.getUTCMonth() !== m[2] - 1) return ''; return d.toISOString().slice(0, 10); }
+  function fAR(v){ return /^\d{4}-\d{2}-\d{2}$/.test(v || '') ? v.slice(8, 10) + '/' + v.slice(5, 7) + '/' + v.slice(0, 4) : ''; }
+  function armar(inp){
+    if(inp._esc) return; inp._esc = true;
+    var t = document.createElement('input'); t.type = 'text'; t.className = 'fe-esc'; t.placeholder = 'o escribila: 9/3/2019'; t.value = fAR(inp.value);
+    t.title = 'Escribí la fecha (día/mes/año) si es vieja y el calendario no llega';
+    inp.insertAdjacentElement('afterend', t);
+    t.addEventListener('keydown', function(e){ e.stopPropagation(); if(e.key === 'Enter'){ e.preventDefault(); t.blur(); } });
+    t.addEventListener('focus', function(){ t._sel = true; try { t.select(); } catch(_){} });
+    t.addEventListener('mouseup', function(e){ if(t._sel){ t._sel = false; e.preventDefault(); try { t.select(); } catch(_){} } });
+    t.addEventListener('input', function(){ var v = /\d{4}\s*$/.test(t.value) ? fISO(t.value) : ''; t.classList.remove('mal'); if(v && v !== inp.value){ inp.value = v; inp.dispatchEvent(new Event('input', { bubbles:true })); inp.dispatchEvent(new Event('change', { bubbles:true })); } });
+    t.addEventListener('blur', function(){ var v = fISO(t.value); t.classList.toggle('mal', !!t.value.trim() && !v); if(v){ t.value = fAR(v); if(v !== inp.value){ inp.value = v; inp.dispatchEvent(new Event('input', { bubbles:true })); } }
+      setTimeout(function(){ if(inp._pend && document.activeElement !== inp){ inp._pend = false; inp.dispatchEvent(new Event('change', { bubbles:true })); } }, 0); });
+    inp.addEventListener('change', function(){ if(document.activeElement !== t) t.value = fAR(inp.value); });
+    inp.addEventListener('input', function(){ if(document.activeElement !== t) t.value = fAR(inp.value); });
+  }
+  var SEL = '.lp-fecha, #carga_est_fecha, .pl-t input[type=date], .ec-fecha';
+  function revisar(){ document.querySelectorAll(SEL).forEach(armar); }
+  new MutationObserver(function(){ clearTimeout(revisar._t); revisar._t = setTimeout(revisar, 60); }).observe(document.documentElement, { childList:true, subtree:true });
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', revisar); else revisar();
+})();
+</script>
+<style>
+.ant-auto{background:#ecfeff;border-radius:8px;box-shadow:0 0 0 4px #ecfeff}
+.ant-auto::after{content:'de Antropometría';display:block;font-size:10.5px;color:#0e7490;margin-top:2px}
+.fe-esc{width:118px;margin-left:6px;padding:5px 8px;border:1.5px dashed #cbd5e1;border-radius:8px;font:12px var(--font-main);color:#334155;background:#fff}
+.fe-esc:focus{border-style:solid;border-color:#93c5fd;outline:none}
+.fe-esc.mal{border-color:#f87171;background:#fef2f2}
+</style>
+<script>
+/* ═══ Estudios: lo que se define por convención se marca solo (y se puede cambiar) ═══
+   MAPA · HTA nocturna: TAS nocturna ≥120 o TAD nocturna ≥70 mmHg → Sí; ambas por debajo → No.
+   MAPA · Variabilidad aumentada: DE de la TAS diurna ≥15 mmHg → Sí; <15 → No.
+   Ergometría · % de la FC máxima teórica: FC máx / (220 − edad) si no lo trae el informe. */
+(function(){
+  function el(k){ var fi = EST_FILAS.findIndex(function(f){ return f.key === k; }); return document.getElementById('carga_est_f_' + fi); }
+  function num(e){ if(!e) return NaN; return parseFloat(String(e.value).replace(',', '.')); }
+  function marcar(sel, v){
+    if(!sel || sel._tocadoConv) return;
+    if(sel.value && !sel._autoConv) return;            // lo trajo el informe o lo eligió ella
+    sel.value = v; sel._autoConv = !!v;
+    var w = sel.nextElementSibling; if(w && w.classList.contains('est-pills')) w.querySelectorAll('button').forEach(function(b){ b.classList.toggle('sel', !!v && b.dataset.v === v); });
+    var g = sel.closest('.form-group'); if(g) g.classList.toggle('conv-auto', !!v);
+  }
+  function edad(){ try { var f = pacienteActual && pacienteActual.fecha_nacimiento; if(!f) return null; var d = new Date(f + 'T12:00:00'), h = new Date(($('carga_est_fecha') || {}).value + 'T12:00:00'); if(isNaN(h)) h = new Date(); var a = h.getFullYear() - d.getFullYear(); if(h.getMonth() < d.getMonth() || (h.getMonth() === d.getMonth() && h.getDate() < d.getDate())) a--; return a; } catch(e){ return null; } }
+  function $(id){ return document.getElementById(id); }
+  function aplicar(){
+    var s = num(el('mapa_TASn')), d = num(el('mapa_TADn'));
+    if(el('mapa_HTAn')){ var hn = (s >= 120 || d >= 70) ? 'Sí' : (s > 0 && d > 0) ? 'No' : ''; marcar(el('mapa_HTAn'), hn); }
+    var de = num(el('mapa_DETASd')); if(el('mapa_Var')) marcar(el('mapa_Var'), de > 0 ? (de >= 15 ? 'Sí' : 'No') : '');
+    var fm = el('ergo_FCmax'), fp = el('ergo_FCpct'), e = edad();
+    if(fm && fp && e && (!fp.value || fp._autoConv)){ var n = num(fm); if(n > 40){ fp.value = String(Math.round(n / (220 - e) * 100)); fp._autoConv = true; var g = fp.closest('.form-group'); if(g) g.classList.add('conv-auto'); } else if(fp._autoConv){ fp.value = ''; fp._autoConv = false; } }
+  }
+  document.addEventListener('input', function(e){ if(e.target && /^carga_est_f_/.test(e.target.id || '')){ if(e.isTrusted && e.target._autoConv){ e.target._autoConv = false; var g = e.target.closest('.form-group'); if(g) g.classList.remove('conv-auto'); } setTimeout(aplicar, 0); } }, true);
+  document.addEventListener('click', function(e){ var w = e.target.closest && e.target.closest('#carga_est_campos .est-pills'); if(!w) return; var sel = w.previousElementSibling; if(sel && sel.tagName === 'SELECT'){ sel._tocadoConv = true; sel._autoConv = false; var g = sel.closest('.form-group'); if(g) g.classList.remove('conv-auto'); } }, true);
+  var oA = window.abrirCargaRapidaEstudio;
+  if(typeof oA === 'function') window.abrirCargaRapidaEstudio = abrirCargaRapidaEstudio = function(){ var r = oA.apply(this, arguments); setTimeout(aplicar, 120); return r; };
+  var oR = window._renderCargaEstCampos;
+  if(typeof oR === 'function') window._renderCargaEstCampos = _renderCargaEstCampos = function(){ var r = oR.apply(this, arguments); setTimeout(aplicar, 120); return r; };
+  document.addEventListener('carga-est-lista', function(){ setTimeout(aplicar, 150); });
+  window._estConvenciones = aplicar;
+})();
+
+/* ═══ Tabaquismo: edad en que empezó (y dejó) → años fumando y paquetes/año ═══ */
+(function(){
+  function $(id){ return document.getElementById(id); }
+  function edadActual(){ try { var f = pacienteActual && pacienteActual.fecha_nacimiento; if(!f) return null; var d = new Date(f + 'T12:00:00'), h = new Date(); var a = h.getFullYear() - d.getFullYear(); if(h.getMonth() < d.getMonth() || (h.getMonth() === d.getMonth() && h.getDate() < d.getDate())) a--; return a; } catch(e){ return null; } }
+  function crear(){
+    var det = $('hab_tab_detalle'); if(!det || $('hab_tab_ini')) return;
+    var fila = $('hab_cig_dia') && $('hab_cig_dia').closest('.habito-row');
+    var div = document.createElement('div');
+    div.innerHTML = '<div class="habito-row"><label>Empezó a los</label><input type="number" id="hab_tab_ini" min="5" max="100" placeholder="edad"></div>'
+      + '<div class="habito-row" id="hab_tab_fin_row"><label>Dejó a los</label><input type="number" id="hab_tab_fin" min="5" max="110" placeholder="edad"></div>'
+      + '<div id="hab_tab_calc" style="font-size:11px;color:#0e7490;margin:-2px 0 4px"></div>';
+    while(div.firstChild) (fila ? fila.parentNode.insertBefore(div.firstChild, fila.nextSibling ? fila.nextSibling : null) : det.insertBefore(div.firstChild, det.firstChild));
+    // orden: Cig/día, Empezó, Dejó, (nota), Años
+    var anios = $('hab_anios') && $('hab_anios').closest('.habito-row');
+    if(anios && fila){ fila.after($('hab_tab_ini').closest('.habito-row')); $('hab_tab_ini').closest('.habito-row').after($('hab_tab_fin_row')); $('hab_tab_fin_row').after($('hab_tab_calc')); $('hab_tab_calc').after(anios); }
+    ['hab_tab_ini', 'hab_tab_fin'].forEach(function(id){ $(id).addEventListener('input', calcular); $(id).addEventListener('keydown', function(e){ e.stopPropagation(); }); });
+    visible();
+  }
+  function visible(){ var r = $('hab_tab_fin_row'); if(r) r.style.display = ($('hab_tabaquismo') || {}).value === 'ex' ? '' : 'none'; }
+  function calcular(){
+    var ini = parseFloat(($('hab_tab_ini') || {}).value), esEx = ($('hab_tabaquismo') || {}).value === 'ex';
+    var fin = esEx ? parseFloat(($('hab_tab_fin') || {}).value) : edadActual(), info = $('hab_tab_calc');
+    if(!(ini > 0) || !(fin > 0)){ if(info) info.textContent = ''; return; }
+    var a = fin - ini, hoy = edadActual();
+    if(esEx && hoy && fin > hoy){ if(info){ info.textContent = '⚠ La edad en que dejó (' + fin + ') es mayor que la edad actual (' + hoy + ')'; info.style.color = '#b91c1c'; } return; }
+    if(a <= 0){ if(info){ info.textContent = '⚠ La edad en que dejó tiene que ser mayor que la de inicio'; info.style.color = '#b91c1c'; } return; }
+    var an = $('hab_anios'); if(an){ an.value = a; an.dispatchEvent(new Event('input', { bubbles:true })); }
+    if(info){ info.style.color = '#0e7490'; info.textContent = '→ ' + a + ' años fumando' + (esEx ? '' : ' (hasta hoy, ' + fin + ' años)') + (esEx && edadActual() ? ' · dejó hace ' + Math.max(0, edadActual() - fin) + ' años' : ''); }
+    if(typeof calcPackYear === 'function') calcPackYear();
+  }
+  var oT = window.actualizarTabaquismo;
+  if(typeof oT === 'function') window.actualizarTabaquismo = actualizarTabaquismo = function(){ var r = oT.apply(this, arguments); crear(); visible(); calcular(); return r; };
+  // se guardan dentro del detalle clínico (dx_detalle_json → "tab")
+  var oL = window._dxdLeer, oC = window._dxdCargar;
+  if(typeof oL === 'function') window._dxdLeer = function(){
+    var o = oL.apply(this, arguments); if(o === undefined) return o;
+    var ini = ($('hab_tab_ini') || {}).value, fin = ($('hab_tab_fin') || {}).value;
+    if(ini || fin){ o = o || {}; o.tab = {}; if(ini) o.tab.edad_inicio = +ini; if(fin && ($('hab_tabaquismo') || {}).value === 'ex') o.tab.edad_cese = +fin; }
+    return o;
+  };
+  if(typeof oC === 'function') window._dxdCargar = function(j){
+    var r = oC.apply(this, arguments); crear();
+    var o = j; try { if(typeof o === 'string') o = JSON.parse(o); } catch(e){ o = null; } o = o || {};
+    var t = o.tab || {}; if($('hab_tab_ini')) $('hab_tab_ini').value = t.edad_inicio == null ? '' : t.edad_inicio; if($('hab_tab_fin')) $('hab_tab_fin').value = t.edad_cese == null ? '' : t.edad_cese;
+    visible(); var info = $('hab_tab_calc'); if(info) info.textContent = '';
+    return r;
+  };
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', crear); else crear();
+})();
+</script>
+<style>
+.conv-auto{background:#f0fdf4;border-radius:8px;box-shadow:0 0 0 4px #f0fdf4}
+.conv-auto::after{content:'por convención (podés cambiarlo)';display:block;font-size:10.5px;color:#15803d;margin-top:2px}
+</style>
 </body>
 </html>
