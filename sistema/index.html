@@ -2,7 +2,7 @@
 <html lang="es-AR">
 <head>
   <meta charset="UTF-8" />
-  <script>var URCYM_BUILD = '2026-11-14-1200';</script>
+  <script>var URCYM_BUILD = '2026-11-14-1300';</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Evaluaciones cardiometabólicas — Sistema de Historia Clínica</title>
 
@@ -34632,7 +34632,7 @@ textarea.nota-chica{min-height:34px;resize:vertical;line-height:1.4}
   setInterval(revisarVersion, 10 * 60 * 1000);
   document.addEventListener('visibilitychange', function(){ if(document.visibilityState === 'visible') revisarVersion(); });
 
-  var TABLAS = ['pacientes','paciente_clinica','medicacion','evoluciones','paciente_tablas','paciente_tablas_historial','paciente_profesionales','paciente_pendientes','mdpa_estudios','mdpa_estudios_historial','adiposidad_tratamientos','adiposidad_efca','urcym_agenda_config','urcym_recetas','urcym_ingresos','urcym_gastos','urcym_personal','online_pedidos','video_reservas'];
+  var TABLAS = ['pacientes','paciente_clinica','medicacion','evoluciones','paciente_tablas','paciente_tablas_historial','paciente_profesionales','paciente_pendientes','mdpa_estudios','mdpa_estudios_historial','adiposidad_tratamientos','adiposidad_efca','urcym_agenda_config','urcym_recetas','urcym_ingresos','urcym_gastos','urcym_personal','online_pedidos','video_reservas','auditoria','urcym_comunicados','urcym_comunicados_envios'];
   window.urcymBackup = async function(){
     var btn = document.getElementById('btn-backup'); var txt = btn ? btn.textContent : '';
     var out = { generado: new Date().toISOString(), version: window.URCYM_BUILD || '', tablas: {} }, errores = [];
@@ -34658,7 +34658,26 @@ textarea.nota-chica{min-height:34px;resize:vertical;line-height:1.4}
     var box = document.createElement('div'); box.id = 'aviso-copia'; box.innerHTML = msj + ' <button type="button">OK</button>'; box.querySelector('button').onclick = function(){ box.remove(); };
     var viejo = document.getElementById('aviso-copia'); if(viejo) viejo.remove(); document.body.appendChild(box);
     if(errores.length) console.warn('Copia de seguridad, tablas con error:', errores);
+    else { try { await sb.from('urcym_agenda_config').upsert({ key: 'ultima_copia', value: JSON.stringify({ fecha: out.generado, por: (typeof selectedUser !== 'undefined' ? selectedUser : ''), registros: total }) }, { onConflict: 'key' }); } catch(e) {} var av = document.getElementById('aviso-copia-vieja'); if(av) av.remove(); }
   };
+  // Recordatorio: si la última copia completa tiene más de 7 días, se avisa (a los profesionales)
+  async function revisarCopia(){
+    try {
+      if(typeof currentUser === 'undefined' || !currentUser || currentUser.secretaria) return;
+      if(document.getElementById('aviso-copia-vieja')) return;
+      var r = await sb.from('urcym_agenda_config').select('value').eq('key', 'ultima_copia').maybeSingle();
+      if(r && r.error) return;
+      var v = r && r.data && r.data.value; try { if(typeof v === 'string') v = JSON.parse(v); } catch(e) {}
+      var dias = v && v.fecha ? Math.floor((Date.now() - new Date(v.fecha).getTime()) / 864e5) : null;
+      if(dias != null && dias < 7) return;
+      var b = document.createElement('div'); b.id = 'aviso-copia-vieja';
+      b.innerHTML = '💾 ' + (dias == null ? 'Todavía no hay registro de una <b>copia de seguridad</b> de las historias clínicas.' : 'La última <b>copia de seguridad</b> es de hace ' + dias + ' días.') + '<br><button type="button" class="si">Hacer copia ahora</button><button type="button" class="x">Después</button>';
+      b.querySelector('.si').onclick = function(){ b.remove(); window.urcymBackup(); };
+      b.querySelector('.x').onclick = function(){ b.remove(); };
+      document.body.appendChild(b);
+    } catch(e) {}
+  }
+  /* recordatorio: ahora es el punto verde/naranja del botón 💾 (módulo Copias v2) */
   // El botón de copia solo para los profesionales
   setInterval(function(){ var b = document.getElementById('btn-backup'); if(b) b.style.display = (typeof currentUser !== 'undefined' && currentUser && !currentUser.secretaria) ? '' : 'none'; }, 2000);
 })();
@@ -34667,6 +34686,9 @@ textarea.nota-chica{min-height:34px;resize:vertical;line-height:1.4}
 #aviso-version{position:fixed;left:50%;top:12px;transform:translateX(-50%);z-index:100000;background:#fff7ed;border:2px solid #f97316;color:#9a3412;padding:10px 16px;border-radius:12px;font-size:13.5px;box-shadow:0 10px 30px rgba(0,0,0,.15);max-width:92vw}
 #aviso-conexion,#aviso-copia{position:fixed;left:50%;top:12px;transform:translateX(-50%);z-index:100001;background:#fef2f2;border:2px solid #dc2626;color:#991b1b;padding:10px 16px;border-radius:12px;font-size:13.5px;box-shadow:0 10px 30px rgba(0,0,0,.15);max-width:92vw}
 #aviso-copia{background:#f0fdf4;border-color:#16a34a;color:#14532d}
+#aviso-copia-vieja{position:fixed;right:16px;bottom:16px;z-index:99990;background:#fff;border:2px solid #0d9488;color:#134e4a;padding:10px 14px;border-radius:12px;font-size:13px;box-shadow:0 10px 30px rgba(0,0,0,.15);max-width:420px}
+#aviso-copia-vieja button{margin:6px 6px 0 0;border-radius:8px;padding:5px 11px;font-weight:700;cursor:pointer;border:1.5px solid #0d9488;background:#0d9488;color:#fff}
+#aviso-copia-vieja button.x{background:#fff;color:#0f766e}
 #aviso-conexion button,#aviso-copia button{margin-left:8px;background:#dc2626;color:white;border:0;border-radius:8px;padding:6px 12px;font-weight:700;cursor:pointer}
 #aviso-copia button{background:#16a34a}
 #aviso-conexion button.x{background:transparent;color:#991b1b}
@@ -43086,6 +43108,205 @@ function _invToggleDroga(key){
 .com-h .f{color:#64748b;font-size:12.5px;min-width:78px}.com-h b{flex:1}.com-h .k{font-size:12px;color:#334155}
 .com-h-t{font-size:13px;color:#334155;margin-top:6px;background:#f8fafc;border-radius:8px;padding:8px 10px}
 @media (max-width:640px){.com-p{grid-template-columns:20px 1fr}.com-p .m,.com-p .u{grid-column:2}}
+</style>
+
+<script>
+/* ══ 💾 Copias de seguridad (versión 2) ══
+   · Una copia = 2 archivos: urcym-copia-AAAA-MM-DD.json (para restaurar el sistema entero) y
+     urcym-HC-legible-AAAA-MM-DD.html (se abre con cualquier navegador: evoluciones, laboratorios,
+     estudios, antropometrías, MAPA/MDPA, medicación y diagnósticos de cada paciente).
+   · Si se eligió una carpeta (por ejemplo la de Google Drive en la compu), se guardan ahí solas:
+     quedan en la PC y Drive las sube. Si no, se descargan.
+   · Copia semanal automática: al abrir el sistema, si pasaron 7 días y la carpeta tiene permiso.
+   · Indicador discreto en el botón 💾: verde = copia de esta semana hecha; naranja = falta. */
+(function(){
+  var TABLAS = ['pacientes','paciente_clinica','medicacion','evoluciones','paciente_tablas','paciente_tablas_historial','paciente_profesionales','paciente_pendientes','mdpa_estudios','mdpa_estudios_historial','adiposidad_tratamientos','adiposidad_efca','urcym_agenda_config','urcym_recetas','urcym_ingresos','urcym_gastos','urcym_personal','online_pedidos','video_reservas','auditoria','urcym_comunicados','urcym_comunicados_envios'];
+  var E = function(t){ return String(t == null ? '' : t).replace(/[&<>"]/g, function(c){ return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' }[c]; }); };
+  var hoyISO = function(){ return new Date().toLocaleDateString('sv-SE', { timeZone:'America/Argentina/Buenos_Aires' }); };
+  var fDMA = function(x){ if(!x) return ''; var s = String(x); var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s); if(!m) return s; return m[3] + '/' + m[2] + '/' + m[1]; };
+  var esProf = function(){ return typeof currentUser !== 'undefined' && currentUser && !currentUser.secretaria; };
+  var estado = null; // { fecha, por, registros, carpeta, drive }
+
+  /* ── Carpeta elegida (se recuerda en esta compu) ── */
+  function idb(){ return new Promise(function(res, rej){ var r = indexedDB.open('urcym-copias', 1); r.onupgradeneeded = function(){ r.result.createObjectStore('h'); }; r.onsuccess = function(){ res(r.result); }; r.onerror = function(){ rej(r.error); }; }); }
+  async function hGet(){ try { var db = await idb(); return await new Promise(function(res){ var q = db.transaction('h').objectStore('h').get('dir'); q.onsuccess = function(){ res(q.result || null); }; q.onerror = function(){ res(null); }; }); } catch(e){ return null; } }
+  async function hSet(v){ try { var db = await idb(); await new Promise(function(res){ var tx = db.transaction('h', 'readwrite'); if(v) tx.objectStore('h').put(v, 'dir'); else tx.objectStore('h').delete('dir'); tx.oncomplete = res; tx.onerror = res; }); } catch(e){} }
+  var puedeCarpeta = typeof window.showDirectoryPicker === 'function';
+  async function elegirCarpeta(){
+    if(!puedeCarpeta){ alert('Este navegador no permite elegir carpeta. Usá Chrome o Edge en la compu.'); return null; }
+    try { var h = await window.showDirectoryPicker({ id: 'urcym-copias', mode: 'readwrite' }); await hSet(h); return h; } catch(e){ return null; }
+  }
+  async function permiso(h, pedir){
+    try { var o = { mode: 'readwrite' }; var p = await h.queryPermission(o); if(p === 'granted') return true; if(pedir) return (await h.requestPermission(o)) === 'granted'; } catch(e){}
+    return false;
+  }
+
+  /* ── Lectura de toda la base ── */
+  async function traerTodo(prog){
+    var out = { generado: new Date().toISOString(), version: window.URCYM_BUILD || '', tablas: {} }, errores = [];
+    for(var i = 0; i < TABLAS.length; i++){
+      var t = TABLAS[i]; if(prog) prog(Math.round(100 * i / TABLAS.length));
+      var filas = [];
+      for(var desde = 0; ; desde += 1000){
+        var r; try { r = await sb.from(t).select('*').range(desde, desde + 999); } catch(e){ r = { error: e }; }
+        if(r.error){ if(!/does not exist|schema cache|Could not find/i.test(r.error.message || '') || /^(pacientes|paciente_clinica|medicacion|evoluciones|paciente_tablas|mdpa_estudios)$/.test(t)) errores.push(t + ': ' + (r.error.message || r.error)); break; }
+        filas = filas.concat(r.data || []);
+        if(!r.data || r.data.length < 1000) break;
+      }
+      out.tablas[t] = filas;
+    }
+    return { out: out, errores: errores };
+  }
+
+  /* ── HC legible (un solo HTML, se abre con cualquier navegador, sin internet) ── */
+  function limpiar(h){ return String(h || '').replace(/<\s*(script|iframe|object|embed|style|link|meta)[\s\S]*?(<\/\s*\1\s*>|$)/gi, '').replace(/\son[a-z]+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, '').replace(/contenteditable="[^"]*"/gi, ''); }
+  function tablaHTML(tipo, datos){
+    var F = tipo === 'lab' ? LAB_FILAS : tipo === 'est' ? EST_FILAS : ANT_FILAS;
+    if(!datos || !Array.isArray(datos.columnas) || !Array.isArray(datos.filas) || !datos.columnas.length) return '';
+    var ext = datos.extraFilas || [], cols = datos.columnas;
+    var orden = cols.map(function(c, i){ return { c: c, i: i }; }).sort(function(a, b){ return String(a.c).localeCompare(String(b.c)); });
+    var rows = '';
+    var n = Math.max(datos.filas.length, F.length + ext.length);
+    for(var i = 0; i < n; i++){
+      var f = F[i], lbl = f ? f.label : ext[i - F.length]; if(!lbl) continue;
+      var fila = datos.filas[i] || [];
+      if(f && f.cat){ rows += '<tr class="cat"><td colspan="' + (cols.length + 1) + '">' + E(lbl) + '</td></tr>'; continue; }
+      if(!orden.some(function(o){ var v = fila[o.i]; return v != null && String(v).trim() !== ''; })) continue;
+      var u = f ? ((datos.unidades && datos.unidades[f.key]) || (f.unidades || [''])[0] || '') : '';
+      rows += '<tr><th>' + E(lbl) + (u ? ' <small>' + E(u) + '</small>' : '') + '</th>' + orden.map(function(o){ var v = fila[o.i]; return '<td>' + E(v == null ? '' : (typeof v === 'object' ? JSON.stringify(v) : v)) + '</td>'; }).join('') + '</tr>';
+    }
+    rows = rows.replace(/<tr class="cat">[^]*?<\/tr>(?=<tr class="cat">|$)/g, '');
+    if(!rows) return '';
+    return '<div class="tw"><table><tr><th></th>' + orden.map(function(o){ return '<th class="f">' + E(fDMA(o.c) || o.c) + '</th>'; }).join('') + '</tr>' + rows + '</table></div>';
+  }
+  function objHTML(o){
+    var skip = /^(id|dni_paciente|created_at|updated_at|creado|actualizado)$/;
+    return '<table class="kv">' + Object.keys(o).filter(function(k){ var v = o[k]; return !skip.test(k) && v != null && v !== '' && v !== false && !(Array.isArray(v) && !v.length); }).map(function(k){ var v = o[k]; return '<tr><th>' + E(k.replace(/_/g, ' ')) + '</th><td>' + E(typeof v === 'object' ? JSON.stringify(v) : v) + '</td></tr>'; }).join('') + '</table>';
+  }
+  function legible(out){
+    var T = out.tablas, por = function(t){ var m = {}; (T[t] || []).forEach(function(r){ var d = r.dni_paciente || r.dni; (m[d] = m[d] || []).push(r); }); return m; };
+    var ev = por('evoluciones'), tb = por('paciente_tablas'), md = por('mdpa_estudios'), me = por('medicacion'), cl = por('paciente_clinica'), ad = por('adiposidad_tratamientos');
+    var pac = (T.pacientes || []).slice().sort(function(a, b){ return ((a.apellido || '') + ' ' + (a.nombre || '')).localeCompare((b.apellido || '') + ' ' + (b.nombre || ''), 'es'); });
+    var DX = (typeof INV_DX_LABELS !== 'undefined') ? INV_DX_LABELS : {};
+    var cuerpo = pac.map(function(p){
+      var d = p.dni, c = (cl[d] || [])[0] || {};
+      var dx = Object.keys(DX).filter(function(k){ return c['dx_' + k]; }).map(function(k){ return DX[k]; });
+      var evs = (ev[d] || []).slice().sort(function(a, b){ return String(b.fecha_hora || '').localeCompare(String(a.fecha_hora || '')); });
+      var tabs = {}; (tb[d] || []).forEach(function(r){ tabs[r.tipo] = r.datos; });
+      var meds = (me[d] || []).filter(function(m){ return m.activo; });
+      var h = '<details class="p" id="p' + E(d) + '" data-q="' + E(((p.apellido || '') + ' ' + (p.nombre || '') + ' ' + d).toLowerCase()) + '"><summary><b>' + E((p.apellido || '') + ', ' + (p.nombre || '')) + '</b> <span>DNI ' + E(d) + (p.fecha_nacimiento ? ' · nac. ' + fDMA(p.fecha_nacimiento) : '') + (p.obra_social ? ' · ' + E(p.obra_social) : '') + ' · ' + evs.length + ' evoluciones</span></summary>';
+      if(dx.length || c.otras_enfermedades) h += '<h3>Diagnósticos</h3><p>' + E(dx.join(' · ')) + (c.otras_enfermedades ? '<br>' + E(c.otras_enfermedades) : '') + '</p>';
+      if(meds.length) h += '<h3>Medicación activa</h3><ul>' + meds.map(function(m){ return '<li>' + E([m.farmaco, m.dosis, m.frecuencia].filter(Boolean).join(' ')) + (m.grupo ? ' <small>(' + E(m.grupo) + ')</small>' : '') + '</li>'; }).join('') + '</ul>';
+      [['lab', 'Laboratorio'], ['ant', 'Antropometría'], ['est', 'Estudios']].forEach(function(x){ var t = tablaHTML(x[0], tabs[x[0]]); if(t) h += '<h3>' + x[1] + '</h3>' + t; });
+      if((md[d] || []).length) h += '<h3>MAPA / MDPA</h3>' + md[d].map(objHTML).join('');
+      if((ad[d] || []).length) h += '<h3>Tratamiento de adiposidad</h3>' + ad[d].map(objHTML).join('');
+      if(evs.length) h += '<h3>Evoluciones</h3>' + evs.map(function(e){ return '<div class="ev"><div class="evf">' + E(fDMA(e.fecha_hora)) + (e.profesional ? ' · ' + E(e.profesional) : '') + '</div>' + limpiar(e.contenido_html || e.contenido || '') + '</div>'; }).join('');
+      if(c && Object.keys(c).length){ h += '<details class="dc"><summary>Datos clínicos completos</summary>' + objHTML(c) + '</details>'; }
+      return h + '</details>';
+    }).join('');
+    return '<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>URCyM · Historias clínicas · copia ' + E(fDMA(out.generado)) + '</title><style>'
+      + 'body{font:14px/1.5 Arial,Helvetica,sans-serif;color:#1e293b;margin:0;background:#f1f5f9}header{position:sticky;top:0;background:#0f766e;color:#fff;padding:12px 18px;z-index:2}header h1{font-size:17px;margin:0 0 6px}header input{width:100%;max-width:420px;padding:7px 10px;border-radius:8px;border:0;font-size:14px}main{padding:12px 18px;max-width:1200px;margin:0 auto}'
+      + '.p{background:#fff;border:1px solid #e2e8f0;border-radius:10px;margin:0 0 8px;padding:8px 14px}.p>summary{cursor:pointer}.p>summary span{color:#64748b;font-size:12.5px}h3{font-size:13px;text-transform:uppercase;letter-spacing:.05em;color:#0f766e;margin:16px 0 6px;border-bottom:1px solid #e2e8f0}'
+      + '.tw{overflow:auto}table{border-collapse:collapse;font-size:12.5px;margin-bottom:6px}td,th{border:1px solid #e2e8f0;padding:3px 7px;text-align:left;vertical-align:top}th{background:#f8fafc;font-weight:600;white-space:nowrap}th small{color:#94a3b8;font-weight:400}th.f{text-align:center}tr.cat td{background:#ecfeff;font-weight:700;font-size:11.5px}'
+      + '.kv th{width:220px}.ev{border-left:3px solid #99f6e4;padding:4px 12px;margin:0 0 12px}.evf{font-weight:700;color:#0f766e;font-size:12.5px;margin-bottom:4px}.dc summary{cursor:pointer;color:#64748b;font-size:12.5px;margin-top:10px}@media print{header{position:static}.p{break-inside:avoid-page}}'
+      + '</style></head><body><header><h1>URCyM · Historias clínicas · copia del ' + E(fDMA(out.generado)) + ' · ' + pac.length + ' pacientes</h1><input id="q" type="search" placeholder="Buscar paciente por apellido, nombre o DNI…"></header><main>' + cuerpo + '</main>'
+      + '<script>var q=document.getElementById("q");q.oninput=function(){var t=q.value.toLowerCase().trim();document.querySelectorAll(".p").forEach(function(p){var ok=!t||p.dataset.q.indexOf(t)>=0;p.style.display=ok?"":"none";});};<\/script></body></html>';
+  }
+
+  /* ── Hacer la copia ── */
+  async function guardarArchivos(h, archivos){
+    for(var i = 0; i < archivos.length; i++){
+      var fh = await h.getFileHandle(archivos[i].nombre, { create: true }); var w = await fh.createWritable(); await w.write(archivos[i].blob); await w.close();
+    }
+  }
+  function descargar(archivos){ archivos.forEach(function(a, i){ setTimeout(function(){ var l = document.createElement('a'); l.href = URL.createObjectURL(a.blob); l.download = a.nombre; document.body.appendChild(l); l.click(); l.remove(); }, i * 700); }); }
+  function aviso(html, ok){ var v = document.getElementById('aviso-copia'); if(v) v.remove(); var b = document.createElement('div'); b.id = 'aviso-copia'; if(!ok) b.style.cssText = 'background:#fef2f2;border-color:#dc2626;color:#991b1b'; b.innerHTML = html + ' <button type="button">OK</button>'; b.querySelector('button').onclick = function(){ b.remove(); }; document.body.appendChild(b); if(ok) setTimeout(function(){ if(b.isConnected) b.remove(); }, 12000); }
+
+  window.urcymBackup = async function(opts){
+    opts = opts || {};
+    var btn = document.getElementById('btn-backup'), txt0 = '💾 Copia';
+    var h = await hGet(), conCarpeta = false;
+    if(h) conCarpeta = await permiso(h, !opts.silencioso);
+    if(opts.silencioso && !conCarpeta) return false;
+    var res = await traerTodo(function(p){ if(btn) btn.firstChild.textContent = '💾 ' + p + '% '; });
+    if(btn) btn.firstChild.textContent = txt0 + ' ';
+    var out = res.out, f = hoyISO();
+    var total = Object.keys(out.tablas).reduce(function(s, k){ return s + out.tablas[k].length; }, 0);
+    var archivos = [{ nombre: 'urcym-copia-' + f + '.json', blob: new Blob([JSON.stringify(out)], { type: 'application/json' }) }];
+    try { archivos.push({ nombre: 'urcym-HC-legible-' + f + '.html', blob: new Blob([legible(out)], { type: 'text/html' }) }); } catch(e){ console.warn('HC legible', e); }
+    var donde = '';
+    if(conCarpeta){ try { await guardarArchivos(h, archivos); donde = 'en tu carpeta <b>' + E(h.name) + '</b>'; } catch(e){ conCarpeta = false; console.warn('carpeta', e); } }
+    if(!conCarpeta){ descargar(archivos); donde = 'en <b>Descargas</b>'; }
+    if(res.errores.length){ aviso('⚠️ La copia quedó <b>INCOMPLETA</b> (' + res.errores.length + ' tablas no respondieron). Recargá la página (F5) y volvé a intentar.', false); console.warn(res.errores); pintar(); return false; }
+    estado = { fecha: out.generado, por: (typeof selectedUser !== 'undefined' ? selectedUser : ''), registros: total, carpeta: conCarpeta ? h.name : null, drive: conCarpeta && /drive|unidad/i.test(h.name) ? true : false };
+    try { await sb.from('urcym_agenda_config').upsert({ key: 'ultima_copia', value: JSON.stringify(estado) }, { onConflict: 'key' }); } catch(e){}
+    var n = (out.tablas.pacientes || []).length, ne = (out.tablas.evoluciones || []).length;
+    aviso((opts.silencioso ? '💾 Copia semanal automática lista: ' : '✓ Copia completa: ') + n + ' pacientes, ' + ne + ' evoluciones (' + total + ' registros). Quedó ' + donde + ': la base completa (.json) y la HC legible (.html).', true);
+    pintar(); return true;
+  };
+
+  /* ── Indicador y menú ── */
+  function dias(){ return estado && estado.fecha ? Math.floor((Date.now() - new Date(estado.fecha).getTime()) / 864e5) : null; }
+  function pintar(){
+    var b = document.getElementById('btn-backup'); if(!b) return;
+    if(!b._v2){ b._v2 = true; b.removeAttribute('onclick'); b.onclick = function(e){ e.stopPropagation(); menu(); }; b.innerHTML = '💾 Copia <i class="bk-dot"></i>'; }
+    var d = dias(), ok = d != null && d < 7;
+    var dot = b.querySelector('.bk-dot'); dot.className = 'bk-dot ' + (ok ? 'ok' : 'falta');
+    b.title = ok ? 'Copia de esta semana hecha (' + fDMA(estado.fecha) + ')' : (d == null ? 'Falta la copia de seguridad' : 'Falta la copia de esta semana (última: hace ' + d + ' días)');
+  }
+  async function menu(){
+    var v = document.getElementById('bk-menu'); if(v){ v.remove(); return; }
+    var h = await hGet(), d = dias();
+    var m = document.createElement('div'); m.id = 'bk-menu';
+    m.innerHTML = '<div class="bk-t">💾 Copia de seguridad</div>'
+      + '<div class="bk-row ' + (d != null && d < 7 ? 'ok' : 'falta') + '">' + (d != null && d < 7 ? '✅ Copia de esta semana hecha' : '⏳ Falta la copia de esta semana') + '</div>'
+      + (estado && estado.fecha ? '<div class="bk-s">Última: ' + fDMA(estado.fecha) + (estado.por ? ' · ' + E(estado.por) : '') + (estado.carpeta ? ' · carpeta ' + E(estado.carpeta) : ' · descargada') + '</div>' : '<div class="bk-s">Todavía no hay registro de ninguna copia.</div>')
+      + '<button type="button" class="bk-go">💾 Hacer copia ahora</button>'
+      + '<div class="bk-sep"></div>'
+      + (puedeCarpeta ? (h ? '<div class="bk-s">📁 Se guarda en: <b>' + E(h.name) + '</b></div><button type="button" class="bk-dir lnk">Cambiar carpeta</button><button type="button" class="bk-sin lnk">Dejar de usar carpeta (descargar)</button>'
+          : '<div class="bk-s">Elegí la carpeta de <b>Google Drive</b> en tu compu (por ejemplo <i>Mi unidad › URCyM copias</i>): la copia queda en la PC y Drive la sube sola. Y se hace sola una vez por semana al abrir el sistema.</div><button type="button" class="bk-dir">📁 Elegir carpeta</button>')
+        : '<div class="bk-s">Para guardar directo en una carpeta (Drive) usá Chrome o Edge en la compu.</div>')
+      + (!(estado && estado.drive) && estado && estado.fecha ? '<label class="bk-ck"><input type="checkbox" class="bk-drive"> ☁ Ya la subí al Drive</label>' : '')
+      + '<div class="bk-s mini">Se guardan 2 archivos: la base completa (.json, para restaurar el sistema) y la HC legible (.html, se abre con cualquier navegador).</div>';
+    document.body.appendChild(m);
+    var b = document.getElementById('btn-backup').getBoundingClientRect();
+    m.style.top = (b.bottom + 6) + 'px'; m.style.left = Math.max(8, Math.min(b.left, innerWidth - m.offsetWidth - 8)) + 'px';
+    m.querySelector('.bk-go').onclick = function(){ m.remove(); window.urcymBackup(); };
+    var bd = m.querySelector('.bk-dir'); if(bd) bd.onclick = async function(){ var nh = await elegirCarpeta(); m.remove(); if(nh && confirm('Listo: las copias se van a guardar en "' + nh.name + '".\n\n¿Hacer la copia ahora?')) window.urcymBackup(); };
+    var bs = m.querySelector('.bk-sin'); if(bs) bs.onclick = async function(){ await hSet(null); m.remove(); };
+    var dr = m.querySelector('.bk-drive'); if(dr) dr.onchange = async function(){ estado.drive = dr.checked; try { await sb.from('urcym_agenda_config').upsert({ key: 'ultima_copia', value: JSON.stringify(estado) }, { onConflict: 'key' }); } catch(e){} };
+    setTimeout(function(){ document.addEventListener('mousedown', function f(e){ if(!m.contains(e.target)){ m.remove(); document.removeEventListener('mousedown', f, true); } }, true); }, 0);
+  }
+  async function leerEstado(){
+    try { var r = await sb.from('urcym_agenda_config').select('value').eq('key', 'ultima_copia').maybeSingle(); var v = r && r.data && r.data.value; if(typeof v === 'string') v = JSON.parse(v); estado = v || null; } catch(e){}
+    pintar();
+  }
+  var autoHecho = false;
+  async function inicio(){
+    if(!esProf()) return;
+    await leerEstado();
+    var d = dias();
+    if(!autoHecho && (d == null || d >= 7)){ autoHecho = true; var h = await hGet(); if(h && await permiso(h, false)) window.urcymBackup({ silencioso: true }); }
+  }
+  setTimeout(inicio, 8000);
+  setInterval(function(){ if(esProf()) leerEstado(); }, 3 * 3600 * 1000);
+})();
+</script>
+<style>
+#btn-backup .bk-dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-left:3px;vertical-align:middle;background:#cbd5e1}
+#btn-backup .bk-dot.ok{background:#16a34a}
+#btn-backup .bk-dot.falta{background:#f59e0b;box-shadow:0 0 0 3px rgba(245,158,11,.18)}
+#bk-menu{position:fixed;z-index:100070;background:#fff;border:1.5px solid #e2e8f0;border-radius:12px;padding:12px 14px;box-shadow:0 12px 34px rgba(0,0,0,.16);width:310px;font-family:var(--font-main);font-size:13px;color:#334155}
+#bk-menu .bk-t{font-weight:800;font-size:14px;margin-bottom:8px}
+#bk-menu .bk-row{font-weight:700;padding:6px 9px;border-radius:8px;margin-bottom:4px}
+#bk-menu .bk-row.ok{background:#f0fdf4;color:#166534}#bk-menu .bk-row.falta{background:#fff7ed;color:#9a3412}
+#bk-menu .bk-s{font-size:12px;color:#64748b;margin:4px 0 6px;line-height:1.45}
+#bk-menu .bk-s.mini{font-size:11px;margin-top:8px}
+#bk-menu button{display:block;width:100%;margin:4px 0;padding:8px 10px;border-radius:9px;border:1.5px solid var(--teal);background:var(--teal);color:#fff;font:700 12.5px var(--font-main);cursor:pointer}
+#bk-menu button.bk-dir{background:#fff;color:var(--teal)}
+#bk-menu button.lnk{border:none;background:none;color:#64748b;font-weight:600;text-align:left;padding:3px 0;text-decoration:underline}
+#bk-menu .bk-sep{border-top:1px solid #f1f5f9;margin:8px 0}
+#bk-menu .bk-ck{display:flex;gap:6px;align-items:center;font-size:12.5px;margin-top:6px;text-transform:none;letter-spacing:0;font-weight:600;cursor:pointer}
 </style>
 
 </body>
