@@ -2,7 +2,7 @@
 <html lang="es-AR">
 <head>
   <meta charset="UTF-8" />
-  <script>var URCYM_BUILD = '2026-11-14-0820';</script>
+  <script>var URCYM_BUILD = '2026-11-14-1200';</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Evaluaciones cardiometabólicas — Sistema de Historia Clínica</title>
 
@@ -42764,5 +42764,329 @@ function _invToggleDroga(key){
   };
 })();
 </script>
+<script>
+/* ══ 📣 Comunicados a pacientes ══
+   Un mensaje (y adjuntos) a varios pacientes a la vez: guía actualizada, vacaciones, avisos.
+   NO es una evolución: queda en un historial aparte (urcym_comunicados / _envios) y en la ficha
+   del paciente se ve "✉ Comunicados (n)". Sale desde el Gmail del profesional, uno por uno,
+   y SOLO al mail registrado en la ficha de cada paciente. */
+(function(){
+  var FN = 'https://qdjzetylyojfjdottjrk.supabase.co/functions/v1/video-turnos';
+  var E = function(t){ return String(t == null ? '' : t).replace(/[&<>"]/g, function(c){ return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' }[c]; }); };
+  var okMail = function(m){ return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(String(m || '').trim()); };
+  var fDMA = function(iso){ if(!iso) return ''; var d = new Date(iso); if(isNaN(d)) return String(iso).slice(0, 10); return d.toLocaleDateString('es-AR', { day:'2-digit', month:'2-digit', year:'numeric', timeZone:'America/Argentina/Buenos_Aires' }); };
+  var sinAc = function(x){ return String(x || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase(); };
+  var PLANT = {
+    guia: { asunto: 'Actualización de la guía', texto: 'Te escribimos para compartirte la versión actualizada de la guía. La tenés en el archivo adjunto.\n\nCualquier duda la conversamos en la próxima consulta.' },
+    vac: { asunto: 'Aviso: vacaciones', texto: 'Te avisamos que no vamos a estar atendiendo entre el __/__ y el __/__.\n\nSi necesitás una receta o tenés una consulta, escribinos antes de esa fecha. Ante una urgencia, acudí a la guardia más cercana.' },
+    aviso: { asunto: 'Aviso importante', texto: '' }
+  };
+  var D = null; // datos para los filtros (se traen una vez por apertura)
+
+  async function traerDatos(){
+    var pac = (typeof pacientesData !== 'undefined' && pacientesData && pacientesData.length) ? pacientesData : null;
+    if(!pac){ if(typeof cargarPacientes === 'function') await cargarPacientes(); pac = pacientesData || []; }
+    var r = await Promise.all([
+      _t1TraerTodo('paciente_clinica', '*').catch(function(){ return []; }),
+      _t1TraerTodo('medicacion', 'dni_paciente,grupo,farmaco', function(q){ return q.eq('activo', true); }).catch(function(){ return []; }),
+      _t1TraerTodo('evoluciones', 'dni_paciente,fecha_hora').catch(function(){ return []; })
+    ]);
+    var cli = {}; r[0].forEach(function(c){ cli[c.dni_paciente] = c; });
+    var med = {}; r[1].forEach(function(m){ (med[m.dni_paciente] = med[m.dni_paciente] || []).push(m); });
+    var ult = {}; r[2].forEach(function(e){ var f = String(e.fecha_hora || '').slice(0, 10); if(f && (!ult[e.dni_paciente] || f > ult[e.dni_paciente])) ult[e.dni_paciente] = f; });
+    return { pac: pac.slice().sort(function(a, b){ return ((a.apellido || '') + (a.nombre || '')).localeCompare((b.apellido || '') + (b.nombre || ''), 'es'); }), cli: cli, med: med, ult: ult };
+  }
+
+  function profActual(){ return { barbara:'BG', omar:'OB' }[String((typeof selectedUser !== 'undefined' && selectedUser) || '').toLowerCase()] || 'BG'; }
+
+  window.comunicadoAbrir = async function(){
+    var bg = document.createElement('div'); bg.className = 'com-bg';
+    bg.innerHTML = '<div class="com-box"><div class="com-hd"><b>📣 Comunicado a pacientes</b><span class="com-tabs"><button type="button" class="on" data-t="nuevo">Nuevo</button><button type="button" data-t="hist">📜 Enviados</button></span><button type="button" class="com-x" title="Cerrar">×</button></div><div class="com-bd"><div class="com-cargando">⏳ Cargando pacientes…</div></div></div>';
+    document.body.appendChild(bg);
+    var bd = bg.querySelector('.com-bd');
+    var enviando = false;
+    bg.querySelector('.com-x').onclick = function(){ if(enviando && !confirm('Se está enviando. ¿Cerrar igual? (lo que falta no se manda)')) return; enviando = false; bg.remove(); };
+    bg.querySelectorAll('.com-tabs button').forEach(function(b){ b.onclick = function(){ if(enviando) return; bg.querySelectorAll('.com-tabs button').forEach(function(x){ x.classList.toggle('on', x === b); }); if(b.dataset.t === 'hist') pintarHist(); else pintarNuevo(); }; });
+    try { D = await traerDatos(); } catch(e){ bd.innerHTML = '<div class="com-err">No se pudieron traer los pacientes: ' + E(e.message || e) + '</div>'; return; }
+    var materiales = (typeof _leerMateriales === 'function') ? await _leerMateriales() : [];
+    var F = { dx:'', farm:'', cob:'', sexo:'', desde:'', q:'' }, desmarcados = {}, archivos = [];
+    var st = { asunto:'', texto:'', prof: profActual(), mats: {} };
+
+    function cumple(p){
+      var c = D.cli[p.dni] || {};
+      if(F.dx && !c['dx_' + F.dx]) return false;
+      if(F.farm && !(D.med[p.dni] || []).some(function(m){ return sinAc(m.grupo).slice(0, 9) === sinAc(F.farm).slice(0, 9); })) return false;
+      if(F.cob && String(p.obra_social || '') !== F.cob) return false;
+      if(F.sexo && !new RegExp('^' + F.sexo, 'i').test(String(p.sexo || ''))) return false;
+      if(F.desde && !((D.ult[p.dni] || '') >= F.desde)) return false;
+      if(F.q){ var t = sinAc((p.apellido || '') + ' ' + (p.nombre || '') + ' ' + p.dni + ' ' + (p.email || '')); if(t.indexOf(sinAc(F.q)) < 0) return false; }
+      return true;
+    }
+    function elegidos(){ return D.pac.filter(function(p){ return cumple(p) && okMail(p.email) && !desmarcados[p.dni]; }); }
+
+    function pintarNuevo(){
+      var dxOp = Object.keys(INV_DX_LABELS || {}).sort(function(a, b){ return INV_DX_LABELS[a].localeCompare(INV_DX_LABELS[b], 'es'); }).map(function(k){ return '<option value="' + k + '"' + (F.dx === k ? ' selected' : '') + '>' + E(INV_DX_LABELS[k]) + '</option>'; }).join('');
+      var cobs = {}; D.pac.forEach(function(p){ if(p.obra_social) cobs[p.obra_social] = 1; });
+      var cobOp = Object.keys(cobs).sort().map(function(c){ return '<option' + (F.cob === c ? ' selected' : '') + '>' + E(c) + '</option>'; }).join('');
+      var farmOp = (typeof GRUPOS_MED !== 'undefined' ? GRUPOS_MED : []).map(function(g){ return '<option' + (F.farm === g ? ' selected' : '') + '>' + E(g) + '</option>'; }).join('');
+      bd.innerHTML =
+        '<div class="com-sec"><div class="com-st">1 · ¿A quiénes?</div>'
+        + '<div class="com-flt">'
+        + '<select data-f="dx"><option value="">Diagnóstico: todos</option>' + dxOp + '</select>'
+        + '<select data-f="farm"><option value="">Medicación: cualquiera</option>' + farmOp + '</select>'
+        + '<select data-f="cob"><option value="">Cobertura: todas</option>' + cobOp + '</select>'
+        + '<select data-f="sexo"><option value="">Sexo: todos</option><option value="f"' + (F.sexo === 'f' ? ' selected' : '') + '>Mujeres</option><option value="m"' + (F.sexo === 'm' ? ' selected' : '') + '>Varones</option></select>'
+        + '<label class="com-desde">Consultó desde <input type="date" data-f="desde" value="' + E(F.desde) + '"></label>'
+        + '<input type="search" data-f="q" placeholder="🔍 Buscar nombre, DNI o mail" value="' + E(F.q) + '">'
+        + '</div><div class="com-cuenta"></div><div class="com-lista"></div></div>'
+        + '<div class="com-sec"><div class="com-st">2 · Mensaje</div>'
+        + '<div class="com-pl">Plantillas: <button type="button" data-p="guia">📘 Guía actualizada</button><button type="button" data-p="vac">🌴 Vacaciones</button><button type="button" data-p="aviso">📢 Aviso</button></div>'
+        + '<div class="com-row"><input type="text" class="com-asunto" placeholder="Asunto del mail" value="' + E(st.asunto) + '"><select class="com-prof" title="Sale desde el Gmail de…"><option value="BG"' + (st.prof === 'BG' ? ' selected' : '') + '>Firma: Dra. Guerrero</option><option value="OB"' + (st.prof === 'OB' ? ' selected' : '') + '>Firma: Dr. Bertani</option></select></div>'
+        + '<div class="com-hola">Hola <i>(nombre de cada paciente)</i>,</div>'
+        + '<textarea class="com-texto" rows="6" placeholder="Escribí el mensaje…">' + E(st.texto) + '</textarea>'
+        + '<div class="com-nota">Cada paciente lo recibe por separado (nadie ve los mails de los demás), con su nombre, y puede responderte el mail.</div></div>'
+        + '<div class="com-sec"><div class="com-st">3 · Adjuntos <span>(opcional)</span></div>'
+        + '<div class="com-adj-compu"></div><input type="file" class="com-file" multiple accept="application/pdf,image/*" style="display:none"><button type="button" class="com-file-btn">📎 Archivo de la compu (ej. el PDF de la guía)</button>'
+        + (materiales.length ? '<details class="com-mats"' + (Object.keys(st.mats).length ? ' open' : '') + '><summary>📚 De la biblioteca de materiales</summary>' + _htmlListaMateriales(materiales, true) + '</details>' : '')
+        + '</div>'
+        + '<div class="com-pie"><button type="button" class="com-prev">👁 Vista previa</button><button type="button" class="com-env">Enviar</button></div>'
+        + '<div class="com-prog"></div>';
+      // filtros
+      bd.querySelectorAll('[data-f]').forEach(function(el){ el.addEventListener(el.tagName === 'INPUT' && el.type !== 'date' ? 'input' : 'change', function(){ F[el.dataset.f] = el.value; pintarLista(); }); });
+      // mensaje
+      var as = bd.querySelector('.com-asunto'), tx = bd.querySelector('.com-texto'), pr = bd.querySelector('.com-prof');
+      as.oninput = function(){ st.asunto = as.value; pintarPie(); }; tx.oninput = function(){ st.texto = tx.value; pintarPie(); }; pr.onchange = function(){ st.prof = pr.value; };
+      bd.querySelectorAll('.com-pl button').forEach(function(b){ b.onclick = function(){
+        var p = PLANT[b.dataset.p]; if((st.texto || st.asunto) && !confirm('¿Reemplazar el asunto y el mensaje que escribiste?')) return;
+        st.asunto = as.value = p.asunto; st.texto = tx.value = p.texto; tx.focus(); pintarPie(); }; });
+      // adjuntos
+      var inp = bd.querySelector('.com-file');
+      bd.querySelector('.com-file-btn').onclick = function(){ inp.click(); };
+      inp.onchange = function(){ Array.prototype.forEach.call(inp.files || [], function(f){ if(f.size > 25 * 1024 * 1024){ alert('"' + f.name + '" pesa más de 25 MB.'); return; } archivos.push({ file: f }); }); inp.value = ''; pintarAdj(); };
+      bd.querySelectorAll('.ui-mat').forEach(function(c){ c.checked = !!st.mats[c.value]; c.onchange = function(){ if(c.checked) st.mats[c.value] = 1; else delete st.mats[c.value]; }; });
+      bd.querySelector('.com-prev').onclick = vistaPrevia;
+      bd.querySelector('.com-env').onclick = enviar;
+      pintarAdj(); pintarLista();
+    }
+    function pintarAdj(){
+      var w = bd.querySelector('.com-adj-compu'); if(!w) return;
+      w.innerHTML = archivos.map(function(a, i){ var kb = a.file.size > 1048576 ? (a.file.size / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(a.file.size / 1024)) + ' KB';
+        return '<div class="com-adj">📄 <span>' + E(a.file.name) + ' <small>' + kb + (a.file.size > 3.5 * 1048576 ? ' · va como link de descarga' : '') + '</small></span><button type="button" data-i="' + i + '" title="Quitar">✕</button></div>'; }).join('');
+      w.querySelectorAll('button').forEach(function(b){ b.onclick = function(){ archivos.splice(+b.dataset.i, 1); pintarAdj(); }; });
+    }
+    function pintarLista(){
+      var l = bd.querySelector('.com-lista'); if(!l) return;
+      var filt = D.pac.filter(cumple), conM = filt.filter(function(p){ return okMail(p.email); }), sel = elegidos();
+      bd.querySelector('.com-cuenta').innerHTML = '<b>' + sel.length + '</b> tildados de ' + filt.length + ' que cumplen' + (filt.length - conM.length ? ' · <span class="com-sinm">' + (filt.length - conM.length) + ' sin mail cargado</span>' : '')
+        + ' <button type="button" class="com-todos">Tildar todos</button><button type="button" class="com-ning">Destildar todos</button>';
+      bd.querySelector('.com-todos').onclick = function(){ filt.forEach(function(p){ delete desmarcados[p.dni]; }); pintarLista(); };
+      bd.querySelector('.com-ning').onclick = function(){ filt.forEach(function(p){ desmarcados[p.dni] = 1; }); pintarLista(); };
+      var MAX = 400;
+      l.innerHTML = filt.slice(0, MAX).map(function(p){
+        var m = okMail(p.email), on = m && !desmarcados[p.dni], u = D.ult[p.dni];
+        return '<label class="com-p' + (m ? '' : ' sin') + '"><input type="checkbox" data-dni="' + E(p.dni) + '"' + (on ? ' checked' : '') + (m ? '' : ' disabled') + '><span class="n">' + E((p.apellido || '') + ', ' + (p.nombre || '')) + '</span><span class="m">' + (m ? E(p.email) : 'sin mail') + '</span><span class="u">' + (u ? 'últ. ' + fDMA(u + 'T12:00:00') : '') + '</span></label>';
+      }).join('') + (filt.length > MAX ? '<div class="com-nota">… y ' + (filt.length - MAX) + ' más (también están tildados). Usá los filtros o el buscador para ver otros.</div>' : '') + (!filt.length ? '<div class="com-nota">Ningún paciente cumple esos filtros.</div>' : '');
+      l.querySelectorAll('input[data-dni]').forEach(function(c){ c.onchange = function(){ if(c.checked) delete desmarcados[c.dataset.dni]; else desmarcados[c.dataset.dni] = 1; pintarLista(); }; });
+      pintarPie();
+    }
+    function pintarPie(){
+      var b = bd.querySelector('.com-env'); if(!b) return;
+      var n = elegidos().length; b.textContent = n ? '✉ Enviar a ' + n + ' paciente' + (n > 1 ? 's' : '') : 'Enviar'; b.disabled = !n || !st.asunto.trim() || !st.texto.trim();
+    }
+    function cuerpoMuestra(nombre){
+      var par = E(st.texto).split(/\n{2,}/).map(function(p){ return '<p>' + p.replace(/\n/g, '<br>') + '</p>'; }).join('');
+      var adj = archivos.map(function(a){ return '<li>📎 ' + E(a.file.name) + '</li>'; }).concat(materiales.filter(function(m){ return st.mats[m.id]; }).map(function(m){ return '<li>📎 ' + E(m.nombre) + '</li>'; })).join('');
+      return '<div class="com-mail"><div class="com-mail-as"><b>Asunto:</b> ' + E(st.asunto) + '</div><div class="com-mail-c"><h3>' + E(st.asunto) + '</h3><p>Hola ' + E(nombre) + ',</p>' + par + (adj ? '<ul>' + adj + '</ul>' : '') + '<p>Saludos,<br><b>' + (st.prof === 'OB' ? 'Dr. Omar Bertani' : 'Dra. Bárbara Guerrero') + '</b></p><p class="pie">Este es un mensaje informativo para los pacientes de URCyM. Si tenés dudas, respondé este mail.</p></div></div>';
+    }
+    function vistaPrevia(){
+      var s = elegidos()[0]; var nom = s ? String(s.nombre || '').trim().split(' ')[0] : 'María';
+      var m = _uiModal('👁 Así le llega a ' + E(nom), cuerpoMuestra(nom) + '<div style="text-align:right;margin-top:10px"><button type="button" class="ui-ok" style="padding:8px 16px;border-radius:9px;border:none;background:var(--teal);color:#fff;font-weight:700;cursor:pointer">Ok</button></div>');
+      m.bg.style.zIndex = 100090; m.box.querySelector('.ui-ok').onclick = m.cerrar;
+    }
+
+    async function subirArchivos(prog){
+      var out = [];
+      for(var i = 0; i < archivos.length; i++){
+        var a = archivos[i]; if(a.subido){ out.push(a.subido); continue; }
+        prog('Subiendo ' + a.file.name + '…');
+        var fd = new FormData(); fd.append('accion', 'staff_comunicado_subir'); fd.append('archivo', a.file, a.file.name);
+        var r = await fetch(FN, { method:'POST', body: fd }); var j = await r.json().catch(function(){ return {}; });
+        if(!r.ok) throw new Error(j.error || ('No se pudo subir ' + a.file.name + ' (' + r.status + ')'));
+        a.subido = j.adj; out.push(j.adj);
+      }
+      return out;
+    }
+    async function enviar(){
+      var lista = elegidos(); if(!lista.length) return;
+      if(!st.asunto.trim() || !st.texto.trim()){ alert('Falta el asunto o el mensaje.'); return; }
+      if(lista.length > 450 && !confirm('Gmail permite unos 500 mails por día. Son ' + lista.length + ': puede que algunos no salgan hoy y haya que reintentarlos mañana. ¿Seguir?')) return;
+      var nAdj = archivos.length + Object.keys(st.mats).length;
+      if(!confirm('¿Enviar "' + st.asunto + '" a ' + lista.length + ' paciente' + (lista.length > 1 ? 's' : '') + (nAdj ? ' con ' + nAdj + ' adjunto' + (nAdj > 1 ? 's' : '') : ' sin adjuntos') + '?')) return;
+      var pg = bd.querySelector('.com-prog');
+      var prog = function(t){ pg.innerHTML = '<div class="com-pg-t">' + t + '</div>'; };
+      bd.querySelectorAll('.com-sec, .com-pie').forEach(function(x){ x.style.display = 'none'; });
+      enviando = true;
+      var adjs;
+      try { adjs = await subirArchivos(prog); } catch(e){ enviando = false; prog('<span class="com-err">' + E(e.message) + '</span>'); bd.querySelectorAll('.com-sec, .com-pie').forEach(function(x){ x.style.display = ''; }); return; }
+      var id = (crypto.randomUUID ? crypto.randomUUID() : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c){ var r = Math.random() * 16 | 0; return (c === 'x' ? r : (r & 3 | 8)).toString(16); }));
+      var matsSel = materiales.filter(function(m){ return st.mats[m.id]; });
+      var ins = await sb.from('urcym_comunicados').insert({ id: id, prof: st.prof, autor: (typeof selectedUser !== 'undefined' ? selectedUser : null), asunto: st.asunto.trim(), texto: st.texto.trim(),
+        adjuntos: adjs.map(function(a){ return { nombre: a.nombre, path: a.path }; }).concat(matsSel.map(function(m){ return { nombre: m.nombre, material: m.id }; })),
+        filtros: F, n_destinatarios: lista.length });
+      if(ins.error){ enviando = false; prog('<span class="com-err">' + (/urcym_comunicados/.test(ins.error.message || '') ? 'Falta correr el SQL 26 en Supabase (crea el registro de comunicados).' : 'No se pudo registrar: ' + E(ins.error.message)) + '</span>'); bd.querySelectorAll('.com-sec, .com-pie').forEach(function(x){ x.style.display = ''; }); return; }
+      await mandarLote(id, lista, adjs, matsSel, pg);
+    }
+    async function mandarLote(id, lista, adjs, matsSel, pg){
+      enviando = true;
+      var ok = 0, fallas = [], detener = false;
+      pg.innerHTML = '<div class="com-pg-t"></div><div class="com-bar"><i></i></div><div class="com-pg-f"></div><button type="button" class="com-stop">⏸ Detener</button>';
+      pg.querySelector('.com-stop').onclick = function(){ detener = true; this.disabled = true; this.textContent = 'Deteniendo…'; };
+      for(var i = 0; i < lista.length; i++){
+        if(detener || !enviando) break;
+        var p = lista[i];
+        pg.querySelector('.com-pg-t').innerHTML = 'Enviando <b>' + (i + 1) + '</b> de ' + lista.length + ' · ' + E((p.apellido || '') + ', ' + (p.nombre || ''));
+        pg.querySelector('.com-bar i').style.width = Math.round(100 * i / lista.length) + '%';
+        try {
+          var fd = new FormData();
+          fd.append('accion', 'staff_comunicado'); fd.append('comunicado_id', id); fd.append('dni', p.dni); fd.append('prof', st.prof);
+          fd.append('asunto', st.asunto.trim()); fd.append('texto', st.texto.trim());
+          fd.append('adjuntos', JSON.stringify(adjs)); if(matsSel.length) fd.append('materiales', matsSel.map(function(m){ return m.id; }).join(','));
+          var r = await fetch(FN, { method:'POST', body: fd }); var j = await r.json().catch(function(){ return {}; });
+          if(!r.ok) throw new Error(j.error || ('Error ' + r.status));
+          ok++;
+        } catch(e){ fallas.push({ p: p, err: String(e.message || e) }); pg.querySelector('.com-pg-f').textContent = fallas.length + ' con error'; if(/sesi[oó]n|401/i.test(e.message)) { detener = true; } }
+        await new Promise(function(res){ setTimeout(res, 600); });
+      }
+      enviando = false;
+      var faltan = lista.length - ok - fallas.length;
+      pg.innerHTML = '<div class="com-fin">✅ <b>' + ok + '</b> enviado' + (ok === 1 ? '' : 's') + (fallas.length ? ' · ❌ <b>' + fallas.length + '</b> con error' : '') + (faltan > 0 ? ' · ⏸ ' + faltan + ' sin mandar' : '') + '</div>'
+        + (fallas.length ? '<div class="com-fallas">' + fallas.map(function(f){ return '<div>' + E((f.p.apellido || '') + ', ' + (f.p.nombre || '')) + ' — <small>' + E(f.err) + '</small></div>'; }).join('') + '</div>' : '')
+        + '<div class="com-pie">' + ((fallas.length || faltan > 0) ? '<button type="button" class="com-reint">🔁 Reintentar los que faltan</button>' : '') + '<button type="button" class="com-cerrar">Listo</button></div>';
+      var rb = pg.querySelector('.com-reint');
+      if(rb) rb.onclick = function(){ var hechos = {}; lista.slice(0, ok + fallas.length).forEach(function(p){ hechos[p.dni] = 1; }); fallas.forEach(function(f){ delete hechos[f.p.dni]; }); mandarLote(id, lista.filter(function(p){ return !hechos[p.dni]; }), adjs, matsSel, pg); };
+      pg.querySelector('.com-cerrar').onclick = function(){ bg.remove(); };
+      if(typeof _comFichaRefrescar === 'function') _comFichaRefrescar();
+    }
+
+    async function pintarHist(){
+      bd.innerHTML = '<div class="com-cargando">⏳ Cargando…</div>';
+      var r = await sb.from('urcym_comunicados').select('*').order('creado', { ascending: false }).limit(50);
+      if(r.error){ bd.innerHTML = '<div class="com-err">' + (/urcym_comunicados/.test(r.error.message || '') ? 'Falta correr el SQL 26 en Supabase.' : E(r.error.message)) + '</div>'; return; }
+      var ids = (r.data || []).map(function(c){ return c.id; });
+      var env = ids.length ? await _t1TraerTodo('urcym_comunicados_envios', 'comunicado_id,dni_paciente,estado', function(q){ return q.in('comunicado_id', ids); }).catch(function(){ return []; }) : [];
+      var cuenta = {}; env.forEach(function(e){ var c = cuenta[e.comunicado_id] = cuenta[e.comunicado_id] || { enviado:0, error:0, sin_mail:0 }; c[e.estado] = (c[e.estado] || 0) + 1; });
+      bd.innerHTML = !(r.data || []).length ? '<div class="com-nota" style="padding:20px;text-align:center">Todavía no mandaste comunicados.</div>'
+        : (r.data || []).map(function(c){ var k = cuenta[c.id] || {}; var adj = (c.adjuntos || []).map(function(a){ return a.nombre; }).join(', ');
+          return '<details class="com-h"><summary><span class="f">' + fDMA(c.creado) + '</span><b>' + E(c.asunto) + '</b><span class="k">✅ ' + (k.enviado || 0) + (k.error ? ' · ❌ ' + k.error : '') + ' de ' + (c.n_destinatarios || '?') + '</span></summary>'
+            + '<div class="com-h-b"><div class="com-nota">' + (c.prof === 'OB' ? 'Dr. Bertani' : 'Dra. Guerrero') + (adj ? ' · 📎 ' + E(adj) : '') + '</div><div class="com-h-t">' + E(c.texto || '').replace(/\n/g, '<br>') + '</div></div></details>'; }).join('');
+    }
+    pintarNuevo();
+  };
+
+  /* ── En la ficha: "✉ Comunicados (n)" al lado de Previas / Cambios ── */
+  window._comFichaRefrescar = async function(){
+    var dni = (typeof pacienteActual !== 'undefined' && pacienteActual) ? String(pacienteActual.dni) : '';
+    var prev = document.querySelector('button[onclick="abrirAuditoria()"]'); if(!prev || !dni) return;
+    var b = document.getElementById('evol_com_btn');
+    if(!b){ b = document.createElement('button'); b.id = 'evol_com_btn'; b.className = 'btn-previas'; b.type = 'button'; b.style.display = 'none'; b.title = 'Comunicados que se le mandaron (no son evoluciones)'; prev.after(b); b.onclick = function(){ verComFicha(); }; }
+    b.style.display = 'none'; b.dataset.dni = dni;
+    var r = await sb.from('urcym_comunicados_envios').select('comunicado_id,estado,fecha,email').eq('dni_paciente', dni).order('fecha', { ascending: false }).limit(50);
+    if(r.error || !r.data || !r.data.length || b.dataset.dni !== dni) return;
+    b._envios = r.data; b.textContent = '✉ Comunicados (' + r.data.filter(function(e){ return e.estado === 'enviado'; }).length + ')'; b.style.display = '';
+  };
+  async function verComFicha(){
+    var b = document.getElementById('evol_com_btn'); var envs = (b && b._envios) || [];
+    var ids = envs.map(function(e){ return e.comunicado_id; }).filter(function(x, i, a){ return x && a.indexOf(x) === i; });
+    var r = ids.length ? await sb.from('urcym_comunicados').select('id,asunto,texto,adjuntos,prof').in('id', ids) : { data: [] };
+    var porId = {}; (r.data || []).forEach(function(c){ porId[c.id] = c; });
+    var m = _uiModal('✉ Comunicados enviados', '<div style="font-size:12px;color:#64748b;margin-bottom:8px">Mensajes generales (no son evoluciones).</div>' + envs.map(function(e){ var c = porId[e.comunicado_id] || {};
+      var est = e.estado === 'enviado' ? '✅' : e.estado === 'sin_mail' ? '⚠️ sin mail' : '❌ no salió';
+      return '<details style="border:1px solid #e5e7eb;border-radius:9px;padding:7px 10px;margin:0 0 6px"><summary style="cursor:pointer;font-size:13.5px"><b>' + fDMA(e.fecha) + '</b> · ' + E(c.asunto || '(comunicado)') + ' <span style="font-size:12px">' + est + '</span></summary>'
+        + '<div style="font-size:13px;color:#334155;margin-top:6px;white-space:pre-wrap">' + E(c.texto || '') + '</div>' + ((c.adjuntos || []).length ? '<div style="font-size:12px;color:#64748b;margin-top:4px">📎 ' + E(c.adjuntos.map(function(a){ return a.nombre; }).join(', ')) + '</div>' : '') + '</details>'; }).join(''));
+    m.bg.style.zIndex = 100090;
+  }
+  (function(){
+    var oA = window.abrirEvolucion;
+    if(typeof oA === 'function') window.abrirEvolucion = abrirEvolucion = function(){ var r = oA.apply(this, arguments); Promise.resolve(r).then(function(){ setTimeout(function(){ window._comFichaRefrescar(); }, 300); }); return r; };
+  })();
+
+  /* ── Botón en Pacientes ── */
+  function boton(){
+    var tb = document.querySelector('#page-pacientes .toolbar'); if(!tb || document.getElementById('com_btn')) return;
+    var b = document.createElement('button'); b.id = 'com_btn'; b.className = 'btn'; b.type = 'button';
+    b.style.cssText = 'width:auto;margin-top:0;background:#fff;color:var(--teal);border:1.5px solid var(--teal)';
+    b.textContent = '📣 Comunicado a pacientes'; b.title = 'Mandar un mail a varios pacientes (guía, vacaciones, avisos). No queda como evolución.';
+    b.onclick = function(){ window.comunicadoAbrir(); };
+    tb.appendChild(b);
+  }
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boton); else boton();
+})();
+</script>
+<style>
+.com-bg{position:fixed;inset:0;background:rgba(15,23,42,.5);z-index:100040;display:flex;align-items:flex-start;justify-content:center;padding:3vh 12px;overflow:auto}
+.com-box{background:#fff;border-radius:16px;width:100%;max-width:880px;box-shadow:0 24px 70px rgba(0,0,0,.3);font-family:var(--font-main);display:flex;flex-direction:column}
+.com-hd{display:flex;align-items:center;gap:14px;padding:14px 18px;border-bottom:1px solid #e5e7eb}
+.com-hd>b{font-size:16.5px}
+.com-tabs{display:flex;gap:4px;flex:1}
+.com-tabs button{border:1.5px solid #e2e8f0;background:#fff;border-radius:999px;padding:4px 12px;font:600 12.5px var(--font-main);color:#64748b;cursor:pointer}
+.com-tabs button.on{background:var(--teal);border-color:var(--teal);color:#fff}
+.com-x{border:none;background:none;font-size:24px;color:#64748b;cursor:pointer;line-height:1}
+.com-bd{padding:14px 18px 18px}
+.com-cargando{padding:30px;text-align:center;color:#64748b}
+.com-err{color:#b91c1c;font-size:13.5px;padding:10px}
+.com-sec{margin-bottom:16px}
+.com-st{font:800 12px var(--font-main);text-transform:uppercase;letter-spacing:.06em;color:var(--teal);margin-bottom:8px}
+.com-st span{font-weight:500;color:#94a3b8;text-transform:none;letter-spacing:0}
+.com-flt{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}
+.com-flt select,.com-flt input{padding:6px 9px;border:1.5px solid var(--border);border-radius:9px;font:13px var(--font-main);background:#fff}
+.com-flt input[type=search]{flex:1;min-width:200px}
+.com-desde{display:flex;align-items:center;gap:6px;font-size:12px;color:#64748b}
+.com-cuenta{font-size:13px;color:#334155;margin:4px 0 6px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.com-cuenta button{border:1px solid #cbd5e1;background:#fff;border-radius:7px;padding:2px 9px;font:600 11.5px var(--font-main);color:#475569;cursor:pointer}
+.com-sinm{color:#b45309}
+.com-lista{max-height:260px;overflow:auto;border:1.5px solid #e5e7eb;border-radius:10px;padding:4px}
+.com-p,.com-desde,.com-mats label{text-transform:none!important;letter-spacing:0!important;font-weight:500}
+.com-mail-c p{margin:0 0 10px}.com-mail-c ul{margin:0 0 10px;padding-left:20px}
+.com-p{display:grid;grid-template-columns:20px 1.3fr 1.3fr .7fr;gap:8px;align-items:center;padding:5px 8px;border-radius:7px;font-size:13px;cursor:pointer}
+.com-p:hover{background:#f8fafc}
+.com-p input{accent-color:var(--teal);width:15px;height:15px}
+.com-p .n{color:#1e293b;font-weight:600}
+.com-p .m{color:#64748b;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.com-p .u{color:#94a3b8;font-size:11.5px;text-align:right}
+.com-p.sin{opacity:.5;cursor:default}
+.com-pl{font-size:12px;color:#64748b;margin-bottom:8px;display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.com-pl button{border:1.5px solid #e2e8f0;background:#f8fafc;border-radius:8px;padding:4px 10px;font:600 12px var(--font-main);color:#334155;cursor:pointer}
+.com-row{display:flex;gap:8px;margin-bottom:8px}
+.com-asunto{flex:1;padding:8px 11px;border:1.5px solid var(--border);border-radius:9px;font:600 14px var(--font-main)}
+.com-prof{padding:7px 9px;border:1.5px solid var(--border);border-radius:9px;font:13px var(--font-main)}
+.com-hola{font-size:13px;color:#64748b;margin:2px 0 4px}
+.com-texto{width:100%;box-sizing:border-box;padding:10px 12px;border:1.5px solid var(--border);border-radius:10px;font:14px/1.5 var(--font-main);resize:vertical}
+.com-nota{font-size:12px;color:#64748b;margin-top:5px}
+.com-file-btn{padding:7px 13px;border-radius:9px;border:1.5px dashed #b6c3d3;background:#fff;cursor:pointer;font:600 12.5px var(--font-main);color:#334155}
+.com-adj{display:flex;align-items:center;gap:8px;padding:6px 10px;border:1px solid #e5e7eb;border-radius:9px;margin:0 0 5px;font-size:13px}
+.com-adj span{flex:1;word-break:break-all}.com-adj small{color:#94a3b8}
+.com-adj button{border:1px solid #fecaca;background:#fff;color:#b91c1c;border-radius:7px;padding:2px 8px;cursor:pointer}
+.com-mats{margin-top:8px;font-size:13px}.com-mats summary{cursor:pointer;font-weight:600;color:#334155}
+.com-pie{display:flex;justify-content:flex-end;gap:8px;margin-top:12px;border-top:1px solid #f1f5f9;padding-top:12px}
+.com-pie button{padding:9px 16px;border-radius:10px;font:700 13.5px var(--font-main);cursor:pointer;border:1.5px solid #e2e8f0;background:#fff;color:#334155}
+.com-env,.com-cerrar{background:var(--teal)!important;border-color:var(--teal)!important;color:#fff!important}
+.com-env:disabled{opacity:.45;cursor:not-allowed}
+.com-pg-t{font-size:14px;color:#334155;margin:8px 0}
+.com-bar{height:10px;background:#e2e8f0;border-radius:99px;overflow:hidden}.com-bar i{display:block;height:100%;width:0;background:var(--teal);transition:width .3s}
+.com-pg-f{font-size:12.5px;color:#b91c1c;margin-top:6px}
+.com-stop{margin-top:10px;border:1.5px solid #e2e8f0;background:#fff;border-radius:9px;padding:6px 12px;cursor:pointer;font:600 12.5px var(--font-main)}
+.com-fin{font-size:15px;padding:12px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px}
+.com-fallas{font-size:13px;margin-top:8px;max-height:200px;overflow:auto}.com-fallas small{color:#b91c1c}
+.com-mail{border:1px solid #e2e8f0;border-radius:10px;overflow:hidden;background:#f0f4f9}
+.com-mail-as{background:#fff;padding:8px 12px;font-size:13px;border-bottom:1px solid #e2e8f0}
+.com-mail-c{background:#fff;margin:12px;border-radius:12px;padding:16px 18px;font-size:14px;color:#24323f}
+.com-mail-c h3{color:#1f6aab;margin:0 0 10px;font-size:18px}.com-mail-c .pie{font-size:11.5px;color:#6b7a86}
+.com-h{border:1px solid #e5e7eb;border-radius:10px;padding:8px 12px;margin-bottom:6px}
+.com-h summary{cursor:pointer;display:flex;gap:10px;align-items:center;font-size:13.5px}
+.com-h .f{color:#64748b;font-size:12.5px;min-width:78px}.com-h b{flex:1}.com-h .k{font-size:12px;color:#334155}
+.com-h-t{font-size:13px;color:#334155;margin-top:6px;background:#f8fafc;border-radius:8px;padding:8px 10px}
+@media (max-width:640px){.com-p{grid-template-columns:20px 1fr}.com-p .m,.com-p .u{grid-column:2}}
+</style>
+
 </body>
 </html>
