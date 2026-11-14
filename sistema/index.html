@@ -2,7 +2,7 @@
 <html lang="es-AR">
 <head>
   <meta charset="UTF-8" />
-  <script>var URCYM_BUILD = '2026-11-14-1300';</script>
+  <script>var URCYM_BUILD = '2026-11-14-1330';</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Evaluaciones cardiometabólicas — Sistema de Historia Clínica</title>
 
@@ -43213,6 +43213,33 @@ function _invToggleDroga(key){
       + '<script>var q=document.getElementById("q");q.oninput=function(){var t=q.value.toLowerCase().trim();document.querySelectorAll(".p").forEach(function(p){var ok=!t||p.dataset.q.indexOf(t)>=0;p.style.display=ok?"":"none";});};<\/script></body></html>';
   }
 
+  /* ── Planilla Excel: todo en filas (se abre con Excel, Google Sheets o LibreOffice, para siempre) ── */
+  function textoPlano(h){ var d = document.createElement('div'); d.innerHTML = limpiar(String(h || '').replace(/<br\s*\/?>/gi, '\n').replace(/<\/(p|div|li|tr|h\d)>/gi, '\n')); return (d.textContent || '').replace(/\n{3,}/g, '\n\n').trim(); }
+  function planilla(out){
+    if(typeof XLSX === 'undefined') return null;
+    var T = out.tablas, P = {}; (T.pacientes || []).forEach(function(p){ P[p.dni] = p; });
+    var nom = function(d){ var p = P[d] || {}; return [d, p.apellido || '', p.nombre || '']; };
+    var wb = XLSX.utils.book_new();
+    var hoja = function(nombre, filas){ XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(filas), nombre); };
+    hoja('Pacientes', [['DNI','Apellido','Nombre','Fecha nac.','Sexo','Cobertura','Mail','Teléfono']].concat((T.pacientes || []).map(function(p){ return [p.dni, p.apellido, p.nombre, p.fecha_nacimiento, p.sexo, p.obra_social, p.email, p.telefono]; })));
+    [['lab','Laboratorio',LAB_FILAS],['ant','Antropometría',ANT_FILAS],['est','Estudios',EST_FILAS]].forEach(function(x){
+      var filas = [['DNI','Apellido','Nombre','Fecha','Parámetro','Valor','Unidad']];
+      (T.paciente_tablas || []).filter(function(r){ return r.tipo === x[0] && r.datos; }).forEach(function(r){
+        var dt = r.datos, F = x[2], ext = dt.extraFilas || [];
+        (dt.filas || []).forEach(function(fila, i){ var f = F[i], lbl = f ? f.label : ext[i - F.length]; if(!lbl || (f && f.cat) || !Array.isArray(fila)) return;
+          var u = f ? ((dt.unidades && dt.unidades[f.key]) || (f.unidades || [''])[0] || '') : '';
+          (dt.columnas || []).forEach(function(c, ci){ var v = fila[ci]; if(v == null || String(v).trim() === '') return; filas.push(nom(r.dni_paciente).concat([c, lbl, typeof v === 'object' ? JSON.stringify(v) : v, u])); }); });
+      });
+      hoja(x[1], filas);
+    });
+    hoja('Evoluciones', [['DNI','Apellido','Nombre','Fecha','Texto']].concat((T.evoluciones || []).slice().sort(function(a, b){ return String(a.fecha_hora || '').localeCompare(String(b.fecha_hora || '')); }).map(function(e){ var t = textoPlano(e.contenido_html || e.contenido || ''); return nom(e.dni_paciente).concat([String(e.fecha_hora || '').slice(0, 16).replace('T', ' '), t.length > 32000 ? t.slice(0, 32000) + ' […sigue en la HC legible]' : t]); })));
+    hoja('Medicación', [['DNI','Apellido','Nombre','Fármaco','Dosis','Frecuencia','Grupo','Activo','Inicio','Fin']].concat((T.medicacion || []).map(function(m){ return nom(m.dni_paciente).concat([m.farmaco, m.dosis, m.frecuencia, m.grupo, m.activo ? 'Sí' : 'No', m.fecha_inicio, m.fecha_fin]); })));
+    if((T.mdpa_estudios || []).length){ var ks = {}; T.mdpa_estudios.forEach(function(r){ Object.keys(r).forEach(function(k){ if(!/^(id|dni_paciente)$/.test(k)) ks[k] = 1; }); }); ks = Object.keys(ks);
+      hoja('MAPA-MDPA', [['DNI','Apellido','Nombre'].concat(ks)].concat(T.mdpa_estudios.map(function(r){ return nom(r.dni_paciente).concat(ks.map(function(k){ var v = r[k]; return v != null && typeof v === 'object' ? JSON.stringify(v) : v; })); }))); }
+    var arr = XLSX.write(wb, { bookType: 'xlsx', type: 'array', compression: true });
+    return new Blob([arr], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  }
+
   /* ── Hacer la copia ── */
   async function guardarArchivos(h, archivos){
     for(var i = 0; i < archivos.length; i++){
@@ -43234,6 +43261,8 @@ function _invToggleDroga(key){
     var total = Object.keys(out.tablas).reduce(function(s, k){ return s + out.tablas[k].length; }, 0);
     var archivos = [{ nombre: 'urcym-copia-' + f + '.json', blob: new Blob([JSON.stringify(out)], { type: 'application/json' }) }];
     try { archivos.push({ nombre: 'urcym-HC-legible-' + f + '.html', blob: new Blob([legible(out)], { type: 'text/html' }) }); } catch(e){ console.warn('HC legible', e); }
+    try { var xb = planilla(out); if(xb) archivos.push({ nombre: 'urcym-planilla-' + f + '.xlsx', blob: xb }); } catch(e){ console.warn('planilla', e); }
+    if(conCarpeta){ try { var rs = await fetch(location.pathname + '?copia=' + Date.now(), { cache: 'no-store' }); var tx = rs.ok ? await rs.text() : ''; if(/URCYM_BUILD/.test(tx)) archivos.push({ nombre: 'urcym-sistema-ultima-version.html', blob: new Blob([tx], { type: 'text/html' }) }); } catch(e){} }
     var donde = '';
     if(conCarpeta){ try { await guardarArchivos(h, archivos); donde = 'en tu carpeta <b>' + E(h.name) + '</b>'; } catch(e){ conCarpeta = false; console.warn('carpeta', e); } }
     if(!conCarpeta){ descargar(archivos); donde = 'en <b>Descargas</b>'; }
@@ -43241,7 +43270,7 @@ function _invToggleDroga(key){
     estado = { fecha: out.generado, por: (typeof selectedUser !== 'undefined' ? selectedUser : ''), registros: total, carpeta: conCarpeta ? h.name : null, drive: conCarpeta && /drive|unidad/i.test(h.name) ? true : false };
     try { await sb.from('urcym_agenda_config').upsert({ key: 'ultima_copia', value: JSON.stringify(estado) }, { onConflict: 'key' }); } catch(e){}
     var n = (out.tablas.pacientes || []).length, ne = (out.tablas.evoluciones || []).length;
-    aviso((opts.silencioso ? '💾 Copia semanal automática lista: ' : '✓ Copia completa: ') + n + ' pacientes, ' + ne + ' evoluciones (' + total + ' registros). Quedó ' + donde + ': la base completa (.json) y la HC legible (.html).', true);
+    aviso((opts.silencioso ? '💾 Copia semanal automática lista: ' : '✓ Copia completa: ') + n + ' pacientes, ' + ne + ' evoluciones (' + total + ' registros). Quedó ' + donde + ': HC legible (.html), planilla (.xlsx) y base completa (.json).', true);
     pintar(); return true;
   };
 
@@ -43267,7 +43296,7 @@ function _invToggleDroga(key){
           : '<div class="bk-s">Elegí la carpeta de <b>Google Drive</b> en tu compu (por ejemplo <i>Mi unidad › URCyM copias</i>): la copia queda en la PC y Drive la sube sola. Y se hace sola una vez por semana al abrir el sistema.</div><button type="button" class="bk-dir">📁 Elegir carpeta</button>')
         : '<div class="bk-s">Para guardar directo en una carpeta (Drive) usá Chrome o Edge en la compu.</div>')
       + (!(estado && estado.drive) && estado && estado.fecha ? '<label class="bk-ck"><input type="checkbox" class="bk-drive"> ☁ Ya la subí al Drive</label>' : '')
-      + '<div class="bk-s mini">Se guardan 2 archivos: la base completa (.json, para restaurar el sistema) y la HC legible (.html, se abre con cualquier navegador).</div>';
+      + '<div class="bk-s mini">Se guardan: la <b>HC legible</b> (.html, se abre con doble clic), una <b>planilla</b> (.xlsx: Excel / Google Sheets) y la base completa (.json, para restaurar el sistema).</div>';
     document.body.appendChild(m);
     var b = document.getElementById('btn-backup').getBoundingClientRect();
     m.style.top = (b.bottom + 6) + 'px'; m.style.left = Math.max(8, Math.min(b.left, innerWidth - m.offsetWidth - 8)) + 'px';
