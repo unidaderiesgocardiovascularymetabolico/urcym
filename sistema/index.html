@@ -2,7 +2,7 @@
 <html lang="es-AR">
 <head>
   <meta charset="UTF-8" />
-  <script>var URCYM_BUILD = '2026-11-14-1330';</script>
+  <script>var URCYM_BUILD = '2026-11-14-1400';</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Evaluaciones cardiometabólicas — Sistema de Historia Clínica</title>
 
@@ -43008,7 +43008,7 @@ function _invToggleDroga(key){
   /* ── En la ficha: "✉ Comunicados (n)" al lado de Previas / Cambios ── */
   window._comFichaRefrescar = async function(){
     var dni = (typeof pacienteActual !== 'undefined' && pacienteActual) ? String(pacienteActual.dni) : '';
-    var prev = document.querySelector('button[onclick="abrirAuditoria()"]'); if(!prev || !dni) return;
+    var prev = document.querySelector('#page-evolucion button[onclick="abrirAuditoria()"]') || document.querySelector('button[onclick="abrirAuditoria()"]'); if(!prev || !dni) return;
     var b = document.getElementById('evol_com_btn');
     if(!b){ b = document.createElement('button'); b.id = 'evol_com_btn'; b.className = 'btn-previas'; b.type = 'button'; b.style.display = 'none'; b.title = 'Comunicados que se le mandaron (no son evoluciones)'; prev.after(b); b.onclick = function(){ verComFicha(); }; }
     b.style.display = 'none'; b.dataset.dni = dni;
@@ -43336,6 +43336,150 @@ function _invToggleDroga(key){
 #bk-menu button.lnk{border:none;background:none;color:#64748b;font-weight:600;text-align:left;padding:3px 0;text-decoration:underline}
 #bk-menu .bk-sep{border-top:1px solid #f1f5f9;margin:8px 0}
 #bk-menu .bk-ck{display:flex;gap:6px;align-items:center;font-size:12.5px;margin-top:6px;text-transform:none;letter-spacing:0;font-weight:600;cursor:pointer}
+</style>
+
+<script>
+/* ══ 🗑 Recuperar lo borrado (72 h) ══
+   Usa la auditoría de la base (cada cambio guarda cómo estaba antes). Por paciente muestra, de las
+   últimas 72 h: evoluciones borradas, MAPA/MDPA borrados y laboratorios / estudios / antropometrías
+   (fechas o valores) que se borraron de las tablas. "Recuperar" lo vuelve a poner como estaba.
+   (Pasadas las 72 h igual queda en 🕘 Cambios: la auditoría no se borra nunca.) */
+(function(){
+  var HORAS = 72;
+  var E = function(t){ return String(t == null ? '' : t).replace(/[&<>"]/g, function(c){ return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' }[c]; }); };
+  var fDMA = function(x){ var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(x || '')); return m ? m[3] + '/' + m[2] + '/' + m[1] : String(x || ''); };
+  var fHora = function(x){ var d = new Date(x); return isNaN(d) ? '' : d.toLocaleString('es-AR', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit', hour12:false, timeZone:'America/Argentina/Buenos_Aires' }); };
+  var vacio = function(v){ return v == null || String(v).trim() === ''; };
+  var NOM = { lab:'Laboratorio', est:'Estudios', ant:'Antropometría' };
+  var dniAct = function(){ return (typeof pacienteActual !== 'undefined' && pacienteActual) ? String(pacienteActual.dni) : ''; };
+
+  function FDe(t){ return t === 'lab' ? LAB_FILAS : t === 'est' ? EST_FILAS : ANT_FILAS; }
+  function norm(t, d){ // copia normalizada al orden de filas actual
+    if(!d || typeof d !== 'object') return null;
+    d = JSON.parse(JSON.stringify(d));
+    try { if(t === 'est' && typeof migrarEstDatos === 'function') d = migrarEstDatos(d); if(t === 'lab' && typeof migrarLabDatos === 'function') d = migrarLabDatos(d); } catch(e){}
+    if(!Array.isArray(d.columnas)) d.columnas = []; if(!Array.isArray(d.filas)) d.filas = []; if(!Array.isArray(d.extraFilas)) d.extraFilas = [];
+    return d;
+  }
+  function filaInfo(t, d, i){ var F = FDe(t); if(i < F.length) return F[i].cat ? null : { key: F[i].key, label: F[i].label }; var l = d.extraFilas[i - F.length]; return l ? { key: 'extra_' + l, label: l } : null; }
+  function idxEn(t, d, info, crear){ var F = FDe(t); var i = F.findIndex(function(f){ return f.key === info.key; }); if(i >= 0) return i; if(!/^extra_/.test(info.key)) return -1; var l = info.key.slice(6), k = d.extraFilas.indexOf(l); if(k < 0 && crear){ d.extraFilas.push(l); k = d.extraFilas.length - 1; } return k < 0 ? -1 : F.length + k; }
+
+  async function buscar(dni){
+    var desde = new Date(Date.now() - HORAS * 3600e3).toISOString();
+    var r = await sb.from('auditoria').select('id,ts,usuario,tabla,accion,fila_id,antes,despues').eq('dni', dni).gte('ts', desde).in('tabla', ['evoluciones','paciente_tablas','mdpa_estudios']).in('accion', ['UPDATE','DELETE']).order('ts', { ascending: false }).limit(400);
+    if(r.error) throw r.error;
+    var aud = r.data || [], items = [];
+    // Evoluciones y MAPA borrados (que no hayan vuelto)
+    var actuales = {};
+    var ev = await sb.from('evoluciones').select('id').eq('dni_paciente', dni); (ev.data || []).forEach(function(x){ actuales['evoluciones|' + x.id] = 1; });
+    var mp = await sb.from('mdpa_estudios').select('id').eq('dni_paciente', dni); (mp.data || []).forEach(function(x){ actuales['mdpa_estudios|' + x.id] = 1; });
+    aud.filter(function(a){ return a.accion === 'DELETE' && (a.tabla === 'evoluciones' || a.tabla === 'mdpa_estudios') && a.antes; }).forEach(function(a){
+      if(actuales[a.tabla + '|' + a.antes.id]) return;
+      var txt = a.tabla === 'evoluciones' ? (function(){ var d = document.createElement('div'); d.innerHTML = String(a.antes.contenido_html || ''); return (d.textContent || '').trim(); })() : '';
+      items.push({ tipo: a.tabla === 'evoluciones' ? 'evol' : 'mdpa', ts: a.ts, usuario: a.usuario, antes: a.antes,
+        titulo: a.tabla === 'evoluciones' ? 'Evolución del ' + fDMA(a.antes.fecha_hora) : 'MAPA / MDPA' + (a.antes.fecha ? ' del ' + fDMA(a.antes.fecha) : ''),
+        detalle: txt.slice(0, 220) + (txt.length > 220 ? '…' : '') });
+    });
+    // Tablas: valores que había antes de un cambio y después no (por tipo y fecha), y que hoy siguen vacíos
+    var actualT = {};
+    var pt = await sb.from('paciente_tablas').select('id,tipo,datos').eq('dni_paciente', dni).in('tipo', ['lab','est','ant']);
+    (pt.data || []).forEach(function(x){ actualT[x.tipo] = { id: x.id, datos: norm(x.tipo, x.datos) }; });
+    var grupos = {};
+    aud.filter(function(a){ return a.tabla === 'paciente_tablas' && a.antes && /^(lab|est|ant)$/.test(a.antes.tipo); }).forEach(function(a){
+      var t = a.antes.tipo, A = norm(t, a.antes.datos), B = a.despues ? norm(t, a.despues.datos) : null, C = actualT[t] ? actualT[t].datos : null;
+      if(!A) return;
+      // ¿la fecha no se borró sino que se cambió? (otra columna nueva en B con los mismos valores)
+      var movida = function(ci){ if(!B) return false; var nuevas = B.columnas.map(function(c, j){ return A.columnas.indexOf(c) < 0 ? j : -1; }).filter(function(j){ return j >= 0; }); if(!nuevas.length) return false;
+        var vals = []; A.filas.forEach(function(f, i){ var v = (f || [])[ci]; var inf = filaInfo(t, A, i); if(!vacio(v) && inf) vals.push([inf, v]); }); if(!vals.length) return false;
+        return nuevas.some(function(j){ var ok = vals.filter(function(x){ var iB = idxEn(t, B, x[0]); return iB >= 0 && String((B.filas[iB] || [])[j]) === String(x[1]); }).length; return ok >= Math.max(1, Math.ceil(vals.length * 0.8)); }); };
+      A.columnas.forEach(function(col, ci){
+        var cjB = B ? B.columnas.indexOf(col) : -1, cjC = C ? C.columnas.indexOf(col) : -1;
+        if(B && cjB < 0 && movida(ci)) return;
+        A.filas.forEach(function(fila, i){
+          var va = (fila || [])[ci]; if(vacio(va) || typeof va === 'object') return;
+          var info = filaInfo(t, A, i); if(!info) return;
+          if(B && cjB >= 0){ var iB = idxEn(t, B, info); if(iB >= 0 && !vacio((B.filas[iB] || [])[cjB])) return; }
+          if(C && cjC >= 0){ var iC = idxEn(t, C, info); if(iC >= 0 && !vacio((C.filas[iC] || [])[cjC])) return; }
+          var g = grupos[t + '|' + col] = grupos[t + '|' + col] || { tipo: 'tabla', t: t, col: col, ts: a.ts, usuario: a.usuario, celdas: {}, colEntera: cjB < 0 };
+          if(!g.celdas[info.key]) g.celdas[info.key] = { info: info, v: va };
+        });
+      });
+    });
+    Object.keys(grupos).forEach(function(k){ var g = grupos[k], n = Object.keys(g.celdas).length; if(!n) return;
+      g.titulo = NOM[g.t] + ' del ' + (fDMA(g.col) || g.col) + (g.colEntera ? ' (se borró la fecha completa)' : ' · ' + n + ' valor' + (n > 1 ? 'es' : '') + ' borrado' + (n > 1 ? 's' : ''));
+      g.detalle = Object.keys(g.celdas).slice(0, 12).map(function(kk){ var c = g.celdas[kk]; return c.info.label + ' ' + c.v; }).join(' · ') + (n > 12 ? ' …' : '');
+      g.actual = actualT[g.t] || null; items.push(g); });
+    items.sort(function(a, b){ return String(b.ts).localeCompare(String(a.ts)); });
+    return items;
+  }
+
+  async function recuperar(it, dni){
+    if(it.tipo === 'evol' || it.tipo === 'mdpa'){
+      var tabla = it.tipo === 'evol' ? 'evoluciones' : 'mdpa_estudios';
+      var r = await sb.from(tabla).insert(it.antes);
+      if(r.error){ var sinId = Object.assign({}, it.antes); delete sinId.id; r = await sb.from(tabla).insert(sinId); }
+      if(r.error) throw r.error; return;
+    }
+    // tabla: volver a poner los valores en la tabla actual (sin pisar nada que se haya cargado después)
+    var cur = await sb.from('paciente_tablas').select('id,datos').eq('dni_paciente', dni).eq('tipo', it.t).maybeSingle();
+    if(cur.error) throw cur.error;
+    var D = norm(it.t, cur.data ? cur.data.datos : { columnas: [], filas: [], extraFilas: [] });
+    var cj = D.columnas.indexOf(it.col);
+    if(cj < 0){ D.columnas.push(it.col); cj = D.columnas.length - 1; }
+    Object.keys(it.celdas).forEach(function(k){ var c = it.celdas[k], i = idxEn(it.t, D, c.info, true); if(i < 0) return;
+      while(D.filas.length <= i) D.filas.push([]); if(!Array.isArray(D.filas[i])) D.filas[i] = [];
+      if(vacio(D.filas[i][cj])) D.filas[i][cj] = c.v; });
+    if(D.columnas.every(function(c){ return /^\d{4}-\d{2}(-\d{2})?$/.test(String(c)); })){
+      var ord = D.columnas.map(function(c, j){ return j; }).sort(function(x, y){ return String(D.columnas[x]).localeCompare(String(D.columnas[y])); });
+      D.columnas = ord.map(function(j){ return D.columnas[j]; }); D.filas = D.filas.map(function(f){ return Array.isArray(f) ? ord.map(function(j){ return f[j] == null ? '' : f[j]; }) : f; });
+    }
+    var nFilas = FDe(it.t).length + D.extraFilas.length;
+    for(var i = 0; i < nFilas; i++){ if(!Array.isArray(D.filas[i])) D.filas[i] = []; while(D.filas[i].length < D.columnas.length) D.filas[i].push(''); }
+    var up = await sb.from('paciente_tablas').upsert({ dni_paciente: dni, tipo: it.t, datos: D }, { onConflict: 'dni_paciente,tipo' });
+    if(up.error) throw up.error;
+  }
+
+  async function abrir(){
+    var dni = dniAct(); if(!dni) return;
+    var m = _uiModal('🗑 Recuperar lo borrado (últimas ' + HORAS + ' h)', '<div class="pap-c">⏳ Buscando…</div>');
+    m.bg.style.zIndex = 100060;
+    var box = m.box.querySelector('.pap-c'), items;
+    try { items = await buscar(dni); } catch(e){ box.innerHTML = '<div style="color:#b91c1c;font-size:13px">' + (/auditoria/.test(e.message || '') ? 'Falta la auditoría en la base (SQL 11).' : E(e.message || e)) + '</div>'; return; }
+    if(!items.length){ box.innerHTML = '<div style="font-size:13.5px;color:#64748b;padding:12px 0">No se borró nada de este paciente en las últimas ' + HORAS + ' h.</div>'; return; }
+    box.innerHTML = '<div style="font-size:12.5px;color:#64748b;margin-bottom:8px">Lo que se borró de este paciente. "Recuperar" lo vuelve a poner como estaba, sin pisar nada que se haya cargado después.</div>'
+      + items.map(function(it, i){ return '<div class="pap-it"><div class="pap-tx"><b>' + E(it.titulo) + '</b><div class="pap-d">' + E(it.detalle || '') + '</div><div class="pap-q">Borrado el ' + E(fHora(it.ts)) + (it.usuario ? ' · ' + E(String(it.usuario).split('@')[0]) : '') + '</div></div><button type="button" data-i="' + i + '">↩ Recuperar</button></div>'; }).join('');
+    box.querySelectorAll('button[data-i]').forEach(function(b){ b.onclick = async function(){
+      var it = items[+b.dataset.i]; b.disabled = true; b.textContent = 'Recuperando…';
+      try { await recuperar(it, dni); b.textContent = '✓ Recuperado'; b.classList.add('ok');
+        if(typeof showToast === 'function') showToast('Recuperado', 'ok', 2500);
+        setTimeout(function(){ m.cerrar(); if(typeof abrirEvolucion === 'function') abrirEvolucion(dni); }, 900);
+      } catch(e){ b.disabled = false; b.textContent = '↩ Recuperar'; alert('No se pudo recuperar: ' + (e.message || e)); }
+    }; });
+  }
+
+  async function pintarBtn(){
+    var dni = dniAct(); var ref = document.querySelector('#page-evolucion button[onclick="abrirAuditoria()"]') || document.querySelector('button[onclick="abrirAuditoria()"]'); if(!ref || !dni) return;
+    var b = document.getElementById('evol_pap_btn');
+    if(!b){ b = document.createElement('button'); b.id = 'evol_pap_btn'; b.type = 'button'; b.className = 'btn-previas pap-btn'; b.style.display = 'none'; b.onclick = abrir; b.title = 'Algo de este paciente se borró en las últimas 72 h: podés recuperarlo'; ref.after(b); }
+    b.dataset.dni = dni;
+    try { var items = await buscar(dni); if(b.dataset.dni !== dni) return; b.textContent = '🗑 Recuperar (' + items.length + ')'; b.style.display = items.length ? '' : 'none'; } catch(e){ b.style.display = 'none'; }
+  }
+  window._papeleraAbrir = abrir; window._papeleraRefrescar = pintarBtn;
+  (function(){
+    var oA = window.abrirEvolucion;
+    if(typeof oA === 'function') window.abrirEvolucion = abrirEvolucion = function(){ var r = oA.apply(this, arguments); Promise.resolve(r).then(function(){ setTimeout(pintarBtn, 1200); }); return r; };
+  })();
+  // Después de borrar algo, se actualiza el botón (las funciones de borrado avisan con un toast; se revisa al rato)
+  setInterval(function(){ var p = document.getElementById('page-evolucion'); if(p && p.classList.contains('active') && document.visibilityState === 'visible') pintarBtn(); }, 45000);
+  document.addEventListener('click', function(e){ var t = e.target && e.target.closest && e.target.closest('button'); if(t && /borrar|eliminar|🗑|✕|×/i.test(t.textContent || '') && !t.closest('#evol_pap_btn')) setTimeout(pintarBtn, 3500); }, true);
+})();
+</script>
+<style>
+.pap-btn{color:#b45309!important;border-color:#fdba74!important;background:#fff7ed!important}
+.pap-it{display:flex;gap:10px;align-items:flex-start;padding:9px 10px;border:1px solid #e5e7eb;border-radius:10px;margin:0 0 6px}
+.pap-tx{flex:1;font-size:13.5px;color:#1e293b}.pap-d{font-size:12px;color:#475569;margin-top:2px;word-break:break-word}.pap-q{font-size:11.5px;color:#94a3b8;margin-top:3px}
+.pap-it button{border:1.5px solid var(--teal);background:#fff;color:var(--teal);border-radius:9px;padding:6px 11px;font:700 12.5px var(--font-main);cursor:pointer;white-space:nowrap}
+.pap-it button.ok{background:#f0fdf4;border-color:#16a34a;color:#166534}
 </style>
 
 </body>
