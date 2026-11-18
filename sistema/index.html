@@ -25391,6 +25391,32 @@ function _vidItemsMenu(menu,key,mkItem){
   menu.appendChild(hdr);
   if(t.meet_link) menu.appendChild(mkItem('🎥 &nbsp;Abrir Meet','#1d9e75',function(){window.open(t.meet_link,'_blank');}));
   menu.appendChild(mkItem('📎 &nbsp;Comprobantes / detalle','#374151',function(){_vidDetalle(t.reserva_id);}));
+  if(t.pago!=='pagado'){
+    menu.appendChild(mkItem('✉️ &nbsp;Pedir saldo por mail','#6d28d9',function(){_vidPedirSaldo(t.reserva_id);}));
+    menu.appendChild(mkItem('✓ &nbsp;Ya pagó el saldo (mandar Meet)','#15803d',function(){_vidSaldoRecibido(t.reserva_id);}));
+  }
+}
+// Pedido manual del saldo (por si la paciente no pagó después del recordatorio automático).
+// Lo manda el servidor: mail de secretaría con los datos para transferir y el botón "Pagar el saldo"
+// (sube el comprobante o paga con MP desde su link, y queda registrado solo). Queda en el registro.
+async function _vidPedirSaldo(id, btn){
+  if(!confirm('¿Mandarle a la paciente el mail pidiéndole el saldo?')) return;
+  if(btn) btn.disabled=true;
+  try{ await _vidStaff({accion:'staff_pedir_saldo', id:id}); _vidToast('✓ Se le pidió el saldo por mail'); if(btn) btn.textContent='✓ Saldo pedido'; }
+  catch(e){ alert('No se pudo enviar: '+e.message); if(btn) btn.disabled=false; }
+}
+// La paciente pagó el saldo por fuera de la página (transferencia directa sin subir comprobante, etc.):
+// lo registra en la reserva y en la agenda, y le manda el link de Meet.
+async function _vidSaldoRecibido(id, btn){
+  if(!confirm('¿Confirmás que la paciente YA pagó el saldo?\n\nSe registra como pagado por transferencia a la profesional y se le manda el link de la videollamada.')) return;
+  if(btn) btn.disabled=true;
+  try{
+    await _vidStaff({accion:'staff_saldo_recibido', id:id});
+    _vidToast('✓ Saldo registrado y Meet enviado');
+    if(btn) btn.textContent='✓ Saldo registrado';
+    try{ if(typeof agRefreshManual==='function') agRefreshManual(); }catch(_){}
+  }
+  catch(e){ alert('No se pudo registrar: '+e.message); if(btn) btn.disabled=false; }
 }
 async function _vidDetalle(id){
   var r;
@@ -25418,6 +25444,8 @@ function _vidHtmlReserva(r,detalle){
     +((r.sena_comprobante||r.saldo_comprobante)?'<label style="margin-left:auto;display:flex;align-items:center;gap:4px;cursor:pointer;'+(pend?'color:#b45309;font-weight:700;':'color:#6b7280;')+'"><input type="checkbox" class="vid-rev" '+(r.comprobante_revisado?'checked':'')+'> comprobantes revisados</label>':'')
     +'</div>'
     +(r.meet_link?'<div style="margin-top:5px;"><a href="'+_vidEsc(r.meet_link)+'" target="_blank" rel="noopener" style="color:#1d9e75;font-weight:700;">🎥 '+_vidEsc(r.meet_link)+'</a></div>':'')
+    +((r.estado==='confirmada'&&!r.saldo_pagado_at&&Number(r.saldo_monto)>0)?'<div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap;"><button type="button" class="vid-pedir-saldo" data-id="'+r.id+'" title="Le manda a la paciente un mail de secretaría pidiendo el saldo, con los datos para transferir y el botón para pagarlo" style="border:1px solid #c4b5fd;background:#f5f3ff;color:#6d28d9;border-radius:8px;padding:4px 10px;font-size:12px;font-weight:700;cursor:pointer;">✉️ Pedir saldo por mail</button>'
+    +'<button type="button" class="vid-saldo-ok" data-id="'+r.id+'" title="Usalo si la paciente te pagó el saldo por fuera de la página: queda registrado y le llega el link de Meet" style="border:1px solid #bbf7d0;background:#f0fdf4;color:#15803d;border-radius:8px;padding:4px 10px;font-size:12px;font-weight:700;cursor:pointer;">✓ Ya pagó el saldo</button></div>':'')
     +((r.estado==='cancelada'||r.estado==='vencida')?'<div style="margin-top:6px;text-align:right;"><button type="button" class="vid-borrar-res" data-id="'+r.id+'" style="border:1px solid #fecaca;background:#fff;color:#b91c1c;border-radius:8px;padding:4px 10px;font-size:12px;cursor:pointer;">🗑 Borrar</button></div>':'');
   if(detalle){
     var log=(r.log||[]).slice(-8).map(function(l){var d=new Date(l.at);return '<div>'+d.toLocaleString('es-AR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})+' · '+_vidEsc(l.msg)+'</div>';}).join('');
@@ -25426,6 +25454,8 @@ function _vidHtmlReserva(r,detalle){
   return h+'</div>';
 }
 function _vidEngancharReservas(box){
+  box.querySelectorAll('.vid-pedir-saldo').forEach(function(b){b.onclick=function(){_vidPedirSaldo(b.dataset.id,b);};});
+  box.querySelectorAll('.vid-saldo-ok').forEach(function(b){b.onclick=function(){_vidSaldoRecibido(b.dataset.id,b);};});
   box.querySelectorAll('[data-comp]').forEach(function(b){b.onclick=function(){_vidVerComprobante(b.getAttribute('data-comp'));};});
   box.querySelectorAll('.vid-borrar-res').forEach(function(b){b.onclick=async function(){
     if(!confirm('¿Borrar esta videoconsulta cancelada? No se puede deshacer.')) return;
@@ -30349,6 +30379,7 @@ window.cargarProxConsultas = cargarProxConsultas;
   function ciFinAtencion(fecha, prof){
     var T = (typeof turnos !== 'undefined' && turnos) || {}, fin = null;
     Object.keys(T).forEach(function(k){ var p = k.split('_'); if(p[0] !== fecha || p[2] !== prof) return; var t = T[k] || {};
+      if(t.video) return; // las videollamadas no son parte de la atención del consultorio
       var hm = String(p[1] || '').split(':'), m = (+hm[0]) * 60 + (+hm[1] || 0) + (Number(t.dur || t.duracion) || 30);
       if(fin == null || m > fin) fin = m; });
     return fin;
@@ -30364,6 +30395,7 @@ window.cargarProxConsultas = cargarProxConsultas;
     // Si todos los turnos del día ya están marcados (atendido o ausente), se puede cerrar aunque sea más temprano
     var T = (typeof turnos !== 'undefined' && turnos) || {}, total = 0, faltan = 0;
     Object.keys(T).forEach(function(k){ var p = k.split('_'); if(p[0] !== fecha || p[2] !== prof) return; var t = T[k] || {};
+      if(t.video) return; // las videollamadas no cuentan para habilitar el cierre
       if(!t.paciente && !t.dni_paciente) return;
       if(/cancel|anulad/i.test(String(t.estado || ''))) return;
       total++; if(!/^(atendido|asistio|presente|ausente)$/.test(String(t.asistencia || ''))) faltan++; });
