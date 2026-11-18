@@ -21,6 +21,20 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script>
+  // Las fuentes básicas de los PDF no tienen ≥, ≤, −, ≈, flechas…: salían como basura (ej. "≥65" → "e65).
+  // Se reemplazan por equivalentes que sí se imprimen, en TODOS los PDF del sistema.
+  (function(){ try {
+    var A = window.jspdf && window.jspdf.jsPDF && window.jspdf.jsPDF.API; if(!A) return;
+    var M = {'≥':'>=','⩾':'>=','≤':'<=','⩽':'<=','−':'-','‑':'-','≈':'~','≅':'~','→':'->','⇒':'=>','←':'<-','↑':'(aumentó)','↓':'(disminuyó)','≠':'distinto de','\u202F':' ','\u2009':' ','\u200B':''};
+    var re = /[≥⩾≤⩽−‑≈≅→⇒←↑↓≠\u202F\u2009\u200B]/g;
+    var fix = function(t){ return typeof t === 'string' ? t.replace(re, function(c){ return M[c]; }) : (Array.isArray(t) ? t.map(fix) : t); };
+    ['text','splitTextToSize','getTextWidth'].forEach(function(fn){
+      var orig = A[fn]; if(typeof orig !== 'function') return;
+      A[fn] = function(t){ var args = Array.prototype.slice.call(arguments); args[0] = fix(t); return orig.apply(this, args); };
+    });
+  } catch(e) { console.warn('[PDF] no se pudo instalar el reemplazo de caracteres', e); } })();
+  </script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -32616,9 +32630,33 @@ function cancelarDocLibre() {
   document.getElementById('modalDocLibre').classList.remove('open');
 }
 
+// Volcado automático al descargar el PDF. Solo si ese paciente es el que está abierto en Evolución
+// (si no, iría a la evolución de otro paciente) y si ese mismo documento no se volcó ya a mano.
+function _docLibreVolcarAuto(p, tipo, contenidoHtml){
+  const editor = document.getElementById('evol_editor');
+  if(!editor || !p) return;
+  if(typeof pacienteActual === 'undefined' || !pacienteActual || pacienteActual.dni !== p.dni){
+    _toastDocLibre('ℹ️ PDF descargado. No se volcó: ' + (p.apellido || p.nombre || 'el paciente') + ' no está abierto en Evolución');
+    return;
+  }
+  const ya = [...editor.querySelectorAll('.bloque-doclibre')].some(b => b.innerHTML.indexOf(contenidoHtml) >= 0);
+  if(ya) return;
+  const hoy = fechaHoy ? fechaHoy() : new Date().toLocaleDateString('es-AR');
+  const bloque = '<div class="bloque-doclibre" style="font-family:Arial,sans-serif;font-size:10pt;color:#333;border-left:3px solid var(--blue);padding:6px 10px;margin-bottom:10px;line-height:1.8">'
+    + '<strong style="font-size:10pt">' + escHtml(tipo) + ' — ' + hoy + ':</strong><br>' + contenidoHtml + '</div>';
+  const tmp = document.createElement('div'); tmp.innerHTML = bloque;
+  editor.appendChild(tmp.firstChild);
+  _asegurarLineaLibreEvol(editor);
+  try { editor.dispatchEvent(new Event('input', { bubbles: true })); } catch(_) {}
+  _toastDocLibre('✅ PDF descargado y volcado a la evolución');
+}
+
 function volcarDocLibreAEvolucion() {
   const p = _docLibrePaciente;
   if(!p){ alert('No hay paciente seleccionado.'); return; }
+  if(typeof pacienteActual !== 'undefined' && pacienteActual && pacienteActual.dni !== p.dni){
+    alert('Este documento es de ' + (p.apellido || p.nombre || 'otro paciente') + ', pero en Evolución tenés abierto a otro paciente. Abrí su evolución para volcarlo.'); return;
+  }
   const contEl = document.getElementById('doclibre_contenido');
   const contenidoHtml = contEl ? contEl.innerHTML.trim() : '';
   if(!contenidoHtml || contenidoHtml === '<br>'){ alert('Escribí el contenido del documento antes de volcarlo.'); return; }
@@ -32737,7 +32775,11 @@ function generarPDFDocLibre() {
     _pdfFooterOtro(doc, u, PW, PH, direccionPie);
 
     if(window._docLibreCaptura){ const cap = window._docLibreCaptura; window._docLibreCaptura = null; cap(doc, filename); }
-    else { doc.save(filename); if(window._docLibreDescargado) window._docLibreDescargado(doc, filename); }
+    else {
+      doc.save(filename); if(window._docLibreDescargado) window._docLibreDescargado(doc, filename);
+      // Al descargar el PDF, el documento queda volcado solo en la evolución del paciente
+      try { _docLibreVolcarAuto(p, tipo, contenidoHtml); } catch(e) { console.warn('[DocLibre] volcado automático', e); }
+    }
 
     // Ya se descargó (o quedó lista para el mail): ahora sí se limpia el borrador y se cierra el modal.
     if(contenidoEl) contenidoEl.innerHTML = '';
@@ -44221,41 +44263,43 @@ function _invToggleDroga(key){
 .dsp-chip.venc,.otr-item.venc{opacity:.5}
 </style>
 
+<style>
+/* Barras laterales de Evolución (iconos a la izquierda, PA/PREVENT a la derecha):
+   van en su propia columna al lado del editor, empiezan a la misma altura que el editor y,
+   al hacer scroll, quedan quietas justo debajo del encabezado del paciente, sin que nada las tape.
+   --evol-stick = dónde termina el encabezado fijo; se recalcula solo si el encabezado cambia de alto. */
+@media (min-width:701px){
+  #page-evolucion.active #pmain-evol:not([style*="none"]){display:grid !important;grid-template-columns:minmax(0,1fr) 300px;align-items:start}
+  #page-evolucion.active #pmain-evol > .evol-body{grid-column:1;grid-row:1;display:grid !important;grid-template-columns:52px minmax(0,1fr);align-items:start}
+  #page-evolucion.active .evol-body > .evol-sidebar-left{grid-column:1;grid-row:1;position:sticky !important;top:var(--evol-stick,210px) !important;bottom:auto !important;left:auto !important;height:calc(100vh - var(--evol-stick,210px));box-sizing:border-box}
+  #page-evolucion.active .evol-body > .evol-col-main{grid-column:2;grid-row:1;margin:0 !important}
+  #page-evolucion.active #pmain-evol > .evol-col-right{grid-column:2;grid-row:1;position:sticky !important;top:var(--evol-stick,210px) !important;bottom:auto !important;right:auto !important;width:auto !important;max-height:calc(100vh - var(--evol-stick,210px));overflow-y:auto}
+}
+</style>
 <script>
-// Las barras laterales fijas de Evolución (iconos a la izquierda, PA/PREVENT a la derecha) arrancaban
-// siempre a 210px. Cuando el encabezado del paciente es alto (muchos diagnósticos o fármacos) las tapaba,
-// y lo de arriba (la tabla de presión arterial) quedaba oculto y no se podía subir. Ahora arrancan justo
-// debajo del encabezado y la barra de pestañas, y se reacomodan al hacer scroll o cambiar de tamaño.
 (function(){
-  var raf=0;
-  function ajustar(){
-    raf=0;
+  function medir(){
     var pg=document.getElementById('page-evolucion');
-    if(!pg || !pg.classList.contains('active') || window.innerWidth<=700) return;
-    var top=56;
-    pg.querySelectorAll('.evol-topbar, .pac-tab-bar').forEach(function(el){
+    if(!pg || window.innerWidth<=700) return;
+    var fin=56;
+    pg.querySelectorAll('.evol-topbar, .evol-header-var, .pac-tab-bar').forEach(function(el){
       if(!el.offsetParent) return;
-      var b=el.getBoundingClientRect().bottom;
-      if(b>top) top=b;
+      var cs=getComputedStyle(el);
+      if(cs.position!=='sticky') return;
+      var b=(parseFloat(cs.top)||0)+el.offsetHeight;
+      if(b>fin) fin=b;
     });
-    top=Math.round(Math.min(top, window.innerHeight-220)); // siempre queda lugar para ver la barra
-    pg.querySelectorAll('.evol-col-right, .evol-sidebar-left').forEach(function(el){ el.style.top=top+'px'; });
+    pg.style.setProperty('--evol-stick', Math.round(fin)+'px');
   }
-  function pedir(){ if(!raf) raf=requestAnimationFrame(ajustar); }
-  window.addEventListener('scroll',pedir,{passive:true});
-  window.addEventListener('resize',pedir);
-  document.addEventListener('click',function(){ setTimeout(pedir,60); },true);
-  if(window.ResizeObserver){
-    var ro=new ResizeObserver(pedir);
-    var engancharRO=function(){ document.querySelectorAll('#page-evolucion .evol-topbar, #page-evolucion .pac-tab-bar').forEach(function(el){ ro.observe(el); }); };
-    if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',engancharRO); else engancharRO();
+  function iniciar(){
+    medir();
+    if(window.ResizeObserver){
+      var ro=new ResizeObserver(medir);
+      document.querySelectorAll('#page-evolucion .evol-topbar, #page-evolucion .evol-header-var, #page-evolucion .pac-tab-bar').forEach(function(el){ ro.observe(el); });
+    }
+    window.addEventListener('resize',medir);
   }
-  if(window.MutationObserver){
-    var mo=new MutationObserver(pedir);
-    var engancharMO=function(){ var pg=document.getElementById('page-evolucion'); if(pg) mo.observe(pg,{attributes:true,attributeFilter:['class']}); };
-    if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',engancharMO); else engancharMO();
-  }
-  setInterval(pedir,1500);
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',iniciar); else iniciar();
 })();
 </script>
 </body>
