@@ -44103,5 +44103,42 @@ function _invToggleDroga(key){
 .dsp-chip.venc,.otr-item.venc{opacity:.5}
 </style>
 
+<script>
+// Las barras laterales fijas de Evolución (iconos a la izquierda, PA/PREVENT a la derecha) arrancaban
+// siempre a 210px. Cuando el encabezado del paciente es alto (muchos diagnósticos o fármacos) las tapaba,
+// y lo de arriba (la tabla de presión arterial) quedaba oculto y no se podía subir. Ahora arrancan justo
+// debajo del encabezado y la barra de pestañas, y se reacomodan al hacer scroll o cambiar de tamaño.
+(function(){
+  var raf=0;
+  function ajustar(){
+    raf=0;
+    var pg=document.getElementById('page-evolucion');
+    if(!pg || !pg.classList.contains('active') || window.innerWidth<=700) return;
+    var top=56;
+    pg.querySelectorAll('.evol-topbar, .pac-tab-bar').forEach(function(el){
+      if(!el.offsetParent) return;
+      var b=el.getBoundingClientRect().bottom;
+      if(b>top) top=b;
+    });
+    top=Math.round(Math.min(top, window.innerHeight-220)); // siempre queda lugar para ver la barra
+    pg.querySelectorAll('.evol-col-right, .evol-sidebar-left').forEach(function(el){ el.style.top=top+'px'; });
+  }
+  function pedir(){ if(!raf) raf=requestAnimationFrame(ajustar); }
+  window.addEventListener('scroll',pedir,{passive:true});
+  window.addEventListener('resize',pedir);
+  document.addEventListener('click',function(){ setTimeout(pedir,60); },true);
+  if(window.ResizeObserver){
+    var ro=new ResizeObserver(pedir);
+    var engancharRO=function(){ document.querySelectorAll('#page-evolucion .evol-topbar, #page-evolucion .pac-tab-bar').forEach(function(el){ ro.observe(el); }); };
+    if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',engancharRO); else engancharRO();
+  }
+  if(window.MutationObserver){
+    var mo=new MutationObserver(pedir);
+    var engancharMO=function(){ var pg=document.getElementById('page-evolucion'); if(pg) mo.observe(pg,{attributes:true,attributeFilter:['class']}); };
+    if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',engancharMO); else engancharMO();
+  }
+  setInterval(pedir,1500);
+})();
+</script>
 </body>
 </html>
