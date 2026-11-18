@@ -131,6 +131,10 @@ header{position:relative}
 .osde-pegar{width:100%;min-height:96px;font-size:14.5px;line-height:1.45;overflow-wrap:anywhere;white-space:pre-wrap;resize:vertical}
 .osde-ok{margin:6px 2px 0;font-size:12.5px;font-weight:600}
 .osde-pegar-btn{margin:2px 0 8px}
+.fnac-row{display:flex;gap:6px;margin-top:8px;align-items:stretch}
+.fnac-row input{width:64px;text-align:center;font-size:17px;padding:10px 6px}
+.fnac-row input#fn-a{width:84px}
+.fnac-row .btn{flex:1;margin:0}
 .despues{display:flex;gap:8px;align-items:flex-start;font-size:13.5px;line-height:1.4;margin:10px 2px 4px;color:var(--ink,#334155);cursor:pointer}
 .despues input{margin-top:3px;width:18px;height:18px;flex:0 0 auto}
 .cal-rep{position:absolute;left:42px;bottom:10px;border:1.5px solid var(--blue);background:var(--blue-light);color:var(--blue-dark,#1f6aab);border-radius:999px;padding:5px 12px;font:inherit;font-size:13px;font-weight:700;cursor:pointer}
@@ -1252,15 +1256,20 @@ var MODOS_REC = {
 };
 function modosRecDisponibles(){
   var p = Q.pac || {};
-  var verif = !!(p.existe && ((p.tiene_email && !Q.datos.email) || Q.mis));
+  // Pacientes ya registrados: sin código por mail, solo confirman su fecha de nacimiento
+  var verif = !!(p.existe || Q.mis);
   var l = [];
-  if(verif || Q.desdeReceta) l.push('ultima');   // siempre: si no hay receta anterior pedida por acá, se carga la medicación registrada
+  if(verif || Q.desdeReceta) l.push('ultima');   // si no hay receta anterior pedida por acá, se carga la medicación registrada
   l.push('fotos', 'escribir');
   if(verif && p.tiene_medicacion !== false) l.push('hc');
   return l;
 }
 function htmlCodigoRec(motivo){
   var p = Q.pac || {};
+  if(!Q.fnacSinDato)
+    return '<div class="aviso azul" style="margin:0 0 12px">Para mostrarte '+motivo+', confirmá tu <b>fecha de nacimiento</b>:'
+      + '<div class="fnac-row"><input type="text" id="fn-d" inputmode="numeric" maxlength="2" placeholder="Día" aria-label="Día"><input type="text" id="fn-m" inputmode="numeric" maxlength="2" placeholder="Mes" aria-label="Mes"><input type="text" id="fn-a" inputmode="numeric" maxlength="4" placeholder="Año" aria-label="Año"><button class="btn btn-chico" id="b-fnac">Ver</button></div>'
+      + '<div class="error" id="e-cod"></div></div>';
   if(!Q.codigoEnviado)
     return '<div class="aviso azul" style="margin:0 0 12px">Para mostrarte '+motivo+' te mandamos un código a <b>'+h(p.email_mask)+'</b>.'
       + '<button class="btn" id="b-codigo" style="margin-top:10px">Enviarme el código</button><div class="error" id="e-cod"></div></div>';
@@ -1378,7 +1387,7 @@ function htmlReceta(n){
   var x = '<section class="card" id="seccion-detalle"><div class="paso"><div class="n">'+n+'</div><h2>¿Qué medicación necesitás?</h2></div>';
   if(!Q.modoRec){
     return x + '<p style="font-size:15px;margin:0 0 12px">¿Cómo querés pedirla?</p><div class="profs">'
-      + disp.map(function(k){ var m = MODOS_REC[k], cod = (k === 'ultima' || k === 'hc') && !Q.mis;
+      + disp.map(function(k){ var m = MODOS_REC[k], cod = false;
           return '<button class="prof" data-modo="'+k+'"><div class="avatar" style="font-size:20px;background:var(--blue-light)">'+m.ico+'</div><div><b>'+m.tit+'</b><span>'+m.sub+(cod ? ' · te mandamos un código a '+h(p.email_mask) : '')+'</span></div></button>';
         }).join('') + '</div></section>';
   }
@@ -1487,6 +1496,27 @@ function engancharReceta(){
     catch(err){ btn.disabled = false; if(e) mostrarError(e, err); }
   };
   var bc = $('#b-codigo'); if(bc) bc.onclick = function(){ enviarCod(bc); };
+  var bfn = $('#b-fnac');
+  if(bfn){
+    var fnD = $('#fn-d'), fnM = $('#fn-m'), fnA = $('#fn-a');
+    [fnD, fnM, fnA].forEach(function(inp, i, arr){ inp.addEventListener('input', function(){ inp.value = inp.value.replace(/\D/g, ''); if(i < 2 && inp.value.length === 2) arr[i + 1].focus(); }); inp.addEventListener('keydown', function(ev){ if(ev.key === 'Enter') bfn.click(); }); });
+    setTimeout(function(){ try { fnD.focus(); } catch(e) {} }, 50);
+    bfn.onclick = async function(){
+      var e = $('#e-cod'); limpiarError(e);
+      var d = +fnD.value, m = +fnM.value, a = +fnA.value;
+      if(!(d >= 1 && d <= 31 && m >= 1 && m <= 12 && a >= 1900 && a <= new Date().getFullYear())) return mostrarError(e, 'Revisá la fecha: día, mes y año (4 números).');
+      bfn.disabled = true;
+      try{
+        var r = await api({ accion:'verificar_fnac', dni:Q.pac.dni, fecha_nac: a + '-' + String(m).padStart(2, '0') + '-' + String(d).padStart(2, '0') });
+        Q.sesion = r.sesion; Q.misDni = Q.pac.dni; guardarSes(r.sesion, Q.pac.dni); Q.mis = await api({ accion:'mis_datos', sesion:Q.sesion });
+        renderPedido();
+      }catch(err){
+        bfn.disabled = false;
+        if(/sin_fnac/.test(err.message || '')){ Q.fnacSinDato = true; renderPedido(); return; }
+        mostrarError(e, err);
+      }
+    };
+  }
   var br = $('#b-recod'); if(br) br.onclick = function(){ enviarCod(br); };
   var bv = $('#b-verif');
   if(bv){
