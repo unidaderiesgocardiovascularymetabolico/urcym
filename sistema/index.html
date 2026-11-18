@@ -2,7 +2,7 @@
 <html lang="es-AR">
 <head>
   <meta charset="UTF-8" />
-  <script>var URCYM_BUILD = '2026-11-14-1400';</script>
+  <script>var URCYM_BUILD = '2026-11-17-2330';</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Evaluaciones cardiometabólicas — Sistema de Historia Clínica</title>
 
@@ -1603,7 +1603,7 @@
       <span class="topbar-user" id="topbarUser"></span>
       <button id="btn-cambiar-pwd" onclick="abrirCambiarPassword()" style="padding:6px 12px;border-radius:8px;border:1.5px solid var(--border);background:transparent;font-size:11px;font-weight:500;color:var(--text-soft);cursor:pointer" title="Cambiar contraseña">🔑</button>
       <button onclick="cambiarUsuario()" style="padding:6px 12px;border-radius:8px;border:1.5px solid var(--border);background:transparent;font-size:11px;font-weight:500;color:var(--text-soft);cursor:pointer" title="Cambiar usuario">👤 Cambiar</button>
-      <button id="btn-backup" onclick="urcymBackup()" style="display:none;padding:6px 12px;border-radius:8px;border:1.5px solid var(--border);background:transparent;font-size:11px;font-weight:500;color:var(--text-soft);cursor:pointer" title="Descargar una copia de seguridad de toda la base">💾 Copia</button>
+      <button id="btn-backup" onclick="urcymBackup()" style="display:none;padding:6px 12px;border-radius:8px;border:1.5px solid var(--border);background:transparent;font-size:11px;font-weight:500;color:var(--text-soft);cursor:pointer" title="Backup: copia de seguridad de toda la base">💾 Backup</button>
       <button class="btn-logout" onclick="logout()">Salir</button>
     </div>
   </div>
@@ -43251,7 +43251,7 @@ function _invToggleDroga(key){
 
   window.urcymBackup = async function(opts){
     opts = opts || {};
-    var btn = document.getElementById('btn-backup'), txt0 = '💾 Copia';
+    var btn = document.getElementById('btn-backup'), txt0 = '💾 Backup';
     var h = await hGet(), conCarpeta = false;
     if(h) conCarpeta = await permiso(h, !opts.silencioso);
     if(opts.silencioso && !conCarpeta) return false;
@@ -43262,6 +43262,7 @@ function _invToggleDroga(key){
     var archivos = [{ nombre: 'urcym-copia-' + f + '.json', blob: new Blob([JSON.stringify(out)], { type: 'application/json' }) }];
     try { archivos.push({ nombre: 'urcym-HC-legible-' + f + '.html', blob: new Blob([legible(out)], { type: 'text/html' }) }); } catch(e){ console.warn('HC legible', e); }
     try { var xb = planilla(out); if(xb) archivos.push({ nombre: 'urcym-planilla-' + f + '.xlsx', blob: xb }); } catch(e){ console.warn('planilla', e); }
+    try { var es = await sb.rpc('urcym_estructura'); if(es && !es.error && es.data) archivos.push({ nombre: 'urcym-estructura-base.sql', blob: new Blob([String(es.data)], { type: 'text/plain' }) }); } catch(e){}
     if(conCarpeta){ try { var rs = await fetch(location.pathname + '?copia=' + Date.now(), { cache: 'no-store' }); var tx = rs.ok ? await rs.text() : ''; if(/URCYM_BUILD/.test(tx)) archivos.push({ nombre: 'urcym-sistema-ultima-version.html', blob: new Blob([tx], { type: 'text/html' }) }); } catch(e){} }
     var donde = '';
     if(conCarpeta){ try { await guardarArchivos(h, archivos); donde = 'en tu carpeta <b>' + E(h.name) + '</b>'; } catch(e){ conCarpeta = false; console.warn('carpeta', e); } }
@@ -43278,7 +43279,7 @@ function _invToggleDroga(key){
   function dias(){ return estado && estado.fecha ? Math.floor((Date.now() - new Date(estado.fecha).getTime()) / 864e5) : null; }
   function pintar(){
     var b = document.getElementById('btn-backup'); if(!b) return;
-    if(!b._v2){ b._v2 = true; b.removeAttribute('onclick'); b.onclick = function(e){ e.stopPropagation(); menu(); }; b.innerHTML = '💾 Copia <i class="bk-dot"></i>'; }
+    if(!b._v2){ b._v2 = true; b.removeAttribute('onclick'); b.onclick = function(e){ e.stopPropagation(); menu(); }; b.innerHTML = '💾 Backup <i class="bk-dot"></i>'; }
     var d = dias(), ok = d != null && d < 7;
     var dot = b.querySelector('.bk-dot'); dot.className = 'bk-dot ' + (ok ? 'ok' : 'falta');
     b.title = ok ? 'Copia de esta semana hecha (' + fDMA(estado.fecha) + ')' : (d == null ? 'Falta la copia de seguridad' : 'Falta la copia de esta semana (última: hace ' + d + ' días)');
@@ -43287,10 +43288,10 @@ function _invToggleDroga(key){
     var v = document.getElementById('bk-menu'); if(v){ v.remove(); return; }
     var h = await hGet(), d = dias();
     var m = document.createElement('div'); m.id = 'bk-menu';
-    m.innerHTML = '<div class="bk-t">💾 Copia de seguridad</div>'
-      + '<div class="bk-row ' + (d != null && d < 7 ? 'ok' : 'falta') + '">' + (d != null && d < 7 ? '✅ Copia de esta semana hecha' : '⏳ Falta la copia de esta semana') + '</div>'
+    m.innerHTML = '<div class="bk-t">💾 Backup <span style="font-weight:500;color:#64748b;font-size:12px">(copia de seguridad)</span></div>'
+      + '<div class="bk-row ' + (d != null && d < 7 ? 'ok' : 'falta') + '">' + (d != null && d < 7 ? '✅ Backup de esta semana hecho' : '⏳ Falta el backup de esta semana') + '</div>'
       + (estado && estado.fecha ? '<div class="bk-s">Última: ' + fDMA(estado.fecha) + (estado.por ? ' · ' + E(estado.por) : '') + (estado.carpeta ? ' · carpeta ' + E(estado.carpeta) : ' · descargada') + '</div>' : '<div class="bk-s">Todavía no hay registro de ninguna copia.</div>')
-      + '<button type="button" class="bk-go">💾 Hacer copia ahora</button>'
+      + '<button type="button" class="bk-go">💾 Hacer backup ahora</button>'
       + '<div class="bk-sep"></div>'
       + (puedeCarpeta ? (h ? '<div class="bk-s">📁 Se guarda en: <b>' + E(h.name) + '</b></div><button type="button" class="bk-dir lnk">Cambiar carpeta</button><button type="button" class="bk-sin lnk">Dejar de usar carpeta (descargar)</button>'
           : '<div class="bk-s">Elegí la carpeta de <b>Google Drive</b> en tu compu (por ejemplo <i>Mi unidad › URCyM copias</i>): la copia queda en la PC y Drive la sube sola. Y se hace sola una vez por semana al abrir el sistema.</div><button type="button" class="bk-dir">📁 Elegir carpeta</button>')
@@ -43480,6 +43481,428 @@ function _invToggleDroga(key){
 .pap-tx{flex:1;font-size:13.5px;color:#1e293b}.pap-d{font-size:12px;color:#475569;margin-top:2px;word-break:break-word}.pap-q{font-size:11.5px;color:#94a3b8;margin-top:3px}
 .pap-it button{border:1.5px solid var(--teal);background:#fff;color:var(--teal);border-radius:9px;padding:6px 11px;font:700 12.5px var(--font-main);cursor:pointer;white-space:nowrap}
 .pap-it button.ok{background:#f0fdf4;border-color:#16a34a;color:#166534}
+</style>
+
+<script>
+/* ══ Historia clínica (lectura): ✏️ Editar y 📝 Agregar comentario ══
+   · Editar: habilita en esta pantalla los botones de editar / eliminar de cada evolución
+     (las de más de 48 h siguen cerradas: se les agrega una aclaración).
+   · Agregar comentario: una nota corta fechada y firmada, como actualización de la HC
+     (queda como una entrada más de la historia, sin abrir una evolución completa).
+   ══ Evolución / HC: DNI y fecha de nacimiento se copian con un clic ══ */
+(function(){
+  function pill(){ var tb = document.querySelector('#page-historia_clinica .hc-topbar'); if(!tb) return null; return Array.prototype.find.call(tb.children, function(x){ return /Solo lectura|Editando/.test(x.textContent || ''); }) || null; }
+  function pintar(){
+    var p = pill(); if(!p) return;
+    if(!document.getElementById('hc_btn_edit')){
+      var bc = document.createElement('button'); bc.type = 'button'; bc.id = 'hc_btn_com'; bc.className = 'hc-tb-btn';
+      bc.textContent = '📝 Agregar comentario'; bc.title = 'Nota corta fechada y firmada, como actualización de la historia clínica';
+      bc.onclick = comentar;
+      var be = document.createElement('button'); be.type = 'button'; be.id = 'hc_btn_edit'; be.className = 'hc-tb-btn';
+      be.onclick = function(){ _hcSoloLectura = !_hcSoloLectura; _hcEditandoId = null; renderHistoria(_historialData || [], false); pintar(); };
+      p.parentNode.insertBefore(bc, p); p.parentNode.insertBefore(be, p);
+    }
+    var ed = !_hcSoloLectura, b = document.getElementById('hc_btn_edit');
+    b.textContent = ed ? '✓ Listo' : '✏️ Editar'; b.classList.toggle('on', ed);
+    b.title = ed ? 'Volver a solo lectura' : 'Editar o eliminar evoluciones (las de más de 48 h se aclaran, no se modifican)';
+    p.textContent = ed ? '✏️ Editando' : '👁 Solo lectura';
+    p.style.background = ed ? '#fff7ed' : ''; p.style.color = ed ? '#b45309' : '';
+  }
+  function comentar(){
+    if(!pacienteActual) return;
+    var dni = pacienteActual.dni;
+    var m = _uiModal('📝 Agregar comentario a la HC',
+      '<div style="font-size:12.5px;color:#64748b;margin-bottom:8px">Queda como una entrada nueva de la historia clínica, con la fecha de hoy y tu firma. Útil para actualizaciones: un resultado que llegó, un llamado, un cambio de indicación, etc.</div>'
+      + '<textarea class="hcc-txt" rows="5" style="width:100%;box-sizing:border-box;padding:10px;border:1.5px solid #e5e7eb;border-radius:10px;font:inherit;font-size:13.5px;resize:vertical" placeholder="Escribí el comentario…"></textarea>'
+      + '<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:10px"><button type="button" class="hcc-no" style="padding:8px 14px;border-radius:9px;border:1.5px solid #e5e7eb;background:#fff;cursor:pointer">Cancelar</button>'
+      + '<button type="button" class="hcc-si" style="padding:8px 16px;border-radius:9px;border:none;background:var(--teal);color:#fff;font-weight:700;cursor:pointer">💾 Guardar comentario</button></div>');
+    var ta = m.box.querySelector('.hcc-txt'); setTimeout(function(){ ta.focus(); }, 50);
+    ta.addEventListener('keydown', function(ev){ ev.stopPropagation(); });
+    m.box.querySelector('.hcc-no').onclick = m.cerrar;
+    m.box.querySelector('.hcc-si').onclick = async function(){
+      var txt = ta.value.trim(); if(!txt){ ta.focus(); return; }
+      this.disabled = true;
+      var html = '<div class="bloque-comentario" style="border-left:3px solid #6366f1;padding:4px 10px;margin:4px 0"><b>📝 Comentario / actualización de la HC:</b><br>' + _esc(txt).replace(/\n/g, '<br>') + '</div>';
+      var r = await sb.from('evoluciones').insert({ dni_paciente: dni, medico: currentUser.titulo + ' — ' + currentUser.mp, contenido_html: html, fecha_hora: new Date().toISOString() });
+      if(r.error){ this.disabled = false; alert('No se pudo guardar: ' + r.error.message); return; }
+      m.cerrar();
+      if(typeof showToast === 'function') showToast('Comentario guardado en la HC', 'success', 3000);
+      await cargarHistoria(dni);
+    };
+  }
+  var oA = window.abrirHistoriaClinica;
+  if(typeof oA === 'function') window.abrirHistoriaClinica = abrirHistoriaClinica = function(){ var r = oA.apply(this, arguments); try { pintar(); } catch(e){} return r; };
+  var oR = window.renderHistoria;
+  if(typeof oR === 'function') window.renderHistoria = renderHistoria = function(){ var r = oR.apply(this, arguments); try { if(document.getElementById('hc_btn_edit')) pintar(); } catch(e){} return r; };
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', pintar); else pintar();
+
+  /* ── copiar con un clic: DNI y fecha de nacimiento ── */
+  var IDS = { evol_dni: 'DNI', evol_fnac: 'Fecha de nacimiento', hc_dni: 'DNI' };
+  function valor(el){ var t = (el.textContent || '').replace(/✓.*$/, ''); return t.replace(/^[^:]*:\s*/, '').trim(); }
+  function marcar(){ Object.keys(IDS).forEach(function(id){ var el = document.getElementById(id); if(el && !el.classList.contains('cp-click')){ el.classList.add('cp-click'); el.title = 'Clic para copiar ' + IDS[id].toLowerCase(); } }); }
+  marcar(); setTimeout(marcar, 1500);
+  document.addEventListener('click', function(e){
+    var el = e.target && e.target.closest && e.target.closest('.cp-click'); if(!el || !IDS[el.id]) return;
+    var v = valor(el); if(!v || /^[-—]?$/.test(v)) return;
+    var ok = function(){ el.classList.add('cp-ok'); setTimeout(function(){ el.classList.remove('cp-ok'); }, 1300); if(typeof showToast === 'function') showToast(IDS[el.id] + ' copiado: ' + v, 'success', 1600); };
+    if(navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(v).then(ok, function(){ _copiarViejo(v); ok(); }); else { _copiarViejo(v); ok(); }
+  });
+})();
+</script>
+<style>
+.hc-tb-btn{padding:6px 12px;border:1.5px solid var(--teal);border-radius:8px;background:#fff;color:var(--teal);font-size:12.5px;font-weight:700;cursor:pointer;font-family:var(--font-main)}
+.hc-tb-btn.on{background:#fff7ed;border-color:#fdba74;color:#b45309}
+.cp-click{cursor:pointer;border-bottom:1px dashed transparent;transition:all .15s;border-radius:4px}
+.cp-click:hover{border-bottom-color:currentColor;background:#f0fdfa}
+.cp-click.cp-ok{background:#dcfce7;color:#166534!important}
+.cp-click.cp-ok::after{content:' ✓';font-weight:700}
+</style>
+
+<script>
+/* ══ 📷 Fotos hoja por hoja ══
+   Subís todas las fotos juntas (o PDF). Se leen solas, en orden. Las ves de a una, en grande,
+   con lo reconocido al lado: elegís qué es (laboratorio, antropometría o qué estudio), la fecha,
+   y corregís los valores. Las hojas de un mismo estudio pueden estar en cualquier orden
+   (ej. eco en la hoja 1 y en la 5): se juntan por estudio + fecha. Al final ves el resumen
+   y recién ahí se llenan las tablas. */
+(function(){
+  var E = function(t){ return String(t == null ? '' : t).replace(/[&<>"]/g, function(c){ return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' }[c]; }); };
+  var sinAc = function(t){ return String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase(); };
+  var CATS_EST = function(){ return EST_FILAS.filter(function(f){ return f.cat; }).map(function(f){ return f.label; }); };
+  function rango(cat){ var s = EST_FILAS.findIndex(function(f){ return f.cat && f.label === cat; }); if(s < 0) return null; var e = s + 1; while(e < EST_FILAS.length && !EST_FILAS[e].cat) e++; return [s, e]; }
+  function filasDe(h){
+    if(h.tipo === 'lab') return LAB_FILAS.filter(function(f){ return !f.cat && !f.calc && f.key !== 'LPA'; }).concat((window._filasExtraDe ? window._filasExtraDe('lab') : []).map(function(l){ return { key: 'extra_' + l, label: l }; }));
+    if(h.tipo === 'ant') return ANT_FILAS.filter(function(f){ return !f.cat && !f.calc; });
+    if(h.tipo === 'est' && h.cat){ var r = rango(h.cat); if(!r) return []; return EST_FILAS.slice(r[0] + 1, r[1]).filter(function(f){ return !f.calc; }); }
+    return [];
+  }
+  function nomCat(c){ return String(c || '').replace(/,? FEMORAL Y OTROS/, '').toLowerCase().replace(/^./, function(x){ return x.toUpperCase(); }).replace(/\b(ecg|mapa|vop|tc|rnm|spect)\b/gi, function(x){ return x.toUpperCase(); }); }
+  function nomTipo(h){ return h.tipo === 'lab' ? 'Laboratorio' : h.tipo === 'ant' ? 'Antropometría' : h.tipo === 'est' ? (h.cat ? nomCat(h.cat) : 'Estudio') : h.tipo === 'no' ? 'No cargar' : '¿Qué es?'; }
+  function colorTipo(h){ return h.tipo === 'lab' ? '#0d9488' : h.tipo === 'ant' ? '#7c3aed' : h.tipo === 'est' ? '#2563eb' : h.tipo === 'no' ? '#94a3b8' : '#f59e0b'; }
+
+  /* ── fechas: dd/mm/aaaa · mm/aaaa · aaaa ↔ ISO ── */
+  function aISO(s){ s = String(s || '').trim(); var m;
+    if((m = /^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})$/.exec(s))){ var y = m[3].length === 2 ? '20' + m[3] : m[3]; return y + '-' + m[2].padStart(2, '0') + '-' + m[1].padStart(2, '0'); }
+    if((m = /^(\d{1,2})[\/\-.](\d{4})$/.exec(s))) return m[2] + '-' + m[1].padStart(2, '0');
+    if(/^\d{4}$/.test(s)) return s;
+    if(/^\d{4}-\d{2}(-\d{2})?$/.test(s)) return s;
+    return null; }
+  function aDMA(iso){ var m = /^(\d{4})(?:-(\d{2}))?(?:-(\d{2}))?/.exec(String(iso || '')); if(!m) return ''; return m[3] ? m[3] + '/' + m[2] + '/' + m[1] : m[2] ? m[2] + '/' + m[1] : m[1]; }
+
+  /* ── Antropometría desde texto (balanza / bioimpedancia / informe) ── */
+  function analizarAnt(t){
+    var l = sinAc(t).replace(/,/g, '.'), v = [];
+    var num = function(re, min, max){ var m = re.exec(l); if(!m) return null; var n = parseFloat(m[m.length - 1]); return (n >= min && n <= max) ? String(n) : null; };
+    var put = function(key, x){ if(x == null) return; var f = ANT_FILAS.find(function(f){ return f.key === key; }); if(f) v.push({ key: key, label: f.label, val: x }); };
+    put('Peso', num(/\bpeso\b[^\d\n]{0,15}(\d{2,3}(?:\.\d)?)/, 25, 350));
+    var alt = num(/\b(altura|talla|estatura)\b[^\d\n]{0,15}(\d(?:\.\d{1,2})?|\d{3}(?:\.\d)?)/, 1, 230); if(alt != null){ var a = parseFloat(alt); put('Altura', String(a < 3 ? Math.round(a * 100) : a)); }
+    put('Cintura', num(/\b(cintura|perimetro abdominal|circunferencia abdominal)\b[^\d\n]{0,15}(\d{2,3}(?:\.\d)?)/, 40, 220));
+    put('Cadera', num(/\bcadera\b[^\d\n]{0,15}(\d{2,3}(?:\.\d)?)/, 50, 220));
+    put('Cuello', num(/\bcuello\b[^\d\n]{0,15}(\d{2}(?:\.\d)?)/, 20, 70));
+    put('PctGrasa', num(/(% ?(de )?grasa|grasa corporal|body fat|masa grasa ?%)[^\d\n]{0,12}(\d{1,2}(?:\.\d)?)/, 3, 75));
+    put('PctMusculo', num(/(% ?(de )?musculo|masa muscular ?%|musculo esqueletico ?%)[^\d\n]{0,12}(\d{1,2}(?:\.\d)?)/, 10, 80));
+    put('GrasaVisceral', num(/(grasa visceral|nivel visceral|visceral fat)[^\d\n]{0,12}(\d{1,2}(?:\.\d)?)/, 1, 60));
+    var f = /(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})/.exec(t);
+    return { items: v, fecha: f ? aISO(f[0]) : null };
+  }
+
+  /* ── reconocer una hoja según su tipo ── */
+  function reconocer(h){
+    h.vals = []; h.otros = [];
+    var t = h.texto || '';
+    if(h.tipo === 'lab' && window._labAnalizarTexto){ var r = window._labAnalizarTexto(t) || {}; h.vals = (r.items || []).filter(function(it){ return it.key !== 'LPA'; }).map(function(it){ return { key: it.key, label: it.label, val: it.val, unidad: it.unidad }; }); h.otros = (r.otros || []).map(function(o){ return { nombre: o.nombre, val: o.val }; }); if(!h.fechaTocada && r.fecha) h.fecha = r.fecha; }
+    else if(h.tipo === 'est' && h.cat && window._estAnalizarTexto){ var re = window._estAnalizarTexto(t, h.cat) || {}; var rg = rango(h.cat) || [0, 0];
+      Object.keys(re.valores || {}).forEach(function(k){ var fi = EST_FILAS.findIndex(function(f){ return f.key === k; }); if(fi > rg[0] && fi < rg[1]) h.vals.push({ key: k, label: EST_FILAS[fi].label, val: re.valores[k] }); });
+      if(!h.fechaTocada && re.fecha) h.fecha = re.fecha; }
+    else if(h.tipo === 'ant'){ var ra = analizarAnt(t); h.vals = ra.items; if(!h.fechaTocada && ra.fecha) h.fecha = ra.fecha; }
+    // sin fecha propia: la de otra hoja del mismo estudio
+    if(!h.fecha && h.tipo && h.tipo !== 'no'){ var o = S.hojas.filter(function(x){ return x !== h && x.tipo === h.tipo && x.cat === h.cat && x.fecha; }); if(o.length){ h.fecha = o[o.length - 1].fecha; h.fechaDeOtra = true; } }
+  }
+  function sugerir(h){
+    var t = h.texto || '';
+    var nLab = 0; try { nLab = ((window._labAnalizarTexto && window._labAnalizarTexto(t)) || { items: [] }).items.length; } catch(e){}
+    var cats = []; try { cats = (window._estCatsEn ? window._estCatsEn(t) : []) || []; } catch(e){}
+    var cat = null;
+    if(cats.length){ try { var rr = window._estAnalizarTexto(t); cat = rr && rr.cat; } catch(e){} if(!cat || !cats.some(function(c){ return c.cat === cat; })) cat = cats[0].cat; }
+    if(cat && !rango(cat)) cat = null;
+    var nAnt = analizarAnt(t).items.length;
+    if(nLab >= 3 && !(cat && nLab < 6)) return { tipo: 'lab' };
+    if(cat) return { tipo: 'est', cat: cat };
+    if(nAnt >= 2) return { tipo: 'ant' };
+    if(nLab >= 1) return { tipo: 'lab' };
+    return { tipo: null };
+  }
+
+  /* ── estado ── */
+  var S = null;
+  async function leerCola(){
+    if(S.leyendo) return; S.leyendo = true;
+    for(var i = 0; i < S.hojas.length; i++){
+      var h = S.hojas[i]; if(h.estado !== 'cola') continue;
+      h.estado = 'leyendo'; pintarTira(); if(i === S.i) pintarHoja();
+      try { h.texto = await window._leerArchivoTexto(h.file, function(p){ h.prog = p; }); h.estado = 'lista'; }
+      catch(e){ h.texto = ''; h.estado = 'error'; h.err = String(e && e.message || e); }
+      if(!S) return;
+      if(!h.tipo){ var s = sugerir(h); h.tipo = s.tipo; h.cat = s.cat || null; h.sugerido = !!s.tipo; }
+      reconocer(h);
+      pintarTira(); if(i === S.i) pintarHoja();
+    }
+    S.leyendo = false; pintarTira();
+  }
+
+  window.fotosHojasAbrir = function(tipoInicial){
+    if(!pacienteActual){ alert('Abrí primero el paciente.'); return; }
+    var inp = document.createElement('input'); inp.type = 'file'; inp.multiple = true; inp.accept = 'image/*,application/pdf';
+    inp.onchange = function(){ var fs = Array.prototype.slice.call(inp.files || []); if(fs.length) abrir(fs, tipoInicial); };
+    inp.click();
+  };
+  function abrir(files, tipoInicial){
+    S = { dni: String(pacienteActual.dni), i: 0, zoom: 1, hojas: files.map(function(f, k){ return { n: k + 1, file: f, url: URL.createObjectURL(f), pdf: /pdf/i.test(f.type) || /\.pdf$/i.test(f.name), estado: 'cola', tipo: null, cat: null, fecha: '', vals: [], otros: [] }; }), tipoInicial: tipoInicial || null };
+    var bg = document.createElement('div'); bg.className = 'fh-bg';
+    bg.innerHTML = '<div class="fh-box"><div class="fh-hd"><b>📷 Fotos hoja por hoja</b><span class="fh-pac">' + E((pacienteActual.apellido || '') + ', ' + (pacienteActual.nombre || '')) + '</span><span class="fh-ayuda">← → para moverte · las hojas de un mismo estudio pueden estar en cualquier orden</span><button type="button" class="fh-x" title="Cerrar sin cargar">×</button></div>'
+      + '<div class="fh-tira"></div><div class="fh-main"><div class="fh-foto"></div><div class="fh-panel"></div></div></div>';
+    document.body.appendChild(bg); S.bg = bg;
+    bg.querySelector('.fh-x').onclick = cerrar;
+    S.key = function(e){ if(!S || S.resumen) return; var tg = e.target; if(tg && /INPUT|TEXTAREA|SELECT/.test(tg.tagName)) return; if(e.key === 'ArrowRight'){ e.preventDefault(); ir(S.i + 1); } else if(e.key === 'ArrowLeft'){ e.preventDefault(); ir(S.i - 1); } else if(e.key === 'Escape'){ cerrar(); } };
+    document.addEventListener('keydown', S.key, true);
+    pintarTira(); pintarHoja(); leerCola();
+  }
+  function cerrar(){
+    if(!S) return;
+    var hay = S.hojas.some(function(h){ return h.vals.length; });
+    if(hay && !S.listo && !confirm('¿Cerrar sin cargar? Lo revisado se pierde.')) return;
+    document.removeEventListener('keydown', S.key, true); S.hojas.forEach(function(h){ try { URL.revokeObjectURL(h.url); } catch(e){} }); S.bg.remove(); S = null;
+  }
+  function ir(i){ if(!S) return; if(i >= S.hojas.length){ resumen(); return; } if(i < 0) return; var h = S.hojas[S.i]; if(h && h.estado === 'lista') h.revisada = true; S.i = i; S.resumen = false; pintarTira(); pintarHoja(); }
+
+  function pintarTira(){
+    if(!S) return; var w = S.bg.querySelector('.fh-tira');
+    w.innerHTML = S.hojas.map(function(h, i){
+      var est = h.estado === 'cola' ? '⏳' : h.estado === 'leyendo' ? '🔎' : h.estado === 'error' ? '⚠️' : h.revisada ? '✓' : '';
+      return '<button type="button" class="fh-th' + (i === S.i && !S.resumen ? ' on' : '') + '" data-i="' + i + '" style="--c:' + colorTipo(h) + '">' + (h.pdf ? '<span class="fh-pdf">PDF</span>' : '<img src="' + h.url + '">') + '<span class="fh-tn">' + h.n + ' ' + est + '</span><span class="fh-tt">' + E(nomTipo(h)) + (h.fecha ? ' · ' + aDMA(h.fecha) : '') + '</span></button>';
+    }).join('') + '<button type="button" class="fh-th fh-fin' + (S.resumen ? ' on' : '') + '">✓<span class="fh-tt">Resumen y cargar</span></button>';
+    w.querySelectorAll('.fh-th[data-i]').forEach(function(b){ b.onclick = function(){ ir(+b.dataset.i); }; });
+    w.querySelector('.fh-fin').onclick = resumen;
+    var lc = S.hojas.filter(function(h){ return h.estado === 'cola' || h.estado === 'leyendo'; }).length;
+    var ay = S.bg.querySelector('.fh-ayuda'); if(ay) ay.textContent = lc ? '🔎 Leyendo ' + lc + ' hoja' + (lc > 1 ? 's' : '') + '… podés ir revisando' : '← → para moverte · las hojas de un mismo estudio pueden estar en cualquier orden';
+  }
+  function pintarFoto(h){
+    var f = S.bg.querySelector('.fh-foto');
+    f.innerHTML = '<div class="fh-zb"><button type="button" data-z="-">−</button><button type="button" data-z="0">Ajustar</button><button type="button" data-z="+">+</button><span>Hoja ' + h.n + ' de ' + S.hojas.length + ' · ' + E(h.file.name) + '</span></div>'
+      + (h.pdf ? '<iframe class="fh-pdfv" src="' + h.url + '"></iframe>' : '<div class="fh-sc"><img src="' + h.url + '" style="width:' + (S.zoom * 100) + '%"></div>');
+    f.querySelector('.fh-zb').onclick = function(e){ var b = e.target.closest('[data-z]'); if(!b) return; var z = b.dataset.z; S.zoom = z === '0' ? 1 : Math.max(0.5, Math.min(4, S.zoom * (z === '+' ? 1.3 : 1 / 1.3))); var im = f.querySelector('img'); if(im) im.style.width = (S.zoom * 100) + '%'; };
+  }
+  function pintarHoja(){
+    if(!S) return; var h = S.hojas[S.i]; if(!h) return;
+    pintarFoto(h);
+    var p = S.bg.querySelector('.fh-panel');
+    if(h.estado === 'cola' || h.estado === 'leyendo'){ p.innerHTML = '<div class="fh-espera">🔎 ' + (h.estado === 'leyendo' ? 'Leyendo esta hoja…' : 'En espera para leer…') + '<br><small>Podés pasar a otra hoja mientras tanto.</small></div>' + navHtml(); armarNav(p); return; }
+    var cats = CATS_EST();
+    var tipos = [['lab','🧪 Laboratorio'],['ant','📏 Antropometría'],['no','🚫 No cargar']];
+    var sumaA = '';
+    if(h.tipo && h.tipo !== 'no'){ var otras = S.hojas.filter(function(x){ return x !== h && x.tipo === h.tipo && x.cat === h.cat && x.fecha && x.fecha === h.fecha; }); if(otras.length) sumaA = '<div class="fh-suma">➕ Se junta con la hoja ' + otras.map(function(x){ return x.n; }).join(', ') + ' (mismo ' + (h.tipo === 'est' ? 'estudio' : h.tipo === 'lab' ? 'laboratorio' : 'registro') + ' y fecha)</div>'; }
+    var filas = filasDe(h);
+    p.innerHTML = (h.estado === 'error' ? '<div class="fh-err">⚠️ No se pudo leer esta hoja (' + E(h.err || '') + '). Podés cargar los valores a mano.</div>' : '')
+      + '<div class="fh-lbl">Esta hoja es' + (h.sugerido ? ' <span class="fh-sug">(sugerido, cambialo si no es)</span>' : '') + '</div>'
+      + '<div class="fh-tipos">' + tipos.map(function(t){ return '<button type="button" data-t="' + t[0] + '" class="' + (h.tipo === t[0] ? 'on' : '') + '">' + t[1] + '</button>'; }).join('')
+      + '<select class="fh-cat' + (h.tipo === 'est' ? ' on' : '') + '"><option value="">🩺 Estudio…</option>' + cats.map(function(c){ return '<option value="' + E(c) + '"' + (h.tipo === 'est' && h.cat === c ? ' selected' : '') + '>' + E(nomCat(c)) + '</option>'; }).join('') + '</select></div>'
+      + (h.tipo && h.tipo !== 'no' ? '<div class="fh-lbl">Fecha</div><div class="fh-fecha"><input type="text" class="fh-f" placeholder="dd/mm/aaaa" value="' + E(aDMA(h.fecha)) + '">' + (h.fechaDeOtra ? '<span class="fh-fo">tomada de otra hoja del mismo estudio</span>' : '') + (h.tipo === 'est' ? '<span class="fh-fo">también mm/aaaa o aaaa</span>' : '') + '</div>' + sumaA : '')
+      + (h.tipo === 'est' && !h.cat ? '<div class="fh-espera" style="padding:14px">Elegí qué estudio es en la lista.</div>' : '')
+      + (h.tipo && h.tipo !== 'no' && (h.tipo !== 'est' || h.cat) ? '<div class="fh-lbl">Valores <span class="fh-sug">(' + h.vals.length + ' reconocidos · corregí lo que haga falta)</span></div>'
+        + '<div class="fh-vals">' + h.vals.map(function(v, k){ return filaHtml(filas, v, k); }).join('') + '</div>'
+        + '<button type="button" class="fh-add">➕ Agregar un valor</button>'
+        + (h.otros && h.otros.length ? '<div class="fh-lbl" style="margin-top:10px">No reconocí <span class="fh-sug">(si alguno va, elegí a qué fila; queda aprendido)</span></div><div class="fh-otros">' + h.otros.map(function(o, k){ return '<div class="fh-ot"><span>' + E(o.nombre) + ' <b>' + E(o.val) + '</b></span><select data-o="' + k + '"><option value="">— no va —</option>' + filas.map(function(f){ return '<option value="' + E(f.key) + '">' + E(f.label) + '</option>'; }).join('') + '</select></div>'; }).join('') + '</div>' : '')
+        : '')
+      + (h.texto ? '<details class="fh-tx"><summary>Ver / corregir el texto leído</summary><textarea rows="8">' + E(h.texto) + '</textarea><button type="button" class="fh-rel">🔁 Volver a reconocer</button></details>' : '')
+      + navHtml();
+    // eventos
+    p.querySelectorAll('.fh-tipos button[data-t]').forEach(function(b){ b.onclick = function(){ guardarEdits(h); h.tipo = b.dataset.t; h.cat = null; h.sugerido = false; if(h.tipo !== 'no') reconocer(h); pintarTira(); pintarHoja(); }; });
+    p.querySelector('.fh-cat').onchange = function(){ guardarEdits(h); if(!this.value) return; h.tipo = 'est'; h.cat = this.value; h.sugerido = false; reconocer(h); pintarTira(); pintarHoja(); };
+    var fi = p.querySelector('.fh-f'); if(fi) fi.onchange = function(){ var v = this.value.trim(); var iso = v ? aISO(v) : ''; if(v && !iso){ this.classList.add('mal'); return; } if(iso && h.tipo !== 'est' && !/^\d{4}-\d{2}-\d{2}$/.test(iso)){ this.classList.add('mal'); alert('Para ' + nomTipo(h).toLowerCase() + ' poné la fecha completa (dd/mm/aaaa).'); return; } this.classList.remove('mal'); h.fecha = iso; h.fechaTocada = true; h.fechaDeOtra = false; pintarTira(); pintarHoja(); };
+    var ad = p.querySelector('.fh-add'); if(ad) ad.onclick = function(){ guardarEdits(h); h.vals.push({ key: '', label: '', val: '', nuevo: true }); pintarHoja(); var ss = p.querySelectorAll('.fh-v select'); if(ss.length) ss[ss.length - 1].focus(); };
+    p.querySelectorAll('.fh-del').forEach(function(b){ b.onclick = function(){ guardarEdits(h); h.vals.splice(+b.dataset.k, 1); pintarHoja(); }; });
+    p.querySelectorAll('.fh-otros select').forEach(function(s){ s.onchange = function(){ var o = h.otros[+s.dataset.o]; o.asignar = s.value || null; }; s.value = (h.otros[+s.dataset.o] || {}).asignar || ''; });
+    var rl = p.querySelector('.fh-rel'); if(rl) rl.onclick = function(){ h.texto = p.querySelector('.fh-tx textarea').value; reconocer(h); pintarTira(); pintarHoja(); };
+    p.querySelectorAll('.fh-v input, .fh-v select').forEach(function(x){ x.addEventListener('change', function(){ guardarEdits(h); }); x.addEventListener('keydown', function(e){ if(e.key === 'Enter'){ e.preventDefault(); guardarEdits(h); } }); });
+    armarNav(p);
+  }
+  function filaHtml(filas, v, k){
+    var f = filas.find(function(x){ return x.key === v.key; });
+    var ops = f && f.opciones ? f.opciones : null;
+    return '<div class="fh-v" data-k="' + k + '"><select class="fh-vk"><option value="">— elegí el parámetro —</option>' + filas.map(function(x){ return '<option value="' + E(x.key) + '"' + (x.key === v.key ? ' selected' : '') + '>' + E(x.label) + '</option>'; }).join('') + '</select>'
+      + (ops ? '<select class="fh-vv">' + ops.map(function(o){ return '<option' + (String(o) === String(v.val) ? ' selected' : '') + '>' + E(o) + '</option>'; }).join('') + (ops.indexOf(v.val) < 0 && v.val ? '<option selected>' + E(v.val) + '</option>' : '') + '</select>'
+        : '<input class="fh-vv" type="text" value="' + E(v.val) + '">')
+      + (v.unidad ? '<span class="fh-u">' + E(v.unidad) + '</span>' : '') + '<button type="button" class="fh-del" data-k="' + k + '" title="Quitar">✕</button></div>';
+  }
+  function guardarEdits(h){
+    if(!S || !S.bg) return;
+    var filas = filasDe(h);
+    S.bg.querySelectorAll('.fh-panel .fh-v').forEach(function(r){ var k = +r.dataset.k, v = h.vals[k]; if(!v) return; var key = r.querySelector('.fh-vk').value; var val = r.querySelector('.fh-vv').value.trim();
+      if(key !== v.key){ var f = filas.find(function(x){ return x.key === key; }); v.key = key; v.label = f ? f.label : ''; v.unidad = ''; }
+      v.val = val; });
+  }
+  function navHtml(){ return '<div class="fh-nav"><button type="button" class="fh-prev"' + (S.i ? '' : ' disabled') + '>← Anterior</button><button type="button" class="fh-next">' + (S.i < S.hojas.length - 1 ? 'Siguiente hoja →' : 'Ver resumen →') + '</button></div>'; }
+  function armarNav(p){ var a = p.querySelector('.fh-prev'), b = p.querySelector('.fh-next'); if(a) a.onclick = function(){ guardarEdits(S.hojas[S.i]); ir(S.i - 1); }; if(b) b.onclick = function(){ guardarEdits(S.hojas[S.i]); ir(S.i + 1); }; }
+
+  /* ── resumen: se junta por tipo + estudio + fecha, sin importar el orden de las hojas ── */
+  function grupos(){
+    var G = {}, orden = [];
+    S.hojas.forEach(function(h){
+      if(!h.tipo || h.tipo === 'no' || (h.tipo === 'est' && !h.cat)) return;
+      var vals = h.vals.filter(function(v){ return v.key && String(v.val).trim() !== ''; });
+      (h.otros || []).forEach(function(o){ if(o.asignar){ var f = filasDe(h).find(function(x){ return x.key === o.asignar; }); vals.push({ key: o.asignar, label: f ? f.label : o.asignar, val: o.val, aprender: o.nombre }); } });
+      var k = h.tipo + '|' + (h.cat || '') + '|' + (h.fecha || '');
+      if(!G[k]){ G[k] = { tipo: h.tipo, cat: h.cat, fecha: h.fecha, hojas: [], vals: {}, choques: [] }; orden.push(k); }
+      var g = G[k]; g.hojas.push(h.n);
+      vals.forEach(function(v){ var prev = g.vals[v.key]; if(prev && String(prev.val) !== String(v.val)) g.choques.push(v.label + ': ' + prev.val + ' (hoja ' + prev.hoja + ') → ' + v.val + ' (hoja ' + h.n + ')'); g.vals[v.key] = Object.assign({ hoja: h.n }, v); });
+    });
+    return orden.map(function(k){ return G[k]; });
+  }
+  function resumen(){
+    if(!S) return; guardarEdits(S.hojas[S.i] || {}); var hc = S.hojas[S.i]; if(hc && hc.estado === 'lista') hc.revisada = true;
+    S.resumen = true; pintarTira();
+    var gs = grupos(), p = S.bg.querySelector('.fh-panel'), f = S.bg.querySelector('.fh-foto');
+    var pend = S.hojas.filter(function(h){ return h.estado === 'cola' || h.estado === 'leyendo'; }).length;
+    var sinTipo = S.hojas.filter(function(h){ return h.estado !== 'cola' && h.estado !== 'leyendo' && (!h.tipo || (h.tipo === 'est' && !h.cat)); });
+    f.innerHTML = '<div class="fh-res-txt"><div class="fh-lbl">Hojas</div>' + S.hojas.map(function(h){ return '<div class="fh-rh" style="--c:' + colorTipo(h) + '"><b>' + h.n + '</b> ' + E(nomTipo(h)) + (h.fecha ? ' · ' + aDMA(h.fecha) : '') + (h.tipo && h.tipo !== 'no' ? ' · ' + h.vals.filter(function(v){ return v.key && v.val !== ''; }).length + ' valores' : '') + '</div>'; }).join('') + '</div>';
+    var sinFecha = gs.filter(function(g){ return !g.fecha; });
+    p.innerHTML = '<div class="fh-lbl">Se va a cargar</div>'
+      + (pend ? '<div class="fh-err" style="background:#fffbeb;border-color:#fde68a;color:#92400e">🔎 Todavía se están leyendo ' + pend + ' hojas. Esperá a que terminen.</div>' : '')
+      + (sinTipo.length ? '<div class="fh-err" style="background:#fffbeb;border-color:#fde68a;color:#92400e">Falta decir qué es la hoja ' + sinTipo.map(function(h){ return h.n; }).join(', ') + ' (o marcala "No cargar").</div>' : '')
+      + (!gs.length ? '<div class="fh-espera">Nada para cargar todavía.</div>' : gs.map(function(g){ var vs = Object.keys(g.vals).map(function(k){ return g.vals[k]; });
+          return '<div class="fh-g" style="--c:' + colorTipo(g) + '"><div class="fh-gt"><b>' + E(nomTipo(g)) + '</b> · ' + (g.fecha ? aDMA(g.fecha) : '<span style="color:#b91c1c">sin fecha</span>') + ' <span class="fh-sug">hoja' + (g.hojas.length > 1 ? 's ' : ' ') + g.hojas.join(', ') + ' · ' + vs.length + ' valores</span></div>'
+            + '<div class="fh-gv">' + vs.map(function(v){ return '<span>' + E(v.label) + ' <b>' + E(v.val) + '</b></span>'; }).join('') + '</div>'
+            + (g.choques.length ? '<div class="fh-ch">⚠️ Dos hojas dicen distinto (queda el de la última): ' + E(g.choques.join(' · ')) + '</div>' : '') + '</div>'; }).join(''))
+      + '<div class="fh-nav"><button type="button" class="fh-prev">← Volver a las hojas</button><button type="button" class="fh-ok"' + (pend || sinTipo.length || sinFecha.length || !gs.length ? ' disabled' : '') + '>✓ Llenar las tablas</button></div>'
+      + (sinFecha.length ? '<div class="fh-sug" style="text-align:right;margin-top:4px">Falta la fecha en ' + sinFecha.map(function(g){ return nomTipo(g); }).join(', ') + '.</div>' : '');
+    p.querySelector('.fh-prev').onclick = function(){ ir(Math.min(S.i, S.hojas.length - 1)); };
+    p.querySelector('.fh-ok').onclick = function(){ llenar(gs); };
+    if(pend) setTimeout(function(){ if(S && S.resumen) resumen(); }, 2500);
+  }
+
+  /* ── escribir en las tablas ── */
+  function cel(datos, F, t, key, fecha, val, crear){
+    var fi = window._filaIdx ? window._filaIdx(t, key, true) : F.findIndex(function(f){ return f.key === key; }); if(fi < 0) return false;
+    if(!datos.columnas) datos.columnas = []; if(!datos.filas) datos.filas = [];
+    var ci = datos.columnas.indexOf(fecha); if(ci < 0) ci = insertarColumnaEnOrden(datos, fecha);
+    while(datos.filas.length <= fi) datos.filas.push([]); if(!datos.filas[fi]) datos.filas[fi] = [];
+    while(datos.filas[fi].length < datos.columnas.length) datos.filas[fi].push('');
+    datos.filas[fi][ci] = String(val); return ci;
+  }
+  function edadEn(fecha){ try { var f = pacienteActual.fecha_nacimiento; if(!f) return null; var d = new Date(f + 'T12:00:00'), h = new Date(String(fecha).padEnd(10, '-01').slice(0, 10) + 'T12:00:00'); var a = h.getFullYear() - d.getFullYear(); if(h.getMonth() < d.getMonth() || (h.getMonth() === d.getMonth() && h.getDate() < d.getDate())) a--; return a; } catch(e){ return null; } }
+  function convenciones(g){
+    var v = function(k){ var x = g.vals[k]; return x ? parseFloat(String(x.val).replace(',', '.')) : NaN; };
+    var poner = function(k, val){ if(g.vals[k] || val == null) return; var f = EST_FILAS.find(function(x){ return x.key === k; }); if(f) g.vals[k] = { key: k, label: f.label, val: val, auto: true }; };
+    if(g.cat === 'MAPA'){ var s = v('mapa_TASn'), d = v('mapa_TADn'); if(s > 0 || d > 0) poner('mapa_HTAn', (s >= 120 || d >= 70) ? 'Sí' : (s > 0 && d > 0 ? 'No' : null)); var de = v('mapa_DETASd'); if(de > 0) poner('mapa_Var', de >= 15 ? 'Sí' : 'No'); }
+    if(g.cat === 'ERGOMETRÍA'){ var fm = v('ergo_FCmax'), e = edadEn(g.fecha); if(fm > 40 && e) poner('ergo_FCpct', String(Math.round(fm / (220 - e) * 100))); }
+    if(g.cat === 'ECOCARDIO' && antDatos && antDatos.columnas && antDatos.columnas.length){
+      var iP = ANT_FILAS.findIndex(function(f){ return f.key === 'Peso'; }), iA = ANT_FILAS.findIndex(function(f){ return f.key === 'Altura'; });
+      var anio = String(g.fecha).slice(0, 4), cols = antDatos.columnas.map(function(c, j){ return { f: c, j: j }; }).sort(function(a, b){ return a.f < b.f ? -1 : 1; });
+      var buscar = function(fi){ var c = cols.filter(function(x){ var w = (antDatos.filas[fi] || [])[x.j]; return w != null && String(w).trim() !== ''; }); if(!c.length) return null; var m = c.filter(function(x){ return String(x.f).slice(0, 4) === anio; }); var x = (m.length ? m : c)[(m.length ? m : c).length - 1]; return { v: antDatos.filas[fi][x.j], f: x.f }; };
+      var p = buscar(iP), a = buscar(iA), lejos = [];
+      if(p){ poner('eco_Peso', String(p.v)); if(Math.abs(parseInt(anio) - parseInt(String(p.f).slice(0, 4))) > 3) lejos.push(aDMA(p.f)); }
+      if(a){ var av = parseFloat(String(a.v).replace(',', '.')); poner('eco_Talla', String(av < 3 ? Math.round(av * 100) : a.v)); if(Math.abs(parseInt(anio) - parseInt(String(a.f).slice(0, 4))) > 3) lejos.push(aDMA(a.f)); }
+      if(lejos.length){ var kc = 'eco_Com', fc = EST_FILAS.find(function(x){ return x.key === kc; }); if(fc){ var prev = g.vals[kc] ? g.vals[kc].val + ' ' : ''; g.vals[kc] = { key: kc, label: fc.label, val: prev + '[Peso y talla de Antropometría del ' + lejos.filter(function(x, i, arr){ return arr.indexOf(x) === i; }).join(' y ') + ': más de 3 años de diferencia con el estudio]' }; } }
+    }
+  }
+  async function llenar(gs){
+    if(!pacienteActual || String(pacienteActual.dni) !== S.dni){ alert('Cambió el paciente abierto: no se cargó nada. Volvé a abrir el paciente.'); return; }
+    var hechos = { lab: null, est: null, ant: null }, aprender = [], n = 0, ignorar = [];
+    gs.forEach(function(g){
+      if(g.tipo === 'est') convenciones(g);
+      var datos = g.tipo === 'lab' ? labDatos : g.tipo === 'est' ? estDatos : antDatos, F = g.tipo === 'lab' ? LAB_FILAS : g.tipo === 'est' ? EST_FILAS : ANT_FILAS;
+      if(g.tipo === 'est' && (!estDatos.filas || !estDatos.filas.length)) estDatos.filas = Array(EST_FILAS.length).fill(null).map(function(){ return []; });
+      if(g.tipo === 'lab' && !labDatos.unidades) labDatos.unidades = {};
+      Object.keys(g.vals).forEach(function(k){ var v = g.vals[k]; var ci = cel(datos, F, g.tipo, k, g.fecha, String(v.val).trim()); if(ci === false) return; n++; hechos[g.tipo] = ci;
+        if(g.tipo === 'lab' && v.unidad){ var fi = window._filaIdx ? window._filaIdx('lab', k) : -1; var tiene = fi >= 0 && (labDatos.filas[fi] || []).some(function(x, j){ return j !== ci && x != null && String(x).trim() !== ''; }); if(!tiene) labDatos.unidades[k] = v.unidad; }
+        if(v.aprender) aprender.push([v.aprender, k]); });
+    });
+    S.hojas.forEach(function(h){ if(h.tipo === 'lab') (h.otros || []).forEach(function(o){ if(!o.asignar) ignorar.push(o.nombre); }); });
+    try {
+      if(hechos.lab !== null){ try { calcLabValues(labDatos, LAB_FILAS); } catch(e){} renderTablaGenerica(labDatos, LAB_FILAS, 'evlab_wrap', hechos.lab); await guardarDatosPac('lab_tabla_wrap'); }
+      if(hechos.est !== null){ try { calcEstValues(estDatos, EST_FILAS); } catch(e){} renderTablaGenerica(estDatos, EST_FILAS, 'evest_wrap', hechos.est); try { renderEstResumen(); } catch(e){} await guardarDatosPac('est_tabla_wrap'); }
+      if(hechos.ant !== null){ try { calcAntValues(antDatos, ANT_FILAS); } catch(e){} renderTablaGenerica(antDatos, ANT_FILAS, 'evant_wrap', hechos.ant); await guardarDatosPac('ant_tabla_wrap'); }
+      try { sincronizarRO(); } catch(e){}
+    } catch(e){ alert('Hubo un problema al guardar: ' + (e.message || e)); return; }
+    aprender.forEach(function(a){ if(window._labSinonimoGuardar) window._labSinonimoGuardar(a[0], a[1]).catch(function(){}); });
+    if(ignorar.length && window._labSinonimosIgnorar) window._labSinonimosIgnorar(ignorar).catch(function(){});
+    S.listo = true;
+    if(typeof showToast === 'function') showToast('✓ Cargado: ' + gs.map(function(g){ return nomTipo(g) + ' ' + aDMA(g.fecha); }).join(' · ') + ' (' + n + ' valores)', 'success', 6000);
+    cerrar();
+  }
+
+  /* ── botones en Laboratorio, Estudios y Antropometría ── */
+  function botones(){
+    [['labPegarAbrir()', 'lab'], ['estDictadoAbrir()', 'est'], ["agregarColumnaManual('ant')", 'ant']].forEach(function(x){
+      document.querySelectorAll('button[onclick="' + x[0] + '"]').forEach(function(b){
+        if(b.parentNode.querySelector('.fh-btn')) return;
+        var n = document.createElement('button'); n.type = 'button'; n.className = 'fh-btn'; n.textContent = '📷 Fotos hoja por hoja';
+        n.title = 'Subí todas las fotos (laboratorio, estudios, antropometría) y revisalas de a una antes de llenar las tablas';
+        n.onclick = function(){ window.fotosHojasAbrir(x[1]); };
+        b.parentNode.insertBefore(n, b);
+      });
+    });
+  }
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', botones); else botones();
+  setTimeout(botones, 2000);
+})();
+</script>
+<style>
+.fh-btn{padding:5px 14px;border:1.5px solid #0d9488;border-radius:7px;background:#0d9488;color:#fff;font-size:12px;font-weight:700;cursor:pointer;font-family:var(--font-main);margin-left:auto}
+.fh-btn + button{margin-left:6px!important}
+.fh-bg{position:fixed;inset:0;z-index:100030;background:rgba(15,23,42,.55);display:flex;align-items:stretch;justify-content:center;padding:1.5vh 1vw}
+.fh-box{background:#fff;border-radius:14px;width:100%;max-width:1500px;display:flex;flex-direction:column;overflow:hidden;font-family:var(--font-main);box-shadow:0 20px 60px rgba(0,0,0,.35)}
+.fh-hd{display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid #e5e7eb}
+.fh-hd b{font-size:15.5px}.fh-pac{font-size:13px;color:#475569}.fh-ayuda{flex:1;font-size:12px;color:#64748b;text-align:right}
+.fh-x{border:none;background:none;font-size:24px;color:#64748b;cursor:pointer;line-height:1}
+.fh-tira{display:flex;gap:6px;padding:8px 12px;overflow-x:auto;border-bottom:1px solid #f1f5f9;background:#f8fafc;flex-shrink:0}
+.fh-th{position:relative;flex:0 0 auto;width:92px;height:84px;border:2px solid #e2e8f0;border-radius:10px;background:#fff;cursor:pointer;padding:0;overflow:hidden;display:flex;flex-direction:column;align-items:stretch}
+.fh-th img{width:100%;height:46px;object-fit:cover}.fh-th .fh-pdf{height:46px;display:flex;align-items:center;justify-content:center;font-weight:800;color:#b91c1c;font-size:12px}
+.fh-th .fh-tn{position:absolute;top:2px;left:3px;background:rgba(255,255,255,.9);border-radius:6px;padding:0 5px;font-size:11px;font-weight:800}
+.fh-th .fh-tt{flex:1;display:flex;align-items:center;justify-content:center;text-align:center;font-size:10.5px;font-weight:700;color:#fff;background:var(--c);padding:1px 3px;line-height:1.15}
+.fh-th.on{border-color:#0f172a;box-shadow:0 0 0 2px #0f172a}
+.fh-fin{width:110px;justify-content:center;align-items:center;font-size:20px;color:#0d9488;font-weight:800}.fh-fin .fh-tt{position:absolute;bottom:0;left:0;right:0;flex:none;background:#0d9488;padding:4px}
+.fh-main{flex:1;display:grid;grid-template-columns:minmax(0,1.25fr) minmax(360px,1fr);min-height:0}
+.fh-foto{display:flex;flex-direction:column;min-height:0;background:#0f172a}
+.fh-zb{display:flex;gap:6px;align-items:center;padding:6px 10px;background:#1e293b;color:#cbd5e1;font-size:12px}
+.fh-zb button{border:1px solid #475569;background:#334155;color:#fff;border-radius:7px;padding:3px 10px;cursor:pointer;font-weight:700}
+.fh-zb span{margin-left:8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fh-sc{flex:1;overflow:auto;text-align:center}.fh-sc img{display:block;margin:0 auto;max-width:none}
+.fh-pdfv{flex:1;border:0;width:100%;background:#fff}
+.fh-panel{overflow:auto;padding:12px 16px;display:flex;flex-direction:column;gap:6px;min-height:0}
+.fh-lbl{font:800 11px var(--font-main);text-transform:uppercase;letter-spacing:.06em;color:#0f766e;margin-top:6px}
+.fh-sug{font-weight:500;text-transform:none;letter-spacing:0;color:#94a3b8;font-size:11.5px}
+.fh-tipos{display:flex;flex-wrap:wrap;gap:6px}
+.fh-tipos button,.fh-cat{padding:7px 12px;border:1.5px solid #e2e8f0;border-radius:10px;background:#fff;font:700 13px var(--font-main);color:#334155;cursor:pointer}
+.fh-tipos button.on{background:#0d9488;border-color:#0d9488;color:#fff}
+.fh-tipos button[data-t=ant].on{background:#7c3aed;border-color:#7c3aed}.fh-tipos button[data-t=no].on{background:#94a3b8;border-color:#94a3b8}
+.fh-cat.on{background:#2563eb;border-color:#2563eb;color:#fff}
+.fh-fecha{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.fh-f{width:130px;padding:7px 10px;border:1.5px solid #cbd5e1;border-radius:9px;font:600 14px var(--font-main)}.fh-f.mal{border-color:#f87171;background:#fef2f2}
+.fh-fo{font-size:11.5px;color:#94a3b8}
+.fh-suma{font-size:12.5px;color:#1d4ed8;background:#eff6ff;border-radius:8px;padding:5px 9px}
+.fh-vals{display:flex;flex-direction:column;gap:4px}
+.fh-v{display:flex;gap:6px;align-items:center}
+.fh-v select.fh-vk{flex:1;min-width:0;padding:6px 8px;border:1.5px solid #e2e8f0;border-radius:8px;font:13px var(--font-main)}
+.fh-v .fh-vv{width:120px;padding:6px 8px;border:1.5px solid #cbd5e1;border-radius:8px;font:700 14px var(--font-main)}
+.fh-u{font-size:11.5px;color:#64748b;min-width:44px}
+.fh-del{border:1px solid #fecaca;background:#fff;color:#b91c1c;border-radius:7px;padding:3px 8px;cursor:pointer}
+.fh-add{align-self:flex-start;border:1.5px dashed #94a3b8;background:#fff;border-radius:9px;padding:5px 12px;font:600 12.5px var(--font-main);color:#334155;cursor:pointer}
+.fh-otros{display:flex;flex-direction:column;gap:4px}.fh-ot{display:flex;gap:8px;align-items:center;font-size:13px}.fh-ot span{flex:1}.fh-ot select{padding:4px 6px;border:1.5px solid #e2e8f0;border-radius:7px;font:12.5px var(--font-main);max-width:55%}
+.fh-tx{margin-top:8px;font-size:12.5px}.fh-tx summary{cursor:pointer;color:#64748b}.fh-tx textarea{width:100%;box-sizing:border-box;margin-top:6px;font:12px/1.4 monospace;border:1.5px solid #e2e8f0;border-radius:8px;padding:8px}
+.fh-rel{margin-top:4px;border:1.5px solid #0d9488;background:#fff;color:#0d9488;border-radius:8px;padding:4px 10px;font-weight:700;cursor:pointer}
+.fh-nav{display:flex;justify-content:space-between;gap:8px;margin-top:auto;padding-top:12px;border-top:1px solid #f1f5f9}
+.fh-nav button{padding:9px 16px;border-radius:10px;font:700 13.5px var(--font-main);cursor:pointer;border:1.5px solid #e2e8f0;background:#fff;color:#334155}
+.fh-nav .fh-next,.fh-nav .fh-ok{background:#0d9488;border-color:#0d9488;color:#fff}
+.fh-nav button:disabled{opacity:.45;cursor:not-allowed}
+.fh-espera{padding:30px 10px;text-align:center;color:#64748b;font-size:14px}
+.fh-err{font-size:12.5px;background:#fef2f2;border:1px solid #fecaca;color:#991b1b;border-radius:9px;padding:7px 10px}
+.fh-res-txt{padding:14px;color:#e2e8f0;overflow:auto}.fh-res-txt .fh-lbl{color:#5eead4}
+.fh-rh{border-left:4px solid var(--c);padding:5px 10px;margin:4px 0;background:#1e293b;border-radius:6px;font-size:13px}
+.fh-g{border:1.5px solid #e2e8f0;border-left:5px solid var(--c);border-radius:10px;padding:8px 12px}
+.fh-gt{font-size:14px}.fh-gv{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:12.5px;color:#475569;margin-top:4px}
+.fh-ch{font-size:12px;color:#b45309;margin-top:4px}
+@media (max-width:900px){.fh-main{grid-template-columns:1fr;grid-template-rows:45vh auto}}
 </style>
 
 </body>
