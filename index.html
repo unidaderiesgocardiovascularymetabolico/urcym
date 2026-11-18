@@ -130,6 +130,9 @@ header{position:relative}
 .primer small{display:block;font-size:12.5px;color:var(--soft)}
 .osde-pegar{width:100%;min-height:96px;font-size:14.5px;line-height:1.45;overflow-wrap:anywhere;white-space:pre-wrap;resize:vertical}
 .osde-ok{margin:6px 2px 0;font-size:12.5px;font-weight:600}
+.osde-pegar-btn{margin:2px 0 8px}
+.despues{display:flex;gap:8px;align-items:flex-start;font-size:13.5px;line-height:1.4;margin:10px 2px 4px;color:var(--ink,#334155);cursor:pointer}
+.despues input{margin-top:3px;width:18px;height:18px;flex:0 0 auto}
 .cal-rep{position:absolute;left:42px;bottom:10px;border:1.5px solid var(--blue);background:var(--blue-light);color:var(--blue-dark,#1f6aab);border-radius:999px;padding:5px 12px;font:inherit;font-size:13px;font-weight:700;cursor:pointer}
 .cal-btns{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
 .cal-btns a,.cal-btns button{display:flex;align-items:center;justify-content:center;gap:6px;padding:10px;border-radius:12px;border:1.5px solid var(--line);background:#fff;color:var(--text);font:inherit;font-size:13.5px;font-weight:600;text-decoration:none;cursor:pointer}
@@ -680,7 +683,7 @@ function avisoFalta(id, st, queComp){
   var el = $('#' + id); if(!el) return;
   var f = [];
   var ir = function(txt, sel){ return '<button type="button" class="ir-falta" data-ir-a="' + sel + '">' + txt + '</button>'; };
-  if(st.metodo === 'comprobante' && !st.archivo) f.push(ir('adjuntar el comprobante de ' + queComp, '.archivo, [id^=f-comp], [id^=f-qcomp], input[type=file]'));
+  if(st.metodo === 'comprobante' && !st.archivo && !st.compDespues) f.push(ir('adjuntar el comprobante de ' + queComp, '.archivo, [id^=f-comp], [id^=f-qcomp], input[type=file]'));
   if(!st.acepto) f.push(ir('tildar «Leí y acepto las condiciones»', '#lbl-acepto'));
   if(st.editMotivos) f.push(ir('tocar «Listo» en el motivo de consulta', '.motivos'));
   el.innerHTML = f.length ? '⚠️ Para continuar falta ' + f.join(' y ') + '.' : '';
@@ -1050,7 +1053,8 @@ function guardarBorrador(){ clearTimeout(_bTimer); _bTimer = setTimeout(guardarB
 async function guardarBorradorYa(){
   try {
     var b = null;
-    if(FLUJO === 'pedido' && Q && Q.datos && Q.detalleOk && !Q.enviando)   // solo al llegar al pago (cuando se va al banco)
+    if(FLUJO === 'pedido' && Q && Q.tipo === 'receta' && Q.datos && !Q.detalleOk && !Q.enviando){ try { if(document.querySelector('[data-campo]') || $('#f-osde')) guardarCamposReceta(); } catch(e) {} }
+    if(FLUJO === 'pedido' && Q && Q.datos && !Q.enviando)   // desde que cargó sus datos (se puede ir a la app de OSDE o del banco y volver)
       b = { flujo:'pedido', tipo:Q.tipo, d:_plano(Q), archivo:Q.archivo || null, adjuntos:(Q.adjuntos || []).slice(), at:Date.now(),
             resumen:(Q.tipo === 'receta' ? 'pedido de receta' : 'consulta por mensaje') + (Q.prof ? ' · ' + Q.prof.nombre : '') };
     else if(FLUJO === 'video' && S && S.hora && S.dniOk && !S.enviando)
@@ -1082,7 +1086,9 @@ function retomarBorrador(b){
   }
   var dest = $('#seccion-pago') || $('#seccion-sena') || $('#seccion-detalle');
   var aviso = document.createElement('div'); aviso.className = 'aviso verde'; aviso.style.margin = '0 0 12px';
-  aviso.innerHTML = '👍 <b>Retomamos tu ' + h(b.resumen.split(' · ')[0]) + ' donde lo dejaste.</b>' + (b.archivo ? ' El comprobante ya está adjunto.' : ' Si ya transferiste, adjuntá el comprobante y listo.');
+  var enOsde = b.flujo === 'pedido' && !(b.d && b.d.detalleOk) && $('#osde-box');
+  if(enOsde) dest = $('#osde-box').parentNode;
+  aviso.innerHTML = '👍 <b>Retomamos tu ' + h(b.resumen.split(' · ')[0]) + ' donde lo dejaste.</b>' + (enOsde ? ' Tocá «Pegar» para poner el link de OSDE que copiaste.' : b.flujo === 'pedido' && !(b.d && b.d.detalleOk) ? '' : (b.archivo ? ' El comprobante ya está adjunto.' : ' Si ya transferiste, adjuntá el comprobante y listo.'));
   if(dest){ dest.insertBefore(aviso, dest.children[1] || null); setTimeout(function(){ dest.scrollIntoView({ behavior:'smooth', block:'start' }); }, 120); }
 }
 // Al abrir la página: si quedó algo sin terminar (últimas 24 h), se retoma solo o se ofrece
@@ -1126,6 +1132,15 @@ function iniciarPedido(tipo, profId, opt){
   if(!profs.length){ $('#app').innerHTML = barraVolver() + '<div class="card centro"><p>Este servicio no está disponible en este momento.</p></div>'; return; }
   renderPedido();
 }
+document.addEventListener('click', async function(ev){
+  var b = ev.target.closest && ev.target.closest('[data-pegar]'); if(!b) return;
+  var t = $('#' + b.dataset.pegar); if(!t) return;
+  try {
+    var txt = navigator.clipboard && navigator.clipboard.readText ? await navigator.clipboard.readText() : '';
+    if(txt && txt.trim()){ t.value = txt.trim(); t.dispatchEvent(new Event('input', { bubbles:true })); b.textContent = '✓ Pegado'; setTimeout(function(){ b.textContent = '📋 Pegar lo que copiaste'; }, 2000); return; }
+  } catch(e) {}
+  t.focus(); b.textContent = 'Mantené apretado el cuadro y elegí «Pegar»'; setTimeout(function(){ b.textContent = '📋 Pegar lo que copiaste'; }, 4000);
+});
 /* Link de OSDE: la app da un texto con el link adentro; se acepta todo y se toma el link */
 function linkOsdeDe(t){ var m = /https:\/\/[^\s<>"']+/i.exec(String(t || '')); return m ? m[0] : ''; }
 function engancharOsdePegar(id, okId){
@@ -1166,11 +1181,17 @@ function htmlCobertura(){
       + '<ol style="margin:8px 0 10px;padding-left:20px;font-size:14px;line-height:1.5">'
       + '<li>Entrá a la <b>app de OSDE</b> y abrí tu <b>credencial</b>.</li>'
       + '<li>Tocá <b>Compartir credencial</b>.</li>'
-      + '<li>Ingresá el DNI '+(dni ? '<b>'+h(dni.replace(/\B(?=(\d{3})+(?!\d))/g, '.'))+'</b> ('+h(Q.prof.nombre)+')' : 'de tu médico')+'.</li>'
+      + '<li>Ingresá el DNI '+(dni ? '<b>'+h(dni.replace(/\B(?=(\d{3})+(?!\d))/g, '.'))+'</b> ('+h(Q.prof.nombre)+') <button type="button" class="copiar" data-copiar="'+h(dni)+'">Copiar DNI</button>' : 'de tu médico')+'.</li>'
       + '<li>Copiá lo que te da la app (el texto con el link) y pegalo acá abajo, completo.</li></ol>'
-      + '<textarea id="f-osde" class="osde-pegar" rows="4" placeholder="Pegá acá lo que te dio la app de OSDE (texto + link https://…)" autocomplete="off" spellcheck="false">'+h(Q.osdeLink||'')+'</textarea>'
-      + '<p class="nota osde-ok" id="osde-ok"></p>'
-      + '<p class="nota" style="margin:6px 0 0">El link dura 8 horas. Si se vence antes de que hagamos la receta, te pedimos uno nuevo por mail.</p></div>';
+      + (Q.osdeDespues
+        ? '<div class="aviso verde" style="margin:4px 0 6px">📧 <b>Lo mandás después.</b> Al terminar el pedido te llega un mail con un botón para cargar el link (o respondés ese mail pegándolo). Hacemos la receta cuando llega el link.</div>'
+          + '<button type="button" class="link" id="b-osde-ahora">Ya lo tengo: lo pego ahora</button>'
+        : '<button type="button" class="btn sec osde-pegar-btn" data-pegar="f-osde">📋 Pegar lo que copiaste</button>'
+          + '<textarea id="f-osde" class="osde-pegar" rows="4" placeholder="…o mantené apretado acá y elegí «Pegar»" autocomplete="off" spellcheck="false">'+h(Q.osdeLink||'')+'</textarea>'
+          + '<p class="nota osde-ok" id="osde-ok"></p>'
+          + '<p class="nota" style="margin:6px 0 0">El link dura 8 horas. Si se vence antes de que hagamos la receta, te pedimos uno nuevo por mail.</p>'
+          + '<button type="button" class="link" id="b-osde-despues" style="margin-top:8px">¿Ahora no podés? Lo mando después por mail</button>')
+      + '</div>';
   } else if(c === 'particular'){
     x += '<p class="nota" style="margin:10px 2px 0">Sin prepaga: abonás los honorarios en el último paso.</p>';
   }
@@ -1480,6 +1501,8 @@ function engancharReceta(){
     bv.onclick = verif; $('#f-cod').addEventListener('keydown', function(ev){ if(ev.key === 'Enter') verif(); });
   }
   engancharOsdePegar('f-osde', 'osde-ok');
+  var bod = $('#b-osde-despues'); if(bod) bod.onclick = function(){ guardarCamposReceta(); Q.osdeDespues = true; Q.osdeLink = ''; renderPedido(); var bx = $('#osde-box'); if(bx) bx.scrollIntoView({ behavior:'smooth', block:'center' }); };
+  var boa = $('#b-osde-ahora'); if(boa) boa.onclick = function(){ guardarCamposReceta(); Q.osdeDespues = false; renderPedido(); var t = $('#f-osde'); if(t) t.focus(); };
   document.querySelectorAll('[data-cob]').forEach(function(b){ b.onclick = function(){ guardarCamposReceta(); Q.cob = b.dataset.cob; renderPedido(); var f = $('#f-af') || $('#f-osde'); if(f && Q.cob === 'osde') f.focus(); }; });
   var bac = $('#b-afcambio'); if(bac) bac.onclick = function(){ guardarCamposReceta(); Q.afCambio = true; renderPedido(); var f = $('#f-af'); if(f) f.focus(); };
   if($('#f-adj')) engancharAdjuntos('e-rec', true);
@@ -1499,7 +1522,7 @@ function engancharReceta(){
     var c = cobQ();
     if(!c){ var tc = document.querySelector('.tabs.cob'); if(tc && tc.scrollIntoView) tc.scrollIntoView({ behavior:'smooth', block:'center' }); return mostrarError(e, 'Elegí la cobertura: OSDE o particular.'); }
     if(c === 'osde' && !(Q.pac.existe && Q.pac.es_osde && !Q.afCambio) && !(Q.af||'').trim()) return mostrarError(e, 'Indicá tu número de afiliado de OSDE.');
-    if(esOsdeQ() && !linkOsdeDe(Q.osdeLink)){ var fo = $('#f-osde'); if(fo) fo.focus(); return mostrarError(e, 'No encontramos el link: pegá lo que te da la app de OSDE al compartir tu credencial (tiene que incluir https://…).'); }
+    if(esOsdeQ() && !Q.osdeDespues && !linkOsdeDe(Q.osdeLink)){ var fo = $('#f-osde'); if(fo) fo.focus(); return mostrarError(e, 'No encontramos el link: pegá lo que te da la app de OSDE al compartir tu credencial (tiene que incluir https://…).'); }
     // Siempre: vista previa para leer con calma antes de pagar
     Q.revisar = true; Q.revise = false; renderPedido();
     var s = $('#seccion-detalle'); if(s && s.scrollIntoView) s.scrollIntoView({ behavior:'smooth', block:'start' });
@@ -1569,6 +1592,7 @@ function htmlPagoPedido(n){
   var accion = Q.tipo === 'receta' ? 'Enviar pedido' : 'Enviar consulta';
   if(Q.metodo === 'comprobante'){
     x += '<p style="font-size:14.5px;margin-bottom:10px">Transferí <b>'+pesos(monto)+'</b> a:<br><span class="nota" style="font-size:12.5px">Podés ir a la app de tu banco y volver: lo que cargaste queda guardado en este celular.</span></p>' + htmlTransferencia(P.transferencia) + htmlArchivo('f-qcomp')
+      + '<label class="despues"><input type="checkbox" id="ck-comp-despues"'+(Q.compDespues ? ' checked' : '')+'> Todavía no tengo la captura: <b>la mando después</b> (te llega un mail para adjuntarla o la mandás respondiéndolo)</label>'
       + aviso() + '<div class="falta" id="falta-q"></div><div class="error" id="e-qpago"></div><button class="btn" id="b-qenviar" disabled>'+accion+'</button>';
   } else {
     x += '<p style="font-size:14.5px">Vas a pagar <b>'+pesos(monto)+'</b> con Mercado Pago. Cuando se acredite, el pedido nos llega solo y te avisamos por mail.</p>'
@@ -1579,8 +1603,9 @@ function htmlPagoPedido(n){
 function engancharPagoPedido(){
   document.querySelectorAll('[data-qmetodo]').forEach(function(b){ b.onclick = function(){ Q.metodo = b.dataset.qmetodo; Q.archivo = null; renderPedido(); }; });
   var bc = $('#b-qenviar');
-  var listo = function(){ bc.disabled = !Q.acepto || (Q.metodo === 'comprobante' && !Q.archivo); avisoFalta('falta-q', Q, 'pago'); };
+  var listo = function(){ bc.disabled = !Q.acepto || (Q.metodo === 'comprobante' && !Q.archivo && !Q.compDespues); avisoFalta('falta-q', Q, 'pago'); };
   if(Q.metodo === 'comprobante') engancharArchivo('f-qcomp', function(f){ Q.archivo = f; listo(); });
+  var ckd = $('#ck-comp-despues'); if(ckd) ckd.onchange = function(){ Q.compDespues = ckd.checked; listo(); guardarBorrador(); };
   engancharAviso(Q, listo); listo();
   bc.onclick = enviarPedido;
   engancharCancelarSinPago('nuevo-pedido', null);
@@ -1589,7 +1614,7 @@ async function enviarPedido(){
   if(Q.enviando) return;
   var e = $('#e-qpago'), bc = $('#b-qenviar'); limpiarError(e);
   if(!Q.acepto) return mostrarError(e, 'Tildá "Leí y acepto" para continuar.');
-  if(Q.metodo === 'comprobante' && !Q.archivo) return mostrarError(e, 'Adjuntá el comprobante de la transferencia.');
+  if(Q.metodo === 'comprobante' && !Q.archivo && !Q.compDespues) return mostrarError(e, 'Adjuntá el comprobante de la transferencia.');
   Q.enviando = true; bc.disabled = true; var txt = bc.textContent;
   bc.innerHTML = '<div class="spin" style="border-top-color:#fff;border-color:rgba(255,255,255,.35)"></div> ' + (Q.metodo === 'mercadopago' ? 'Abriendo Mercado Pago…' : 'Enviando…');
   try{
@@ -1601,13 +1626,13 @@ async function enviarPedido(){
       if(Q.nota) fd.append('nota', Q.nota);
       fd.append('cobertura', cobQ() || '');
       if(cobQ() === 'osde' && (Q.af||'').trim() && (!(Q.pac.existe && Q.pac.es_osde) || Q.afCambio)) fd.append('afiliado', Q.af.trim());
-      if(Q.metodo === 'osde') fd.append('osde_link', Q.osdeLink || '');
+      if(Q.metodo === 'osde'){ fd.append('osde_link', Q.osdeDespues ? '' : (Q.osdeLink || '')); if(Q.osdeDespues) fd.append('osde_despues', '1'); }
       for(var j = 0; j < Q.adjuntos.length; j++) fd.append('fotos', await prepararArchivo(Q.adjuntos[j]));
     } else {
       fd.append('texto', Q.texto.trim());
       for(var i = 0; i < Q.adjuntos.length; i++) fd.append('adjuntos', await prepararArchivo(Q.adjuntos[i]));
     }
-    if(Q.metodo === 'comprobante') fd.append('comprobante', await prepararArchivo(Q.archivo));
+    if(Q.metodo === 'comprobante'){ if(Q.archivo) fd.append('comprobante', await prepararArchivo(Q.archivo)); else fd.append('comp_despues', '1'); }
     var r = await apiForm(fd); await borrarBorrador();
     if(r.pagar_url){ location.href = r.pagar_url; return; }
     history.replaceState(null, '', '?p=' + encodeURIComponent(r.token));
@@ -1628,7 +1653,7 @@ async function verPedido(token, opt){
   $('#subtitulo').textContent = '';
   pintarPedido(opt);
   clearTimeout(PD.timer);
-  if(PD.datos.estado === 'pendiente_pago' && PD.intentos < 30){ PD.intentos++; PD.timer = setTimeout(function(){ verPedido(token, opt); }, 4000); }
+  if(PD.datos.estado === 'pendiente_pago' && !PD.datos.falta_comprobante && PD.intentos < 30){ PD.intentos++; PD.timer = setTimeout(function(){ verPedido(token, opt); }, 4000); }
 }
 function fechaHora(iso){ var d = new Date(iso); return d.toLocaleString('es-AR', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' }); }
 function btnInicio(){ return '<a class="btn sec" href="'+location.pathname+'">← Volver al menú principal</a>'; }
@@ -1659,7 +1684,10 @@ function pintarPedido(opt){
         + (m.adjuntos && m.adjuntos.length ? '<div class="nota" style="margin-top:3px">📎 '+m.adjuntos.map(h).join(', ')+'</div>' : '') + '</div>';
     }).join('') + '</div>';
   }
-  if(d.estado === 'pendiente_pago') x += '<div class="aviso amber"><div class="cargando" style="padding:0"><div class="spin"></div><span>Estamos esperando la confirmación de Mercado Pago. Si ya pagaste, se actualiza solo en unos segundos.</span></div></div>'
+  if(d.falta_comprobante) x += '<div class="aviso amber" style="margin-top:12px"><b>Falta el comprobante de la transferencia</b> de '+pesos(d.monto)+'. Lo preparamos cuando llega.</div>'
+    + (d.transferencia ? htmlTransferencia(d.transferencia) : '') + htmlArchivo('f-pcomp')
+    + '<p class="nota" style="margin:6px 2px 0">También podés mandarlo respondiendo el mail que te llegó.</p><div class="error" id="e-pcomp"></div><button class="btn" id="b-pcomp" disabled>Enviar comprobante</button>';
+  else if(d.estado === 'pendiente_pago') x += '<div class="aviso amber"><div class="cargando" style="padding:0"><div class="spin"></div><span>Estamos esperando la confirmación de Mercado Pago. Si ya pagaste, se actualiza solo en unos segundos.</span></div></div>'
     + (d.pago.mp ? '<div class="error" id="e-pmp"></div><button class="btn mp" id="b-pmp">Ir a pagar</button>' : '');
   if(d.estado === 'vencida') x += '<div class="aviso amber">No recibimos el pago. Si pagaste y ves este mensaje, respondé el mail y lo resolvemos.</div><a class="btn" href="'+location.pathname+'">Hacer un pedido nuevo</a>';
   x += '</section>';
@@ -1668,9 +1696,10 @@ function pintarPedido(opt){
     var pide = d.osde.pidieron_nuevo || vencido;
     x += '<section class="card" id="sec-osde"><div class="paso"><div class="n">🏥</div><h2>Link de OSDE</h2></div>'
       + (pide
-        ? '<div class="aviso amber" style="margin:0 0 10px">'+(d.osde.pidieron_nuevo ? '<b>Necesitamos un link nuevo de OSDE.</b> ' : '<b>Tu link de OSDE ya venció.</b> ')+'En la app de OSDE entrá a tu credencial → <b>Compartir credencial</b> → ingresá el DNI '+(d.osde.dni_prof ? '<b>'+h(d.osde.dni_prof)+'</b>' : 'de tu médico')+', copiá el link y pegalo acá.</div>'
+        ? '<div class="aviso amber" style="margin:0 0 10px">'+(d.osde.pidieron_nuevo ? '<b>Necesitamos un link nuevo de OSDE.</b> ' : !d.osde.link_at ? '<b>Falta el link de tu credencial de OSDE.</b> ' : '<b>Tu link de OSDE ya venció.</b> ')+'En la app de OSDE entrá a tu credencial → <b>Compartir credencial</b> → ingresá el DNI '+(d.osde.dni_prof ? '<b>'+h(d.osde.dni_prof)+'</b>' : 'de tu médico')+', copiá el link y pegalo acá.</div>'
         : '<p style="font-size:14.5px;margin:0 0 8px">✓ Recibimos tu link. Vale hasta las <b>'+fechaHora(d.osde.vence_at)+' h</b>. Si se vence antes de que hagamos la receta, te avisamos por mail.</p><p class="nota" style="margin:0 0 6px">¿Lo querés cambiar? Pegá uno nuevo:</p>')
-      + '<textarea id="f-osde2" class="osde-pegar" rows="4" placeholder="Pegá acá lo que te dio la app de OSDE (texto + link https://…)" autocomplete="off" spellcheck="false"></textarea>'
+      + '<button type="button" class="btn sec osde-pegar-btn" data-pegar="f-osde2">📋 Pegar lo que copiaste</button>'
+      + '<textarea id="f-osde2" class="osde-pegar" rows="4" placeholder="…o mantené apretado acá y elegí «Pegar»" autocomplete="off" spellcheck="false"></textarea>'
       + '<p class="nota osde-ok" id="osde-ok2"></p>'
       + '<div class="error" id="e-osde2"></div><button class="btn'+(pide?'':' sec')+'" id="b-osde2">Enviar link nuevo</button></section>';
   }
@@ -1687,6 +1716,12 @@ function pintarPedido(opt){
   $('#app').innerHTML = x;
   engancharCancelarSinPago('pedido', PD.token);
   engancharOsdePegar('f-osde2', 'osde-ok2');
+  var bpc = $('#b-pcomp'); if(bpc){ var archP = null;
+    engancharArchivo('f-pcomp', function(f){ archP = f; bpc.disabled = !f; });
+    bpc.onclick = async function(){ var e = $('#e-pcomp'); limpiarError(e); if(!archP) return mostrarError(e, 'Adjuntá el comprobante.');
+      bpc.disabled = true; bpc.textContent = 'Enviando…';
+      try { var fd = new FormData(); fd.append('accion', 'pedido_comprobante'); fd.append('token', PD.token); fd.append('comprobante', await prepararArchivo(archP)); await apiForm(fd); PD.datos = null; await verPedido(PD.token, { recien:true }); }
+      catch(err){ bpc.disabled = false; bpc.textContent = 'Enviar comprobante'; mostrarError(e, err); } }; }
   var bo2 = $('#b-osde2'); if(bo2) bo2.onclick = async function(){
     var e = $('#e-osde2'); limpiarError(e);
     var v = $('#f-osde2').value.trim();
