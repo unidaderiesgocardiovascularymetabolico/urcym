@@ -32359,6 +32359,9 @@ ${profNombre?`<div class="prof"><span class="prof-name">${profNombre}</span>${pr
         <div style="width:1px;height:20px;background:#d0d8e4;margin:0 2px;"></div>
         <button type="button" title="Quitar formato" onclick="document.getElementById('doclibre_contenido').focus();document.execCommand('removeFormat')"
           style="padding:0 8px;height:28px;border:1.5px solid #d0d8e4;border-radius:6px;background:white;font-size:11px;cursor:pointer;color:#6b7a8d;">✕ fmt</button>
+        <div style="width:1px;height:20px;background:#d0d8e4;margin:0 2px;"></div>
+        <button type="button" title="Elegir estudios complementarios cargados y agregarlos como texto" onmousedown="_docLibreGuardarCursor();event.preventDefault()" onclick="_docLibreAbrirEstudios()"
+          style="padding:0 10px;height:28px;border:1.5px solid #3089ca;border-radius:6px;background:#eef6fc;font-size:12px;font-weight:700;cursor:pointer;color:#226ca6;">🩺 Estudios</button>
       </div>
       <div id="doclibre_contenido" class="doc-libre-editor" contenteditable="true" spellcheck="true"
         data-placeholder="Escribí el contenido del documento aquí...&#10;&#10;Podés incluir diagnósticos, medicación actual, motivo de derivación, etc."
@@ -32485,6 +32488,121 @@ function abrirDocumentoLibre(dni) {
     fc._docLibreListener = true;
   }
   document.getElementById('modalDocLibre').classList.add('open');
+}
+
+// ===== DOCUMENTO LIBRE: adjuntar estudios complementarios =====
+// Lista los estudios cargados (cada estudio en cada fecha), se tildan los que se quieren y se agregan
+// al documento como texto corrido (valores + comentarios), con el mismo redactor que usa la evolución.
+let _docLibreRango = null;
+function _docLibreGuardarCursor(){
+  const ed = document.getElementById('doclibre_contenido');
+  const sel = window.getSelection();
+  _docLibreRango = (ed && sel && sel.rangeCount && ed.contains(sel.getRangeAt(0).commonAncestorContainer)) ? sel.getRangeAt(0).cloneRange() : null;
+}
+async function _docLibreDatosEstudios(dni){
+  if(typeof pacienteActual !== 'undefined' && pacienteActual && pacienteActual.dni === dni && pacHistoriaDni === dni && estDatos && estDatos.columnas) return estDatos;
+  const { data: rows, error } = await sb.from('paciente_tablas').select('datos').eq('dni_paciente', dni).eq('tipo', 'est');
+  if(error) throw error;
+  const data = (rows || []).filter(r => r && r.datos).pop();
+  if(!data) return { columnas:[], filas:[], unidades:{}, extraFilas:[] };
+  const d = typeof data.datos === 'string' ? JSON.parse(data.datos) : data.datos;
+  if(!d.extraFilas) d.extraFilas = []; if(!d.unidades) d.unidades = {}; if(!d.columnas) d.columnas = []; if(!d.filas) d.filas = [];
+  return migrarEstDatos(d);
+}
+// Ítems cargados de una columna (fecha), igual que el volcado de estudios a la evolución
+function _estItemsColumna(datos, ci, sexo){
+  const todas = [...EST_FILAS, ...(datos.extraFilas||[]).map(lbl=>({label:lbl,key:'extra_'+lbl,unidades:[''],defU:0,ref:null}))];
+  const items = []; let cat = '';
+  todas.forEach((f, fi) => {
+    if(f.cat){ cat = f.label; return; }
+    if(!f.key) return;
+    const val = (datos.filas[fi] || [])[ci];
+    if(val == null || String(val).trim() === '') return;
+    const u = (datos.unidades && datos.unidades[f.key]) || (f.unidades && f.unidades[0]) || '';
+    const alt = f.ref && f.ref(val, sexo, u);
+    const esNota = !f.ref && !f.calc && (f.nota || f.opciones || !/^-?\d+([.,]\d+)?$/.test(String(val).trim()));
+    items.push({ label:f.label, val:String(val), unidad: esNota && !alt ? '' : u, refTxt: alt ? (f.refTxt||'') : '',
+      tipo: alt ? 'alterado' : (esNota ? 'nota' : 'normal'), cat: f.key.startsWith('extra_') ? 'OTROS' : cat, key:f.key, fila:f });
+  });
+  return items;
+}
+async function _docLibreAbrirEstudios(){
+  const p = _docLibrePaciente;
+  if(!p){ alert('No hay paciente seleccionado.'); return; }
+  let datos;
+  try { datos = await _docLibreDatosEstudios(p.dni); }
+  catch(e){ alert('No se pudieron leer los estudios: ' + (e.message || e)); return; }
+  const sexo = p.sexo === 'Femenino' ? 'F' : 'H';
+  const entradas = [];
+  (datos.columnas || []).forEach((fecha, ci) => {
+    const porCat = {};
+    _estItemsColumna(datos, ci, sexo).forEach(it => { (porCat[it.cat] = porCat[it.cat] || []).push(it); });
+    Object.keys(porCat).forEach(cat => entradas.push({ fecha, ci, cat, items: porCat[cat] }));
+  });
+  if(!entradas.length){ alert('Este paciente no tiene estudios complementarios cargados.'); return; }
+  entradas.sort((a, b) => String(b.fecha).localeCompare(String(a.fecha)));
+  const orden = EST_CATS.map(c => c.label);
+  const cats = [...new Set(entradas.map(e => e.cat))].sort((a, b) => (orden.indexOf(a) < 0 ? 99 : orden.indexOf(a)) - (orden.indexOf(b) < 0 ? 99 : orden.indexOf(b)));
+  window._docLibreEstEntradas = entradas;
+  let html = '';
+  cats.forEach(cat => {
+    const ic = (EST_CATS.find(c => c.label === cat) || {}).icon || '🩺';
+    html += '<div style="margin:10px 0 4px;font-size:12px;font-weight:800;letter-spacing:.04em;color:#226ca6">' + ic + ' ' + escHtml(_EST_NOMBRE_PROSA[cat] || cat) + '</div>';
+    entradas.forEach((e, i) => {
+      if(e.cat !== cat) return;
+      const resumen = e.items.filter(it => !/^(comentarios?|nota)$/i.test(it.label.trim())).slice(0, 4)
+        .map(it => it.label.replace(/\s*\([^)]*\)\s*$/, '') + ' ' + _numAR(it.val)).join(' · ');
+      html += '<label style="text-transform:none;letter-spacing:0;font-weight:400;display:flex;gap:8px;align-items:flex-start;padding:6px 8px;border-radius:8px;cursor:pointer;border:1px solid #e3e9f0;margin-bottom:4px">'
+        + '<input type="checkbox" class="dl-est-chk" value="' + i + '" style="margin-top:3px;accent-color:#3089ca;width:15px;height:15px">'
+        + '<span style="font-size:13px"><b>' + escHtml(_fmtFechaCol(e.fecha)) + '</b>'
+        + (resumen ? '<span style="color:#6b7a8d"> · ' + escHtml(resumen) + (e.items.length > 4 ? '…' : '') + '</span>' : '') + '</span></label>';
+    });
+  });
+  let ov = document.getElementById('dl_est_overlay');
+  if(ov) ov.remove();
+  ov = document.createElement('div');
+  ov.id = 'dl_est_overlay';
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:400;display:flex;align-items:center;justify-content:center;padding:20px';
+  ov.innerHTML = '<div style="background:#fff;border-radius:16px;padding:20px 22px;width:100%;max-width:560px;max-height:85vh;display:flex;flex-direction:column">'
+    + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px"><b style="font-size:16px">🩺 Estudios complementarios</b>'
+    + '<button type="button" onclick="document.getElementById(\'dl_est_overlay\').remove()" style="background:none;border:none;font-size:20px;cursor:pointer;color:#6b7a8d">✕</button></div>'
+    + '<div style="font-size:12px;color:#6b7a8d;margin-bottom:6px">Tildá los que quieras agregar. Se suman como texto corrido, con los valores y los comentarios cargados, donde estaba el cursor (o al final).</div>'
+    + '<div style="overflow-y:auto;flex:1;padding-right:4px">' + html + '</div>'
+    + '<label style="text-transform:none;letter-spacing:0;font-weight:400;display:flex;gap:6px;align-items:center;font-size:12px;margin-top:10px;cursor:pointer"><input type="checkbox" id="dl_est_titulo" checked style="accent-color:#3089ca"> Encabezar con "Estudios complementarios:"</label>'
+    + '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px">'
+    + '<button type="button" class="btn btn-secondary" style="width:auto;margin:0;padding:8px 16px" onclick="document.getElementById(\'dl_est_overlay\').remove()">Cancelar</button>'
+    + '<button type="button" class="btn btn-teal" style="width:auto;margin:0;padding:8px 16px" onclick="_docLibreInsertarEstudios()">Agregar al documento</button></div></div>';
+  ov.addEventListener('click', ev => { if(ev.target === ov) ov.remove(); });
+  document.body.appendChild(ov);
+}
+function _docLibreInsertarEstudios(){
+  const entradas = window._docLibreEstEntradas || [];
+  const elegidas = [...document.querySelectorAll('#dl_est_overlay .dl-est-chk:checked')].map(c => entradas[+c.value]).filter(Boolean);
+  if(!elegidas.length){ alert('Tildá al menos un estudio.'); return; }
+  const conTitulo = document.getElementById('dl_est_titulo')?.checked;
+  // Del más antiguo al más reciente, agrupando por estudio en el orden de la lista de estudios
+  const orden = EST_CATS.map(c => c.label);
+  elegidas.sort((a, b) => ((orden.indexOf(a.cat) < 0 ? 99 : orden.indexOf(a.cat)) - (orden.indexOf(b.cat) < 0 ? 99 : orden.indexOf(b.cat))) || String(a.fecha).localeCompare(String(b.fecha)));
+  const parrafos = elegidas.map(e => {
+    let h = _redactarEstudiosEnOraciones(e.items);
+    h = h.replace(/<span style="color:var\(--red\);font-weight:700">([\s\S]*?)<\/span>/g, '$1');      // sin rojo en el documento
+    h = h.replace(/^<span style="color:#1a2535;font-weight:600">([\s\S]*?):<\/span>/, (m, nom) => '<b>' + nom + ' (' + escHtml(_fmtFechaCol(e.fecha)) + '):</b>');
+    return '<div>' + h + '</div>';
+  });
+  const bloque = (conTitulo ? '<div><b>Estudios complementarios:</b></div>' : '') + parrafos.join('') + '<div><br></div>';
+  const ed = document.getElementById('doclibre_contenido');
+  const tmp = document.createElement('div'); tmp.innerHTML = bloque;
+  const frag = document.createDocumentFragment(); let ult = null;
+  while(tmp.firstChild){ ult = tmp.firstChild; frag.appendChild(ult); }
+  if(_docLibreRango && ed.contains(_docLibreRango.commonAncestorContainer)){
+    _docLibreRango.deleteContents(); _docLibreRango.insertNode(frag);
+  } else {
+    ed.appendChild(frag);
+  }
+  if(ult){ const r = document.createRange(); r.setStartAfter(ult); r.collapse(true); const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(r); }
+  _docLibreRango = null;
+  document.getElementById('dl_est_overlay')?.remove();
+  if(typeof _toastDocLibre === 'function') _toastDocLibre('✅ Estudios agregados');
 }
 
 // Cancelar: si hay algo escrito, confirma antes de descartarlo de verdad
