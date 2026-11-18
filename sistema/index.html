@@ -2,7 +2,7 @@
 <html lang="es-AR">
 <head>
   <meta charset="UTF-8" />
-  <script>var URCYM_BUILD = '2026-11-17-2330';</script>
+  <script>var URCYM_BUILD = '2026-11-18-0800';</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Evaluaciones cardiometabólicas — Sistema de Historia Clínica</title>
 
@@ -23206,7 +23206,8 @@ function renderGrid(){
         nlEl.style.width='calc('+wPct+'% - 2px)';
         nlEl.style.zIndex=3+item.col;
         nlEl.textContent=item.nl.label+(visProfs.length>1?' ('+PROF_LBL[p]+')':'');
-        nlEl.title=(item.nl.label||'No laborable')+' · '+(PROF_LBL[p]||p)+' · '+item.nl.from+'–'+item.nl.to;
+        nlEl.title=(item.nl.label||'No laborable')+' · '+(PROF_LBL[p]||p)+' · '+item.nl.from+'–'+item.nl.to+' · tocá para cambiarlo o borrarlo';
+        if(window._otrosEditarBloque){ nlEl.style.cursor='pointer'; nlEl.onclick=function(ev){ ev.stopPropagation(); window._otrosEditarBloque(item.nl); }; }
         col.appendChild(nlEl);
         return;
       }
@@ -24896,6 +24897,164 @@ window._dspAbrirLista=function(){
 
   window._dspAbrir=abrir;
 })();
+
+/* ══ Agenda › 🔒 Otros, con el mismo editor que Disponibilidad ══
+   Los bloques "otros" (gimnasio, reuniones, clases, trámites…) se ven por día como tarjetas:
+   tocás una y cambiás el día, el horario, el motivo, cada cuánto se repite, o la borrás.
+   "+ Agregar" carga uno para varios días de una vez. Las fechas puntuales van aparte.
+   (Las ausencias "No atiendo" siguen en Disponibilidad › Excepciones.) */
+(function(){
+  var DL = ['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
+  var FQ = { semanal:'Todas las semanas', quincenal:'Cada 15 días', mensual:'Cada 4 semanas', unico:'Una sola vez' };
+  var O = { prof:'BG', nl:[], cambios:false, tab:'semana', venc:false };
+  var E = function(t){ return String(t == null ? '' : t).replace(/[&<>"]/g, function(c){ return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' }[c]; }); };
+  var hoy = function(){ return new Date().toLocaleDateString('sv-SE', { timeZone:'America/Argentina/Buenos_Aires' }); };
+  var diaDe = function(f){ return (new Date(f + 'T12:00:00').getDay() + 6) % 7; };
+  var mas1 = function(f){ var d = new Date(f + 'T12:00:00'); d.setDate(d.getDate() + 1); return d.toLocaleDateString('sv-SE'); };
+  var fF = function(f){ var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(f || ''); return m ? m[3] + '/' + m[2] + '/' + m[1] : ''; };
+  var anioOk = function(f){ var y = +String(f).slice(0, 4); return y >= 2000 && y <= 2100; };
+  var esOtro = function(b){ return b && !b.ausencia; };
+  var unico = function(b){ return (b.freq || 'semanal') === 'unico'; };
+  var vig = function(b){ return unico(b) ? (b.startDate || '') >= hoy() : (!b.endDate || b.endDate >= hoy()); };
+  var mios = function(){ return O.nl.filter(function(b){ return esOtro(b) && b.prof === O.prof && (O.venc || vig(b)); }); };
+
+  function abrir(){
+    O.nl = nlBlocks.map(function(b){ return JSON.parse(JSON.stringify(b)); });
+    O.prof = window._su === 'omar' ? 'OB' : 'BG'; O.cambios = false; O.tab = 'semana';
+    var bg = document.getElementById('otr-bg');
+    if(!bg){
+      bg = document.createElement('div'); bg.id = 'otr-bg'; bg.className = 'dsp-bg';
+      bg.innerHTML = '<div class="dsp-modal" role="dialog" aria-modal="true"><div class="dsp-head"><span style="font-size:22px">🔒</span><div><h3>Otros</h3>'
+        + '<div class="dsp-sub">Horarios ocupados que no son consulta: gimnasio, reuniones, clases, trámites. En esos horarios no se dan turnos.</div></div>'
+        + '<button type="button" class="dsp-x" aria-label="Cerrar">✕</button></div><div class="dsp-body" id="otr-body"></div>'
+        + '<div class="dsp-foot"><button type="button" class="dsp-link" id="otr-lista">Vista lista (avanzada)</button><span style="flex:1"></span>'
+        + '<button type="button" class="dsp-btn sec" id="otr-cancel">Cancelar</button><button type="button" class="dsp-btn" id="otr-save">Guardar cambios</button></div></div>';
+      document.body.appendChild(bg);
+      bg.querySelector('.dsp-x').onclick = cerrar; document.getElementById('otr-cancel').onclick = cerrar;
+      bg.addEventListener('mousedown', function(e){ if(e.target === bg) cerrar(); });
+      document.getElementById('otr-save').onclick = guardar;
+      document.getElementById('otr-lista').onclick = function(){
+        if(O.cambios && !confirm('Tenés cambios sin guardar acá. ¿Ir a la vista lista igual? (se pierden)')) return;
+        bg.style.display = 'none'; listaVieja();
+      };
+    }
+    bg.style.display = 'flex'; render();
+  }
+  function listaVieja(){
+    nlTmp = nlBlocks.map(function(b){ return Object.assign({}, b); });
+    initCfgV2('ag-nl-bg', 'ag-nl-prof-pills', 'ag-nl-list', NL_PROFS, nlTmp, nlTmp.length ? nlTmp[0].prof : NL_PROFS[0]);
+    document.getElementById('ag-nl-bg').style.display = 'flex';
+  }
+  function cerrar(){ if(O.cambios && !confirm('¿Cerrar sin guardar los cambios?')) return; document.getElementById('otr-bg').style.display = 'none'; }
+  function guardar(){
+    var mal = O.nl.find(function(b){ return esOtro(b) && t2m(b.from) >= t2m(b.to); });
+    if(mal){ alert('Hay un bloque con hora de fin anterior a la de inicio (' + DIAS[mal.day] + ' ' + mal.from + '–' + mal.to + ').'); return; }
+    O.nl.forEach(function(b){ if(!b.endDate) delete b.endDate; });
+    nlBlocks = O.nl.slice(); saveLocal(); O.cambios = false;
+    document.getElementById('otr-bg').style.display = 'none'; renderGrid();
+    var t = document.getElementById('urcym-save-ok-toast'); if(t){ t.textContent = '✓ Otros guardado'; t.style.display = 'block'; setTimeout(function(){ t.style.display = 'none'; }, 2500); }
+  }
+  function cambio(){ O.cambios = true; render(); }
+
+  function chip(b){
+    var i = O.nl.indexOf(b), ex = [];
+    if((b.freq || 'semanal') !== 'semanal') ex.push(FQ[b.freq] || b.freq);
+    if(b.startDate && b.startDate > hoy()) ex.push('desde ' + fF(b.startDate));
+    if(b.endDate) ex.push((vig(b) ? 'hasta ' : 'terminó ') + fF(b.endDate));
+    return '<button type="button" class="dsp-chip otr-chip' + (vig(b) ? '' : ' venc') + '" data-oi="' + i + '"><b>' + E(b.from) + '–' + E(b.to) + '</b><span>' + E(b.label || 'Otro') + '</span>' + (ex.length ? '<i>' + E(ex.join(' · ')) + '</i>' : '') + '</button>';
+  }
+  function render(){
+    var body = document.getElementById('otr-body'), m = mios();
+    var rec = m.filter(function(b){ return !unico(b); }), pun = m.filter(unico).sort(function(a, b){ return (a.startDate || '').localeCompare(b.startDate || '') || t2m(a.from) - t2m(b.from); });
+    var x = '<div class="dsp-bar"><div class="dsp-pills">' + NL_PROFS.map(function(p){ return '<button type="button" class="dsp-pill' + (O.prof === p ? ' on ' + p.toLowerCase() : '') + '" data-oprof="' + p + '">' + E(PROF_LBL[p] || p) + '</button>'; }).join('') + '</div>'
+      + '<div class="dsp-tabs"><button type="button" class="dsp-tab' + (O.tab === 'semana' ? ' on' : '') + '" data-otab="semana">🗓️ Todas las semanas</button><button type="button" class="dsp-tab' + (O.tab === 'fechas' ? ' on' : '') + '" data-otab="fechas">📌 Fechas puntuales (' + pun.length + ')</button></div></div>';
+    if(O.tab === 'semana'){
+      x += '<p class="dsp-ayuda">Cada tarjeta es un día. <b>Tocá un bloque para cambiar el día, el horario o borrarlo.</b> Con <b>+ Agregar</b> lo cargás para varios días de una vez.</p><div class="dsp-sem">';
+      for(var d = 0; d < 6; d++){
+        var del = rec.filter(function(b){ return b.day === d; }).sort(function(a, b){ return t2m(a.from) - t2m(b.from); });
+        x += '<div class="dsp-dia"><div class="dsp-dia-t">' + DL[d] + '</div>' + (del.length ? del.map(chip).join('') : '<div class="dsp-vacio">—</div>') + '<button type="button" class="dsp-mas" data-onuevo="' + d + '">+ Agregar</button></div>';
+      }
+      x += '</div><button type="button" class="dsp-btn" data-onuevo="" style="margin-top:12px">+ Agregar (varios días)</button>';
+    } else {
+      x += '<p class="dsp-ayuda">Un día puntual (un trámite, una reunión). Tocá uno para cambiarlo o borrarlo.</p>'
+        + (pun.length ? pun.map(function(b){ return '<button type="button" class="dsp-exc-item otr-item' + (vig(b) ? '' : ' venc') + '" data-oi="' + O.nl.indexOf(b) + '"><b>' + DL[b.day] + ' ' + fF(b.startDate) + '</b><span>' + E(b.from) + '–' + E(b.to) + (b.label ? ' · ' + E(b.label) : '') + '</span></button>'; }).join('') : '<div class="dsp-vacio">No hay fechas puntuales.</div>')
+        + '<button type="button" class="dsp-btn sec" data-ounico style="margin-top:10px">+ Fecha puntual</button>';
+    }
+    x += '<label class="dsp-venc"><input type="checkbox" id="otr-venc"' + (O.venc ? ' checked' : '') + '> Mostrar también lo vencido / pasado</label>';
+    body.innerHTML = x;
+    body.querySelectorAll('[data-oprof]').forEach(function(b){ b.onclick = function(){ O.prof = b.dataset.oprof; render(); }; });
+    body.querySelectorAll('[data-otab]').forEach(function(b){ b.onclick = function(){ O.tab = b.dataset.otab; render(); }; });
+    body.querySelectorAll('[data-oi]').forEach(function(c){ c.onclick = function(){ editar(O.nl[+c.dataset.oi]); }; });
+    body.querySelectorAll('[data-onuevo]').forEach(function(b){ b.onclick = function(){ editar(null, b.dataset.onuevo === '' ? null : +b.dataset.onuevo); }; });
+    var nu = body.querySelector('[data-ounico]'); if(nu) nu.onclick = function(){ editar(null, null, true); };
+    document.getElementById('otr-venc').onchange = function(){ O.venc = this.checked; render(); };
+  }
+
+  function editar(b, dia, esUnico){
+    var nuevo = !b, fq = b ? (b.freq || 'semanal') : (esUnico ? 'unico' : 'semanal');
+    var sel = b ? [b.day] : (dia == null ? [] : [dia]);
+    var p = document.createElement('div'); p.className = 'dsp-panel-bg';
+    p.innerHTML = '<div class="dsp-panel"><h4>' + (nuevo ? 'Agregar' : 'Cambiar') + ' · ' + E(PROF_LBL[O.prof] || O.prof) + '</h4>'
+      + '<label>Motivo <small>(se ve en la agenda)</small></label><input type="text" id="op-label" value="' + E(b ? b.label || '' : '') + '" placeholder="Ej.: Gimnasio, Reunión, Clase UCA">'
+      + '<label>Se repite</label><select id="op-freq">' + Object.keys(FQ).map(function(k){ return '<option value="' + k + '"' + (k === fq ? ' selected' : '') + '>' + FQ[k] + '</option>'; }).join('') + '</select>'
+      + '<div id="op-rec"><label>Día' + (nuevo ? 's' : '') + '</label><div class="dsp-dias">' + DL.map(function(n, d){ return '<label class="' + (sel.indexOf(d) >= 0 ? 'on' : '') + '"><input type="' + (nuevo ? 'checkbox' : 'radio') + '" name="op-dia" value="' + d + '"' + (sel.indexOf(d) >= 0 ? ' checked' : '') + '>' + n.slice(0, 3) + '</label>'; }).join('') + '</div></div>'
+      + '<div class="dsp-fila"><div><label>Desde</label><input type="time" id="op-from" value="' + E(b ? b.from : '08:00') + '"></div><div><label>Hasta</label><input type="time" id="op-to" value="' + E(b ? b.to : '09:00') + '"></div></div>'
+      + '<div class="dsp-fila"><div><label id="op-ini-l">' + (fq === 'unico' ? 'Fecha' : 'Empieza') + '</label><input type="date" id="op-ini" value="' + E(b ? b.startDate || '' : hoy()) + '"></div>'
+      + '<div id="op-fin-w"><label>Termina <small>(opcional)</small></label><input type="date" id="op-fin" value="' + E(b && !unico(b) ? b.endDate || '' : '') + '"></div></div>'
+      + '<div class="dsp-acc">' + (nuevo ? '' : '<button type="button" class="dsp-btn peligro" data-del>Borrar</button>') + '<span style="flex:1"></span><button type="button" class="dsp-btn sec" data-c>Cancelar</button><button type="button" class="dsp-btn" data-ok>' + (nuevo ? 'Agregar' : 'Listo') + '</button></div>'
+      + '<div class="dsp-err" id="op-err"></div></div>';
+    document.body.appendChild(p);
+    var close = function(){ p.remove(); }, err = function(m){ p.querySelector('#op-err').textContent = m; };
+    p.addEventListener('mousedown', function(e){ if(e.target === p) close(); });
+    var fsel = p.querySelector('#op-freq');
+    var ajustar = function(){ var u = fsel.value === 'unico'; p.querySelector('#op-rec').style.display = u ? 'none' : ''; p.querySelector('#op-fin-w').style.visibility = u ? 'hidden' : ''; p.querySelector('#op-ini-l').textContent = u ? 'Fecha' : 'Empieza'; };
+    fsel.onchange = ajustar; ajustar();
+    p.querySelectorAll('.dsp-dias input').forEach(function(c){ c.onchange = function(){ if(c.type === 'radio') p.querySelectorAll('.dsp-dias label').forEach(function(l){ l.classList.remove('on'); }); c.parentNode.classList.toggle('on', c.checked); }; });
+    p.querySelector('[data-c]').onclick = close;
+    var del = p.querySelector('[data-del]'); if(del) del.onclick = function(){ if(!confirm('¿Borrar "' + (b.label || 'este bloque') + '" (' + DIAS[b.day] + ' ' + b.from + '–' + b.to + ')?')) return; O.nl.splice(O.nl.indexOf(b), 1); close(); cambio(); };
+    p.querySelector('[data-ok]').onclick = function(){
+      var label = p.querySelector('#op-label').value.trim() || 'Otro', freq = fsel.value;
+      var from = p.querySelector('#op-from').value, to = p.querySelector('#op-to').value;
+      if(!from || !to) return err('Completá el horario.');
+      if(t2m(from) >= t2m(to)) return err('La hora de fin tiene que ser posterior a la de inicio.');
+      var ini = p.querySelector('#op-ini').value, fin = p.querySelector('#op-fin').value;
+      if(ini && !anioOk(ini) || fin && !anioOk(fin)) return err('Revisá el año de las fechas.');
+      if(freq === 'unico'){
+        if(!ini) return err('Elegí la fecha.');
+        if(diaDe(ini) > 5) return err('Ese día es domingo: la agenda va de lunes a sábado.');
+        var nb = { prof: O.prof, day: diaDe(ini), from: from, to: to, label: label, freq: 'unico', startDate: ini };
+        if(b) O.nl[O.nl.indexOf(b)] = Object.assign({}, b, nb, { endDate: undefined }); else O.nl.push(nb);
+        close(); cambio(); return;
+      }
+      var dias = Array.prototype.map.call(p.querySelectorAll('.dsp-dias input:checked'), function(c){ return +c.value; });
+      if(!dias.length) return err('Elegí ' + (nuevo ? 'al menos un día' : 'el día') + '.');
+      if(ini && fin && fin < ini) return err('La fecha de fin es anterior a la de inicio.');
+      var armar = function(d){ var st = ini || ''; if(st && freq !== 'semanal'){ var n = 0; while(diaDe(st) !== d && n++ < 7) st = mas1(st); }
+        var x = { prof: O.prof, day: d, from: from, to: to, label: label, freq: freq, startDate: st }; if(fin) x.endDate = fin; return x; };
+      if(b){ var nb2 = Object.assign({}, b, armar(dias[0])); if(!fin) delete nb2.endDate; O.nl[O.nl.indexOf(b)] = nb2; }
+      else dias.forEach(function(d){ O.nl.push(armar(d)); });
+      close(); cambio();
+    };
+  }
+  window._otrosAbrir = abrir;
+  // Tocar un bloque en la agenda → se abre directo para cambiarlo o borrarlo
+  window._otrosEditarBloque = function(bl){
+    if(bl && bl.ausencia){ if(window._dspAbrir) window._dspAbrir(); return; }
+    abrir(); var k = JSON.stringify(bl);
+    var b = O.nl.find(function(x){ return JSON.stringify(x) === k; }); if(!b) return;
+    O.prof = b.prof; O.tab = unico(b) ? 'fechas' : 'semana'; if(!vig(b)) O.venc = true; render();
+    editar(b);
+  };
+  // El botón 🔒 Otros abre este editor (la lista de antes queda como "Vista lista (avanzada)")
+  function enganchar(){
+    var b = document.getElementById('ag-btn-nl'); if(!b || b._otr) return;
+    var n = b.cloneNode(true); n._otr = true; b.parentNode.replaceChild(n, b);
+    n.addEventListener('click', function(){ abrir(); });
+  }
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', enganchar); else enganchar();
+  setTimeout(enganchar, 1500);
+})();
+
 
 // ─── INSTITUCIONAL ───
 function renderInstList(){
@@ -43903,6 +44062,13 @@ function _invToggleDroga(key){
 .fh-gt{font-size:14px}.fh-gv{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:12.5px;color:#475569;margin-top:4px}
 .fh-ch{font-size:12px;color:#b45309;margin-top:4px}
 @media (max-width:900px){.fh-main{grid-template-columns:1fr;grid-template-rows:45vh auto}}
+</style>
+
+<style>
+.otr-chip{background:#F3F0FA!important;border-color:#c4b8e6!important;color:#4c3d82!important}
+.otr-chip b{color:#4c3d82}
+.otr-item{border-left:4px solid #7B6EA6!important}
+.dsp-chip.venc,.otr-item.venc{opacity:.5}
 </style>
 
 </body>
