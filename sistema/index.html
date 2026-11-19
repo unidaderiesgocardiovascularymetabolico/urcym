@@ -2,7 +2,7 @@
 <html lang="es-AR">
 <head>
   <meta charset="UTF-8" />
-  <script>var URCYM_BUILD = '2026-11-19-0730';</script>
+  <script>var URCYM_BUILD = '2026-11-19-0915';</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Evaluaciones cardiometabólicas — Sistema de Historia Clínica</title>
 
@@ -43147,6 +43147,21 @@ function _invToggleDroga(key){
       if(!st.asunto.trim() || !st.texto.trim()){ alert('Falta el asunto o el mensaje.'); return; }
       if(lista.length > 450 && !confirm('Gmail permite unos 500 mails por día. Son ' + lista.length + ': puede que algunos no salgan hoy y haya que reintentarlos mañana. ¿Seguir?')) return;
       var nAdj = archivos.length + Object.keys(st.mats).length;
+      if(!nAdj){
+        var resp = await new Promise(function(res){
+          var m = _uiModal('📎 ¿Querés adjuntar un archivo?', '<div style="font-size:14px;color:#334155;margin-bottom:12px">Este comunicado no tiene ningún archivo adjunto (por ejemplo, el PDF de la guía).</div>'
+            + '<div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap"><button type="button" class="ca-adj" style="padding:9px 14px;border-radius:9px;border:1.5px solid var(--teal);background:#fff;color:var(--teal);font-weight:700;cursor:pointer">📎 Sí, adjuntar un archivo</button>'
+            + '<button type="button" class="ca-sin" style="padding:9px 14px;border-radius:9px;border:none;background:var(--teal);color:#fff;font-weight:700;cursor:pointer">Enviar sin adjunto</button></div>');
+          m.bg.style.zIndex = 100090;
+          var fin = function(v){ m.cerrar(); res(v); };
+          m.box.querySelector('.ca-adj').onclick = function(){ fin('adj'); };
+          m.box.querySelector('.ca-sin').onclick = function(){ fin('sin'); };
+          var x = m.box.querySelector('.ui-x, .ui-cerrar'); if(x) x.addEventListener('click', function(){ res('cancel'); });
+          m.bg.addEventListener('mousedown', function(ev){ if(ev.target === m.bg) res('cancel'); });
+        });
+        if(resp === 'adj'){ var fb = bd.querySelector('.com-file'); if(fb){ bd.querySelector('.com-file-btn').scrollIntoView({ behavior:'smooth', block:'center' }); fb.click(); } return; }
+        if(resp !== 'sin') return;
+      }
       if(!confirm('¿Enviar "' + st.asunto + '" a ' + lista.length + ' paciente' + (lista.length > 1 ? 's' : '') + (nAdj ? ' con ' + nAdj + ' adjunto' + (nAdj > 1 ? 's' : '') : ' sin adjuntos') + '?')) return;
       var pg = bd.querySelector('.com-prog');
       var prog = function(t){ pg.innerHTML = '<div class="com-pg-t">' + t + '</div>'; };
@@ -43200,11 +43215,30 @@ function _invToggleDroga(key){
       if(r.error){ bd.innerHTML = '<div class="com-err">' + (/urcym_comunicados/.test(r.error.message || '') ? 'Falta correr el SQL 26 en Supabase.' : E(r.error.message)) + '</div>'; return; }
       var ids = (r.data || []).map(function(c){ return c.id; });
       var env = ids.length ? await _t1TraerTodo('urcym_comunicados_envios', 'comunicado_id,dni_paciente,estado', function(q){ return q.in('comunicado_id', ids); }).catch(function(){ return []; }) : [];
-      var cuenta = {}; env.forEach(function(e){ var c = cuenta[e.comunicado_id] = cuenta[e.comunicado_id] || { enviado:0, error:0, sin_mail:0 }; c[e.estado] = (c[e.estado] || 0) + 1; });
+      var cuenta = {}, quien = {}; env.forEach(function(e){ var c = cuenta[e.comunicado_id] = cuenta[e.comunicado_id] || { enviado:0, error:0, sin_mail:0 }; c[e.estado] = (c[e.estado] || 0) + 1; (quien[e.comunicado_id] = quien[e.comunicado_id] || []).push(e); });
+      var pacDe = {}; D.pac.forEach(function(p){ pacDe[p.dni] = p; });
+      var nomDe = function(dni){ var p = pacDe[dni]; return p ? (p.apellido || '') + ', ' + (p.nombre || '') : 'DNI ' + dni; };
       bd.innerHTML = !(r.data || []).length ? '<div class="com-nota" style="padding:20px;text-align:center">Todavía no mandaste comunicados.</div>'
         : (r.data || []).map(function(c){ var k = cuenta[c.id] || {}; var adj = (c.adjuntos || []).map(function(a){ return a.nombre; }).join(', ');
           return '<details class="com-h"><summary><span class="f">' + fDMA(c.creado) + '</span><b>' + E(c.asunto) + '</b><span class="k">✅ ' + (k.enviado || 0) + (k.error ? ' · ❌ ' + k.error : '') + ' de ' + (c.n_destinatarios || '?') + '</span></summary>'
-            + '<div class="com-h-b"><div class="com-nota">' + (c.prof === 'OB' ? 'Dr. Bertani' : 'Dra. Guerrero') + (adj ? ' · 📎 ' + E(adj) : '') + '</div><div class="com-h-t">' + E(c.texto || '').replace(/\n/g, '<br>') + '</div></div></details>'; }).join('');
+            + '<div class="com-h-b"><div class="com-nota">' + (c.prof === 'OB' ? 'Dr. Bertani' : 'Dra. Guerrero') + (adj ? ' · 📎 ' + E(adj) : '') + '</div><div class="com-h-t">' + E(c.texto || '').replace(/\n/g, '<br>') + '</div>'
+            + (function(){ var q = (quien[c.id] || []).slice().sort(function(a, b){ return nomDe(a.dni_paciente).localeCompare(nomDe(b.dni_paciente), 'es'); }); if(!q.length) return '';
+                return '<div class="com-lbl-q">👥 A quiénes (' + q.length + ')</div><div class="com-quien">' + q.map(function(e){ return '<span class="' + (e.estado === 'enviado' ? 'ok' : 'mal') + '">' + (e.estado === 'enviado' ? '✓ ' : e.estado === 'sin_mail' ? '⚠️ ' : '❌ ') + E(nomDe(e.dni_paciente)) + '</span>'; }).join('') + '</div>'
+                  + '<div class="com-rep"><button type="button" data-rep="' + c.id + '">🔁 Mandar otro mensaje a este grupo</button><button type="button" data-rep2="' + c.id + '">📋 Mismo grupo y mismo mensaje</button></div>'; })()
+            + '</div></details>'; }).join('');
+      var usar = function(id, conMsj){
+        var dnis = (quien[id] || []).filter(function(e){ return e.estado === 'enviado'; }).map(function(e){ return e.dni_paciente; });
+        tild = {}; dnis.forEach(function(d){ tild[d] = 1; });
+        F = { dx:'', farm:'', cob:'', sexo:'', desde:'', q:'', prof:'', soloSel:true };
+        var c = (r.data || []).find(function(x){ return x.id === id; }) || {};
+        if(conMsj){ st.asunto = c.asunto || ''; st.texto = c.texto || ''; } else { st.asunto = ''; st.texto = ''; }
+        archivos = []; st.mats = {};
+        bg.querySelectorAll('.com-tabs button').forEach(function(x){ x.classList.toggle('on', x.dataset.t === 'nuevo'); });
+        pintarNuevo();
+        if(typeof showToast === 'function') showToast('Grupo cargado: ' + dnis.length + ' paciente' + (dnis.length === 1 ? '' : 's') + ' tildados' + (conMsj ? ' con el mismo mensaje (revisá el adjunto)' : ''), 'success', 4000);
+      };
+      bd.querySelectorAll('[data-rep]').forEach(function(b){ b.onclick = function(){ usar(b.dataset.rep, false); }; });
+      bd.querySelectorAll('[data-rep2]').forEach(function(b){ b.onclick = function(){ usar(b.dataset.rep2, true); }; });
     }
     pintarNuevo();
   };
@@ -43317,6 +43351,12 @@ function _invToggleDroga(key){
 .com-h{border:1px solid #e5e7eb;border-radius:10px;padding:8px 12px;margin-bottom:6px}
 .com-h summary{cursor:pointer;display:flex;gap:10px;align-items:center;font-size:13.5px}
 .com-h .f{color:#64748b;font-size:12.5px;min-width:78px}.com-h b{flex:1}.com-h .k{font-size:12px;color:#334155}
+.com-lbl-q{font:800 11px var(--font-main);text-transform:uppercase;letter-spacing:.05em;color:#0f766e;margin:10px 0 4px}
+.com-quien{display:flex;flex-wrap:wrap;gap:4px;max-height:160px;overflow:auto}
+.com-quien span{font-size:12px;border-radius:999px;padding:2px 9px;background:#f0fdf4;color:#166534;border:1px solid #bbf7d0}
+.com-quien span.mal{background:#fef2f2;color:#991b1b;border-color:#fecaca}
+.com-rep{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+.com-rep button{border:1.5px solid var(--teal);background:#fff;color:var(--teal);border-radius:9px;padding:6px 11px;font:700 12.5px var(--font-main);cursor:pointer}
 .com-h-t{font-size:13px;color:#334155;margin-top:6px;background:#f8fafc;border-radius:8px;padding:8px 10px}
 @media (max-width:640px){.com-p{grid-template-columns:20px 1fr}.com-p .m,.com-p .u{grid-column:2}}
 </style>
