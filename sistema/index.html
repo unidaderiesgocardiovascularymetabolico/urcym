@@ -2,7 +2,7 @@
 <html lang="es-AR">
 <head>
   <meta charset="UTF-8" />
-  <script>var URCYM_BUILD = '2026-11-18-2200';</script>
+  <script>var URCYM_BUILD = '2026-11-19-0730';</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Evaluaciones cardiometabólicas — Sistema de Historia Clínica</title>
 
@@ -8397,7 +8397,7 @@ function renderTabla(data, soloAlfabetico, q) {
         '<td><strong>' + p.apellido + ', ' + p.nombre + '</strong>' + (esNuevo?'&nbsp;<span style="font-size:10px;background:var(--teal);color:white;padding:2px 7px;border-radius:10px;vertical-align:middle">nuevo</span>':'') + (p.email ? '<div>✉️ ' + _chipCopiar(p.email, 'mail', true) + '</div>' : '') + '</td>' +
         '<td>' + _chipCopiar(p.dni, 'DNI') + '</td>' +
         '<td>' + edadDesde(p.fecha_nacimiento) + ' años' + (p.fecha_nacimiento ? '<div>' + _chipCopiar(String(p.fecha_nacimiento).slice(0,10).split('-').reverse().join('/'), 'fecha de nacimiento', true) + '</div>' : '') + '</td>' +
-        '<td>' + (p.obra_social?'<span class="badge badge-blue">'+p.obra_social+'</span>':'-') + (p.numero_afiliado ? '<div>' + _chipCopiar(p.numero_afiliado, 'n.º de afiliado', true) + '</div>' : '') + '</td>' +
+        '<td>' + (p.obra_social?'<span class="badge badge-blue">'+p.obra_social+'</span>':'-') + (p.numero_afiliado ? '<div>' + _chipCopiar(p.numero_afiliado, 'n.º de afiliado', true).replace('class="dato-copiar chico"', 'class="dato-copiar chico afil"') + '</div>' : (p.obra_social && !/particular/i.test(p.obra_social) ? '<div><span class="af-add" title="Cargar el n.º de afiliado" onclick="event.stopPropagation();_afiliadoCargar(\'' + p.dni + '\')">+ n.º afiliado</span></div>' : '')) + '</td>' +
         '<td id="uc-' + p.dni + '" style="font-size:12px;color:var(--text-soft)">cargando...</td>' +
         '<td><div class="acciones">' +
           '<button class="btn-accion evolucionar" onclick="abrirEvolucion(\'' + p.dni + '\')">✚ Evolucionar</button>' +
@@ -8414,6 +8414,16 @@ function renderTabla(data, soloAlfabetico, q) {
 }
 
 // Dato que se copia con un clic (DNI, fecha de nacimiento, n.º de afiliado)
+async function _afiliadoCargar(dni){
+  var p = (pacientesData || []).find(function(x){ return String(x.dni) === String(dni); }); if(!p) return;
+  var v = prompt('N.º de afiliado de ' + (p.obra_social || 'la obra social') + ' — ' + (p.apellido || '') + ', ' + (p.nombre || ''), p.numero_afiliado || '');
+  if(v == null) return; v = v.trim(); if(!v) return;
+  var r = await sb.from('pacientes').update({ numero_afiliado: v }).eq('dni', dni);
+  if(r.error){ alert('No se pudo guardar: ' + r.error.message); return; }
+  p.numero_afiliado = v;
+  try { var q = (document.getElementById('buscarPaciente') || {}).value || ''; if(typeof filtrarPacientes === 'function') filtrarPacientes(); else renderTabla(pacientesData, false, q); } catch(e) {}
+  if(typeof showToast === 'function') showToast('N.º de afiliado guardado', 'success', 2000);
+}
 function _chipCopiar(valor, que, chico) {
   const v = String(valor == null ? '' : valor).trim(); if(!v) return '';
   const e = v.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -33185,7 +33195,7 @@ const INV_EXPORT_VARS = [
 function invFiltrosVacio() {
   return { edadMin:'', edadMax:'', sexo:'', cobertura:'', dxInc:[], dxMode:'OR', dxExc:[],
            famInc:[], famMode:'OR', famExc:[], ginInc:[], ginMode:'OR', ginExc:[],
-           farmInc:[], farmMode:'OR', farmExc:[], farmDrogas:[], farmEspecifico:'', tabaquismo:'', lab:{}, ant:{},
+           farmInc:[], farmMode:'OR', farmExc:[], farmDrogas:[], semaMarca:'', farmEspecifico:'', tabaquismo:'', lab:{}, ant:{},
            est:{}, mapaPatron:'', ecoDD:'', ecoabdEst:'', placas:'', idx:{}, alimentacion:'', ascvd:{min:'',max:''} };
 }
 let invFiltros = invFiltrosVacio();
@@ -33439,7 +33449,7 @@ function invContarFiltrosActivos() {
   if(f.dxInc.length) n++; if(f.dxExc.length) n++;
   if(f.famInc.length) n++; if(f.famExc.length) n++;
   if(f.ginInc.length) n++; if(f.ginExc.length) n++;
-  if(f.farmInc.length) n++; if(f.farmExc.length) n++; if((f.farmDrogas || []).length) n++; if(f.farmEspecifico) n++;
+  if(f.farmInc.length) n++; if(f.farmExc.length) n++; if((f.farmDrogas || []).length) n++; if(f.semaMarca) n++; if(f.farmEspecifico) n++;
   n += Object.keys(f.lab).filter(function(k){ return f.lab[k] && (f.lab[k].min!=='' || f.lab[k].max!==''); }).length;
   n += Object.keys(f.ant).filter(function(k){ return f.ant[k] && (f.ant[k].min!=='' || f.ant[k].max!==''); }).length;
   n += Object.keys(f.est).filter(function(k){ return f.est[k] && (f.est[k].min!=='' || f.est[k].max!==''); }).length;
@@ -33510,6 +33520,12 @@ async function invAplicarFiltros() {
   }
   if(!candidatos.length) return invRenderCohorteVacia();
 
+  if(f.semaMarca) {
+    const { data } = await sb.from('paciente_clinica').select('dni_paciente,sema_marca').in('dni_paciente', candidatos.map(function(p){return p.dni;}));
+    const sm = {}; (data||[]).forEach(function(c){ sm[c.dni_paciente] = c.sema_marca; });
+    candidatos = candidatos.filter(function(p){ return f.semaMarca === 'alguna' ? !!sm[p.dni] : sm[p.dni] === f.semaMarca; });
+    if(!candidatos.length) return invRenderCohorteVacia();
+  }
   if(f.farmInc.length || f.farmExc.length || f.farmEspecifico || ascvdActivo) {
     const { data } = await sb.from('medicacion').select('*').eq('activo', true).in('dni_paciente', candidatos.map(function(p){return p.dni;}));
     medsMap = {}; (data||[]).forEach(function(m){ (medsMap[m.dni_paciente]=medsMap[m.dni_paciente]||[]).push(m); });
@@ -35021,6 +35037,7 @@ function _t1Fila(p, D){
   f.med = {}; T1_MEDS.forEach(function(g){ f.med[g] = ms.some(function(m){ return _t1GrupoMed(m.grupo) === g; }); });
   f.nMedsCM = ms.filter(function(m){ return m.grupo && m.grupo !== 'otros'; }).length;
   f.farm = {}; ms.forEach(function(m){ var d = _t1Droga(m); if(d) f.farm[d.k] = true; });
+  f.semaMarca = c && c.sema_marca ? c.sema_marca : null;
   // Calidad de carga: diagnósticos, estudios (laboratorio o estudios complementarios) y tratamiento CM
   var tieneValor = function(t){ return !!(t && Array.isArray(t.filas) && t.filas.some(function(r){ return Array.isArray(r) && r.some(function(x){ return x != null && String(x).trim() !== ''; }); })); };
   f.nombre = (p.apellido || '') + ', ' + (p.nombre || '');
@@ -35094,7 +35111,9 @@ function _t1Variables(){
   v.push({ sec: 'Medicación cardiometabólica actual' });
   var _dpg = T1.detFarm === false ? {} : _t1DrogasPorGrupo();
   T1_MEDS.forEach(function(g){ v.push({ id: 'med:' + g, l: g, t: 'bin', g: function(f){ return f.med[g]; }, ocultarSi0: true });
-    (_dpg[g] || []).forEach(function(d){ v.push({ id: 'farm:' + d.k, l: d.n, t: 'bin', sub: true, g: function(f){ return f.farm ? !!f.farm[d.k] : null; }, ocultarSi0: true }); }); });
+    (_dpg[g] || []).forEach(function(d){ v.push({ id: 'farm:' + d.k, l: d.n, t: 'bin', sub: true, g: function(f){ return f.farm ? !!f.farm[d.k] : null; }, ocultarSi0: true });
+      if(d.k === 'semaglutida') Object.keys({ozempic:'Ozempic',wegovy:'Wegovy',obetide:'Obetide',dutide:'Dutide'}).forEach(function(mk){ var MN = {ozempic:'Ozempic',wegovy:'Wegovy',obetide:'Obetide',dutide:'Dutide'}; v.push({ id: 'sema:' + mk, l: '\u00a0\u00a0· ' + MN[mk] + ' (% sobre los que usan semaglutida)', t: 'bin', sub: true, g: function(f){ return f.farm && f.farm.semaglutida ? f.semaMarca === mk : null; }, ocultarSi0: true }); });
+      if(d.k === 'semaglutida') v.push({ id: 'sema:sin', l: '\u00a0\u00a0· marca sin registrar', t: 'bin', sub: true, g: function(f){ return f.farm && f.farm.semaglutida ? !f.semaMarca : null; }, ocultarSi0: true }); }); });
   v.push({ l: 'N.º de fármacos cardiometabólicos', t: 'cont', np: true, dec: 0, g: function(f){ return f.nMedsCM; } });
   return v;
 }
@@ -35779,6 +35798,10 @@ details.t1-q:not([disabled]) summary .t1-q-t::after{content:' ▾';color:var(--b
 .dato-copiar{cursor:copy;border-radius:6px;padding:1px 5px;margin-left:-5px;transition:background .15s}
 .dato-copiar:hover{background:var(--blue-light,#e8f1fb);color:var(--blue,#1f6aab)}
 .dato-copiar.chico{font-size:11.5px;color:var(--text-soft,#64748b);display:inline-block;margin-top:3px}
+.dato-copiar.afil::before{content:'Afil. ';color:#94a3b8;font-weight:500}
+.dato-copiar.afil{font-weight:700;color:#334155}
+.af-add{display:inline-block;margin-top:3px;font-size:11px;color:#94a3b8;cursor:pointer;border:1px dashed #cbd5e1;border-radius:6px;padding:0 5px}
+.af-add:hover{color:var(--blue,#1f6aab);border-color:var(--blue,#1f6aab)}
 .dato-copiar.chico:hover{color:var(--blue,#1f6aab)}
 .dato-copiar.ok{background:#dcfce7!important;color:#15803d!important}
 </style>
@@ -42926,7 +42949,14 @@ function _invDrogasHtml(f){
       var key = g + '|' + d.k, on = fd.indexOf(key) >= 0;
       return '<label class="inv-check-pill' + (on ? ' checked' : '') + '"><input type="checkbox" ' + (on ? 'checked' : '') + ' onchange="_invToggleDroga(\'' + escHtml(key).replace(/'/g, "\\'") + '\')"/>' + escHtml(d.n) + ' <span style="opacity:.6;font-size:10.5px">(' + d.c + ')</span></label>';
     }).join('') + '</div>' : '<div class="inv-filtro-nota">No hay pacientes con fármacos activos de este grupo.</div>';
+    if(g === 'Antiobesidad' && l.some(function(d){ return d.k === 'semaglutida'; })){
+      var MN = {ozempic:'Ozempic',wegovy:'Wegovy',obetide:'Obetide',dutide:'Dutide'};
+      h += '<div class="inv-sema-marca">Semaglutida · marca <select onchange="invFiltros.semaMarca=this.value;invRenderFiltrosPanel()"><option value="">cualquiera</option>'
+        + Object.keys(MN).map(function(k){ return '<option value="' + k + '"' + (f.semaMarca === k ? ' selected' : '') + '>' + MN[k] + '</option>'; }).join('')
+        + '<option value="alguna"' + (f.semaMarca === 'alguna' ? ' selected' : '') + '>con marca registrada</option></select></div>';
+    }
   });
+  if(f.semaMarca && f.farmInc.indexOf('Antiobesidad') < 0) h += '<div class="inv-filtro-nota">Filtrando por marca de semaglutida.</div>';
   return h;
 }
 function _invToggleDroga(key){
@@ -43084,6 +43114,10 @@ function _invToggleDroga(key){
     function pintarPie(){
       var b = bd.querySelector('.com-env'); if(!b) return;
       var n = elegidos().length; b.textContent = n ? '✉ Enviar a ' + n + ' paciente' + (n > 1 ? 's' : '') : 'Enviar'; b.disabled = !n || !st.asunto.trim() || !st.texto.trim();
+      var falta = !n ? 'Tildá al menos un paciente' : !st.asunto.trim() ? 'Falta el asunto del mail' : !st.texto.trim() ? 'Falta el mensaje' : '';
+      b.title = falta; var fz = bd.querySelector('.com-falta'); if(!fz){ fz = document.createElement('span'); fz.className = 'com-falta'; b.parentNode.insertBefore(fz, b); }
+      fz.textContent = falta ? '⚠️ ' + falta : '';
+      var as0 = bd.querySelector('.com-asunto'); if(as0) as0.classList.toggle('com-req', !!n && !st.asunto.trim());
     }
     function cuerpoMuestra(nombre){
       var par = E(st.texto).split(/\n{2,}/).map(function(p){ return '<p>' + p.replace(/\n/g, '<br>') + '</p>'; }).join('');
@@ -43206,8 +43240,8 @@ function _invToggleDroga(key){
   function boton(){
     var tb = document.querySelector('#page-pacientes .toolbar'); if(!tb || document.getElementById('com_btn')) return;
     var b = document.createElement('button'); b.id = 'com_btn'; b.className = 'btn'; b.type = 'button';
-    b.style.cssText = 'width:auto;margin-top:0;background:#fff;color:var(--teal);border:1.5px solid var(--teal)';
-    b.textContent = '📣 Comunicado a pacientes'; b.title = 'Mandar un mail a varios pacientes (guía, vacaciones, avisos). No queda como evolución.';
+    b.style.cssText = 'width:auto;margin-top:0;background:transparent;color:var(--text-soft,#64748b);border:1px solid #e2e8f0;padding:7px 12px;font-size:12.5px;font-weight:600;box-shadow:none;letter-spacing:0;align-self:center';
+    b.textContent = '📣 Comunicado'; b.title = 'Mandar un mail a varios pacientes (guía, vacaciones, avisos). No queda como evolución.';
     b.onclick = function(){ window.comunicadoAbrir(); };
     tb.appendChild(b);
   }
@@ -43231,6 +43265,8 @@ function _invToggleDroga(key){
 .com-st span{font-weight:500;color:#94a3b8;text-transform:none;letter-spacing:0}
 .com-flt{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}
 .com-flt select,.com-flt input{padding:6px 9px;border:1.5px solid var(--border);border-radius:9px;font:13px var(--font-main);background:#fff}
+.inv-sema-marca{margin-top:6px;font-size:12px;color:#475569;display:flex;align-items:center;gap:6px}
+.inv-sema-marca select{padding:3px 6px;border:1px solid #cbd5e1;border-radius:7px;font-size:12px}
 .com-buscar{width:100%;box-sizing:border-box;padding:10px 14px;border:2px solid var(--teal);border-radius:11px;font:15px var(--font-main);margin-bottom:8px}
 .com-tot{background:#ccfbf1;color:#0f766e;border-radius:999px;padding:2px 10px}
 .com-solo{display:inline-flex;align-items:center;gap:5px;font-size:12.5px;color:#334155;text-transform:none;letter-spacing:0;font-weight:600;cursor:pointer}
@@ -43266,6 +43302,8 @@ function _invToggleDroga(key){
 .com-pie button{padding:9px 16px;border-radius:10px;font:700 13.5px var(--font-main);cursor:pointer;border:1.5px solid #e2e8f0;background:#fff;color:#334155}
 .com-env,.com-cerrar{background:var(--teal)!important;border-color:var(--teal)!important;color:#fff!important}
 .com-env:disabled{opacity:.45;cursor:not-allowed}
+.com-falta{align-self:center;font-size:13px;font-weight:700;color:#b45309;margin-right:auto}
+.com-asunto.com-req{border-color:#f59e0b;background:#fffbeb}
 .com-pg-t{font-size:14px;color:#334155;margin:8px 0}
 .com-bar{height:10px;background:#e2e8f0;border-radius:99px;overflow:hidden}.com-bar i{display:block;height:100%;width:0;background:var(--teal);transition:width .3s}
 .com-pg-f{font-size:12.5px;color:#b91c1c;margin-top:6px}
