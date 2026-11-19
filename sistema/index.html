@@ -2,7 +2,7 @@
 <html lang="es-AR">
 <head>
   <meta charset="UTF-8" />
-  <script>var URCYM_BUILD = '2026-11-18-0800';</script>
+  <script>var URCYM_BUILD = '2026-11-18-2200';</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Evaluaciones cardiometabólicas — Sistema de Historia Clínica</title>
 
@@ -21,20 +21,6 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-  <script>
-  // Las fuentes básicas de los PDF no tienen ≥, ≤, −, ≈, flechas…: salían como basura (ej. "≥65" → "e65).
-  // Se reemplazan por equivalentes que sí se imprimen, en TODOS los PDF del sistema.
-  (function(){ try {
-    var A = window.jspdf && window.jspdf.jsPDF && window.jspdf.jsPDF.API; if(!A) return;
-    var M = {'≥':'>=','⩾':'>=','≤':'<=','⩽':'<=','−':'-','‑':'-','≈':'~','≅':'~','→':'->','⇒':'=>','←':'<-','↑':'(aumentó)','↓':'(disminuyó)','≠':'distinto de','\u202F':' ','\u2009':' ','\u200B':''};
-    var re = /[≥⩾≤⩽−‑≈≅→⇒←↑↓≠\u202F\u2009\u200B]/g;
-    var fix = function(t){ return typeof t === 'string' ? t.replace(re, function(c){ return M[c]; }) : (Array.isArray(t) ? t.map(fix) : t); };
-    ['text','splitTextToSize','getTextWidth'].forEach(function(fn){
-      var orig = A[fn]; if(typeof orig !== 'function') return;
-      A[fn] = function(t){ var args = Array.prototype.slice.call(arguments); args[0] = fix(t); return orig.apply(this, args); };
-    });
-  } catch(e) { console.warn('[PDF] no se pudo instalar el reemplazo de caracteres', e); } })();
-  </script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -25405,32 +25391,6 @@ function _vidItemsMenu(menu,key,mkItem){
   menu.appendChild(hdr);
   if(t.meet_link) menu.appendChild(mkItem('🎥 &nbsp;Abrir Meet','#1d9e75',function(){window.open(t.meet_link,'_blank');}));
   menu.appendChild(mkItem('📎 &nbsp;Comprobantes / detalle','#374151',function(){_vidDetalle(t.reserva_id);}));
-  if(t.pago!=='pagado'){
-    menu.appendChild(mkItem('✉️ &nbsp;Pedir saldo por mail','#6d28d9',function(){_vidPedirSaldo(t.reserva_id);}));
-    menu.appendChild(mkItem('✓ &nbsp;Ya pagó el saldo (mandar Meet)','#15803d',function(){_vidSaldoRecibido(t.reserva_id);}));
-  }
-}
-// Pedido manual del saldo (por si la paciente no pagó después del recordatorio automático).
-// Lo manda el servidor: mail de secretaría con los datos para transferir y el botón "Pagar el saldo"
-// (sube el comprobante o paga con MP desde su link, y queda registrado solo). Queda en el registro.
-async function _vidPedirSaldo(id, btn){
-  if(!confirm('¿Mandarle a la paciente el mail pidiéndole el saldo?')) return;
-  if(btn) btn.disabled=true;
-  try{ await _vidStaff({accion:'staff_pedir_saldo', id:id}); _vidToast('✓ Se le pidió el saldo por mail'); if(btn) btn.textContent='✓ Saldo pedido'; }
-  catch(e){ alert('No se pudo enviar: '+e.message); if(btn) btn.disabled=false; }
-}
-// La paciente pagó el saldo por fuera de la página (transferencia directa sin subir comprobante, etc.):
-// lo registra en la reserva y en la agenda, y le manda el link de Meet.
-async function _vidSaldoRecibido(id, btn){
-  if(!confirm('¿Confirmás que la paciente YA pagó el saldo?\n\nSe registra como pagado por transferencia a la profesional y se le manda el link de la videollamada.')) return;
-  if(btn) btn.disabled=true;
-  try{
-    await _vidStaff({accion:'staff_saldo_recibido', id:id});
-    _vidToast('✓ Saldo registrado y Meet enviado');
-    if(btn) btn.textContent='✓ Saldo registrado';
-    try{ if(typeof agRefreshManual==='function') agRefreshManual(); }catch(_){}
-  }
-  catch(e){ alert('No se pudo registrar: '+e.message); if(btn) btn.disabled=false; }
 }
 async function _vidDetalle(id){
   var r;
@@ -25458,8 +25418,6 @@ function _vidHtmlReserva(r,detalle){
     +((r.sena_comprobante||r.saldo_comprobante)?'<label style="margin-left:auto;display:flex;align-items:center;gap:4px;cursor:pointer;'+(pend?'color:#b45309;font-weight:700;':'color:#6b7280;')+'"><input type="checkbox" class="vid-rev" '+(r.comprobante_revisado?'checked':'')+'> comprobantes revisados</label>':'')
     +'</div>'
     +(r.meet_link?'<div style="margin-top:5px;"><a href="'+_vidEsc(r.meet_link)+'" target="_blank" rel="noopener" style="color:#1d9e75;font-weight:700;">🎥 '+_vidEsc(r.meet_link)+'</a></div>':'')
-    +((r.estado==='confirmada'&&!r.saldo_pagado_at&&Number(r.saldo_monto)>0)?'<div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap;"><button type="button" class="vid-pedir-saldo" data-id="'+r.id+'" title="Le manda a la paciente un mail de secretaría pidiendo el saldo, con los datos para transferir y el botón para pagarlo" style="border:1px solid #c4b5fd;background:#f5f3ff;color:#6d28d9;border-radius:8px;padding:4px 10px;font-size:12px;font-weight:700;cursor:pointer;">✉️ Pedir saldo por mail</button>'
-    +'<button type="button" class="vid-saldo-ok" data-id="'+r.id+'" title="Usalo si la paciente te pagó el saldo por fuera de la página: queda registrado y le llega el link de Meet" style="border:1px solid #bbf7d0;background:#f0fdf4;color:#15803d;border-radius:8px;padding:4px 10px;font-size:12px;font-weight:700;cursor:pointer;">✓ Ya pagó el saldo</button></div>':'')
     +((r.estado==='cancelada'||r.estado==='vencida')?'<div style="margin-top:6px;text-align:right;"><button type="button" class="vid-borrar-res" data-id="'+r.id+'" style="border:1px solid #fecaca;background:#fff;color:#b91c1c;border-radius:8px;padding:4px 10px;font-size:12px;cursor:pointer;">🗑 Borrar</button></div>':'');
   if(detalle){
     var log=(r.log||[]).slice(-8).map(function(l){var d=new Date(l.at);return '<div>'+d.toLocaleString('es-AR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})+' · '+_vidEsc(l.msg)+'</div>';}).join('');
@@ -25468,8 +25426,6 @@ function _vidHtmlReserva(r,detalle){
   return h+'</div>';
 }
 function _vidEngancharReservas(box){
-  box.querySelectorAll('.vid-pedir-saldo').forEach(function(b){b.onclick=function(){_vidPedirSaldo(b.dataset.id,b);};});
-  box.querySelectorAll('.vid-saldo-ok').forEach(function(b){b.onclick=function(){_vidSaldoRecibido(b.dataset.id,b);};});
   box.querySelectorAll('[data-comp]').forEach(function(b){b.onclick=function(){_vidVerComprobante(b.getAttribute('data-comp'));};});
   box.querySelectorAll('.vid-borrar-res').forEach(function(b){b.onclick=async function(){
     if(!confirm('¿Borrar esta videoconsulta cancelada? No se puede deshacer.')) return;
@@ -30393,7 +30349,6 @@ window.cargarProxConsultas = cargarProxConsultas;
   function ciFinAtencion(fecha, prof){
     var T = (typeof turnos !== 'undefined' && turnos) || {}, fin = null;
     Object.keys(T).forEach(function(k){ var p = k.split('_'); if(p[0] !== fecha || p[2] !== prof) return; var t = T[k] || {};
-      if(t.video) return; // las videollamadas no son parte de la atención del consultorio
       var hm = String(p[1] || '').split(':'), m = (+hm[0]) * 60 + (+hm[1] || 0) + (Number(t.dur || t.duracion) || 30);
       if(fin == null || m > fin) fin = m; });
     return fin;
@@ -30409,7 +30364,6 @@ window.cargarProxConsultas = cargarProxConsultas;
     // Si todos los turnos del día ya están marcados (atendido o ausente), se puede cerrar aunque sea más temprano
     var T = (typeof turnos !== 'undefined' && turnos) || {}, total = 0, faltan = 0;
     Object.keys(T).forEach(function(k){ var p = k.split('_'); if(p[0] !== fecha || p[2] !== prof) return; var t = T[k] || {};
-      if(t.video) return; // las videollamadas no cuentan para habilitar el cierre
       if(!t.paciente && !t.dni_paciente) return;
       if(/cancel|anulad/i.test(String(t.estado || ''))) return;
       total++; if(!/^(atendido|asistio|presente|ausente)$/.test(String(t.asistencia || ''))) faltan++; });
@@ -32373,9 +32327,6 @@ ${profNombre?`<div class="prof"><span class="prof-name">${profNombre}</span>${pr
         <div style="width:1px;height:20px;background:#d0d8e4;margin:0 2px;"></div>
         <button type="button" title="Quitar formato" onclick="document.getElementById('doclibre_contenido').focus();document.execCommand('removeFormat')"
           style="padding:0 8px;height:28px;border:1.5px solid #d0d8e4;border-radius:6px;background:white;font-size:11px;cursor:pointer;color:#6b7a8d;">✕ fmt</button>
-        <div style="width:1px;height:20px;background:#d0d8e4;margin:0 2px;"></div>
-        <button type="button" title="Elegir estudios complementarios cargados y agregarlos como texto" onmousedown="_docLibreGuardarCursor();event.preventDefault()" onclick="_docLibreAbrirEstudios()"
-          style="padding:0 10px;height:28px;border:1.5px solid #3089ca;border-radius:6px;background:#eef6fc;font-size:12px;font-weight:700;cursor:pointer;color:#226ca6;">🩺 Estudios</button>
       </div>
       <div id="doclibre_contenido" class="doc-libre-editor" contenteditable="true" spellcheck="true"
         data-placeholder="Escribí el contenido del documento aquí...&#10;&#10;Podés incluir diagnósticos, medicación actual, motivo de derivación, etc."
@@ -32504,121 +32455,6 @@ function abrirDocumentoLibre(dni) {
   document.getElementById('modalDocLibre').classList.add('open');
 }
 
-// ===== DOCUMENTO LIBRE: adjuntar estudios complementarios =====
-// Lista los estudios cargados (cada estudio en cada fecha), se tildan los que se quieren y se agregan
-// al documento como texto corrido (valores + comentarios), con el mismo redactor que usa la evolución.
-let _docLibreRango = null;
-function _docLibreGuardarCursor(){
-  const ed = document.getElementById('doclibre_contenido');
-  const sel = window.getSelection();
-  _docLibreRango = (ed && sel && sel.rangeCount && ed.contains(sel.getRangeAt(0).commonAncestorContainer)) ? sel.getRangeAt(0).cloneRange() : null;
-}
-async function _docLibreDatosEstudios(dni){
-  if(typeof pacienteActual !== 'undefined' && pacienteActual && pacienteActual.dni === dni && pacHistoriaDni === dni && estDatos && estDatos.columnas) return estDatos;
-  const { data: rows, error } = await sb.from('paciente_tablas').select('datos').eq('dni_paciente', dni).eq('tipo', 'est');
-  if(error) throw error;
-  const data = (rows || []).filter(r => r && r.datos).pop();
-  if(!data) return { columnas:[], filas:[], unidades:{}, extraFilas:[] };
-  const d = typeof data.datos === 'string' ? JSON.parse(data.datos) : data.datos;
-  if(!d.extraFilas) d.extraFilas = []; if(!d.unidades) d.unidades = {}; if(!d.columnas) d.columnas = []; if(!d.filas) d.filas = [];
-  return migrarEstDatos(d);
-}
-// Ítems cargados de una columna (fecha), igual que el volcado de estudios a la evolución
-function _estItemsColumna(datos, ci, sexo){
-  const todas = [...EST_FILAS, ...(datos.extraFilas||[]).map(lbl=>({label:lbl,key:'extra_'+lbl,unidades:[''],defU:0,ref:null}))];
-  const items = []; let cat = '';
-  todas.forEach((f, fi) => {
-    if(f.cat){ cat = f.label; return; }
-    if(!f.key) return;
-    const val = (datos.filas[fi] || [])[ci];
-    if(val == null || String(val).trim() === '') return;
-    const u = (datos.unidades && datos.unidades[f.key]) || (f.unidades && f.unidades[0]) || '';
-    const alt = f.ref && f.ref(val, sexo, u);
-    const esNota = !f.ref && !f.calc && (f.nota || f.opciones || !/^-?\d+([.,]\d+)?$/.test(String(val).trim()));
-    items.push({ label:f.label, val:String(val), unidad: esNota && !alt ? '' : u, refTxt: alt ? (f.refTxt||'') : '',
-      tipo: alt ? 'alterado' : (esNota ? 'nota' : 'normal'), cat: f.key.startsWith('extra_') ? 'OTROS' : cat, key:f.key, fila:f });
-  });
-  return items;
-}
-async function _docLibreAbrirEstudios(){
-  const p = _docLibrePaciente;
-  if(!p){ alert('No hay paciente seleccionado.'); return; }
-  let datos;
-  try { datos = await _docLibreDatosEstudios(p.dni); }
-  catch(e){ alert('No se pudieron leer los estudios: ' + (e.message || e)); return; }
-  const sexo = p.sexo === 'Femenino' ? 'F' : 'H';
-  const entradas = [];
-  (datos.columnas || []).forEach((fecha, ci) => {
-    const porCat = {};
-    _estItemsColumna(datos, ci, sexo).forEach(it => { (porCat[it.cat] = porCat[it.cat] || []).push(it); });
-    Object.keys(porCat).forEach(cat => entradas.push({ fecha, ci, cat, items: porCat[cat] }));
-  });
-  if(!entradas.length){ alert('Este paciente no tiene estudios complementarios cargados.'); return; }
-  entradas.sort((a, b) => String(b.fecha).localeCompare(String(a.fecha)));
-  const orden = EST_CATS.map(c => c.label);
-  const cats = [...new Set(entradas.map(e => e.cat))].sort((a, b) => (orden.indexOf(a) < 0 ? 99 : orden.indexOf(a)) - (orden.indexOf(b) < 0 ? 99 : orden.indexOf(b)));
-  window._docLibreEstEntradas = entradas;
-  let html = '';
-  cats.forEach(cat => {
-    const ic = (EST_CATS.find(c => c.label === cat) || {}).icon || '🩺';
-    html += '<div style="margin:10px 0 4px;font-size:12px;font-weight:800;letter-spacing:.04em;color:#226ca6">' + ic + ' ' + escHtml(_EST_NOMBRE_PROSA[cat] || cat) + '</div>';
-    entradas.forEach((e, i) => {
-      if(e.cat !== cat) return;
-      const resumen = e.items.filter(it => !/^(comentarios?|nota)$/i.test(it.label.trim())).slice(0, 4)
-        .map(it => it.label.replace(/\s*\([^)]*\)\s*$/, '') + ' ' + _numAR(it.val)).join(' · ');
-      html += '<label style="text-transform:none;letter-spacing:0;font-weight:400;display:flex;gap:8px;align-items:flex-start;padding:6px 8px;border-radius:8px;cursor:pointer;border:1px solid #e3e9f0;margin-bottom:4px">'
-        + '<input type="checkbox" class="dl-est-chk" value="' + i + '" style="margin-top:3px;accent-color:#3089ca;width:15px;height:15px">'
-        + '<span style="font-size:13px"><b>' + escHtml(_fmtFechaCol(e.fecha)) + '</b>'
-        + (resumen ? '<span style="color:#6b7a8d"> · ' + escHtml(resumen) + (e.items.length > 4 ? '…' : '') + '</span>' : '') + '</span></label>';
-    });
-  });
-  let ov = document.getElementById('dl_est_overlay');
-  if(ov) ov.remove();
-  ov = document.createElement('div');
-  ov.id = 'dl_est_overlay';
-  ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:400;display:flex;align-items:center;justify-content:center;padding:20px';
-  ov.innerHTML = '<div style="background:#fff;border-radius:16px;padding:20px 22px;width:100%;max-width:560px;max-height:85vh;display:flex;flex-direction:column">'
-    + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px"><b style="font-size:16px">🩺 Estudios complementarios</b>'
-    + '<button type="button" onclick="document.getElementById(\'dl_est_overlay\').remove()" style="background:none;border:none;font-size:20px;cursor:pointer;color:#6b7a8d">✕</button></div>'
-    + '<div style="font-size:12px;color:#6b7a8d;margin-bottom:6px">Tildá los que quieras agregar. Se suman como texto corrido, con los valores y los comentarios cargados, donde estaba el cursor (o al final).</div>'
-    + '<div style="overflow-y:auto;flex:1;padding-right:4px">' + html + '</div>'
-    + '<label style="text-transform:none;letter-spacing:0;font-weight:400;display:flex;gap:6px;align-items:center;font-size:12px;margin-top:10px;cursor:pointer"><input type="checkbox" id="dl_est_titulo" checked style="accent-color:#3089ca"> Encabezar con "Estudios complementarios:"</label>'
-    + '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px">'
-    + '<button type="button" class="btn btn-secondary" style="width:auto;margin:0;padding:8px 16px" onclick="document.getElementById(\'dl_est_overlay\').remove()">Cancelar</button>'
-    + '<button type="button" class="btn btn-teal" style="width:auto;margin:0;padding:8px 16px" onclick="_docLibreInsertarEstudios()">Agregar al documento</button></div></div>';
-  ov.addEventListener('click', ev => { if(ev.target === ov) ov.remove(); });
-  document.body.appendChild(ov);
-}
-function _docLibreInsertarEstudios(){
-  const entradas = window._docLibreEstEntradas || [];
-  const elegidas = [...document.querySelectorAll('#dl_est_overlay .dl-est-chk:checked')].map(c => entradas[+c.value]).filter(Boolean);
-  if(!elegidas.length){ alert('Tildá al menos un estudio.'); return; }
-  const conTitulo = document.getElementById('dl_est_titulo')?.checked;
-  // Del más antiguo al más reciente, agrupando por estudio en el orden de la lista de estudios
-  const orden = EST_CATS.map(c => c.label);
-  elegidas.sort((a, b) => ((orden.indexOf(a.cat) < 0 ? 99 : orden.indexOf(a.cat)) - (orden.indexOf(b.cat) < 0 ? 99 : orden.indexOf(b.cat))) || String(a.fecha).localeCompare(String(b.fecha)));
-  const parrafos = elegidas.map(e => {
-    let h = _redactarEstudiosEnOraciones(e.items);
-    h = h.replace(/<span style="color:var\(--red\);font-weight:700">([\s\S]*?)<\/span>/g, '$1');      // sin rojo en el documento
-    h = h.replace(/^<span style="color:#1a2535;font-weight:600">([\s\S]*?):<\/span>/, (m, nom) => '<b>' + nom + ' (' + escHtml(_fmtFechaCol(e.fecha)) + '):</b>');
-    return '<div>' + h + '</div>';
-  });
-  const bloque = (conTitulo ? '<div><b>Estudios complementarios:</b></div>' : '') + parrafos.join('') + '<div><br></div>';
-  const ed = document.getElementById('doclibre_contenido');
-  const tmp = document.createElement('div'); tmp.innerHTML = bloque;
-  const frag = document.createDocumentFragment(); let ult = null;
-  while(tmp.firstChild){ ult = tmp.firstChild; frag.appendChild(ult); }
-  if(_docLibreRango && ed.contains(_docLibreRango.commonAncestorContainer)){
-    _docLibreRango.deleteContents(); _docLibreRango.insertNode(frag);
-  } else {
-    ed.appendChild(frag);
-  }
-  if(ult){ const r = document.createRange(); r.setStartAfter(ult); r.collapse(true); const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(r); }
-  _docLibreRango = null;
-  document.getElementById('dl_est_overlay')?.remove();
-  if(typeof _toastDocLibre === 'function') _toastDocLibre('✅ Estudios agregados');
-}
-
 // Cancelar: si hay algo escrito, confirma antes de descartarlo de verdad
 function cancelarDocLibre() {
   const contEl = document.getElementById('doclibre_contenido');
@@ -32630,33 +32466,9 @@ function cancelarDocLibre() {
   document.getElementById('modalDocLibre').classList.remove('open');
 }
 
-// Volcado automático al descargar el PDF. Solo si ese paciente es el que está abierto en Evolución
-// (si no, iría a la evolución de otro paciente) y si ese mismo documento no se volcó ya a mano.
-function _docLibreVolcarAuto(p, tipo, contenidoHtml){
-  const editor = document.getElementById('evol_editor');
-  if(!editor || !p) return;
-  if(typeof pacienteActual === 'undefined' || !pacienteActual || pacienteActual.dni !== p.dni){
-    _toastDocLibre('ℹ️ PDF descargado. No se volcó: ' + (p.apellido || p.nombre || 'el paciente') + ' no está abierto en Evolución');
-    return;
-  }
-  const ya = [...editor.querySelectorAll('.bloque-doclibre')].some(b => b.innerHTML.indexOf(contenidoHtml) >= 0);
-  if(ya) return;
-  const hoy = fechaHoy ? fechaHoy() : new Date().toLocaleDateString('es-AR');
-  const bloque = '<div class="bloque-doclibre" style="font-family:Arial,sans-serif;font-size:10pt;color:#333;border-left:3px solid var(--blue);padding:6px 10px;margin-bottom:10px;line-height:1.8">'
-    + '<strong style="font-size:10pt">' + escHtml(tipo) + ' — ' + hoy + ':</strong><br>' + contenidoHtml + '</div>';
-  const tmp = document.createElement('div'); tmp.innerHTML = bloque;
-  editor.appendChild(tmp.firstChild);
-  _asegurarLineaLibreEvol(editor);
-  try { editor.dispatchEvent(new Event('input', { bubbles: true })); } catch(_) {}
-  _toastDocLibre('✅ PDF descargado y volcado a la evolución');
-}
-
 function volcarDocLibreAEvolucion() {
   const p = _docLibrePaciente;
   if(!p){ alert('No hay paciente seleccionado.'); return; }
-  if(typeof pacienteActual !== 'undefined' && pacienteActual && pacienteActual.dni !== p.dni){
-    alert('Este documento es de ' + (p.apellido || p.nombre || 'otro paciente') + ', pero en Evolución tenés abierto a otro paciente. Abrí su evolución para volcarlo.'); return;
-  }
   const contEl = document.getElementById('doclibre_contenido');
   const contenidoHtml = contEl ? contEl.innerHTML.trim() : '';
   if(!contenidoHtml || contenidoHtml === '<br>'){ alert('Escribí el contenido del documento antes de volcarlo.'); return; }
@@ -32775,11 +32587,7 @@ function generarPDFDocLibre() {
     _pdfFooterOtro(doc, u, PW, PH, direccionPie);
 
     if(window._docLibreCaptura){ const cap = window._docLibreCaptura; window._docLibreCaptura = null; cap(doc, filename); }
-    else {
-      doc.save(filename); if(window._docLibreDescargado) window._docLibreDescargado(doc, filename);
-      // Al descargar el PDF, el documento queda volcado solo en la evolución del paciente
-      try { _docLibreVolcarAuto(p, tipo, contenidoHtml); } catch(e) { console.warn('[DocLibre] volcado automático', e); }
-    }
+    else { doc.save(filename); if(window._docLibreDescargado) window._docLibreDescargado(doc, filename); }
 
     // Ya se descargó (o quedó lista para el mail): ahora sí se limpia el borrador y se cierra el modal.
     if(contenidoEl) contenidoEl.innerHTML = '';
@@ -43150,7 +42958,7 @@ function _invToggleDroga(key){
   var fDMA = function(iso){ if(!iso) return ''; var d = new Date(iso); if(isNaN(d)) return String(iso).slice(0, 10); return d.toLocaleDateString('es-AR', { day:'2-digit', month:'2-digit', year:'numeric', timeZone:'America/Argentina/Buenos_Aires' }); };
   var sinAc = function(x){ return String(x || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase(); };
   var PLANT = {
-    guia: { asunto: 'Actualización de la guía', texto: 'Te escribimos para compartirte la versión actualizada de la guía. La tenés en el archivo adjunto.\n\nCualquier duda la conversamos en la próxima consulta.' },
+    guia: { asunto: 'Actualización de la guía', texto: 'Te escribimos para compartirte la versión actualizada de la guía. La tenés en el archivo adjunto.' },
     vac: { asunto: 'Aviso: vacaciones', texto: 'Te avisamos que no vamos a estar atendiendo entre el __/__ y el __/__.\n\nSi necesitás una receta o tenés una consulta, escribinos antes de esa fecha. Ante una urgencia, acudí a la guardia más cercana.' },
     aviso: { asunto: 'Aviso importante', texto: '' }
   };
@@ -43162,12 +42970,14 @@ function _invToggleDroga(key){
     var r = await Promise.all([
       _t1TraerTodo('paciente_clinica', '*').catch(function(){ return []; }),
       _t1TraerTodo('medicacion', 'dni_paciente,grupo,farmaco', function(q){ return q.eq('activo', true); }).catch(function(){ return []; }),
-      _t1TraerTodo('evoluciones', 'dni_paciente,fecha_hora').catch(function(){ return []; })
+      _t1TraerTodo('evoluciones', 'dni_paciente,fecha_hora').catch(function(){ return []; }),
+      _t1TraerTodo('paciente_profesionales', 'dni_paciente,profesional').catch(function(){ return []; })
     ]);
+    var pro = {}; (r[3] || []).forEach(function(x){ (pro[x.dni_paciente] = pro[x.dni_paciente] || []).push(String(x.profesional || '')); });
     var cli = {}; r[0].forEach(function(c){ cli[c.dni_paciente] = c; });
     var med = {}; r[1].forEach(function(m){ (med[m.dni_paciente] = med[m.dni_paciente] || []).push(m); });
     var ult = {}; r[2].forEach(function(e){ var f = String(e.fecha_hora || '').slice(0, 10); if(f && (!ult[e.dni_paciente] || f > ult[e.dni_paciente])) ult[e.dni_paciente] = f; });
-    return { pac: pac.slice().sort(function(a, b){ return ((a.apellido || '') + (a.nombre || '')).localeCompare((b.apellido || '') + (b.nombre || ''), 'es'); }), cli: cli, med: med, ult: ult };
+    return { pac: pac.slice().sort(function(a, b){ return ((a.apellido || '') + (a.nombre || '')).localeCompare((b.apellido || '') + (b.nombre || ''), 'es'); }), cli: cli, med: med, ult: ult, pro: pro };
   }
 
   function profActual(){ return { barbara:'BG', omar:'OB' }[String((typeof selectedUser !== 'undefined' && selectedUser) || '').toLowerCase()] || 'BG'; }
@@ -43182,7 +42992,7 @@ function _invToggleDroga(key){
     bg.querySelectorAll('.com-tabs button').forEach(function(b){ b.onclick = function(){ if(enviando) return; bg.querySelectorAll('.com-tabs button').forEach(function(x){ x.classList.toggle('on', x === b); }); if(b.dataset.t === 'hist') pintarHist(); else pintarNuevo(); }; });
     try { D = await traerDatos(); } catch(e){ bd.innerHTML = '<div class="com-err">No se pudieron traer los pacientes: ' + E(e.message || e) + '</div>'; return; }
     var materiales = (typeof _leerMateriales === 'function') ? await _leerMateriales() : [];
-    var F = { dx:'', farm:'', cob:'', sexo:'', desde:'', q:'' }, desmarcados = {}, archivos = [];
+    var F = { dx:'', farm:'', cob:'', sexo:'', desde:'', q:'', prof:'', soloSel:false }, tild = {}, archivos = [];
     var st = { asunto:'', texto:'', prof: profActual(), mats: {} };
 
     function cumple(p){
@@ -43192,10 +43002,13 @@ function _invToggleDroga(key){
       if(F.cob && String(p.obra_social || '') !== F.cob) return false;
       if(F.sexo && !new RegExp('^' + F.sexo, 'i').test(String(p.sexo || ''))) return false;
       if(F.desde && !((D.ult[p.dni] || '') >= F.desde)) return false;
+      if(F.prof && !(D.pro[p.dni] || []).some(function(x){ return sinAc(x).indexOf(F.prof) >= 0; })) return false;
+      if(F.soloSel && !tild[p.dni]) return false;
       if(F.q){ var t = sinAc((p.apellido || '') + ' ' + (p.nombre || '') + ' ' + p.dni + ' ' + (p.email || '')); if(t.indexOf(sinAc(F.q)) < 0) return false; }
       return true;
     }
-    function elegidos(){ return D.pac.filter(function(p){ return cumple(p) && okMail(p.email) && !desmarcados[p.dni]; }); }
+    /* Lo tildado se mantiene aunque cambies de búsqueda o de filtro: buscás, tildás, buscás otro, tildás… */
+    function elegidos(){ return D.pac.filter(function(p){ return tild[p.dni] && okMail(p.email); }); }
 
     function pintarNuevo(){
       var dxOp = Object.keys(INV_DX_LABELS || {}).sort(function(a, b){ return INV_DX_LABELS[a].localeCompare(INV_DX_LABELS[b], 'es'); }).map(function(k){ return '<option value="' + k + '"' + (F.dx === k ? ' selected' : '') + '>' + E(INV_DX_LABELS[k]) + '</option>'; }).join('');
@@ -43204,20 +43017,22 @@ function _invToggleDroga(key){
       var farmOp = (typeof GRUPOS_MED !== 'undefined' ? GRUPOS_MED : []).map(function(g){ return '<option' + (F.farm === g ? ' selected' : '') + '>' + E(g) + '</option>'; }).join('');
       bd.innerHTML =
         '<div class="com-sec"><div class="com-st">1 · ¿A quiénes?</div>'
+        + '<input type="search" data-f="q" class="com-buscar" placeholder="🔍 Buscá un paciente por apellido, nombre o DNI y tildalo (lo tildado no se pierde al buscar otro)" value="' + E(F.q) + '">'
         + '<div class="com-flt">'
         + '<select data-f="dx"><option value="">Diagnóstico: todos</option>' + dxOp + '</select>'
         + '<select data-f="farm"><option value="">Medicación: cualquiera</option>' + farmOp + '</select>'
         + '<select data-f="cob"><option value="">Cobertura: todas</option>' + cobOp + '</select>'
+        + '<select data-f="prof"><option value="">Pacientes: de los dos</option><option value="guerrero"' + (F.prof === 'guerrero' ? ' selected' : '') + '>Pacientes de Guerrero</option><option value="bertani"' + (F.prof === 'bertani' ? ' selected' : '') + '>Pacientes de Bertani</option></select>'
         + '<select data-f="sexo"><option value="">Sexo: todos</option><option value="f"' + (F.sexo === 'f' ? ' selected' : '') + '>Mujeres</option><option value="m"' + (F.sexo === 'm' ? ' selected' : '') + '>Varones</option></select>'
         + '<label class="com-desde">Consultó desde <input type="date" data-f="desde" value="' + E(F.desde) + '"></label>'
-        + '<input type="search" data-f="q" placeholder="🔍 Buscar nombre, DNI o mail" value="' + E(F.q) + '">'
+
         + '</div><div class="com-cuenta"></div><div class="com-lista"></div></div>'
         + '<div class="com-sec"><div class="com-st">2 · Mensaje</div>'
         + '<div class="com-pl">Plantillas: <button type="button" data-p="guia">📘 Guía actualizada</button><button type="button" data-p="vac">🌴 Vacaciones</button><button type="button" data-p="aviso">📢 Aviso</button></div>'
         + '<div class="com-row"><input type="text" class="com-asunto" placeholder="Asunto del mail" value="' + E(st.asunto) + '"><select class="com-prof" title="Sale desde el Gmail de…"><option value="BG"' + (st.prof === 'BG' ? ' selected' : '') + '>Firma: Dra. Guerrero</option><option value="OB"' + (st.prof === 'OB' ? ' selected' : '') + '>Firma: Dr. Bertani</option></select></div>'
         + '<div class="com-hola">Hola <i>(nombre de cada paciente)</i>,</div>'
         + '<textarea class="com-texto" rows="6" placeholder="Escribí el mensaje…">' + E(st.texto) + '</textarea>'
-        + '<div class="com-nota">Cada paciente lo recibe por separado (nadie ve los mails de los demás), con su nombre, y puede responderte el mail.</div></div>'
+        + '<div class="com-nota">Cada paciente lo recibe por separado (nadie ve los mails de los demás), con su nombre.</div></div>'
         + '<div class="com-sec"><div class="com-st">3 · Adjuntos <span>(opcional)</span></div>'
         + '<div class="com-adj-compu"></div><input type="file" class="com-file" multiple accept="application/pdf,image/*" style="display:none"><button type="button" class="com-file-btn">📎 Archivo de la compu (ej. el PDF de la guía)</button>'
         + (materiales.length ? '<details class="com-mats"' + (Object.keys(st.mats).length ? ' open' : '') + '><summary>📚 De la biblioteca de materiales</summary>' + _htmlListaMateriales(materiales, true) + '</details>' : '')
@@ -43250,16 +43065,20 @@ function _invToggleDroga(key){
     function pintarLista(){
       var l = bd.querySelector('.com-lista'); if(!l) return;
       var filt = D.pac.filter(cumple), conM = filt.filter(function(p){ return okMail(p.email); }), sel = elegidos();
-      bd.querySelector('.com-cuenta').innerHTML = '<b>' + sel.length + '</b> tildados de ' + filt.length + ' que cumplen' + (filt.length - conM.length ? ' · <span class="com-sinm">' + (filt.length - conM.length) + ' sin mail cargado</span>' : '')
-        + ' <button type="button" class="com-todos">Tildar todos</button><button type="button" class="com-ning">Destildar todos</button>';
-      bd.querySelector('.com-todos').onclick = function(){ filt.forEach(function(p){ delete desmarcados[p.dni]; }); pintarLista(); };
-      bd.querySelector('.com-ning').onclick = function(){ filt.forEach(function(p){ desmarcados[p.dni] = 1; }); pintarLista(); };
+      bd.querySelector('.com-cuenta').innerHTML = '<span class="com-tot">✓ <b>' + sel.length + '</b> tildado' + (sel.length === 1 ? '' : 's') + '</span> · se ven ' + filt.length + (filt.length - conM.length ? ' (<span class="com-sinm">' + (filt.length - conM.length) + ' sin mail</span>)' : '')
+        + ' <button type="button" class="com-todos">Tildar los ' + conM.length + ' que se ven</button><button type="button" class="com-ning">Destildar los que se ven</button>'
+        + '<label class="com-solo"><input type="checkbox" class="com-solosel"' + (F.soloSel ? ' checked' : '') + '> Ver solo los tildados</label>'
+        + (sel.length ? '<button type="button" class="com-cero">Destildar todo</button>' : '');
+      bd.querySelector('.com-todos').onclick = function(){ conM.forEach(function(p){ tild[p.dni] = 1; }); pintarLista(); };
+      bd.querySelector('.com-ning').onclick = function(){ filt.forEach(function(p){ delete tild[p.dni]; }); pintarLista(); };
+      bd.querySelector('.com-solosel').onchange = function(){ F.soloSel = this.checked; pintarLista(); };
+      var cz = bd.querySelector('.com-cero'); if(cz) cz.onclick = function(){ if(confirm('¿Destildar a los ' + sel.length + '?')){ tild = {}; F.soloSel = false; pintarLista(); } };
       var MAX = 400;
       l.innerHTML = filt.slice(0, MAX).map(function(p){
-        var m = okMail(p.email), on = m && !desmarcados[p.dni], u = D.ult[p.dni];
+        var m = okMail(p.email), on = m && !!tild[p.dni], u = D.ult[p.dni];
         return '<label class="com-p' + (m ? '' : ' sin') + '"><input type="checkbox" data-dni="' + E(p.dni) + '"' + (on ? ' checked' : '') + (m ? '' : ' disabled') + '><span class="n">' + E((p.apellido || '') + ', ' + (p.nombre || '')) + '</span><span class="m">' + (m ? E(p.email) : 'sin mail') + '</span><span class="u">' + (u ? 'últ. ' + fDMA(u + 'T12:00:00') : '') + '</span></label>';
-      }).join('') + (filt.length > MAX ? '<div class="com-nota">… y ' + (filt.length - MAX) + ' más (también están tildados). Usá los filtros o el buscador para ver otros.</div>' : '') + (!filt.length ? '<div class="com-nota">Ningún paciente cumple esos filtros.</div>' : '');
-      l.querySelectorAll('input[data-dni]').forEach(function(c){ c.onchange = function(){ if(c.checked) delete desmarcados[c.dataset.dni]; else desmarcados[c.dataset.dni] = 1; pintarLista(); }; });
+      }).join('') + (filt.length > MAX ? '<div class="com-nota">… y ' + (filt.length - MAX) + ' más. Usá el buscador o los filtros para verlos.</div>' : '') + (!filt.length ? '<div class="com-nota">Ningún paciente cumple esos filtros.</div>' : '');
+      l.querySelectorAll('input[data-dni]').forEach(function(c){ c.onchange = function(){ if(c.checked) tild[c.dataset.dni] = 1; else delete tild[c.dataset.dni]; var top = l.scrollTop; pintarLista(); l.scrollTop = top; }; });
       pintarPie();
     }
     function pintarPie(){
@@ -43269,7 +43088,7 @@ function _invToggleDroga(key){
     function cuerpoMuestra(nombre){
       var par = E(st.texto).split(/\n{2,}/).map(function(p){ return '<p>' + p.replace(/\n/g, '<br>') + '</p>'; }).join('');
       var adj = archivos.map(function(a){ return '<li>📎 ' + E(a.file.name) + '</li>'; }).concat(materiales.filter(function(m){ return st.mats[m.id]; }).map(function(m){ return '<li>📎 ' + E(m.nombre) + '</li>'; })).join('');
-      return '<div class="com-mail"><div class="com-mail-as"><b>Asunto:</b> ' + E(st.asunto) + '</div><div class="com-mail-c"><h3>' + E(st.asunto) + '</h3><p>Hola ' + E(nombre) + ',</p>' + par + (adj ? '<ul>' + adj + '</ul>' : '') + '<p>Saludos,<br><b>' + (st.prof === 'OB' ? 'Dr. Omar Bertani' : 'Dra. Bárbara Guerrero') + '</b></p><p class="pie">Este es un mensaje informativo para los pacientes de URCyM. Si tenés dudas, respondé este mail.</p></div></div>';
+      return '<div class="com-mail"><div class="com-mail-as"><b>Asunto:</b> ' + E(st.asunto) + '</div><div class="com-mail-c"><h3>' + E(st.asunto) + '</h3><p>Hola ' + E(nombre) + ',</p>' + par + (adj ? '<ul>' + adj + '</ul>' : '') + '<p>Saludos,<br><b>' + (st.prof === 'OB' ? 'Dr. Omar Bertani' : 'Dra. Bárbara Guerrero') + '</b></p><p class="pie">Este es un mensaje informativo para los pacientes de URCyM.</p></div></div>';
     }
     function vistaPrevia(){
       var s = elegidos()[0]; var nom = s ? String(s.nombre || '').trim().split(' ')[0] : 'María';
@@ -43412,7 +43231,10 @@ function _invToggleDroga(key){
 .com-st span{font-weight:500;color:#94a3b8;text-transform:none;letter-spacing:0}
 .com-flt{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}
 .com-flt select,.com-flt input{padding:6px 9px;border:1.5px solid var(--border);border-radius:9px;font:13px var(--font-main);background:#fff}
-.com-flt input[type=search]{flex:1;min-width:200px}
+.com-buscar{width:100%;box-sizing:border-box;padding:10px 14px;border:2px solid var(--teal);border-radius:11px;font:15px var(--font-main);margin-bottom:8px}
+.com-tot{background:#ccfbf1;color:#0f766e;border-radius:999px;padding:2px 10px}
+.com-solo{display:inline-flex;align-items:center;gap:5px;font-size:12.5px;color:#334155;text-transform:none;letter-spacing:0;font-weight:600;cursor:pointer}
+.com-cuenta .com-cero{color:#b91c1c;border-color:#fecaca}
 .com-desde{display:flex;align-items:center;gap:6px;font-size:12px;color:#64748b}
 .com-cuenta{font-size:13px;color:#334155;margin:4px 0 6px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .com-cuenta button{border:1px solid #cbd5e1;background:#fff;border-radius:7px;padding:2px 9px;font:600 11.5px var(--font-main);color:#475569;cursor:pointer}
@@ -44263,44 +44085,5 @@ function _invToggleDroga(key){
 .dsp-chip.venc,.otr-item.venc{opacity:.5}
 </style>
 
-<style>
-/* Barras laterales de Evolución (iconos a la izquierda, PA/PREVENT a la derecha):
-   van en su propia columna al lado del editor, empiezan a la misma altura que el editor y,
-   al hacer scroll, quedan quietas justo debajo del encabezado del paciente, sin que nada las tape.
-   --evol-stick = dónde termina el encabezado fijo; se recalcula solo si el encabezado cambia de alto. */
-@media (min-width:701px){
-  #page-evolucion.active #pmain-evol:not([style*="none"]){display:grid !important;grid-template-columns:minmax(0,1fr) 300px;align-items:start}
-  #page-evolucion.active #pmain-evol > .evol-body{grid-column:1;grid-row:1;display:grid !important;grid-template-columns:52px minmax(0,1fr);align-items:start}
-  #page-evolucion.active .evol-body > .evol-sidebar-left{grid-column:1;grid-row:1;position:sticky !important;top:var(--evol-stick,210px) !important;bottom:auto !important;left:auto !important;height:calc(100vh - var(--evol-stick,210px));box-sizing:border-box}
-  #page-evolucion.active .evol-body > .evol-col-main{grid-column:2;grid-row:1;margin:0 !important}
-  #page-evolucion.active #pmain-evol > .evol-col-right{grid-column:2;grid-row:1;position:sticky !important;top:var(--evol-stick,210px) !important;bottom:auto !important;right:auto !important;width:auto !important;max-height:calc(100vh - var(--evol-stick,210px));overflow-y:auto}
-}
-</style>
-<script>
-(function(){
-  function medir(){
-    var pg=document.getElementById('page-evolucion');
-    if(!pg || window.innerWidth<=700) return;
-    var fin=56;
-    pg.querySelectorAll('.evol-topbar, .evol-header-var, .pac-tab-bar').forEach(function(el){
-      if(!el.offsetParent) return;
-      var cs=getComputedStyle(el);
-      if(cs.position!=='sticky') return;
-      var b=(parseFloat(cs.top)||0)+el.offsetHeight;
-      if(b>fin) fin=b;
-    });
-    pg.style.setProperty('--evol-stick', Math.round(fin)+'px');
-  }
-  function iniciar(){
-    medir();
-    if(window.ResizeObserver){
-      var ro=new ResizeObserver(medir);
-      document.querySelectorAll('#page-evolucion .evol-topbar, #page-evolucion .evol-header-var, #page-evolucion .pac-tab-bar').forEach(function(el){ ro.observe(el); });
-    }
-    window.addEventListener('resize',medir);
-  }
-  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',iniciar); else iniciar();
-})();
-</script>
 </body>
 </html>
