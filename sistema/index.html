@@ -2,7 +2,7 @@
 <html lang="es-AR">
 <head>
   <meta charset="UTF-8" />
-  <script>var URCYM_BUILD = '2026-11-19-0915';</script>
+  <script>var URCYM_BUILD = '2026-11-20-1045';</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Evaluaciones cardiometabólicas — Sistema de Historia Clínica</title>
 
@@ -25429,6 +25429,11 @@ function _vidHtmlReserva(r,detalle){
     +'</div>'
     +(r.meet_link?'<div style="margin-top:5px;"><a href="'+_vidEsc(r.meet_link)+'" target="_blank" rel="noopener" style="color:#1d9e75;font-weight:700;">🎥 '+_vidEsc(r.meet_link)+'</a></div>':'')
     +((r.estado==='cancelada'||r.estado==='vencida')?'<div style="margin-top:6px;text-align:right;"><button type="button" class="vid-borrar-res" data-id="'+r.id+'" style="border:1px solid #fecaca;background:#fff;color:#b91c1c;border-radius:8px;padding:4px 10px;font-size:12px;cursor:pointer;">🗑 Borrar</button></div>':'');
+  if(detalle && r.estado==='confirmada' && r.email){
+    var _sp=r.saldo_monto>0&&!r.saldo_pagado_at, _pas=new Date(r.fecha+'T'+(r.hora||'00:00')+':00-03:00')<new Date();
+    h+='<div style="margin-top:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;"><button type="button" class="vid-reenv-res" data-id="'+r.id+'" data-que="'+(_sp?'saldo':'conf')+'" style="padding:6px 12px;border-radius:8px;border:1px solid #7B3FC4;background:#fff;color:#7B3FC4;font-weight:700;font-size:12px;cursor:pointer;">📨 Reenviar mail'+(_sp?(_pas?' · reclamar el saldo':' (falta el saldo)'):' (confirmación)')+'</button>'
+      +'<span style="font-size:11px;color:#6b7280;">'+(_sp?(_pas?'La consulta ya pasó: le avisa amablemente que quedó pendiente y le manda el botón para abonarlo.':'Le recuerda el saldo con el botón para pagarlo.'):'Le vuelve a mandar la confirmación con los datos del turno.')+'</span></div>';
+  }
   if(detalle){
     var log=(r.log||[]).slice(-8).map(function(l){var d=new Date(l.at);return '<div>'+d.toLocaleString('es-AR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})+' · '+_vidEsc(l.msg)+'</div>';}).join('');
     if(log)h+='<div style="margin-top:8px;padding-top:6px;border-top:1px dashed #e5e7eb;color:#6b7280;font-size:11.5px;">'+log+'</div>';
@@ -25436,6 +25441,13 @@ function _vidHtmlReserva(r,detalle){
   return h+'</div>';
 }
 function _vidEngancharReservas(box){
+  box.querySelectorAll('.vid-reenv-res').forEach(function(b){ b.onclick=async function(){
+    var q=b.dataset.que==='saldo'?'¿Reenviarle el mail recordándole el saldo?':'¿Reenviarle el mail de confirmación del turno?';
+    if(!confirm(q)) return;
+    var t=b.textContent; b.disabled=true; b.textContent='Enviando…';
+    try{ var j=await _vidStaff({accion:'staff_reenviar_turno', id:b.dataset.id}); _vidToast('✓ Mail reenviado a '+((j&&j.email)||'el paciente')); b.textContent='✓ Reenviado'; }
+    catch(e){ alert(e.message); b.disabled=false; b.textContent=t; }
+  }; });
   box.querySelectorAll('[data-comp]').forEach(function(b){b.onclick=function(){_vidVerComprobante(b.getAttribute('data-comp'));};});
   box.querySelectorAll('.vid-borrar-res').forEach(function(b){b.onclick=async function(){
     if(!confirm('¿Borrar esta videoconsulta cancelada? No se puede deshacer.')) return;
@@ -25637,10 +25649,18 @@ function _vidHtmlOsde(p){
       +'</div><div style="font-size:11.5px;color:#6b7280;margin-top:4px;">Cargado '+_vidFechaHora(ult.at)+(links.length>1?' · '+links.length+' links en total':'')+'</div>';
   } else h+='<div style="color:#b45309;">El paciente todavía no cargó el link.</div>';
   if(ultPed && (!ult || ultPed.at>ult.at)) h+='<div style="margin-top:6px;color:#b45309;">📩 Se le pidió un link nuevo '+_vidFechaHora(ultPed.at)+' — esperando que lo cargue.</div>';
-  if(p.estado==='pendiente') h+='<button type="button" class="vid-osde-pedir" data-id="'+_vidEsc(p.id)+'" style="margin-top:8px;padding:7px 12px;border-radius:8px;border:1px solid #0369a1;background:#fff;color:#0369a1;font-weight:700;cursor:pointer;">📩 Pedir link nuevo al paciente</button>';
+  if(p.estado==='pendiente' && !ult) h+='<button type="button" class="vid-reenv-ped" data-id="'+_vidEsc(p.id)+'" data-que="osde" style="margin-top:8px;padding:6px 12px;border-radius:8px;border:1px solid #7B3FC4;background:#fff;color:#7B3FC4;font-weight:700;font-size:12px;cursor:pointer;">📨 Reclamar el link por mail</button>';
+  else if(p.estado==='pendiente') h+='<button type="button" class="vid-osde-pedir" data-id="'+_vidEsc(p.id)+'" style="margin-top:8px;padding:7px 12px;border-radius:8px;border:1px solid #0369a1;background:#fff;color:#0369a1;font-weight:700;cursor:pointer;">📩 Pedir link nuevo al paciente</button>';
   return h+'</div>';
 }
 function _vidEngancharOsde(box, alActualizar){
+  box.querySelectorAll('.vid-reenv-ped').forEach(function(b){ b.onclick=async function(){
+    var q=b.dataset.que==='comp'?'¿Reenviarle el mail reclamando el comprobante de la transferencia?':'¿Reenviarle el mail reclamando el link de OSDE?';
+    if(!confirm(q)) return;
+    var t=b.textContent; b.disabled=true; b.textContent='Enviando…';
+    try{ var j=await _vidStaff({accion:'staff_reenviar_pedido', id:b.dataset.id}); _vidToast('✓ Mail reenviado a '+((j&&j.email)||'el paciente')); if(alActualizar) alActualizar(); else b.textContent='✓ Reenviado'; }
+    catch(e){ alert(e.message); b.disabled=false; b.textContent=t; }
+  }; });
   box.querySelectorAll('.vid-osde-pedir').forEach(function(b){ b.onclick=async function(){
     if(!confirm('¿Pedirle al paciente un link nuevo de OSDE? Le llega un mail con el botón para cargarlo.')) return;
     b.disabled=true; b.textContent='Enviando…';
@@ -25827,6 +25847,8 @@ async function vidPedidoDetalle(id){
     +(p.nota?'<div style="margin-top:4px;">Nota: '+_vidEsc(p.nota)+'</div>':'')
     +_vidHtmlFotos(p)
     +_vidHtmlOsde(p)
+    +((p.estado==='pendiente_pago'&&p.pago_metodo==='comprobante'&&p.email)?'<div style="margin-top:10px;padding:10px 12px;border:1px solid #fdba74;background:#fff7ed;border-radius:10px;"><div style="font-weight:700;color:#b45309;margin-bottom:6px;">⏳ Falta el comprobante de la transferencia</div><button type="button" class="vid-reenv-ped" data-id="'+_vidEsc(p.id)+'" data-que="comp" style="padding:6px 12px;border-radius:8px;border:1px solid #7B3FC4;background:#fff;color:#7B3FC4;font-weight:700;font-size:12px;cursor:pointer;">📨 Reclamar el comprobante por mail</button></div>':'')
+    +(function(){ var lg=(p.log||[]).slice(-8).map(function(l){var d=new Date(l.at);return '<div>'+d.toLocaleString('es-AR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})+' · '+_vidEsc(l.msg)+'</div>';}).join(''); return lg?'<div style="margin-top:10px;padding-top:6px;border-top:1px dashed #e5e7eb;color:#6b7280;font-size:11.5px;">'+lg+'</div>':''; })()
     +(p.receta_pdf?'<div style="margin-top:8px;"><button class="vid-btn" data-comp="'+_vidEsc(p.receta_pdf)+'">📄 Receta enviada '+_vidFechaHora(p.receta_enviada_at)+'</button></div>':'')
     +'<div style="margin-top:12px;text-align:right;"><button type="button" class="vid-borrar-ped" style="border:1px solid #fecaca;background:#fff;color:#b91c1c;border-radius:8px;padding:5px 12px;font-size:12px;cursor:pointer;">🗑 Borrar pedido</button></div>'
     +'</div>';
