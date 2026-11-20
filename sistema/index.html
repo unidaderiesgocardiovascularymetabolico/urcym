@@ -2,7 +2,7 @@
 <html lang="es-AR">
 <head>
   <meta charset="UTF-8" />
-  <script>var URCYM_BUILD = '2026-11-20-1045';</script>
+  <script>var URCYM_BUILD = '2026-11-20-1200';</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Evaluaciones cardiometabólicas — Sistema de Historia Clínica</title>
 
@@ -37067,6 +37067,7 @@ function _cargaEstPrec(p){
     await script(CDN.pdf);
     pdfjsLib.GlobalWorkerOptions.workerSrc = CDN.pdfWorker;
     var doc = await pdfjsLib.getDocument({ data: await file.arrayBuffer() }).promise, out = [];
+    var paginas = window._pdfUltimo = [];   // cada página como imagen, para verla al lado de lo leído
     for(var i = 1; i <= Math.min(doc.numPages, 8); i++){
       var pg = await doc.getPage(i), tc = await pg.getTextContent();
       // reconstruir renglones por posición vertical
@@ -37080,12 +37081,27 @@ function _cargaEstPrec(p){
       });
       renglones.sort(function(a, b){ return b.y - a.y; });
       var txt = renglones.map(function(r){ return r.items.sort(function(a, b){ return a.x - b.x; }).map(function(o){ return o.s; }).join('  '); }).join('\n');
+      var pag = { texto: '', url: null, words: [], w: 0, h: 0 };
       if(txt.replace(/\s/g, '').length < 20){
         // PDF escaneado: se dibuja la página y se lee como foto
         var vp = pg.getViewport({ scale:2 }), cv = document.createElement('canvas'); cv.width = vp.width; cv.height = vp.height;
         await pg.render({ canvasContext:cv.getContext('2d'), viewport:vp }).promise;
+        try { pag.url = cv.toDataURL('image/jpeg', 0.85); } catch(_){}
+        window._ocrUltimo = null;
         txt = await ocr(cv, function(p){ if(progreso) progreso(p, 'página ' + i); });
+        var oc = window._ocrUltimo; if(oc){ pag.words = oc.words || []; pag.w = oc.w; pag.h = oc.h; }
+      } else {
+        // PDF con texto: se dibuja igual para verlo, y se ubica cada texto en la página (para resaltar el valor)
+        try {
+          var vp2 = pg.getViewport({ scale:1.6 }), cv2 = document.createElement('canvas'); cv2.width = vp2.width; cv2.height = vp2.height;
+          await pg.render({ canvasContext:cv2.getContext('2d'), viewport:vp2 }).promise;
+          pag.url = cv2.toDataURL('image/jpeg', 0.85); pag.w = cv2.width; pag.h = cv2.height;
+          tc.items.forEach(function(it){ if(!it.str || !it.str.trim()) return;
+            var m = pdfjsLib.Util.transform(vp2.transform, it.transform), alto = Math.hypot(m[2], m[3]) || 10, ancho = (it.width || 0) * vp2.scale;
+            pag.words.push({ t: it.str, c: 100, b: [m[4], m[5] - alto, m[4] + Math.max(ancho, 6), m[5] + alto * 0.2] }); });
+        } catch(e){ console.warn('[pdf] no se pudo dibujar la página', e && e.message); }
       }
+      pag.texto = txt; paginas.push(pag);
       out.push(txt);
     }
     return out.join('\n');
@@ -37117,9 +37133,17 @@ function _cargaEstPrec(p){
           var t = await window._leerArchivoTexto(files[i], function(p, extra){ est.textContent = rotulo(p, extra); });
           t = String(t || '').replace(/(\s*\.){4,}\s*/g, ' …… ').replace(/[ \t]{3,}/g, '   ');
           try {
-            var oc = window._ocrUltimo, esImg = /^image\//.test(files[i].type);
+            var oc = window._ocrUltimo, esImg = /^image\//.test(files[i].type), esPdf = /pdf$/i.test(files[i].type) || /\.pdf$/i.test(files[i].name);
+            if(esPdf && window._pdfUltimo && window._pdfUltimo.length){
+              // PDF: cada página es una "hoja" que se ve al lado de lo leído
+              window._pdfUltimo.forEach(function(pg){ if(!pg.url) return;
+                (textarea._fuentes = textarea._fuentes || []).push({ file: files[i], texto: String(pg.texto || '').replace(/(\s*\.){4,}\s*/g, ' …… ').replace(/[ \t]{3,}/g, '   '), url: pg.url, words: pg.words || [], w: pg.w, h: pg.h, pdf: true });
+                (pg.words || []).forEach(function(w){ if(w.c < 75 && /\d/.test(w.t)) (textarea._dudas = textarea._dudas || []).push({ t: w.t, c: w.c, f: files[i] }); }); });
+              window._pdfUltimo = null;
+            } else {
             var fu = { file: files[i], texto: t, url: esImg ? URL.createObjectURL(files[i]) : null, words: (esImg && oc) ? oc.words : [], w: oc ? oc.w : 0, h: oc ? oc.h : 0 };
             (textarea._fuentes = textarea._fuentes || []).push(fu);
+            }
             if(esImg && oc) oc.words.forEach(function(w){ if(w.c < 75 && /\d/.test(w.t)) (textarea._dudas = textarea._dudas || []).push({ t: w.t, c: w.c, f: files[i] }); });
           } catch(_){}
           try { textarea.dispatchEvent(new CustomEvent('ft-leido', { detail: { file: files[i], texto: t } })); } catch(_){}
@@ -40696,6 +40720,7 @@ function copiarEditor(id, btn){
     }
     return out;
   }
+  window._qcCoherencia = coherencia;
   // ── Valor leído con poca seguridad (el lector marcó ese número como dudoso)
   window._qcDudoso = function(ta, val){
     var d = ta && ta._dudas; if(!d || !d.length) return false;
@@ -40861,7 +40886,7 @@ function copiarEditor(id, btn){
     setTimeout(function(){
       var tas = document.querySelectorAll('.lp-txt'), ta = tas[tas.length - 1]; if(!ta || ta._vista) return; ta._vista = true;
       var col = ta.closest('.lp-col'); if(!col) return;
-      var bar = document.createElement('div'); bar.className = 'lp-vista'; bar.innerHTML = '<button type="button" data-v="txt" class="act">📝 Texto</button><button type="button" data-v="foto" disabled>📷 Foto</button>';
+      var bar = document.createElement('div'); bar.className = 'lp-vista'; bar.innerHTML = '<button type="button" data-v="txt" class="act">📝 Texto</button><button type="button" data-v="foto" disabled title="Ver la foto o el PDF original al lado de lo reconocido">📄 Ver el informe</button>';
       var foto = document.createElement('div'); foto.className = 'lp-foto'; foto.style.display = 'none';
       col.insertBefore(bar, col.firstChild); col.appendChild(foto);
       var oculto = [];
@@ -40884,8 +40909,8 @@ function copiarEditor(id, btn){
         var fa = fuentesActuales();
         if(fa.length < 2 || foto.style.display === 'none'){ nav.innerHTML = ''; return; }
         var k = sel ? fa.indexOf(sel) : -1;
-        nav.innerHTML = k >= 0 ? '📷 <b>Foto ' + (k + 1) + ' de ' + fa.length + '</b> de este laboratorio: abajo solo lo que se leyó de esta foto <span class="lp-fn-b"><button type="button" data-n="-1">←</button><button type="button" data-n="1">→</button><button type="button" data-n="0">Ver todo junto</button></span>'
-          : '📷 Este laboratorio tiene <b>' + fa.length + ' fotos</b>. Revisalas de a una: <span class="lp-fn-b"><button type="button" data-n="1">Empezar por la foto 1 →</button></span>';
+        nav.innerHTML = k >= 0 ? '📷 <b>Hoja ' + (k + 1) + ' de ' + fa.length + '</b> de este laboratorio: abajo solo lo que se leyó de esta hoja <span class="lp-fn-b"><button type="button" data-n="-1">←</button><button type="button" data-n="1">→</button><button type="button" data-n="0">Ver todo junto</button></span>'
+          : '📷 Este laboratorio tiene <b>' + fa.length + ' hojas</b>. Revisalas de a una: <span class="lp-fn-b"><button type="button" data-n="1">Empezar por la hoja 1 →</button></span>';
       }
       nav.addEventListener('click', function(e){ var b = e.target.closest('[data-n]'); if(!b) return; var fa = fuentesActuales(), n = +b.dataset.n;
         if(n === 0){ sel = null; } else { var k = sel ? fa.indexOf(sel) : -1; k = Math.max(0, Math.min(fa.length - 1, k + n)); sel = fa[k]; }
@@ -40903,7 +40928,7 @@ function copiarEditor(id, btn){
         });
         prevEl.querySelectorAll('.lp-ens').forEach(function(s){ var row = s.closest('tr, div'); if(!row || row.tagName === 'TR') return; var o = norm(row.textContent).slice(0, 28); row.style.display = !sel || clave.indexOf(o) >= 0 ? '' : 'none'; });
         var info = prevEl.parentNode.querySelector('.lp-fn-cuenta'); if(!info){ info = document.createElement('div'); info.className = 'lp-fn-cuenta'; nav.appendChild(info); }
-        info.textContent = sel ? n + ' de ' + tot + ' renglones son de esta foto (los demás siguen tildados, en sus fotos)' : '';
+        info.textContent = sel ? n + ' de ' + tot + ' renglones son de esta hoja (los demás siguen tildados, en sus hojas)' : '';
         document.querySelectorAll('.ec-th').forEach(function(d){ d.classList.toggle('es-act', !!sel && d._f === sel.file); });
       }
       if(prevEl) new MutationObserver(function(){ clearTimeout(prevEl._ft); prevEl._ft = setTimeout(filtrar, 30); }).observe(prevEl, { childList: true });
@@ -41021,6 +41046,7 @@ function copiarEditor(id, btn){
       tm = setTimeout(revisar, 2000);
     }
   }
+  window._qrPanel = abrirPanel;
   var oBoton = window._botonFotoTexto;
   if(typeof oBoton === 'function') window._botonFotoTexto = function(textarea){
     var w = oBoton.apply(this, arguments);
@@ -43832,8 +43858,9 @@ function _invToggleDroga(key){
 </style>
 
 <script>
-/* ══ 📷 Fotos hoja por hoja ══
-   Subís todas las fotos juntas (o PDF). Se leen solas, en orden. Las ves de a una, en grande,
+/* ══ 📥 Carga unificada: fotos, PDF, celular, captura pegada o texto/dictado — hoja por hoja ══
+   (Reemplaza a "Cargar laboratorio" y "Fotos hoja por hoja": una sola ventana.)
+   Subís todas las fotos juntas (o PDF: cada página es una hoja). Se leen solas, en orden. Las ves de a una, en grande,
    con lo reconocido al lado: elegís qué es (laboratorio, antropometría o qué estudio), la fecha,
    y corregís los valores. Las hojas de un mismo estudio pueden estar en cualquier orden
    (ej. eco en la hoja 1 y en la 5): se juntan por estudio + fecha. Al final ves el resumen
@@ -43841,6 +43868,7 @@ function _invToggleDroga(key){
 (function(){
   var E = function(t){ return String(t == null ? '' : t).replace(/[&<>"]/g, function(c){ return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' }[c]; }); };
   var sinAc = function(t){ return String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase(); };
+  var numV = function(z){ var t = String(z == null ? '' : z).trim(); if(!t) return null; t = t.replace(/\.(?=\d{3}(\D|$))/g, '').replace(',', '.'); var n = parseFloat(t); return isNaN(n) ? null : n; };
   var CATS_EST = function(){ return EST_FILAS.filter(function(f){ return f.cat; }).map(function(f){ return f.label; }); };
   function rango(cat){ var s = EST_FILAS.findIndex(function(f){ return f.cat && f.label === cat; }); if(s < 0) return null; var e = s + 1; while(e < EST_FILAS.length && !EST_FILAS[e].cat) e++; return [s, e]; }
   function filasDe(h){
@@ -43883,7 +43911,7 @@ function _invToggleDroga(key){
   function reconocer(h){
     h.vals = []; h.otros = [];
     var t = h.texto || '';
-    if(h.tipo === 'lab' && window._labAnalizarTexto){ var r = window._labAnalizarTexto(t) || {}; h.vals = (r.items || []).filter(function(it){ return it.key !== 'LPA'; }).map(function(it){ return { key: it.key, label: it.label, val: it.val, unidad: it.unidad }; }); h.otros = (r.otros || []).map(function(o){ return { nombre: o.nombre, val: o.val }; }); if(!h.fechaTocada && r.fecha) h.fecha = r.fecha; }
+    if(h.tipo === 'lab' && window._labAnalizarTexto){ var r = window._labAnalizarTexto(t) || {}; h.vals = (r.items || []).filter(function(it){ return it.key !== 'LPA'; }).map(function(it){ return { key: it.key, label: it.label, val: it.val, unidad: it.unidad }; }); h.otros = (r.otros || []).filter(function(o){ return !/\b(dni|d\.n\.i|documento|paciente|afiliado|protocolo|edad|tel|hc)\b/i.test(o.nombre); }).map(function(o){ return { nombre: o.nombre, val: o.val }; }); if(!h.fechaTocada && r.fecha) h.fecha = r.fecha; }
     else if(h.tipo === 'est' && h.cat && window._estAnalizarTexto){ var re = window._estAnalizarTexto(t, h.cat) || {}; var rg = rango(h.cat) || [0, 0];
       Object.keys(re.valores || {}).forEach(function(k){ var fi = EST_FILAS.findIndex(function(f){ return f.key === k; }); if(fi > rg[0] && fi < rg[1]) h.vals.push({ key: k, label: EST_FILAS[fi].label, val: re.valores[k] }); });
       if(!h.fechaTocada && re.fecha) h.fecha = re.fecha; }
@@ -43913,61 +43941,159 @@ function _invToggleDroga(key){
     for(var i = 0; i < S.hojas.length; i++){
       var h = S.hojas[i]; if(h.estado !== 'cola') continue;
       h.estado = 'leyendo'; pintarTira(); if(i === S.i) pintarHoja();
-      try { h.texto = await window._leerArchivoTexto(h.file, function(p){ h.prog = p; }); h.estado = 'lista'; }
+      var nuevas = [];
+      try {
+        window._ocrUltimo = null; window._pdfUltimo = null;
+        h.texto = await window._leerArchivoTexto(h.file, function(p){ h.prog = p; }); h.estado = 'lista';
+        if(h.pdf && window._pdfUltimo && window._pdfUltimo.length){
+          // PDF: cada página es una hoja, con su imagen para verla
+          window._pdfUltimo.forEach(function(pg, k){
+            var o = k === 0 ? h : { file: h.file, pdf: true, estado: 'lista', tipo: null, cat: null, fecha: '', vals: [], otros: [] };
+            o.url = pg.url || o.url; o.pdfImg = !!pg.url; o.texto = pg.texto || ''; o.words = pg.words || []; o.w = pg.w; o.h = pg.h; o.pag = k + 1; o.pags = window._pdfUltimo.length;
+            if(k) nuevas.push(o); });
+          window._pdfUltimo = null;
+        } else if(!h.pdf && window._ocrUltimo){ h.words = window._ocrUltimo.words || []; h.w = window._ocrUltimo.w; h.h = window._ocrUltimo.h; }
+      }
       catch(e){ h.texto = ''; h.estado = 'error'; h.err = String(e && e.message || e); }
       if(!S) return;
-      if(!h.tipo){ var s = sugerir(h); h.tipo = s.tipo; h.cat = s.cat || null; h.sugerido = !!s.tipo; }
-      reconocer(h);
+      if(nuevas.length){ S.hojas.splice.apply(S.hojas, [i + 1, 0].concat(nuevas)); S.hojas.forEach(function(x, j){ x.n = j + 1; }); }
+      [h].concat(nuevas).forEach(function(x){ prepararHoja(x); });
       pintarTira(); if(i === S.i) pintarHoja();
     }
     S.leyendo = false; pintarTira();
+    if(S.resumen) resumen(); else if(S.hojas[S.i]) pintarHoja();
   }
+  function prepararHoja(h){
+    if(!h.tipo){ var s = sugerir(h); if(!s.tipo && S.tipoInicial && S.tipoInicial !== 'est') s = { tipo: S.tipoInicial }; h.tipo = s.tipo; h.cat = s.cat || null; h.sugerido = !!s.tipo; }
+    reconocer(h);
+  }
+  /* ── agregar hojas: archivos, captura pegada, celular o texto ── */
+  function agregarArchivos(files){
+    if(!S) return; files = Array.prototype.slice.call(files || []).filter(function(f){ return /^image\//.test(f.type) || /pdf/i.test(f.type) || /\.pdf$/i.test(f.name); });
+    if(!files.length) return;
+    var i0 = S.hojas.length;
+    files.forEach(function(f){ var pdf = /pdf/i.test(f.type) || /\.pdf$/i.test(f.name); S.hojas.push({ n: S.hojas.length + 1, file: f, url: pdf ? null : URL.createObjectURL(f), pdfUrl: pdf ? URL.createObjectURL(f) : null, pdf: pdf, estado: 'cola', tipo: null, cat: null, fecha: '', vals: [], otros: [] }); });
+    S.agregando = false; S.resumen = false; S.i = i0; pintarTodo(); leerCola();
+  }
+  function agregarTexto(t){
+    if(!S) return; var h = { n: S.hojas.length + 1, file: null, url: null, esTexto: true, estado: 'lista', texto: String(t || ''), tipo: null, cat: null, fecha: '', vals: [], otros: [] };
+    S.hojas.push(h); if(h.texto.trim()) prepararHoja(h);
+    S.agregando = false; S.resumen = false; S.i = S.hojas.length - 1; pintarTodo();
+    setTimeout(function(){ var ta = S && S.bg.querySelector('.fh-txv'); if(ta && !h.texto) ta.focus(); }, 50);
+  }
+  window._fhAgregarTexto = function(t){ if(S) agregarTexto(t); };
 
-  window.fotosHojasAbrir = function(tipoInicial){
+  var TIT = { lab: 'Cargar laboratorio', est: 'Cargar estudios', ant: 'Cargar antropometría' };
+  window.fotosHojasAbrir = function(tipoInicial, archivos, texto){
     if(!pacienteActual){ alert('Abrí primero el paciente.'); return; }
-    var inp = document.createElement('input'); inp.type = 'file'; inp.multiple = true; inp.accept = 'image/*,application/pdf';
-    inp.onchange = function(){ var fs = Array.prototype.slice.call(inp.files || []); if(fs.length) abrir(fs, tipoInicial); };
-    inp.click();
+    if(S){ if(archivos) agregarArchivos(archivos); if(texto) agregarTexto(texto); return; }
+    abrir(tipoInicial, archivos, texto);
   };
-  function abrir(files, tipoInicial){
-    S = { dni: String(pacienteActual.dni), i: 0, zoom: 1, hojas: files.map(function(f, k){ return { n: k + 1, file: f, url: URL.createObjectURL(f), pdf: /pdf/i.test(f.type) || /\.pdf$/i.test(f.name), estado: 'cola', tipo: null, cat: null, fecha: '', vals: [], otros: [] }; }), tipoInicial: tipoInicial || null };
+  function elegirArchivos(){ var inp = document.createElement('input'); inp.type = 'file'; inp.multiple = true; inp.accept = 'image/*,application/pdf'; inp.onchange = function(){ agregarArchivos(inp.files); }; inp.click(); }
+  function abrir(tipoInicial, archivos, texto){
+    S = { dni: String(pacienteActual.dni), i: 0, zoom: 1, hojas: [], tipoInicial: tipoInicial || null };
     var bg = document.createElement('div'); bg.className = 'fh-bg';
-    bg.innerHTML = '<div class="fh-box"><div class="fh-hd"><b>📷 Fotos hoja por hoja</b><span class="fh-pac">' + E((pacienteActual.apellido || '') + ', ' + (pacienteActual.nombre || '')) + '</span><span class="fh-ayuda">← → para moverte · las hojas de un mismo estudio pueden estar en cualquier orden</span><button type="button" class="fh-x" title="Cerrar sin cargar">×</button></div>'
-      + '<div class="fh-tira"></div><div class="fh-main"><div class="fh-foto"></div><div class="fh-panel"></div></div></div>';
+    bg.innerHTML = '<div class="fh-box"><div class="fh-hd"><b>📥 ' + (TIT[tipoInicial] || 'Cargar informes') + '</b><span class="fh-pac">' + E((pacienteActual.apellido || '') + ', ' + (pacienteActual.nombre || '')) + '</span><span class="fh-ayuda"></span>'
+      + (window._fhViejo && window._fhViejo[tipoInicial] ? '<button type="button" class="fh-viejo" title="Abrir la ventana de carga anterior">versión anterior</button>' : '') + '<button type="button" class="fh-x" title="Cerrar sin cargar">×</button></div>'
+      + '<div class="fh-tira"></div><div class="fh-qrslot"></div><div class="fh-main"><div class="fh-foto"></div><div class="fh-panel"></div></div><textarea class="fh-celta" style="display:none"></textarea></div>';
     document.body.appendChild(bg); S.bg = bg;
     bg.querySelector('.fh-x').onclick = cerrar;
-    S.key = function(e){ if(!S || S.resumen) return; var tg = e.target; if(tg && /INPUT|TEXTAREA|SELECT/.test(tg.tagName)) return; if(e.key === 'ArrowRight'){ e.preventDefault(); ir(S.i + 1); } else if(e.key === 'ArrowLeft'){ e.preventDefault(); ir(S.i - 1); } else if(e.key === 'Escape'){ cerrar(); } };
+    var vj = bg.querySelector('.fh-viejo'); if(vj) vj.onclick = function(){ var f = window._fhViejo[tipoInicial]; S.listo = true; cerrar(); f(); };
+    var cel = bg.querySelector('.fh-celta'); cel._leerArchivos = async function(fs){ agregarArchivos(fs); };
+    S.key = function(e){ if(!S || S.resumen || S.agregando) return; var tg = e.target; if(tg && /INPUT|TEXTAREA|SELECT/.test(tg.tagName)) return; if(e.key === 'ArrowRight'){ e.preventDefault(); ir(S.i + 1); } else if(e.key === 'ArrowLeft'){ e.preventDefault(); ir(S.i - 1); } else if(e.key === 'Escape'){ cerrar(); } };
     document.addEventListener('keydown', S.key, true);
-    pintarTira(); pintarHoja(); leerCola();
+    // Ctrl+V: captura o foto → hoja nueva; texto → hoja de texto (salvo que se esté escribiendo en un campo)
+    S.pegar = function(e){ if(!S) return; var cd = e.clipboardData; if(!cd) return;
+      var fs = Array.prototype.slice.call(cd.files || []).filter(function(f){ return /^image\/|pdf/.test(f.type); });
+      if(fs.length){ e.preventDefault(); e.stopPropagation(); agregarArchivos(fs.map(function(f, k){ return f.name && f.name !== 'image.png' ? f : new File([f], 'captura-' + (S.hojas.length + k + 1) + '.png', { type: f.type }); })); return; }
+      var tg = e.target; if(tg && /INPUT|TEXTAREA|SELECT/.test(tg.tagName)) return;
+      var t = cd.getData('text/plain'); if(t && t.trim()){ e.preventDefault(); e.stopPropagation(); agregarTexto(t); } };
+    document.addEventListener('paste', S.pegar, true);
+    bg.addEventListener('dragover', function(e){ e.preventDefault(); bg.classList.add('fh-drag'); });
+    bg.addEventListener('dragleave', function(e){ if(e.target === bg) bg.classList.remove('fh-drag'); });
+    bg.addEventListener('drop', function(e){ e.preventDefault(); bg.classList.remove('fh-drag'); if(e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length) agregarArchivos(e.dataTransfer.files); });
+    if(archivos && archivos.length) agregarArchivos(archivos);
+    else if(texto) agregarTexto(texto);
+    else { S.agregando = true; pintarTodo(); }
+  }
+  function abrirCelular(){
+    if(!S || !window._qrPanel) { alert('La opción del celular no está disponible.'); return; }
+    window._qrPanel(S.bg.querySelector('.fh-celta'), S.bg.querySelector('.fh-qrslot'));
   }
   function cerrar(){
     if(!S) return;
     var hay = S.hojas.some(function(h){ return h.vals.length; });
     if(hay && !S.listo && !confirm('¿Cerrar sin cargar? Lo revisado se pierde.')) return;
-    document.removeEventListener('keydown', S.key, true); S.hojas.forEach(function(h){ try { URL.revokeObjectURL(h.url); } catch(e){} }); S.bg.remove(); S = null;
+    document.removeEventListener('keydown', S.key, true); document.removeEventListener('paste', S.pegar, true);
+    S.hojas.forEach(function(h){ try { if(h.url && /^blob:/.test(h.url)) URL.revokeObjectURL(h.url); if(h.pdfUrl) URL.revokeObjectURL(h.pdfUrl); } catch(e){} });
+    var qp = S.bg.querySelector('.qr-panel'); if(qp && qp._cerrar) qp._cerrar();
+    S.bg.remove(); S = null;
   }
-  function ir(i){ if(!S) return; if(i >= S.hojas.length){ resumen(); return; } if(i < 0) return; var h = S.hojas[S.i]; if(h && h.estado === 'lista') h.revisada = true; S.i = i; S.resumen = false; pintarTira(); pintarHoja(); }
+  function pintarTodo(){ pintarTira(); if(S.agregando || !S.hojas.length) pintarInicio(); else if(S.resumen) resumen(); else pintarHoja(); }
+  function pintarInicio(){
+    S.agregando = true;
+    var f = S.bg.querySelector('.fh-foto'), p = S.bg.querySelector('.fh-panel');
+    S.bg.querySelector('.fh-main').classList.add('fh-ini');
+    f.innerHTML = '<div class="fh-inicio"><div class="fh-drop">📋 <b>Pegá acá</b> la foto, la captura o el texto del informe (<b>Ctrl + V</b>)<br><span>o arrastrá fotos y PDF a esta ventana</span></div>'
+      + '<div class="fh-ibt"><button type="button" data-a="sub">📁 Subir fotos o PDF</button><button type="button" data-a="cel">📱 Desde el celular</button><button type="button" data-a="txt">✍️ Escribir o dictar el texto</button></div>'
+      + '<div class="fh-inota">Podés mezclar <b>laboratorio, estudios y antropometría</b> y varias hojas: cada una se reconoce sola (qué es, fecha y valores), la revisás al lado de la foto y recién al final se llenan las tablas.</div>'
+      + (S.hojas.length ? '<button type="button" class="fh-volver">← Volver a las hojas</button>' : '') + '</div>';
+    p.innerHTML = '';
+    f.querySelectorAll('[data-a]').forEach(function(b){ b.onclick = function(){ var a = b.dataset.a; if(a === 'sub') elegirArchivos(); else if(a === 'cel') abrirCelular(); else agregarTexto(''); }; });
+    var v = f.querySelector('.fh-volver'); if(v) v.onclick = function(){ S.agregando = false; pintarTodo(); };
+  }
+  function ir(i){ if(!S) return; if(i >= S.hojas.length){ resumen(); return; } if(i < 0) return; var h = S.hojas[S.i]; if(h && h.estado === 'lista') h.revisada = true; S.i = i; S.resumen = false; S.agregando = false; pintarTira(); pintarHoja(); }
 
   function pintarTira(){
     if(!S) return; var w = S.bg.querySelector('.fh-tira');
     w.innerHTML = S.hojas.map(function(h, i){
       var est = h.estado === 'cola' ? '⏳' : h.estado === 'leyendo' ? '🔎' : h.estado === 'error' ? '⚠️' : h.revisada ? '✓' : '';
-      return '<button type="button" class="fh-th' + (i === S.i && !S.resumen ? ' on' : '') + '" data-i="' + i + '" style="--c:' + colorTipo(h) + '">' + (h.pdf ? '<span class="fh-pdf">PDF</span>' : '<img src="' + h.url + '">') + '<span class="fh-tn">' + h.n + ' ' + est + '</span><span class="fh-tt">' + E(nomTipo(h)) + (h.fecha ? ' · ' + aDMA(h.fecha) : '') + '</span></button>';
-    }).join('') + '<button type="button" class="fh-th fh-fin' + (S.resumen ? ' on' : '') + '">✓<span class="fh-tt">Resumen y cargar</span></button>';
-    w.querySelectorAll('.fh-th[data-i]').forEach(function(b){ b.onclick = function(){ ir(+b.dataset.i); }; });
-    w.querySelector('.fh-fin').onclick = resumen;
+      return '<button type="button" class="fh-th' + (i === S.i && !S.resumen && !S.agregando ? ' on' : '') + '" data-i="' + i + '" style="--c:' + colorTipo(h) + '">' + (h.url ? '<img src="' + h.url + '">' : h.esTexto ? '<span class="fh-pdf" style="color:#475569">✍️ Texto</span>' : '<span class="fh-pdf">PDF</span>') + (h.pag ? '<span class="fh-pg">pág. ' + h.pag + '</span>' : '') + '<span class="fh-tn">' + h.n + ' ' + est + '</span><span class="fh-tt">' + E(nomTipo(h)) + (h.fecha ? ' · ' + aDMA(h.fecha) : '') + '</span></button>';
+    }).join('') + '<button type="button" class="fh-th fh-mas' + (S.agregando ? ' on' : '') + '">➕<span class="fh-tt">Agregar hojas</span></button>'
+      + (S.hojas.length ? '<button type="button" class="fh-th fh-fin' + (S.resumen ? ' on' : '') + '">✓<span class="fh-tt">Resumen y cargar</span></button>' : '');
+    w.querySelectorAll('.fh-th[data-i]').forEach(function(b){ b.onclick = function(){ S.bg.querySelector('.fh-main').classList.remove('fh-ini'); ir(+b.dataset.i); }; });
+    w.querySelector('.fh-mas').onclick = function(){ if(S.hojas[S.i] && !S.resumen && !S.agregando) guardarEdits(S.hojas[S.i]); S.resumen = false; pintarTira(); pintarInicio(); pintarTira(); };
+    var fn = w.querySelector('.fh-fin'); if(fn) fn.onclick = function(){ S.bg.querySelector('.fh-main').classList.remove('fh-ini'); S.agregando = false; resumen(); };
     var lc = S.hojas.filter(function(h){ return h.estado === 'cola' || h.estado === 'leyendo'; }).length;
-    var ay = S.bg.querySelector('.fh-ayuda'); if(ay) ay.textContent = lc ? '🔎 Leyendo ' + lc + ' hoja' + (lc > 1 ? 's' : '') + '… podés ir revisando' : '← → para moverte · las hojas de un mismo estudio pueden estar en cualquier orden';
+    var ay = S.bg.querySelector('.fh-ayuda'); if(ay) ay.textContent = lc ? '🔎 Leyendo ' + lc + ' hoja' + (lc > 1 ? 's' : '') + '… podés ir revisando' : S.hojas.length ? '← → para moverte · Ctrl+V agrega otra hoja' : '';
   }
   function pintarFoto(h){
     var f = S.bg.querySelector('.fh-foto');
-    f.innerHTML = '<div class="fh-zb"><button type="button" data-z="-">−</button><button type="button" data-z="0">Ajustar</button><button type="button" data-z="+">+</button><span>Hoja ' + h.n + ' de ' + S.hojas.length + ' · ' + E(h.file.name) + '</span></div>'
-      + (h.pdf ? '<iframe class="fh-pdfv" src="' + h.url + '"></iframe>' : '<div class="fh-sc"><img src="' + h.url + '" style="width:' + (S.zoom * 100) + '%"></div>');
-    f.querySelector('.fh-zb').onclick = function(e){ var b = e.target.closest('[data-z]'); if(!b) return; var z = b.dataset.z; S.zoom = z === '0' ? 1 : Math.max(0.5, Math.min(4, S.zoom * (z === '+' ? 1.3 : 1 / 1.3))); var im = f.querySelector('img'); if(im) im.style.width = (S.zoom * 100) + '%'; };
+    S.bg.querySelector('.fh-main').classList.remove('fh-ini');
+    if(h.esTexto){
+      f.innerHTML = '<div class="fh-zb"><span>Hoja ' + h.n + ' de ' + S.hojas.length + ' · ✍️ texto escrito, pegado o dictado</span></div>'
+        + '<div class="fh-txw"><textarea class="fh-txv" placeholder="Escribí, pegá o dictá acá el informe (dictado: Win + H o Handy). Se reconoce solo mientras escribís.">' + E(h.texto) + '</textarea></div>';
+      var ta = f.querySelector('.fh-txv'), tm;
+      ta.addEventListener('input', function(){ clearTimeout(tm); tm = setTimeout(function(){ if(!S) return; guardarEdits(h); var vacia = !h.vals.length && !h.tipo; h.texto = ta.value; if(vacia || h.sugerido){ h.tipo = null; h.cat = null; } prepararHoja(h); pintarTira(); pintarPanel(h); }, 700); });
+      return;
+    }
+    var nom = h.file ? h.file.name : '';
+    f.innerHTML = '<div class="fh-zb"><button type="button" data-z="-">−</button><button type="button" data-z="0">Ajustar</button><button type="button" data-z="+">+</button><span>Hoja ' + h.n + ' de ' + S.hojas.length + ' · ' + E(nom) + (h.pag ? ' · página ' + h.pag + ' de ' + h.pags : '') + '</span>' + (h.words && h.words.length ? '<span class="fh-tip">tocá un valor para ver dónde está</span>' : '') + '</div>'
+      + (h.url ? '<div class="fh-sc"><div class="fh-in" style="width:' + (S.zoom * 100) + '%"><img src="' + h.url + '"></div></div>'
+        : h.pdfUrl ? '<iframe class="fh-pdfv" src="' + h.pdfUrl + '"></iframe>' : '<div class="fh-espera" style="color:#cbd5e1">Sin imagen</div>');
+    f.querySelector('.fh-zb').onclick = function(e){ var b = e.target.closest('[data-z]'); if(!b) return; var z = b.dataset.z; S.zoom = z === '0' ? 1 : Math.max(0.5, Math.min(4, S.zoom * (z === '+' ? 1.3 : 1 / 1.3))); var im = f.querySelector('.fh-in'); if(im) im.style.width = (S.zoom * 100) + '%'; };
+    var inn = f.querySelector('.fh-in'); if(inn) inn.addEventListener('dblclick', function(){ S.zoom = S.zoom > 1.5 ? 1 : 2; inn.style.width = (S.zoom * 100) + '%'; });
   }
+  // Marca en la foto dónde se leyó un valor
+  function resaltar(h, val){
+    var inn = S && S.bg.querySelector('.fh-in'); if(!inn) return;
+    inn.querySelectorAll('.fh-hl').forEach(function(x){ x.remove(); });
+    var n = numV(val); if(n == null || !h.words || !h.w) return; var primero = null;
+    h.words.forEach(function(x){
+      var ok = (String(x.t).match(/-?\d+(?:[.,]\d+)*/g) || []).some(function(z){ var k = numV(z); return k != null && Math.abs(k - n) < 1e-9; });
+      if(!ok) return;
+      var b = document.createElement('div'); b.className = 'fh-hl';
+      b.style.left = (x.b[0] / h.w * 100) + '%'; b.style.top = (x.b[1] / h.h * 100) + '%'; b.style.width = ((x.b[2] - x.b[0]) / h.w * 100) + '%'; b.style.height = ((x.b[3] - x.b[1]) / h.h * 100) + '%';
+      inn.appendChild(b); if(!primero) primero = b; });
+    if(primero) try { primero.scrollIntoView({ block: 'center', inline: 'center', behavior: 'smooth' }); } catch(e){}
+  }
+  function dudoso(h, val){ var n = numV(val); if(n == null || !h.words) return false; return h.words.some(function(x){ return x.c < 75 && (String(x.t).match(/-?\d+(?:[.,]\d+)*/g) || []).some(function(z){ var k = numV(z); return k != null && Math.abs(k - n) < 1e-9; }); }); }
+  function qcMsg(h, v){ if(!v.key || !window._qcValor) return null; try { var q = window._qcValor(h.tipo, v.key, v.val, v.unidad); return q && q.msg; } catch(e){ return null; } }
   function pintarHoja(){
-    if(!S) return; var h = S.hojas[S.i]; if(!h) return;
-    pintarFoto(h);
+    if(!S || S.agregando || S.resumen) return; var h = S.hojas[S.i]; if(!h){ pintarInicio(); return; }
+    pintarFoto(h); pintarPanel(h);
+  }
+  function pintarPanel(h){
     var p = S.bg.querySelector('.fh-panel');
     if(h.estado === 'cola' || h.estado === 'leyendo'){ p.innerHTML = '<div class="fh-espera">🔎 ' + (h.estado === 'leyendo' ? 'Leyendo esta hoja…' : 'En espera para leer…') + '<br><small>Podés pasar a otra hoja mientras tanto.</small></div>' + navHtml(); armarNav(p); return; }
     var cats = CATS_EST();
@@ -43975,18 +44101,20 @@ function _invToggleDroga(key){
     var sumaA = '';
     if(h.tipo && h.tipo !== 'no'){ var otras = S.hojas.filter(function(x){ return x !== h && x.tipo === h.tipo && x.cat === h.cat && x.fecha && x.fecha === h.fecha; }); if(otras.length) sumaA = '<div class="fh-suma">➕ Se junta con la hoja ' + otras.map(function(x){ return x.n; }).join(', ') + ' (mismo ' + (h.tipo === 'est' ? 'estudio' : h.tipo === 'lab' ? 'laboratorio' : 'registro') + ' y fecha)</div>'; }
     var filas = filasDe(h);
+    var idn = null; try { idn = window._identidadInforme && h.texto ? window._identidadInforme(h.texto) : null; } catch(e){}
     p.innerHTML = (h.estado === 'error' ? '<div class="fh-err">⚠️ No se pudo leer esta hoja (' + E(h.err || '') + '). Podés cargar los valores a mano.</div>' : '')
+      + (idn ? '<div class="fh-id ' + idn.n + '">' + idn.msg + '</div>' : '')
       + '<div class="fh-lbl">Esta hoja es' + (h.sugerido ? ' <span class="fh-sug">(sugerido, cambialo si no es)</span>' : '') + '</div>'
       + '<div class="fh-tipos">' + tipos.map(function(t){ return '<button type="button" data-t="' + t[0] + '" class="' + (h.tipo === t[0] ? 'on' : '') + '">' + t[1] + '</button>'; }).join('')
       + '<select class="fh-cat' + (h.tipo === 'est' ? ' on' : '') + '"><option value="">🩺 Estudio…</option>' + cats.map(function(c){ return '<option value="' + E(c) + '"' + (h.tipo === 'est' && h.cat === c ? ' selected' : '') + '>' + E(nomCat(c)) + '</option>'; }).join('') + '</select></div>'
       + (h.tipo && h.tipo !== 'no' ? '<div class="fh-lbl">Fecha</div><div class="fh-fecha"><input type="text" class="fh-f" placeholder="dd/mm/aaaa" value="' + E(aDMA(h.fecha)) + '">' + (h.fechaDeOtra ? '<span class="fh-fo">tomada de otra hoja del mismo estudio</span>' : '') + (h.tipo === 'est' ? '<span class="fh-fo">también mm/aaaa o aaaa</span>' : '') + '</div>' + sumaA : '')
       + (h.tipo === 'est' && !h.cat ? '<div class="fh-espera" style="padding:14px">Elegí qué estudio es en la lista.</div>' : '')
       + (h.tipo && h.tipo !== 'no' && (h.tipo !== 'est' || h.cat) ? '<div class="fh-lbl">Valores <span class="fh-sug">(' + h.vals.length + ' reconocidos · corregí lo que haga falta)</span></div>'
-        + '<div class="fh-vals">' + h.vals.map(function(v, k){ return filaHtml(filas, v, k); }).join('') + '</div>'
+        + '<div class="fh-vals">' + h.vals.map(function(v, k){ return filaHtml(filas, v, k, h); }).join('') + '</div>'
         + '<button type="button" class="fh-add">➕ Agregar un valor</button>'
         + (h.otros && h.otros.length ? '<div class="fh-lbl" style="margin-top:10px">No reconocí <span class="fh-sug">(si alguno va, elegí a qué fila; queda aprendido)</span></div><div class="fh-otros">' + h.otros.map(function(o, k){ return '<div class="fh-ot"><span>' + E(o.nombre) + ' <b>' + E(o.val) + '</b></span><select data-o="' + k + '"><option value="">— no va —</option>' + filas.map(function(f){ return '<option value="' + E(f.key) + '">' + E(f.label) + '</option>'; }).join('') + '</select></div>'; }).join('') + '</div>' : '')
         : '')
-      + (h.texto ? '<details class="fh-tx"><summary>Ver / corregir el texto leído</summary><textarea rows="8">' + E(h.texto) + '</textarea><button type="button" class="fh-rel">🔁 Volver a reconocer</button></details>' : '')
+      + (h.texto && !h.esTexto ? '<details class="fh-tx"><summary>Ver / corregir el texto leído</summary><textarea rows="8">' + E(h.texto) + '</textarea><button type="button" class="fh-rel">🔁 Volver a reconocer</button></details>' : '')
       + navHtml();
     // eventos
     p.querySelectorAll('.fh-tipos button[data-t]').forEach(function(b){ b.onclick = function(){ guardarEdits(h); h.tipo = b.dataset.t; h.cat = null; h.sugerido = false; if(h.tipo !== 'no') reconocer(h); pintarTira(); pintarHoja(); }; });
@@ -43996,16 +44124,21 @@ function _invToggleDroga(key){
     p.querySelectorAll('.fh-del').forEach(function(b){ b.onclick = function(){ guardarEdits(h); h.vals.splice(+b.dataset.k, 1); pintarHoja(); }; });
     p.querySelectorAll('.fh-otros select').forEach(function(s){ s.onchange = function(){ var o = h.otros[+s.dataset.o]; o.asignar = s.value || null; }; s.value = (h.otros[+s.dataset.o] || {}).asignar || ''; });
     var rl = p.querySelector('.fh-rel'); if(rl) rl.onclick = function(){ h.texto = p.querySelector('.fh-tx textarea').value; reconocer(h); pintarTira(); pintarHoja(); };
-    p.querySelectorAll('.fh-v input, .fh-v select').forEach(function(x){ x.addEventListener('change', function(){ guardarEdits(h); }); x.addEventListener('keydown', function(e){ if(e.key === 'Enter'){ e.preventDefault(); guardarEdits(h); } }); });
+    p.querySelectorAll('.fh-v input, .fh-v select').forEach(function(x){ x.addEventListener('change', function(){ guardarEdits(h); refrescarQc(h, x.closest('.fh-v')); }); x.addEventListener('keydown', function(e){ if(e.key === 'Enter'){ e.preventDefault(); guardarEdits(h); refrescarQc(h, x.closest('.fh-v')); } }); });
+    p.querySelectorAll('.fh-v').forEach(function(r){ r.addEventListener('focusin', function(){ var v = h.vals[+r.dataset.k]; if(v) resaltar(h, r.querySelector('.fh-vv').value); }); r.addEventListener('click', function(){ var v = h.vals[+r.dataset.k]; if(v) resaltar(h, r.querySelector('.fh-vv').value); }); });
     armarNav(p);
   }
-  function filaHtml(filas, v, k){
+  function refrescarQc(h, r){ if(!r) return; var v = h.vals[+r.dataset.k]; if(!v) return; var m = qcMsg(h, v), d = r.nextElementSibling && r.nextElementSibling.classList.contains('fh-q') ? r.nextElementSibling : null;
+    if(m){ if(!d){ d = document.createElement('div'); d.className = 'fh-q'; r.insertAdjacentElement('afterend', d); } d.textContent = '⛔ ' + m; r.classList.add('mal'); } else { if(d) d.remove(); r.classList.remove('mal'); } }
+  function filaHtml(filas, v, k, h){
     var f = filas.find(function(x){ return x.key === v.key; });
     var ops = f && f.opciones ? f.opciones : null;
-    return '<div class="fh-v" data-k="' + k + '"><select class="fh-vk"><option value="">— elegí el parámetro —</option>' + filas.map(function(x){ return '<option value="' + E(x.key) + '"' + (x.key === v.key ? ' selected' : '') + '>' + E(x.label) + '</option>'; }).join('') + '</select>'
+    var q = h ? qcMsg(h, v) : null, du = h ? dudoso(h, v.val) : false;
+    return '<div class="fh-v' + (q ? ' mal' : '') + (du ? ' duda' : '') + '" data-k="' + k + '"' + (du ? ' title="El lector no estaba seguro de este número: revisalo en la foto"' : '') + '><select class="fh-vk"><option value="">— elegí el parámetro —</option>' + filas.map(function(x){ return '<option value="' + E(x.key) + '"' + (x.key === v.key ? ' selected' : '') + '>' + E(x.label) + '</option>'; }).join('') + '</select>'
       + (ops ? '<select class="fh-vv">' + ops.map(function(o){ return '<option' + (String(o) === String(v.val) ? ' selected' : '') + '>' + E(o) + '</option>'; }).join('') + (ops.indexOf(v.val) < 0 && v.val ? '<option selected>' + E(v.val) + '</option>' : '') + '</select>'
         : '<input class="fh-vv" type="text" value="' + E(v.val) + '">')
-      + (v.unidad ? '<span class="fh-u">' + E(v.unidad) + '</span>' : '') + '<button type="button" class="fh-del" data-k="' + k + '" title="Quitar">✕</button></div>';
+      + (v.unidad ? '<span class="fh-u">' + E(v.unidad) + '</span>' : '') + '<button type="button" class="fh-del" data-k="' + k + '" title="Quitar">✕</button></div>'
+      + (q ? '<div class="fh-q">⛔ ' + E(q) + '</div>' : '');
   }
   function guardarEdits(h){
     if(!S || !S.bg) return;
@@ -44045,7 +44178,8 @@ function _invToggleDroga(key){
       + (!gs.length ? '<div class="fh-espera">Nada para cargar todavía.</div>' : gs.map(function(g){ var vs = Object.keys(g.vals).map(function(k){ return g.vals[k]; });
           return '<div class="fh-g" style="--c:' + colorTipo(g) + '"><div class="fh-gt"><b>' + E(nomTipo(g)) + '</b> · ' + (g.fecha ? aDMA(g.fecha) : '<span style="color:#b91c1c">sin fecha</span>') + ' <span class="fh-sug">hoja' + (g.hojas.length > 1 ? 's ' : ' ') + g.hojas.join(', ') + ' · ' + vs.length + ' valores</span></div>'
             + '<div class="fh-gv">' + vs.map(function(v){ return '<span>' + E(v.label) + ' <b>' + E(v.val) + '</b></span>'; }).join('') + '</div>'
-            + (g.choques.length ? '<div class="fh-ch">⚠️ Dos hojas dicen distinto (queda el de la última): ' + E(g.choques.join(' · ')) + '</div>' : '') + '</div>'; }).join(''))
+            + (g.choques.length ? '<div class="fh-ch">⚠️ Dos hojas dicen distinto (queda el de la última): ' + E(g.choques.join(' · ')) + '</div>' : '')
+            + avisosGrupo(g, vs) + '</div>'; }).join(''))
       + '<div class="fh-nav"><button type="button" class="fh-prev">← Volver a las hojas</button><button type="button" class="fh-ok"' + (pend || sinTipo.length || sinFecha.length || !gs.length ? ' disabled' : '') + '>✓ Llenar las tablas</button></div>'
       + (sinFecha.length ? '<div class="fh-sug" style="text-align:right;margin-top:4px">Falta la fecha en ' + sinFecha.map(function(g){ return nomTipo(g); }).join(', ') + '.</div>' : '');
     p.querySelector('.fh-prev').onclick = function(){ ir(Math.min(S.i, S.hojas.length - 1)); };
@@ -44053,6 +44187,15 @@ function _invToggleDroga(key){
     if(pend) setTimeout(function(){ if(S && S.resumen) resumen(); }, 2500);
   }
 
+  function avisosGrupo(g, vs){
+    var out = [];
+    vs.forEach(function(v){ var m = qcMsg(g, v); if(m) out.push('⛔ ' + m); });
+    try { if(window._qcCoherencia){ var V = {}; vs.forEach(function(v){ V[v.key] = v.val; }); window._qcCoherencia(g.tipo === 'lab' ? 'lab' : g.tipo === 'est' ? 'est' : 'ant', V).forEach(function(m){ out.push('⚠️ ' + m); }); } } catch(e){}
+    try { var datos = g.tipo === 'lab' ? labDatos : g.tipo === 'est' ? estDatos : antDatos, ci = (datos.columnas || []).indexOf(g.fecha), difs = [];
+      if(ci >= 0) vs.forEach(function(v){ var fi = window._filaIdx ? window._filaIdx(g.tipo, v.key) : -1; var ant = fi >= 0 && datos.filas[fi] ? datos.filas[fi][ci] : null; if(ant != null && String(ant).trim() !== '' && String(ant).trim() !== String(v.val).trim()) difs.push(v.label + ': ' + ant + ' → ' + v.val); });
+      if(difs.length) out.push('🔁 Ya hay datos del ' + aDMA(g.fecha) + ' y se reemplazan: ' + difs.join(' · ')); } catch(e){}
+    return out.length ? '<div class="fh-ch">' + out.map(E).join('<br>') + '</div>' : '';
+  }
   /* ── escribir en las tablas ── */
   function cel(datos, F, t, key, fecha, val, crear){
     var fi = window._filaIdx ? window._filaIdx(t, key, true) : F.findIndex(function(f){ return f.key === key; }); if(fi < 0) return false;
@@ -44105,15 +44248,26 @@ function _invToggleDroga(key){
   }
 
   /* ── botones en Laboratorio, Estudios y Antropometría ── */
+  // Un solo botón por pestaña: "Cargar …" abre esta ventana (la anterior queda como "versión anterior" adentro)
+  window._fhViejo = window._fhViejo || {};
   function botones(){
-    [['labPegarAbrir()', 'lab'], ['estDictadoAbrir()', 'est'], ["agregarColumnaManual('ant')", 'ant']].forEach(function(x){
+    if(typeof window.labPegarAbrir === 'function' && !window._fhViejo.lab) window._fhViejo.lab = window.labPegarAbrir;
+    if(typeof window.estDictadoAbrir === 'function' && !window._fhViejo.est) window._fhViejo.est = window.estDictadoAbrir;
+    document.querySelectorAll('.fh-btn').forEach(function(b){ if(!b.dataset.ant) b.remove(); });
+    [['labPegarAbrir()', 'lab', '📥 Cargar laboratorio (fotos, PDF, celular, dictado)'], ['estDictadoAbrir()', 'est', '📥 Cargar estudio (fotos, PDF, celular, dictado)']].forEach(function(x){
       document.querySelectorAll('button[onclick="' + x[0] + '"]').forEach(function(b){
-        if(b.parentNode.querySelector('.fh-btn')) return;
-        var n = document.createElement('button'); n.type = 'button'; n.className = 'fh-btn'; n.textContent = '📷 Fotos hoja por hoja';
-        n.title = 'Subí todas las fotos (laboratorio, estudios, antropometría) y revisalas de a una antes de llenar las tablas';
-        n.onclick = function(){ window.fotosHojasAbrir(x[1]); };
-        b.parentNode.insertBefore(n, b);
+        if(b.dataset.fh) return; b.dataset.fh = '1';
+        b.removeAttribute('onclick'); b.setAttribute('data-fhcarga', x[1]);
+        b.textContent = x[2]; b.title = 'Fotos, PDF, celular, captura pegada o texto/dictado: se reconoce cada hoja y la revisás al lado del informe antes de llenar la tabla';
+        b.onclick = function(){ window.fotosHojasAbrir(x[1]); };
       });
+    });
+    document.querySelectorAll('button[onclick="agregarColumnaManual(\'ant\')"]').forEach(function(b){
+      if(b.parentNode.querySelector('.fh-btn')) return;
+      var n = document.createElement('button'); n.type = 'button'; n.className = 'fh-btn'; n.dataset.ant = '1'; n.textContent = '📥 Cargar desde foto o PDF';
+      n.title = 'Foto de la balanza, bioimpedancia o informe: se reconoce y lo revisás antes de llenar la tabla';
+      n.onclick = function(){ window.fotosHojasAbrir('ant'); };
+      b.parentNode.insertBefore(n, b);
     });
   }
   if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', botones); else botones();
@@ -44130,7 +44284,7 @@ function _invToggleDroga(key){
 .fh-x{border:none;background:none;font-size:24px;color:#64748b;cursor:pointer;line-height:1}
 .fh-tira{display:flex;gap:6px;padding:8px 12px;overflow-x:auto;border-bottom:1px solid #f1f5f9;background:#f8fafc;flex-shrink:0}
 .fh-th{position:relative;flex:0 0 auto;width:92px;height:84px;border:2px solid #e2e8f0;border-radius:10px;background:#fff;cursor:pointer;padding:0;overflow:hidden;display:flex;flex-direction:column;align-items:stretch}
-.fh-th img{width:100%;height:46px;object-fit:cover}.fh-th .fh-pdf{height:46px;display:flex;align-items:center;justify-content:center;font-weight:800;color:#b91c1c;font-size:12px}
+.fh-th img{width:100%;height:46px;object-fit:cover;object-position:center 25%}.fh-th .fh-pdf{height:46px;display:flex;align-items:center;justify-content:center;font-weight:800;color:#b91c1c;font-size:12px}
 .fh-th .fh-tn{position:absolute;top:2px;left:3px;background:rgba(255,255,255,.9);border-radius:6px;padding:0 5px;font-size:11px;font-weight:800}
 .fh-th .fh-tt{flex:1;display:flex;align-items:center;justify-content:center;text-align:center;font-size:10.5px;font-weight:700;color:#fff;background:var(--c);padding:1px 3px;line-height:1.15}
 .fh-th.on{border-color:#0f172a;box-shadow:0 0 0 2px #0f172a}
@@ -44176,6 +44330,27 @@ function _invToggleDroga(key){
 .fh-gt{font-size:14px}.fh-gv{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:12.5px;color:#475569;margin-top:4px}
 .fh-ch{font-size:12px;color:#b45309;margin-top:4px}
 @media (max-width:900px){.fh-main{grid-template-columns:1fr;grid-template-rows:45vh auto}}
+.fh-main.fh-ini{grid-template-columns:1fr}.fh-main.fh-ini .fh-panel{display:none}.fh-main.fh-ini .fh-foto{background:#fff}
+.fh-inicio{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:30px}
+.fh-drop{width:min(760px,100%);border:2.5px dashed #93c5fd;background:#eff6ff;border-radius:16px;padding:34px 20px;text-align:center;font-size:17px;color:#1e3a8a}
+.fh-drop span{font-size:13px;color:#64748b}
+.fh-bg.fh-drag .fh-drop{background:#dbeafe;border-color:#2563eb}
+.fh-ibt{display:flex;gap:10px;flex-wrap:wrap;justify-content:center}
+.fh-ibt button{padding:12px 20px;border-radius:12px;border:1.5px solid #0d9488;background:#fff;color:#0f766e;font:700 14.5px var(--font-main);cursor:pointer}
+.fh-ibt button:first-child{background:#0d9488;color:#fff}
+.fh-inota{max-width:640px;text-align:center;font-size:13px;color:#64748b;line-height:1.5}
+.fh-volver{border:1px solid #cbd5e1;background:#fff;border-radius:9px;padding:6px 14px;cursor:pointer;font-weight:600}
+.fh-mas{width:84px;justify-content:center;align-items:center;font-size:20px;color:#2563eb;font-weight:800;border-style:dashed}.fh-mas .fh-tt{position:absolute;bottom:0;left:0;right:0;flex:none;background:#2563eb;padding:4px}
+.fh-th .fh-pg{position:absolute;top:2px;right:3px;background:rgba(15,23,42,.75);color:#fff;border-radius:6px;padding:0 4px;font-size:10px}
+.fh-qrslot:empty{display:none}.fh-qrslot + .qr-panel{margin:8px auto}
+.fh-viejo{border:none;background:none;color:#94a3b8;font-size:11.5px;text-decoration:underline;cursor:pointer}
+.fh-in{position:relative;margin:0 auto}.fh-in img{display:block;width:100%}
+.fh-hl{position:absolute;border:2.5px solid #f59e0b;background:rgba(250,204,21,.28);border-radius:3px;pointer-events:none;box-shadow:0 0 0 3px rgba(245,158,11,.25)}
+.fh-tip{margin-left:auto!important;color:#fcd34d}
+.fh-txw{flex:1;display:flex;padding:10px;background:#f8fafc}.fh-txv{flex:1;width:100%;box-sizing:border-box;border:1.5px solid #cbd5e1;border-radius:10px;padding:12px;font:13px/1.5 monospace;resize:none}
+.fh-id{font-size:12.5px;border-radius:9px;padding:6px 10px}.fh-id.ok{background:#f0fdf4;color:#166534;border:1px solid #bbf7d0}.fh-id.warn{background:#fffbeb;color:#92400e;border:1px solid #fde68a}.fh-id.error{background:#fef2f2;color:#991b1b;border:1.5px solid #f87171;font-weight:700}
+.fh-v.mal .fh-vv{border-color:#f87171;background:#fef2f2}.fh-v.duda .fh-vv{border-color:#fb923c;background:#fff7ed}
+.fh-q{font-size:11.5px;color:#b91c1c;margin:-2px 0 2px 4px}
 </style>
 
 <style>
