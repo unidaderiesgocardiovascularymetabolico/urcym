@@ -2,7 +2,7 @@
 <html lang="es-AR">
 <head>
   <meta charset="UTF-8" />
-  <script>var URCYM_BUILD = '2026-11-21-1230';</script>
+  <script>var URCYM_BUILD = '2026-11-21-1500';</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Evaluaciones cardiometabólicas — Sistema de Historia Clínica</title>
 
@@ -25274,7 +25274,7 @@ window._dspAbrirLista=function(){
 
 /* ══ Agenda › 📆 Vista mensual: franjas de colores por lugar / actividad ══ */
 (function(){
-  var M = { on:false, y:0, m:0 };
+  var M = { on:false, y:0, m:0, vista:'mes', lun:null, busca:null };
   var MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
   var DCORTO = ['Lun','Mar','Mié','Jue','Vie','Sáb'];
   var INI = { BG:'G', OB:'B', MA:'M' };
@@ -25326,31 +25326,173 @@ window._dspAbrirLista=function(){
     });
     return c;
   }
-  function blk(b, p){
-    var top = pos(b.f), h = Math.max(2.5, pos(b.t) - top), dur = t2m(b.t) - t2m(b.f);
-    var cls = 'mv-blk' + (b.rem ? ' rem' : '') + (b.aus ? ' aus' : '') + (b.imp ? ' imp' : '');
-    return '<div class="' + cls + '" style="top:' + top + '%;height:' + h + '%;--c:' + b.c + '" title="' + E(INI[p] + ' · ' + hh(b.f) + '–' + hh(b.t) + ' · ' + b.txt + (b.rem ? ' (desde casa)' : '')) + '">' + (dur >= 90 && !b.imp ? '<span>' + E(corto(b.txt)) + '</span>' : '') + '</div>';
+  var PC = { BG:'#7F77DD', OB:'#378ADD', MA:'#22C55E' };
+  var PASO = 15, NSL = HSPAN / PASO;
+  function seg(b, p){
+    var l = pos(b.f), w = Math.max(1.5, pos(b.t) - l);
+    var cls = 'mv2-s' + (b.aus ? ' aus' : b.imp ? (b.rem ? ' imp rem' : ' imp') : b.rem ? ' rem' : ' pres');
+    return '<b class="' + cls + '" style="left:' + l + '%;width:' + w + '%;--c:' + (PC[p] || '#64748b') + '" title="' + E(INI[p] + ' · ' + hh(b.f) + '–' + hh(b.t) + ' · ' + b.txt + (b.aus ? '' : b.rem ? ' (desde casa)' : ' (fuera de casa)')) + '"></b>';
+  }
+  function ocupado(L){ var o = []; for(var i = 0; i < NSL; i++) o.push(false);
+    L.forEach(function(b){ if(b.aus) return; var a = Math.floor((t2m(b.f) - H0) / PASO), z = Math.ceil((t2m(b.t) - H0) / PASO); for(var i = Math.max(0, a); i < Math.min(NSL, z); i++) o[i] = true; });
+    return o; }
+  function libresJuntos(dd, ps){
+    var occ = ps.map(function(p){ return ocupado(dd.cols[p] || []); }), out = [], ini = -1;
+    for(var i = 0; i <= NSL; i++){
+      var libre = i < NSL && occ.every(function(o){ return !o[i]; });
+      if(libre && ini < 0) ini = i;
+      if(!libre && ini >= 0){ if(i - ini >= 4) out.push([ini, i]); ini = -1; }   // huecos de 1 h o más
+    }
+    return out;
+  }
+  function nombres(L){
+    var v = [];
+    L.forEach(function(b){ var n = b.aus ? 'no atiende' : b.imp ? b.txt : corto(b.txt); if(v.indexOf(n) < 0) v.push(n); });
+    return v.join(' · ');
   }
   function celda(ds, fuera, hoyS, cnt){
-    var dd = dia(ds), ps = profs(), cerrado = dd.inst.some(function(i){ return i.td; }), dn = +ds.slice(8);
-    var x = '<button type="button" class="mv-c' + (fuera ? ' fuera' : '') + (ds === hoyS ? ' hoy' : '') + '" data-mvd="' + ds + '">'
-      + '<div class="mv-n"><span>' + dn + '</span>' + (cnt[ds] ? '<em title="Turnos dados">' + cnt[ds] + ' t.</em>' : '') + '</div>'
-      + (ps.length > 1 ? '<div class="mv-lt">' + ps.map(function(p){ return '<i>' + INI[p] + '</i>'; }).join('') + '</div>' : '')
-      + '<div class="mv-tl">' + [8, 12, 16, 20].map(function(hr){ return '<b class="mv-hl" style="top:' + pos(hr + ':00') + '%"></b>'; }).join('');
-    ps.forEach(function(p){ x += '<div class="mv-col">' + (dd.cols[p] || []).map(function(b){ return blk(b, p); }).join('') + '</div>'; });
-    dd.inst.forEach(function(i){ var top = i.td ? 0 : pos(i.f), h = i.td ? 100 : Math.max(3, pos(i.t) - top);
-      x += '<div class="mv-inst" style="top:' + top + '%;height:' + h + '%" title="' + E('🏛 ' + i.txt + (i.td ? '' : ' · ' + hh(i.f) + '–' + hh(i.t))) + '">' + (h > 25 ? '<span>🏛 ' + E(i.txt) + '</span>' : '') + '</div>'; });
-    return x + '</div></button>';
+    var dd = dia(ds), ps = profs(), sec = _esSecretariaLogueada(), dn = +ds.slice(8);
+    var cerrado = dd.inst.find(function(i){ return i.td; });
+    var x = '<button type="button" class="mv-c mv2' + (fuera ? ' fuera' : '') + (ds === hoyS ? ' hoy' : '') + (cerrado ? ' cerr' : '') + '" data-mvd="' + ds + '">'
+      + '<div class="mv-n"><span>' + dn + '</span>' + (cnt[ds] ? '<em title="Turnos dados">' + cnt[ds] + ' turno' + (cnt[ds] > 1 ? 's' : '') + '</em>' : '') + '</div>';
+    if(cerrado) return x + '<div class="mv2-cerr">🏛 ' + E(cerrado.txt) + '</div></button>';
+    var hz = M.busca ? huecos(ds, dd) : null;
+    if(M.busca) x = x.replace('class="mv-c mv2', 'class="mv-c mv2' + (hz && hz.length ? ' mv-ok' : ' mv-dim'));
+    x += '<div class="mv2-bars">';
+    ps.forEach(function(p){
+      var L = dd.cols[p] || [];
+      x += '<div class="mv2-f"><i style="color:' + PC[p] + '">' + INI[p] + '</i><div class="mv2-bar">' + L.map(function(b){ return seg(b, p); }).join('') + '</div></div>';
+    });
+    if(hz && hz.length){
+      x += '<div class="mv2-f mv2-j mv2-hz"><i title="Hueco que buscaste">🔎</i><div class="mv2-bar">' + hz.map(function(r){ return '<b class="mv2-s libre" style="left:' + (r[0] / NSL * 100) + '%;width:' + ((r[1] - r[0]) / NSL * 100) + '%" title="Libre de ' + hSl(r[0]) + ' a ' + hSl(r[1]) + '"></b>'; }).join('') + '</div></div>';
+    } else if(ps.length > 1 && !M.busca){
+      var lj = libresJuntos(dd, ps);
+      x += '<div class="mv2-f mv2-j"><i title="Los dos libres">♥</i><div class="mv2-bar">' + lj.map(function(r){ return '<b class="mv2-s libre" style="left:' + (r[0] / NSL * 100) + '%;width:' + ((r[1] - r[0]) / NSL * 100) + '%" title="Los dos libres de ' + hh(Math.floor((H0 + r[0] * PASO) / 60) + ':' + String((H0 + r[0] * PASO) % 60).padStart(2, '0')) + ' a ' + hh(Math.floor((H0 + r[1] * PASO) / 60) + ':' + String((H0 + r[1] * PASO) % 60).padStart(2, '0')) + '"></b>'; }).join('') + '</div></div>';
+    }
+    dd.inst.forEach(function(i){ var l = pos(i.f), w = Math.max(2, pos(i.t) - l); x += '<b class="mv2-inst" style="left:calc(14px + (100% - 14px) * ' + (l / 100) + ');width:calc((100% - 14px) * ' + (w / 100) + ')" title="' + E('🏛 ' + i.txt + ' · ' + hh(i.f) + '–' + hh(i.t)) + '"></b>'; });
+    x += '</div><div class="mv2-lug">' + ps.map(function(p){ var n = nombres(dd.cols[p] || []); return n ? '<span><b style="color:' + PC[p] + '">' + INI[p] + '</b> ' + E(n) + '</span>' : ''; }).join('') + '</div>';
+    if(hz && hz.length) x += '<div class="mv2-hzt">🔎 ' + hz.map(function(r){ return hSl(r[0]) + '–' + hSl(r[1]); }).join(' · ') + '</div>';
+    return x + '</button>';
   }
-  function pintar(){
+  var hSl = function(i){ var m = H0 + i * PASO; return hh(Math.floor(m / 60) + ':' + String(m % 60).padStart(2, '0')); };
+  // Huecos libres según lo que se busca: quién, cuánto tiempo, qué días y qué franja
+  function huecos(ds, dd){
+    var B = M.busca; if(!B) return null;
+    if(ds < kd(new Date()) || B.dias.indexOf(diOf(ds)) < 0) return [];
+    dd = dd || dia(ds);
+    if(dd.inst.some(function(i){ return i.td; }) && B.trabajo) return [];
+    var quien = B.quien === 'ambos' ? profs().filter(function(p){ return p !== 'MA'; }) : [B.quien];
+    var occ = quien.map(function(p){ return ocupado(dd.cols[p] || []); });
+    var a0 = Math.max(0, (t2m(B.desde) - H0) / PASO), a1 = Math.min(NSL, (t2m(B.hasta) - H0) / PASO), out = [], ini = -1;
+    for(var i = a0; i <= a1; i++){
+      var libre = i < a1 && occ.every(function(o){ return !o[i]; });
+      if(libre && ini < 0) ini = i;
+      if(!libre && ini >= 0){ if((i - ini) * PASO >= B.dur) out.push([ini, i]); ini = -1; }
+    }
+    return out;
+  }
+  function panelBuscar(){
+    var B = M.busca || { dur:120, quien:'ambos', dias:[0,1,2,3,4], desde:'07:00', hasta:'21:00' };
+    var p = document.createElement('div'); p.className = 'dsp-panel-bg';
+    var DUR = [[60,'1 hora'],[120,'2 horas'],[180,'3 horas'],[240,'4 horas'],[300,'Medio día (5 h)'],[840,'Todo el día']];
+    var FR = [['07:00-21:00','A cualquier hora'],['07:00-13:00','A la mañana (7 a 13)'],['13:00-21:00','A la tarde (13 a 21)'],['17:00-21:00','Después de las 17']];
+    var ps = profs();
+    p.innerHTML = '<div class="dsp-panel" style="width:480px"><h4>🔎 Buscar hueco libre</h4>'
+      + '<label>¿De quién?</label><div class="dsp-seg">' + (ps.length > 1 ? '<label><input type="radio" name="bh-q" value="ambos"' + (B.quien === 'ambos' ? ' checked' : '') + '> Los dos</label>' : '') + ps.map(function(x){ return '<label><input type="radio" name="bh-q" value="' + x + '"' + (B.quien === x || (ps.length === 1) ? ' checked' : '') + '> ' + (PROF_LBL[x] || x) + '</label>'; }).join('') + '</div>'
+      + '<label>¿Cuánto tiempo?</label><select id="bh-dur">' + DUR.map(function(d){ return '<option value="' + d[0] + '"' + (d[0] === B.dur ? ' selected' : '') + '>' + d[1] + '</option>'; }).join('') + '</select>'
+      + '<label>¿Qué días?</label><div class="dsp-dias">' + DCORTO.map(function(n, d){ var on = B.dias.indexOf(d) >= 0; return '<label class="' + (on ? 'on' : '') + '"><input type="checkbox" value="' + d + '"' + (on ? ' checked' : '') + '>' + n + '</label>'; }).join('') + '</div>'
+      + '<label>¿En qué horario?</label><select id="bh-fr">' + FR.map(function(f){ return '<option value="' + f[0] + '"' + (f[0] === B.desde + '-' + B.hasta ? ' selected' : '') + '>' + f[1] + '</option>'; }).join('') + '</select>'
+      + '<p class="dsp-ayuda" style="margin-top:8px">Se apagan los días que no sirven y se marcan en verde los horarios libres. Cuenta todo: consultorio, videollamadas, otros lugares e importantes.</p>'
+      + '<div class="dsp-acc">' + (M.busca ? '<button type="button" class="dsp-btn sec" data-q>Quitar búsqueda</button>' : '') + '<span style="flex:1"></span><button type="button" class="dsp-btn sec" data-c>Cancelar</button><button type="button" class="dsp-btn" data-ok>Buscar</button></div></div>';
+    document.body.appendChild(p);
+    var close = function(){ p.remove(); };
+    p.addEventListener('mousedown', function(e){ if(e.target === p) close(); });
+    p.querySelectorAll('.dsp-dias input').forEach(function(c){ c.onchange = function(){ c.parentNode.classList.toggle('on', c.checked); }; });
+    p.querySelector('[data-c]').onclick = close;
+    var q = p.querySelector('[data-q]'); if(q) q.onclick = function(){ M.busca = null; close(); pintar(); };
+    p.querySelector('[data-ok]').onclick = function(){
+      var fr = p.querySelector('#bh-fr').value.split('-'), dias = Array.prototype.map.call(p.querySelectorAll('.dsp-dias input:checked'), function(c){ return +c.value; });
+      if(!dias.length) dias = [0,1,2,3,4,5];
+      M.busca = { quien:(p.querySelector('input[name=bh-q]:checked') || {}).value || ps[0], dur:+p.querySelector('#bh-dur').value, dias:dias, desde:fr[0], hasta:fr[1] };
+      if(M.busca.dur > t2m(fr[1]) - t2m(fr[0])) M.busca.dur = t2m(fr[1]) - t2m(fr[0]);
+      close(); pintar();
+    };
+  }
+  function barra(){
+    var B = M.busca, txt = '';
+    if(B){
+      var durT = B.dur >= 840 ? 'todo el día' : B.dur >= 300 ? 'medio día' : (B.dur / 60) + ' h';
+      txt = '<span class="mv-bchip">🔎 ' + (B.quien === 'ambos' ? 'Los dos' : (PROF_LBL[B.quien] || B.quien)) + ' · ' + durT + ' libres · ' + B.dias.map(function(d){ return DCORTO[d]; }).join(', ') + (B.desde !== '07:00' || B.hasta !== '21:00' ? ' · de ' + hh(B.desde) + ' a ' + hh(B.hasta) : '') + ' <button type="button" data-mvq title="Quitar búsqueda">✕</button></span>';
+    }
+    return '<div class="mv-bar"><div class="mv-seg"><button type="button" data-mvv="mes"' + (M.vista === 'mes' ? ' class="on"' : '') + '>📆 Mes</button><button type="button" data-mvv="sem"' + (M.vista === 'sem' ? ' class="on"' : '') + '>🗓 Semana de ' + (profs().length > 1 ? 'los dos' : (PROF_LBL[profs()[0]] || '')) + '</button></div>'
+      + '<button type="button" class="mv-bbtn" data-mvb>🔎 Buscar hueco</button>' + txt + '</div>';
+  }
+  function engancharBarra(box){
+    box.querySelectorAll('[data-mvv]').forEach(function(b){ b.onclick = function(){
+      var v = b.dataset.mvv; if(v === M.vista) return; M.vista = v;
+      if(v === 'sem' && !M.lun){ var h = new Date(); M.lun = (h.getFullYear() === M.y && h.getMonth() === M.m) ? getMonday(h) : getMonday(new Date(M.y, M.m, 1)); if(new Date(M.lun).getMonth() !== M.m && !(h.getFullYear() === M.y && h.getMonth() === M.m)){ M.lun = addDays(M.lun, 7); } }
+      if(v === 'mes' && M.lun){ var md = addDays(M.lun, 3); M.y = md.getFullYear(); M.m = md.getMonth(); }
+      pintar(); }; });
+    var bb = box.querySelector('[data-mvb]'); if(bb) bb.onclick = panelBuscar;
+    var bq = box.querySelector('[data-mvq]'); if(bq) bq.onclick = function(){ M.busca = null; pintar(); };
+  }
+  /* ── Semana de los dos: como la agenda de papel (horas en vertical, una columna por persona) ── */
+  var PXH = 38;
+  function pintarSem(){
     var box = document.getElementById('ag-mes'); if(!box) return;
-    var hoyS = kd(new Date()), cnt = cuentaTurnos(), ps = profs();
+    if(!M.lun) M.lun = getMonday(new Date());
+    var ps = profs(), sec = _esSecretariaLogueada(), hoyS = kd(new Date()), cnt = cuentaTurnos(), alto = (HSPAN / 60) * PXH;
+    var x = barra() + '<div class="sm-grid"><div class="sm-h sm-ax"></div>';
+    var dias = []; for(var i = 0; i < 6; i++) dias.push(addDays(M.lun, i));
+    dias.forEach(function(d){ var ds = kd(d); x += '<div class="sm-h' + (ds === hoyS ? ' hoy' : '') + '"><b>' + DCORTO[diOf(ds)] + ' ' + d.getDate() + '</b>' + (cnt[ds] ? '<em>' + cnt[ds] + ' turno' + (cnt[ds] > 1 ? 's' : '') + '</em>' : '') + (ps.length > 1 ? '<div class="sm-pp">' + ps.map(function(p){ return '<i style="color:' + PC[p] + '">' + (PROF_LBL[p] || p) + '</i>'; }).join('') + '</div>' : '') + '</div>'; });
+    x += '<div class="sm-ax" style="height:' + alto + 'px">';
+    for(var h = H0 / 60; h <= H1 / 60; h++) x += '<span style="top:' + ((h * 60 - H0) / 60 * PXH) + 'px">' + h + ':00</span>';
+    x += '</div>';
+    dias.forEach(function(d){
+      var ds = kd(d), dd = dia(ds), hz = M.busca ? huecos(ds, dd) : null;
+      x += '<div class="sm-d' + (ds === hoyS ? ' hoy' : '') + (M.busca && !(hz && hz.length) ? ' mv-dim' : '') + '" style="height:' + alto + 'px" data-smd="' + ds + '">';
+      for(var h2 = H0 / 60 + 1; h2 < H1 / 60; h2++) x += '<b class="sm-hl" style="top:' + ((h2 * 60 - H0) / 60 * PXH) + 'px"></b>';
+      ps.forEach(function(p, pi){
+        x += '<div class="sm-c">' + (dd.cols[p] || []).map(function(b){
+          var top = (t2m(b.f) - H0) / 60 * PXH, hgt = Math.max(10, (t2m(b.t) - t2m(b.f)) / 60 * PXH);
+          if(top < 0){ hgt += top; top = 0; } if(top + hgt > alto) hgt = alto - top;
+          var cls = 'sm-b' + (b.aus ? ' aus' : b.imp ? (b.rem ? ' imp rem' : ' imp') : b.rem ? ' rem' : ' pres');
+          return '<div class="' + cls + '" style="top:' + top + 'px;height:' + hgt + 'px;--c:' + (PC[p] || '#64748b') + '" title="' + E((PROF_LBL[p] || p) + ' · ' + hh(b.f) + '–' + hh(b.t) + ' · ' + b.txt + (b.aus ? '' : b.rem ? ' (desde casa)' : ' (fuera de casa)')) + '">'
+            + (hgt >= 18 ? '<b>' + E(b.aus ? 'No atiende' : b.imp ? b.txt : b.txt === 'Videollamada' ? '📹 Video' : b.txt) + '</b>' : '') + (hgt >= 32 ? '<small>' + hh(b.f) + '–' + hh(b.t) + '</small>' : '') + '</div>';
+        }).join('') + '</div>';
+      });
+      (hz || []).forEach(function(r){ x += '<div class="sm-hz" style="top:' + (r[0] * PASO / 60 * PXH) + 'px;height:' + ((r[1] - r[0]) * PASO / 60 * PXH) + 'px"><span>libre ' + hSl(r[0]) + '–' + hSl(r[1]) + '</span></div>'; });
+      dd.inst.forEach(function(i){ var top = Math.max(0, (t2m(i.f) - H0) / 60 * PXH), hgt = Math.min(alto, (t2m(i.t) - H0) / 60 * PXH) - top;
+        x += '<div class="sm-inst" style="top:' + top + 'px;height:' + hgt + 'px"><span>🏛 ' + E(i.txt) + '</span></div>'; });
+      x += '</div>';
+    });
+    x += '</div><div class="mv-ley mv2-ley">'
+      + ps.map(function(p){ return '<span><i class="mv2-k" style="background:' + PC[p] + '"></i>' + (PROF_LBL[p] || p) + ' fuera de casa</span>' + (sec ? '' : '<span><i class="mv2-k rem" style="--c:' + PC[p] + '"></i>' + (PROF_LBL[p] || p) + ' desde casa</span>'); }).join('')
+      + '<span><i class="mv2-k libre0"></i>Libre</span>' + (sec ? '' : '<span><i class="mv2-k imp"></i>⭐ Importante</span>') + '<span><i class="mv2-k aus"></i>No atiende</span><span><i class="mv2-k inst"></i>Cierre</span>'
+      + '<span class="mv-ley-p">Tocá un día para ver los turnos de esa semana</span></div>';
+    box.innerHTML = x; engancharBarra(box);
+    box.querySelectorAll('[data-smd]').forEach(function(c){ c.onclick = function(){ irSemana(c.dataset.smd); }; });
+    var fin = addDays(M.lun, 5), lb = document.getElementById('ag-week-label');
+    if(lb) lb.textContent = 'Semana del ' + new Date(M.lun).getDate() + (new Date(M.lun).getMonth() !== fin.getMonth() ? ' de ' + MESES[new Date(M.lun).getMonth()].toLowerCase() : '') + ' al ' + fin.getDate() + ' de ' + MESES[fin.getMonth()].toLowerCase();
+  }
+  function irSemana(ds){
+    salir();
+    currentMonday = getMonday(parseLocalDate(ds));
+    if(_esSecretariaLogueada()) currentMonday = agClampMonday(currentMonday);
+    if(typeof agEsMovil === 'function' && agEsMovil()) agDiaIdx = diOf(ds);
+    renderGrid();
+  }
+  function pintar(){ if(M.vista === 'sem') pintarSem(); else pintarMes(); }
+  function pintarMes(){
+    var box = document.getElementById('ag-mes'); if(!box) return;
+    var hoyS = kd(new Date()), cnt = cuentaTurnos(), ps = profs(), sec = _esSecretariaLogueada();
     var d1 = new Date(M.y, M.m, 1), lun = getMonday(d1), fin = new Date(M.y, M.m + 1, 0);
-    var eje = '<div class="mv-ax"><div class="mv-ax-tl">' + [8, 12, 16, 20].map(function(hr){ return '<span style="top:' + pos(hr + ':00') + '%">' + hr + '</span>'; }).join('') + '</div></div>';
-    var x = '<div class="mv-grid' + (ps.length > 1 ? ' multi' : '') + '"><div class="mv-h"><div></div>' + DCORTO.map(function(d){ return '<div>' + d + '</div>'; }).join('') + '</div>';
+    var escala = '<div class="mv2-esc">' + [7, 12, 17, 21].map(function(hr){ return '<span style="left:' + pos(hr + ':00') + '%">' + hr + '</span>'; }).join('') + '</div>';
+    var nOk = 0;
+    var x = barra() + '<div class="mv-grid mv2-grid"><div class="mv-h">' + DCORTO.map(function(d){ return '<div>' + d + escala + '</div>'; }).join('') + '</div>';
     var d = new Date(lun);
     while(d <= fin || diOf(kd(d)) !== 0){
-      if(diOf(kd(d)) === 0) x += '<div class="mv-row">' + eje;
+      if(diOf(kd(d)) === 0) x += '<div class="mv-row">';
       var ds = kd(d), di = diOf(ds);
       if(di <= 5) x += celda(ds, d.getMonth() !== M.m, hoyS, cnt);
       if(di === 6) x += '</div>';
@@ -25358,26 +25500,24 @@ window._dspAbrirLista=function(){
       if(diOf(kd(d)) === 0 && d > fin) break;
     }
     x += '</div>';
-    var sec = _esSecretariaLogueada();
-    var ley = [['#7F77DD', 'Consultorio Guerrero'], ['#378ADD', 'Consultorio Bertani']].concat(sec ? [] : [['#7B3FC4', 'Videollamada'], ['#7B6EA6', 'Otros Guerrero'], ['#2B4E8C', 'Otros Bertani'], ['#F59E0B', 'Sapiens'], ['#14B8A6', 'CEM'], ['#DB2777', 'CEQ'], ['#EAB308', 'Zoom, Meet e importantes']]);
-    x += '<div class="mv-ley">'
-      + (ps.length > 1 ? '<span class="mv-ley-c">Cada día: <strong>' + ps.map(function(p){ return INI[p] + ' = ' + (PROF_LBL[p] || p); }).join('</strong> a la izquierda · <strong>') + '</strong> a la derecha · de 7 a 21 h</span>' : '')
-      + '<span><b class="mv-k lleno"></b>Lleno = presencial</span>' + (sec ? '' : '<span><b class="mv-k rayado"></b>Rayado = desde casa (video, zoom)</span>')
-      + '<span><b class="mv-k libre"></b>Blanco = libre</span><span><b class="mv-k aus"></b>No atiende</span><span><b class="mv-k inst"></b>Cierre institucional</span></div>'
-      + '<div class="mv-ley">' + ley.map(function(l){ return '<span><b style="background:' + l[0] + '"></b>' + l[1] + '</span>'; }).join('') + '<span class="mv-ley-p">Pasá el mouse por una franja para ver el detalle · tocá un día para ir a esa semana</span></div>';
-    box.innerHTML = x;
+    x += '<div class="mv-ley mv2-ley">'
+      + '<span>Cada renglón es una persona, de <strong>7 a 21 h</strong> (de izquierda a derecha):</span>'
+      + ps.map(function(p){ return '<span><i class="mv2-k" style="background:' + PC[p] + '"></i>' + (PROF_LBL[p] || p) + ' fuera de casa</span>' + (sec ? '' : '<span><i class="mv2-k rem" style="--c:' + PC[p] + '"></i>' + (PROF_LBL[p] || p) + ' desde casa</span>'); }).join('')
+      + '<span><i class="mv2-k libre0"></i>Libre</span>' + (ps.length > 1 ? '<span><i class="mv2-k libre"></i>♥ Los dos libres (1 h o más)</span>' : '')
+      + (sec ? '' : '<span><i class="mv2-k imp"></i>⭐ Importante</span>') + '<span><i class="mv2-k aus"></i>No atiende</span><span><i class="mv2-k inst"></i>Cierre</span>'
+      + '<span class="mv-ley-p">Abajo de cada día dice dónde. Pasá el mouse por una franja para el detalle · tocá un día para ir a esa semana</span></div>';
+    box.innerHTML = x; engancharBarra(box);
+    if(M.busca){ var n = box.querySelectorAll('.mv-c.mv-ok').length, ch = box.querySelector('.mv-bchip'); if(ch) ch.insertAdjacentHTML('beforeend', ' <b class="mv-bn">' + (n ? n + ' día' + (n > 1 ? 's' : '') + ' con lugar' : 'ningún día con lugar este mes') + '</b>'); }
     box.querySelectorAll('[data-mvd]').forEach(function(c){ c.onclick = function(){
-      var ds = c.dataset.mvd; salir();
-      currentMonday = getMonday(parseLocalDate(ds));
-      if(_esSecretariaLogueada()) currentMonday = agClampMonday(currentMonday);
-      if(typeof agEsMovil === 'function' && agEsMovil()) agDiaIdx = diOf(ds);
-      renderGrid();
+      var ds = c.dataset.mvd;
+      if(M.busca){ M.lun = getMonday(parseLocalDate(ds)); M.vista = 'sem'; pintar(); return; }   // buscando: se abre la semana de los dos
+      irSemana(ds);
     }; });
     var lb = document.getElementById('ag-week-label'); if(lb) lb.textContent = MESES[M.m] + ' ' + M.y;
   }
   function entrar(){
     var base = currentMonday ? new Date(currentMonday) : new Date(); base.setDate(base.getDate() + 3);
-    M.on = true; M.y = base.getFullYear(); M.m = base.getMonth();
+    M.on = true; M.y = base.getFullYear(); M.m = base.getMonth(); M.lun = currentMonday ? new Date(currentMonday) : getMonday(new Date());
     var w = document.querySelector('#agenda-app .ag-grid-wrap'); if(w) w.style.display = 'none';
     var lg = document.querySelector('#agenda-app .ag-legend'); if(lg) lg.style.display = 'none';
     var box = document.getElementById('ag-mes'); if(box) box.style.display = '';
@@ -25407,7 +25547,8 @@ window._dspAbrirLista=function(){
         if(!M.on) return; var t = e.target.closest('button'); if(!t || t.id === 'ag-btn-mes') return;
         if(t.id === 'ag-prev' || t.id === 'ag-next' || t.id === 'ag-today-btn'){
           e.stopPropagation(); e.preventDefault();
-          if(t.id === 'ag-today-btn'){ var n = new Date(); M.y = n.getFullYear(); M.m = n.getMonth(); }
+          if(M.vista === 'sem'){ M.lun = t.id === 'ag-today-btn' ? getMonday(new Date()) : addDays(M.lun, t.id === 'ag-next' ? 7 : -7); var md = addDays(M.lun, 3); M.y = md.getFullYear(); M.m = md.getMonth(); }
+          else if(t.id === 'ag-today-btn'){ var n = new Date(); M.y = n.getFullYear(); M.m = n.getMonth(); }
           else { M.m += t.id === 'ag-next' ? 1 : -1; if(M.m < 0){ M.m = 11; M.y--; } if(M.m > 11){ M.m = 0; M.y++; } }
           pintar();
         }
@@ -37091,8 +37232,8 @@ function _cargaEstPrec(p){
     [/hemoglobina|\bhb\b|\bhgb\b/, 'Hb'],
     [/plaquetas|trombocitos|\bplt\b|^[\s|\[\]—_-]*plaq\b/, 'Rto_plaquetas'],
     [/acido\s+urico|uricemia|\bac\.?\s*urico|^[\s|\[\]—_-]*(au|uric)\b/, 'AcidoUrico'],
-    [/\b(tgo|got|ast)\b|aspartato/, 'TGO'],
-    [/\b(tgp|gpt|alt)\b|alanina/, 'TGP'],
+    [/\b(tgo|got|ast)\b|aspartato|glutamic\w*\s*-?\s*oxal\w*/, 'TGO'],
+    [/\b(tgp|gpt|alt)\b|alanina|glutamic\w*\s*-?\s*piruv\w*/, 'TGP'],
     [/fosfatasa\s+alcalina|\bfal\b/, 'FAL'],
     [/bilirrubina\s+total|\bbt\b/, 'BT'],
     [/gam+a\s*-?\s*g|\bggt\b|\bgama\b/, 'GGT'],
@@ -37100,7 +37241,7 @@ function _cargaEstPrec(p){
     [/no\s*-?\s*hdl/, 'noHDL'],
     [/(colesterol\s+ldl|\bc\s*-?\s*ldl\b|\bldl\b)(?!\s*-?\s*\(?\s*(calc|estim|martin|sampson|friedewald|segun|formula))/, 'LDLd'],
     [/hdl/, 'HDL'],
-    [/colesterol\s+total|colesterolemia|^\s*colesterol\b(?!\s+(ldl|hdl|no))|^[\s|\[\]—_-]*ct\b|\bct\b(?=\s*[:=]?\s*\d)|\bcol(est)?\.?\s*tot(al)?\b|^[\s|\[\]—_-]*col\.?\s*t\b/, 'CT'],
+    [/colesterol\s+total|colesterolemia|^\s*colesterol\b(?![\s\-–:.]*(ldl|hdl|no\b))|^[\s|\[\]—_-]*ct\b|\bct\b(?=\s*[:=]?\s*\d)|\bcol(est)?\.?\s*tot(al)?\b|^[\s|\[\]—_-]*col\.?\s*t\b/, 'CT'],
     [/triglic|trigliceridemia|^[\s|\[\]—_-]*(tg|tgl|trig)\b|\b(tag|tgl|tg)\b(?=\s*[:=]?\s*\d)/, 'TG'],
     [/apo\w*\s*-?\s*b\b|apob/, 'ApoB'],
     [/lp\s*\(\s*a\s*\)|lipoproteina\s*\(?\s*a\b\s*\)?|\blpa\b|\blp\s+a\b/, 'LPA'],
@@ -37121,13 +37262,15 @@ function _cargaEstPrec(p){
     [/saturacion|\bsat\b.*transf/, 'SatTransf'],
     [/ferremia|hierro\s+serico|sideremia|^\s*hierro\b/, 'Ferremia'],
     [/ferritina/, 'Ferritina'],
-    [/calcio|calcemia/, 'Calcio'],
+    // el calcio iónico (mmol/L) no es el calcio total: no se carga en la fila de Calcio
+    [/calcio(?!\s*-?\s*ion)|calcemia/, 'Calcio'],
     [/fosforo|fosfatemia/, 'Fosforo'],
     [/magnesio|magnesemia/, 'Magnesio'],
     [/albumin/, 'Albumina'],
     [/vitamina\s*a\b|retinol/, 'VitA'],
     [/b\s*12|cianocobalamina|cobalamina/, 'B12'],
-    [/vitamina\s*d|\bvit\.?\s*d\d?\b|25\s*-?\s*\(?\s*oh\s*\)?|hidroxi\s*-?\s*vitamina\s*d|colecalciferol/, 'D3'],
+    // el '3' de 'D3' es parte del nombre, no el resultado (\"VITAMINA D3 ... 34,20\", \"(D3)\", \"D 3\")
+    [/(hidroxi\s*-?\s*)?vitamina\s*[(\[]?\s*d\s*-?\s*3?(?![\d.,])\s*[)\]]?(\s*total\b)?|\bvit\.?\s*d\s*3?(?![\d.,])|25\s*-?\s*\(?\s*oh\s*\)?(\s*-?\s*(vitamina\s*)?d\s*3?(?![\d.,]))?|colecalciferol/, 'D3'],
     [/vitamina\s*e\b|tocoferol/, 'VitE'],
     [/vitamina\s*k\b/, 'VitK'],
     [/zinc|\bzn\b/, 'Zinc']
@@ -37171,7 +37314,13 @@ function _cargaEstPrec(p){
     var r = await (window._sbFromOriginal || sb.from.bind(sb))('urcym_agenda_config').upsert({ key:'lab_sinonimos', value:JSON.stringify(o) }, { onConflict:'key' });
     return !r.error;
   };
-  var NO_PARAM_LINEA = /(protocolo|paciente|documento|obra social|dr\.?\s*\/\s*dra|fecha\s*:|matricula|\bm\.?\s?p\.?\s*\d)/;
+  var NO_PARAM_LINEA = /(protocolo|paciente|documento|obra social|dr\.?\s*\/\s*dra|fecha\s*:|matricula|\bm\.?\s?p\.?\s*\d|pagina|diagonal|\bcalle\b|avenida|\bav\.?\s|bs\.?\s*as|\btel\w*\b|\bcuit\b|solicita|instrumento|contador|\bmetodo\b|\bbioquimic)/;
+  // texto ilegible de la lectura de la foto ("a nanananann", "nnnnnnn"): no se ofrece para enseñar
+  function basura(n){ n = String(n || ''); var sl = n.replace(/[^a-z]/g, '');
+    if(sl.length < 3) return true;
+    if(/(.)\1\1/.test(sl) || /(na|an|ne|en|nn|aa|ee){3,}/.test(sl)) return true;
+    var voc = (sl.match(/[aeiou]/g) || []).length / sl.length; if(voc < .2 || voc > .75) return true;
+    return !/[a-z]{4,}/.test(n); }
   var NO_PARAM = /^((colesterol )?ldl (calc|estim|segun|por formula)|hasta|limitrofe|normal|deseable|optimo|insuficiencia|deficiencia|suficiencia|riesgo|alto|bajo|elevado|hombres?|mujeres?|varones?|adultos?|meses|anos|vn|v r|valor|valores|rango|metodo|tecnica|directa|indirecta|mp|tel|whatsapp|documento|dni|protocolo|fecha|paciente|dr|dra|medico|metodo|v\.? ?ref|valor(es)? de ref|ref|hombres?|mujer(es)?|ninos|adultos|en adultos|riesgo (ecv|grado)|ayuno|verano|invierno|obra social|avda|av|calle|contador|formula|aspecto|edad|sexo|pagina|hoja|\d)/;
   var REFW = /(valor(es)?\s+(de\s+)?(referencia|normal(es)?|deseable|optimo|esperado)|\bv\.?\s?[rn]\.?(?=[\s:>]|$)|\bvn\s*>|\brango\b|\breferencia\b|\bdeseable\b|\boptimo\b|\blimitrofe\b|\bnormal(es)?\s*:|\bhasta\s*:?\s*\d|\b(menor|mayor|inferior|superior)\s+(de|a)\s+\d|\bdeficiencia\b|\binsuficiencia\b|\bsuficiencia\b|\b(hombres?|varones?|mujeres?)\s*:?\s*[<>≤≥]?\s*\d|\b(adultos?|ninos?|embarazadas?)\s*:|\d+\s*a\s*\d+\s*(anos|meses|dias)\b|\briesgo\s+(bajo|alto|moderado|intermedio)|\b(bajo|alto|elevado|muy alto)\s*:\s*[<>≥≤]?\s*\d|\bfase\s+(folicular|lutea)|\bpost\s*menopausia|\btrimestre\b)/;
   function sinRefs(lin){
@@ -37188,7 +37337,7 @@ function _cargaEstPrec(p){
       while((mm = re.exec(seg))){
         var nombre = mm[1].replace(/^((mg|g|ml|dl|l|ui|u|meq|mmol|umol|ng|pg|mm3|mm|cel|x)\b[\s\/.]*|%\s*)+/g, '').replace(/[.:%\-–_/()]+/g, ' ').replace(/\s+/g, ' ').trim();
         if(!nombre || nombre.length < 2 || nombre.length > 40 || !/^[a-z]/.test(nombre) || /^\d/.test(nombre)) continue;
-        if(NO_PARAM.test(nombre) || IGNORAR[nombre] || otros.some(function(o){ return o.nombre === nombre; })) continue;
+        if(NO_PARAM.test(nombre) || IGNORAR[nombre] || basura(nombre) || NO_PARAM_LINEA.test(nombre) || otros.some(function(o){ return o.nombre === nombre; })) continue;
         otros.push({ nombre:nombre, val:numero(mm[2]), origen:origen });
       }
     }
@@ -37199,10 +37348,13 @@ function _cargaEstPrec(p){
     var seccion = '', desdeSeccion = 99;
     texto.split(/\r?\n/).forEach(function(lineaEntera){
      var ls = sinAc(lineaEntera).trim();
+     if(/^(relacion|indice|cociente|razon)\b/.test(ls) && !/alb\w*[^\n]{0,12}creat/.test(ls)) return;   // "Relación CT/HDL 2,96" no es el HDL
      if(/^bilirrubin/.test(ls) && !/\d/.test(ls)){ seccion = 'bili'; desdeSeccion = 0; return; }
+     if(/^(eritrosedimentacion|eritrosed|vsg|e\.?\s?s\.?\s?d\b)/.test(ls) && !/\d/.test(ls.replace(/\([^)]*\)/g, ''))){ seccion = 'ers'; desdeSeccion = 0; return; }
      desdeSeccion++;
      // dentro de "Bilirrubinemia": "Total ...: 0,65" es la bilirrubina total (directa/indirecta no se cargan)
-     if(seccion === 'bili' && desdeSeccion <= 4 && /^total\b/.test(ls)) lineaEntera = 'Bilirrubina total ' + lineaEntera.replace(/^\s*total/i, '');
+     if(seccion === 'ers' && desdeSeccion <= 3 && /^(primera|1\s*(ra|era|°|º)?)\s*hora\b/.test(ls)) lineaEntera = 'ERS ' + lineaEntera.replace(/^\s*\S+\s*hora/i, '');
+     if(seccion === 'bili' && desdeSeccion <= 8 && /^total\b/.test(ls)) lineaEntera = 'Bilirrubina total ' + lineaEntera.replace(/^\s*total/i, '');
      var origen = lineaEntera.replace(/(\s*\.){3,}\s*/g, ' … ').replace(/\s{2,}/g, ' ').trim();
      // Rangos y explicaciones del laboratorio NO son el resultado: "(70 - 110)", "Deseable: < 200", "VN hasta 40", "Hombres: 30 a 400"…
      lineaEntera = sinRefs(lineaEntera);
@@ -37228,7 +37380,7 @@ function _cargaEstPrec(p){
           var pnm = /(^|[^a-z0-9])(\d)/.exec(lc), dp = lc.indexOf(':'), pn = pnm ? pnm.index + pnm[1].length : -1;
           var nombre = (dp > 0 && dp < pn ? lc.slice(0, dp) : lc.slice(0, pn)).replace(/[.:%\-–_/()]+/g, ' ').replace(/\s+/g, ' ').trim();
           var mv = (dp > 0 && dp < pn ? lc.slice(dp + 1) : lc.slice(pn)).match(/-?\d[\d.,]*/);
-          if(nombre && nombre.length >= 2 && nombre.length <= 45 && /^[a-z]/.test(nombre) && !NO_PARAM.test(nombre) && !NO_PARAM_LINEA.test(lc) && !IGNORAR[nombre] && mv && !otros.some(function(o){ return o.nombre === nombre; }))
+          if(nombre && nombre.length >= 2 && nombre.length <= 45 && /^[a-z]/.test(nombre) && !NO_PARAM.test(nombre) && !NO_PARAM_LINEA.test(lc) && !IGNORAR[nombre] && !basura(nombre) && mv && !otros.some(function(o){ return o.nombre === nombre; }))
             otros.push({ nombre:nombre, val:numero(mv[0]), origen:origen });
         }
         return;
@@ -37239,6 +37391,9 @@ function _cargaEstPrec(p){
         if(usadas[key]) return linea.slice(m.index + m[0].length);
         // primer número después del nombre (salteando fechas)
         var resto0 = linea.slice(m.index + m[0].length);
+        // Vitamina D aprendida con otro nombre ("25 hidroxi vitamina"): el "D3" que sigue no es el valor
+        if(key === 'HbA1c') resto0 = resto0.replace(/^[^:\d\n]*?\(?\s*(hb\s*)?a\s*1\s*c\s*\)?(?![a-z])/i, ' ');
+        if(key === 'D3') resto0 = resto0.replace(/^\s*[(\[]?\s*d\s*-?\s*3?(?![\d.,])\s*[)\]]?/i, ' ');
         // "NOMBRE ......: valor": si hay dos puntos antes del primer número, el valor está después de ":"
         // (así "25 Hidroxi VITAMINA D3 ....: 22,30" no toma el 3 de "D3")
         var dp = resto0.indexOf(':'), pn = resto0.search(/\d/);
@@ -37254,6 +37409,7 @@ function _cargaEstPrec(p){
         }
         if(!mn) return '';
         var uTxt = (mn[2] || '').trim();
+        if(/^mg\s*%/i.test(uTxt)) uTxt = 'mg/dL';   // mg% = mg/dL
         var esUnidad = /^(%|[µμu]?(g|mg|ng|pg|ui|u|meq|mmol|nmol|umol|mui|uui|mil|mm|ml|l)(\b|\/|$)|mg\/|g\/|mm\/)/i.test(uTxt);
         if(!esUnidad) uTxt = '';
         var siguiente = esUnidad ? resto0.slice(mn.index + mn[0].length) : resto0.slice(mn.index + mn[0].indexOf(mn[1]) + mn[1].length);
@@ -37265,6 +37421,7 @@ function _cargaEstPrec(p){
         if(key === 'Rto_plaquetas' && parseFloat(val) > 1000) val = String(Math.round(parseFloat(val) / 1000));
         if(key === 'Leuco' && parseFloat(val) > 0 && parseFloat(val) < 100) val = String(Math.round(parseFloat(val) * 1000));   // 7,5 (×10³/µL) → 7500
         if(key === 'SatTransf') unidad = '%';
+        if((key === 'Creatinina' || key === 'AcidoUrico') && /^mg\s*\/\s*l\b/i.test(uTxt) && !/dl/i.test(uTxt)){ val = String(Math.round(parseFloat(val) * 10) / 100); unidad = 'mg/dL'; }   // 10,13 mg/L → 1,01 mg/dL
         // en g/L ("GA 0,81", "CT 2,31 g/l") → mg/dL
         var nv = parseFloat(val), enGL = /^g\s*\/\s*l/i.test(uTxt);
         if((key === 'Glucemia' || key === 'PTOG') && nv > 0 && nv < 3.5 && !/mmol/i.test(uTxt)){ val = String(Math.round(nv * 100)); unidad = 'mg/dL'; }
@@ -44633,7 +44790,7 @@ function _invToggleDroga(key){
   var CATS_EST = function(){ return EST_FILAS.filter(function(f){ return f.cat; }).map(function(f){ return f.label; }); };
   function rango(cat){ var s = EST_FILAS.findIndex(function(f){ return f.cat && f.label === cat; }); if(s < 0) return null; var e = s + 1; while(e < EST_FILAS.length && !EST_FILAS[e].cat) e++; return [s, e]; }
   function filasDe(h){
-    if(h.tipo === 'lab') return LAB_FILAS.filter(function(f){ return !f.cat && !f.calc && f.key !== 'LPA'; }).concat((window._filasExtraDe ? window._filasExtraDe('lab') : []).map(function(l){ return { key: 'extra_' + l, label: l }; }));
+    if(h.tipo === 'lab') return LAB_FILAS.filter(function(f){ return !f.cat && !f.calc && f.key !== 'LPA'; }).concat([{ key: 'LPA', label: 'Lp(a)' }]).concat((window._filasExtraDe ? window._filasExtraDe('lab') : []).map(function(l){ return { key: 'extra_' + l, label: l }; }));
     if(h.tipo === 'ant') return ANT_FILAS.filter(function(f){ return !f.cat && !f.calc; });
     if(h.tipo === 'est' && h.cat){ var r = rango(h.cat); if(!r) return []; return EST_FILAS.slice(r[0] + 1, r[1]).filter(function(f){ return !f.calc; }); }
     return [];
@@ -44672,7 +44829,7 @@ function _invToggleDroga(key){
   function reconocer(h){
     h.vals = []; h.otros = [];
     var t = h.texto || '';
-    if(h.tipo === 'lab' && window._labAnalizarTexto){ var r = window._labAnalizarTexto(t) || {}; h.vals = (r.items || []).filter(function(it){ return it.key !== 'LPA'; }).map(function(it){ return { key: it.key, label: it.label, val: it.val, unidad: it.unidad }; }); h.otros = (r.otros || []).filter(function(o){ return !/\b(dni|d\.n\.i|documento|paciente|afiliado|protocolo|edad|tel|hc)\b/i.test(o.nombre); }).map(function(o){ return { nombre: o.nombre, val: o.val }; }); if(!h.fechaTocada && r.fecha) h.fecha = r.fecha; }
+    if(h.tipo === 'lab' && window._labAnalizarTexto){ var r = window._labAnalizarTexto(t) || {}; h.vals = (r.items || []).map(function(it){ return { key: it.key, label: it.key === 'LPA' ? 'Lp(a)' : it.label, val: it.val, unidad: it.unidad }; }); var _pn = pacienteActual ? [pacienteActual.apellido, pacienteActual.nombre].join(' ').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').split(/\s+/).filter(function(w){ return w.length > 2; }) : []; h.otros = (r.otros || []).filter(function(o){ return !/\b(dni|d\.n\.i|documento|paciente|afiliado|protocolo|edad|tel|hc|pagina)\b/i.test(o.nombre) && !_pn.some(function(w){ return o.nombre.indexOf(w) >= 0; }); }).map(function(o){ return { nombre: o.nombre, val: o.val }; }); if(!h.fechaTocada && r.fecha) h.fecha = r.fecha; }
     else if(h.tipo === 'est' && h.cat && window._estAnalizarTexto){ var re = window._estAnalizarTexto(t, h.cat) || {}; var rg = rango(h.cat) || [0, 0];
       Object.keys(re.valores || {}).forEach(function(k){ var fi = EST_FILAS.findIndex(function(f){ return f.key === k; }); if(fi > rg[0] && fi < rg[1]) h.vals.push({ key: k, label: EST_FILAS[fi].label, val: re.valores[k] }); });
       if(!h.fechaTocada && re.fecha) h.fecha = re.fecha; }
@@ -44873,7 +45030,7 @@ function _invToggleDroga(key){
       + (h.tipo && h.tipo !== 'no' && (h.tipo !== 'est' || h.cat) ? '<div class="fh-lbl">Valores <span class="fh-sug">(' + h.vals.length + ' reconocidos · corregí lo que haga falta)</span></div>'
         + '<div class="fh-vals">' + h.vals.map(function(v, k){ return filaHtml(filas, v, k, h); }).join('') + '</div>'
         + '<button type="button" class="fh-add">➕ Agregar un valor</button>'
-        + (h.otros && h.otros.length ? '<div class="fh-lbl" style="margin-top:10px">No reconocí <span class="fh-sug">(si alguno va, elegí a qué fila; queda aprendido)</span></div><div class="fh-otros">' + h.otros.map(function(o, k){ return '<div class="fh-ot"><span>' + E(o.nombre) + ' <b>' + E(o.val) + '</b></span><select data-o="' + k + '"><option value="">— no va —</option>' + filas.map(function(f){ return '<option value="' + E(f.key) + '">' + E(f.label) + '</option>'; }).join('') + '</select></div>'; }).join('') + '</div>' : '')
+        + (h.otros && h.otros.length ? '<details class="fh-otd"' + (h.otros.some(function(o){ return o.asignar; }) ? ' open' : '') + '><summary>❔ No reconocí ' + h.otros.length + (h.otros.length > 1 ? ' renglones' : ' renglón') + ' <span class="fh-sug">· abrilo solo si falta algún valor (elegís a qué fila va y queda aprendido)</span></summary><div class="fh-otros">' + h.otros.map(function(o, k){ return '<div class="fh-ot"><span>' + E(o.nombre) + ' <b>' + E(o.val) + '</b></span><select data-o="' + k + '"><option value="">— no va —</option>' + filas.map(function(f){ return '<option value="' + E(f.key) + '">' + E(f.label) + '</option>'; }).join('') + '</select></div>'; }).join('') + '</div></details>' : '')
         : '')
       + (h.texto && !h.esTexto ? '<details class="fh-tx"><summary>Ver / corregir el texto leído</summary><textarea rows="8">' + E(h.texto) + '</textarea><button type="button" class="fh-rel">🔁 Volver a reconocer</button></details>' : '')
       + navHtml();
@@ -44898,7 +45055,7 @@ function _invToggleDroga(key){
     return '<div class="fh-v' + (q ? ' mal' : '') + (du ? ' duda' : '') + '" data-k="' + k + '"' + (du ? ' title="El lector no estaba seguro de este número: revisalo en la foto"' : '') + '><select class="fh-vk"><option value="">— elegí el parámetro —</option>' + filas.map(function(x){ return '<option value="' + E(x.key) + '"' + (x.key === v.key ? ' selected' : '') + '>' + E(x.label) + '</option>'; }).join('') + '</select>'
       + (ops ? '<select class="fh-vv">' + ops.map(function(o){ return '<option' + (String(o) === String(v.val) ? ' selected' : '') + '>' + E(o) + '</option>'; }).join('') + (ops.indexOf(v.val) < 0 && v.val ? '<option selected>' + E(v.val) + '</option>' : '') + '</select>'
         : '<input class="fh-vv" type="text" value="' + E(v.val) + '">')
-      + (v.unidad ? '<span class="fh-u">' + E(v.unidad) + '</span>' : '') + '<button type="button" class="fh-del" data-k="' + k + '" title="Quitar">✕</button></div>'
+      + '<span class="fh-u">' + E(v.unidad || '') + '</span><button type="button" class="fh-del" data-k="' + k + '" title="Quitar">✕</button></div>'
       + (q ? '<div class="fh-q">⛔ ' + E(q) + '</div>' : '');
   }
   function guardarEdits(h){
@@ -44990,13 +45147,19 @@ function _invToggleDroga(key){
       var datos = g.tipo === 'lab' ? labDatos : g.tipo === 'est' ? estDatos : antDatos, F = g.tipo === 'lab' ? LAB_FILAS : g.tipo === 'est' ? EST_FILAS : ANT_FILAS;
       if(g.tipo === 'est' && (!estDatos.filas || !estDatos.filas.length)) estDatos.filas = Array(EST_FILAS.length).fill(null).map(function(){ return []; });
       if(g.tipo === 'lab' && !labDatos.unidades) labDatos.unidades = {};
-      Object.keys(g.vals).forEach(function(k){ var v = g.vals[k]; var ci = cel(datos, F, g.tipo, k, g.fecha, String(v.val).trim()); if(ci === false) return; n++; hechos[g.tipo] = ci;
+      Object.keys(g.vals).forEach(function(k){ var v = g.vals[k];
+        if(g.tipo === 'lab' && k === 'LPA'){   // Lp(a) va a su propia tarjeta (máx. 2 registros), no a la tabla
+          if(!labDatos.lpa) labDatos.lpa = [];
+          if(!labDatos.lpa.some(function(x){ return x.fecha === g.fecha && String(x.valor) === String(v.val); })) labDatos.lpa.push({ valor: v.val, unidad: v.unidad || 'mg/dL', fecha: g.fecha });
+          hechos.lpa = true; n++; return; }
+        var ci = cel(datos, F, g.tipo, k, g.fecha, String(v.val).trim()); if(ci === false) return; n++; hechos[g.tipo] = ci;
         if(g.tipo === 'lab' && v.unidad){ var fi = window._filaIdx ? window._filaIdx('lab', k) : -1; var tiene = fi >= 0 && (labDatos.filas[fi] || []).some(function(x, j){ return j !== ci && x != null && String(x).trim() !== ''; }); if(!tiene) labDatos.unidades[k] = v.unidad; }
         if(v.aprender) aprender.push([v.aprender, k]); });
     });
     S.hojas.forEach(function(h){ if(h.tipo === 'lab') (h.otros || []).forEach(function(o){ if(!o.asignar) ignorar.push(o.nombre); }); });
     try {
-      if(hechos.lab !== null){ try { calcLabValues(labDatos, LAB_FILAS); } catch(e){} renderTablaGenerica(labDatos, LAB_FILAS, 'evlab_wrap', hechos.lab); await guardarDatosPac('lab_tabla_wrap'); }
+      if(hechos.lab !== null || hechos.lpa){ try { calcLabValues(labDatos, LAB_FILAS); } catch(e){} renderTablaGenerica(labDatos, LAB_FILAS, 'evlab_wrap', hechos.lab); await guardarDatosPac('lab_tabla_wrap'); }
+      if(hechos.lpa){ try { if(typeof renderLpa === 'function') renderLpa(); if(typeof volcarLpaAlEditor === 'function') volcarLpaAlEditor(); } catch(e){} }
       if(hechos.est !== null){ try { calcEstValues(estDatos, EST_FILAS); } catch(e){} renderTablaGenerica(estDatos, EST_FILAS, 'evest_wrap', hechos.est); try { renderEstResumen(); } catch(e){} await guardarDatosPac('est_tabla_wrap'); }
       if(hechos.ant !== null){ try { calcAntValues(antDatos, ANT_FILAS); } catch(e){} renderTablaGenerica(antDatos, ANT_FILAS, 'evant_wrap', hechos.ant); await guardarDatosPac('ant_tabla_wrap'); }
       try { sincronizarRO(); } catch(e){}
@@ -45157,9 +45320,10 @@ function _invToggleDroga(key){
 .mv-ley-p{color:#9ca3af}
 @media (max-width:700px){.mv-c{min-height:80px;padding:3px}.mv-b{font-size:9.5px;padding:1px 3px;border-left-width:3px}.mv-b small,.mv-b i{display:none}.mv-n em{font-size:9px;padding:0 4px}}
 /* Aviso de evoluciones por cerrarse (48 h) */
+#ev48-pill.en-barra{position:static;box-shadow:none;padding:5px 11px;font-size:11.5px;margin-right:2px}
 #ev48-pill{position:fixed;left:16px;bottom:16px;z-index:9000;border:1.5px solid #f59e0b;background:#fffbeb;color:#92400e;border-radius:999px;padding:8px 15px;font:600 13px/1.2 inherit;font-family:inherit;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.12)}
 #ev48-pill.urg{border-color:#ef4444;background:#fef2f2;color:#991b1b}
-#ev48-panel{position:fixed;left:16px;bottom:62px;z-index:9001;width:min(430px,calc(100vw - 32px));max-height:62vh;overflow:auto;background:#fff;border-radius:14px;box-shadow:0 14px 40px rgba(0,0,0,.2);border:1px solid #e5e7eb;padding:12px 14px;font-family:inherit}
+#ev48-panel{position:fixed;right:16px;top:64px;z-index:9001;width:min(430px,calc(100vw - 32px));max-height:62vh;overflow:auto;background:#fff;border-radius:14px;box-shadow:0 14px 40px rgba(0,0,0,.2);border:1px solid #e5e7eb;padding:12px 14px;font-family:inherit}
 .ev48-h{display:flex;justify-content:space-between;align-items:center;font-size:15px}
 .ev48-x{border:none;background:none;font-size:16px;cursor:pointer;color:#6b7280}
 .ev48-ay{font-size:12px;color:#6b7280;margin:4px 0 10px}
@@ -45215,10 +45379,12 @@ function _invToggleDroga(key){
   function pintar(){
     var pill = document.getElementById('ev48-pill');
     if(!lista.length){ if(pill) pill.remove(); var pn = document.getElementById('ev48-panel'); if(pn) pn.remove(); abierto = false; return; }
-    if(!pill){ pill = document.createElement('button'); pill.type = 'button'; pill.id = 'ev48-pill'; document.body.appendChild(pill); pill.onclick = function(){ abierto = !abierto; panel(); }; }
+    if(!pill){ pill = document.createElement('button'); pill.type = 'button'; pill.id = 'ev48-pill'; pill.onclick = function(e){ e.stopPropagation(); abierto = !abierto; panel(); }; }
+    var ancla = document.getElementById('btn-cambiar-pwd');
+    if(ancla && pill.nextSibling !== ancla) ancla.parentNode.insertBefore(pill, ancla); else if(!ancla && !pill.parentNode) document.body.appendChild(pill);
     var urg = lista[0].falta < 6 * 3600e3;
-    pill.className = urg ? 'urg' : '';
-    pill.innerHTML = '🕒 <b>' + lista.length + '</b> evoluci' + (lista.length > 1 ? 'ones' : 'ón') + ' se cierra' + (lista.length > 1 ? 'n' : '') + ' pronto';
+    pill.className = (urg ? 'urg' : '') + (ancla ? ' en-barra' : '');
+    pill.innerHTML = '🕒 ' + lista.length + ' por cerrar';
     pill.title = 'Evoluciones tuyas que todavía se pueden editar (a las 48 h quedan cerradas)';
     if(abierto) panel();
   }
@@ -45241,6 +45407,7 @@ function _invToggleDroga(key){
     pn.querySelectorAll('[data-ok]').forEach(function(b){ b.onclick = function(){ marcarOk(b.dataset.ok); lista = lista.filter(function(x){ return String(x.id) !== String(b.dataset.ok); }); pintar(); }; });
   }
   window._ev48Refrescar = function(){ buscar().catch(function(){}); };
+  document.addEventListener('click', function(e){ if(abierto && !e.target.closest('#ev48-panel,#ev48-pill')){ abierto = false; panel(); } });
   // Revisa al entrar, cada 10 minutos, y un rato después de guardar una evolución
   setInterval(function(){ if(soyProfesional() && Date.now() - ultimo > 10 * 60e3) window._ev48Refrescar(); else if(!soyProfesional() && lista.length){ lista = []; pintar(); } }, 30e3);
   setInterval(function(){ if(lista.length){ var a = Date.now(); lista = lista.filter(function(x){ return x.cierra > a; }); pintar(); } }, 60e3);
@@ -45361,6 +45528,110 @@ html.urcym-sec .cierre-solo-prof, html.urcym-sec .dash-card.dash-pacientes, html
 .mv-k.libre{background:#fff;box-shadow:inset 0 0 0 1px #cbd5e1}.mv-k.aus{background:repeating-linear-gradient(135deg,#fecaca 0 3px,#fff 3px 6px);box-shadow:inset 0 0 0 1px #f87171}
 .mv-k.inst{background:repeating-linear-gradient(45deg,rgba(107,114,128,.45) 0 3px,#f3f4f6 3px 6px)}
 @media (max-width:700px){.mv-grid .mv-h,.mv-grid .mv-row{grid-template-columns:20px repeat(6,minmax(0,1fr))!important}.mv-tl{height:96px;gap:1px}.mv-ax-tl{height:96px}.mv-blk span,.mv-inst span{display:none}}
+</style>
+<style>
+/* Vista mensual v3: un renglón por persona, de 7 a 21 h (izquierda → derecha) */
+.mv2-grid .mv-h,.mv2-grid .mv-row{grid-template-columns:repeat(6,minmax(0,1fr))!important}
+.mv2-grid .mv-h>div{position:relative;padding-bottom:14px}
+.mv2-esc{position:absolute;left:22px;right:10px;bottom:1px;height:12px}
+.mv2-esc span{position:absolute;transform:translateX(-50%);font-size:9px;font-weight:600;color:#94a3b8}
+.mv-c.mv2{min-height:0!important;padding:5px 8px 6px!important;gap:3px!important}
+.mv2-bars{position:relative;display:flex;flex-direction:column;gap:3px}
+.mv2-f{display:flex;align-items:center;gap:4px;height:15px}
+.mv2-f>i{width:10px;flex-shrink:0;font-style:normal;font-size:10px;font-weight:800;text-align:center}
+.mv2-bar{position:relative;flex:1;height:100%;background:#fff;border:1px solid #e2e8f0;border-radius:4px;overflow:hidden;background-image:linear-gradient(90deg,transparent calc(35.7% - .5px),#e2e8f0 calc(35.7% - .5px),#e2e8f0 calc(35.7% + .5px),transparent calc(35.7% + .5px),transparent calc(71.4% - .5px),#e2e8f0 calc(71.4% - .5px),#e2e8f0 calc(71.4% + .5px),transparent calc(71.4% + .5px))}
+.mv2-s{position:absolute;top:0;bottom:0}
+.mv2-s.pres{background:var(--c)}
+.mv2-s.rem{background:repeating-linear-gradient(135deg,var(--c) 0 2.5px,color-mix(in srgb,var(--c) 25%,#fff) 2.5px 5.5px);box-shadow:inset 0 0 0 1px var(--c)}
+.mv2-s.imp{background:#EAB308;top:2px;bottom:2px;border-radius:2px;z-index:2;box-shadow:0 0 0 1px #fff}
+.mv2-s.imp.rem{background:repeating-linear-gradient(135deg,#EAB308 0 2.5px,#fef9c3 2.5px 5.5px);box-shadow:0 0 0 1px #fff,inset 0 0 0 1px #CA8A04}
+.mv2-s.aus{background:repeating-linear-gradient(135deg,#fecaca 0 2.5px,#fff 2.5px 5.5px)}
+.mv2-s.libre{background:#22C55E;top:3px;bottom:3px;border-radius:3px;opacity:.85}
+.mv2-j{height:11px}.mv2-j>i{color:#16a34a}.mv2-j .mv2-bar{border-color:transparent;background:#f8fafc}
+.mv2-inst{position:absolute;top:0;bottom:0;background:repeating-linear-gradient(45deg,rgba(107,114,128,.4) 0 4px,rgba(243,244,246,.85) 4px 8px);z-index:3;border-radius:3px}
+.mv2-cerr{flex:1;min-height:54px;display:flex;align-items:center;justify-content:center;text-align:center;font-size:12px;font-weight:700;color:#374151;background:repeating-linear-gradient(45deg,#e5e7eb 0 6px,#f9fafb 6px 12px);border-radius:6px;padding:4px}
+.mv2-lug{display:flex;flex-direction:column;gap:0;font-size:10.5px;color:#64748b;line-height:1.3;min-height:13px}
+.mv2-lug span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mv2-ley{align-items:center}
+.mv2-k{display:inline-block;width:18px;height:11px;border-radius:3px;margin-right:5px;vertical-align:-1px}
+.mv2-k.rem{background:repeating-linear-gradient(135deg,var(--c) 0 2.5px,color-mix(in srgb,var(--c) 25%,#fff) 2.5px 5.5px);box-shadow:inset 0 0 0 1px var(--c)}
+.mv2-k.libre0{background:#fff;box-shadow:inset 0 0 0 1px #cbd5e1}.mv2-k.libre{background:#22C55E}.mv2-k.imp{background:#EAB308}
+.mv2-k.aus{background:repeating-linear-gradient(135deg,#fecaca 0 2.5px,#fff 2.5px 5.5px);box-shadow:inset 0 0 0 1px #fca5a5}
+.mv2-k.inst{background:repeating-linear-gradient(45deg,rgba(107,114,128,.5) 0 3px,#f3f4f6 3px 6px)}
+@media (max-width:700px){.mv2-lug,.mv2-esc{display:none}.mv-c.mv2{padding:3px!important}.mv2-f>i{display:none}}
+</style>
+<style>
+/* Barra del mes: Mes / Semana de los dos / Buscar hueco */
+.mv-bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:2px 0 10px}
+.mv-seg{display:inline-flex;border:1.5px solid #cbd5e1;border-radius:10px;overflow:hidden}
+.mv-seg button{border:none;background:#fff;padding:7px 14px;font:600 13px inherit;font-family:inherit;color:#475569;cursor:pointer}
+.mv-seg button+button{border-left:1.5px solid #cbd5e1}
+.mv-seg button.on{background:#185FA5;color:#fff}
+.mv-bbtn{border:1.5px solid #16a34a;background:#fff;color:#15803d;border-radius:10px;padding:7px 14px;font:700 13px inherit;font-family:inherit;cursor:pointer}
+.mv-bbtn:hover{background:#f0fdf4}
+.mv-bchip{display:inline-flex;align-items:center;gap:6px;background:#dcfce7;color:#14532d;border-radius:999px;padding:5px 6px 5px 12px;font-size:12.5px;font-weight:600}
+.mv-bchip button{border:none;background:#fff;border-radius:999px;width:22px;height:22px;cursor:pointer;color:#15803d}
+.mv-bn{color:#166534;background:#fff;border-radius:999px;padding:1px 8px;font-size:12px}
+.mv-c.mv-dim{opacity:.28;filter:grayscale(.6)}
+.mv-c.mv-ok{box-shadow:inset 0 0 0 2px #22C55E}
+.mv2-hz{height:13px!important}.mv2-hz .mv2-s.libre{top:1px;bottom:1px;opacity:1}
+.mv2-hzt{font-size:11px;font-weight:700;color:#15803d}
+/* Semana de los dos */
+.sm-grid{display:grid;grid-template-columns:44px repeat(6,minmax(0,1fr));border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;background:#fff}
+.sm-h{background:#f8fafc;border-bottom:1px solid #e5e7eb;border-left:1px solid #eef2f5;padding:6px 6px 4px;text-align:center;font-size:13px;color:#334155}
+.sm-h.sm-ax{border-left:none}
+.sm-h.hoy{background:#e6f1fb;color:#185FA5}
+.sm-h em{display:block;font-style:normal;font-size:10.5px;color:#185FA5;font-weight:600}
+.sm-pp{display:flex;margin-top:3px}.sm-pp i{flex:1;font-style:normal;font-size:10.5px;font-weight:800}
+.sm-ax{position:relative;background:#f8fafc}
+.sm-ax span{position:absolute;right:5px;transform:translateY(-50%);font-size:10px;color:#94a3b8;font-weight:600}
+.sm-ax span:first-child{transform:none}
+.sm-d{position:relative;display:flex;gap:4px;padding:0 4px;border-left:1px solid #eef2f5;cursor:pointer}
+.sm-d:hover{background:#fafcff}
+.sm-d.hoy{background:#f7fbff}
+.sm-hl{position:absolute;left:0;right:0;border-top:1px solid #f1f5f9;pointer-events:none}
+.sm-c{position:relative;flex:1}
+.sm-b{position:absolute;left:0;right:0;border-radius:5px;overflow:hidden;padding:2px 5px;color:#fff;line-height:1.15}
+.sm-b b{display:block;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sm-b small{display:block;font-size:10px;opacity:.9}
+.sm-b.pres{background:var(--c)}
+.sm-b.rem{background:repeating-linear-gradient(135deg,var(--c) 0 3px,color-mix(in srgb,var(--c) 22%,#fff) 3px 8px);box-shadow:inset 0 0 0 1.5px var(--c);color:#1f2937}
+.sm-b.rem b,.sm-b.rem small{background:rgba(255,255,255,.85);border-radius:3px;padding:0 2px;width:max-content;max-width:100%}
+.sm-b.imp{background:#EAB308;color:#422006;left:22%;z-index:2;box-shadow:0 0 0 1.5px #fff}
+.sm-b.imp.rem{background:repeating-linear-gradient(135deg,#EAB308 0 3px,#fef9c3 3px 8px);box-shadow:0 0 0 1.5px #fff,inset 0 0 0 1px #CA8A04}
+.sm-b.aus{background:repeating-linear-gradient(135deg,#fecaca 0 3px,#fff 3px 8px);color:#b91c1c;box-shadow:inset 0 0 0 1px #fca5a5}
+.sm-hz{position:absolute;left:2px;right:2px;border:2px dashed #16a34a;background:rgba(34,197,94,.12);border-radius:6px;z-index:3;pointer-events:none;display:flex;align-items:flex-start;justify-content:center}
+.sm-hz span{background:#16a34a;color:#fff;font-size:10.5px;font-weight:700;border-radius:0 0 6px 6px;padding:1px 6px}
+.sm-inst{position:absolute;left:0;right:0;background:repeating-linear-gradient(45deg,rgba(107,114,128,.38) 0 6px,rgba(243,244,246,.9) 6px 12px);z-index:4;display:flex;align-items:center;justify-content:center}
+.sm-inst span{background:#fff;border-radius:6px;padding:2px 8px;font-size:12px;font-weight:700;color:#374151}
+.sm-d.mv-dim{opacity:.35}
+@media (max-width:700px){.sm-grid{grid-template-columns:30px repeat(6,minmax(0,1fr))}.sm-b b,.sm-b small,.sm-pp{display:none}.sm-d{gap:1px;padding:0 1px}}
+</style>
+<style>
+/* Carga de informes: valores alineados como tabla y lo no reconocido plegado */
+.fh-vals{border:1px solid #e2e8f0;border-radius:10px;overflow:hidden;gap:0!important}
+.fh-v{display:grid!important;grid-template-columns:minmax(0,1fr) 104px 52px 28px;gap:8px!important;align-items:center;padding:5px 8px;border-bottom:1px solid #f1f5f9;background:#fff}
+.fh-v:nth-child(even){background:#fafcfd}
+.fh-v select.fh-vk{border:none!important;background:transparent;font:700 13.5px var(--font-main)!important;color:#1e293b;padding:4px 2px!important;cursor:pointer;text-overflow:ellipsis}
+.fh-v select.fh-vk:hover{background:#f1f5f9}
+.fh-v .fh-vv{width:100%!important;box-sizing:border-box;text-align:right;font:800 15px var(--font-main)!important;padding:5px 8px!important}
+.fh-u{min-width:0!important;font-size:11px!important;color:#94a3b8!important}
+.fh-del{border:none!important;background:none!important;color:#cbd5e1!important;font-size:14px;padding:2px!important}
+.fh-del:hover{color:#b91c1c!important}
+.fh-q{padding:0 8px 5px;margin:0!important;background:#fef2f2;border-bottom:1px solid #fee2e2}
+.fh-otd{margin-top:8px;border:1px dashed #cbd5e1;border-radius:10px;padding:6px 10px;background:#f8fafc}
+.fh-otd summary{cursor:pointer;font-size:12.5px;font-weight:700;color:#64748b}
+.fh-otd[open] summary{margin-bottom:6px}
+.fh-otd .fh-ot{font-size:12.5px;color:#475569}
+</style>
+<style>
+/* Evolución: datos del paciente en una o dos líneas prolijas; los botones pasan abajo (a la derecha) si no entran */
+#page-evolucion .evol-topbar, .evol-topbar{align-items:flex-start;row-gap:8px}
+.evol-topbar > .evol-paciente-header{flex:1 1 560px;min-width:min(560px,100%);row-gap:4px;column-gap:8px;padding-top:2px}
+.evol-topbar > .evol-paciente-header #evol_nombre{font-size:18px!important;margin-right:2px}
+.evol-topbar > .evol-paciente-header .evol-faltan{flex:0 1 auto;max-width:100%}
+.evol-topbar > div:last-child{flex:0 1 auto;margin-left:auto;justify-content:flex-end}
+.evol-topbar > .btn-volver{align-self:center}
 </style>
 </body>
 </html>
