@@ -2,7 +2,7 @@
 <html lang="es-AR">
 <head>
   <meta charset="UTF-8" />
-  <script>var URCYM_BUILD = '2026-11-20-1825';</script>
+  <script>var URCYM_BUILD = '2026-11-21-1030';</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Evaluaciones cardiometabólicas — Sistema de Historia Clínica</title>
 
@@ -22849,6 +22849,7 @@ function renderGrid(){
     var ds0=kd(d);
     var h=document.createElement('div');
     h.className='ag-cell-head'+(ds0===todayStr?' ag-today':'');
+    h.dataset.ds=ds0;
     h.textContent=DIAS[diOf(ds0)]+' '+d.getDate();
     wrap.appendChild(h);
   });
@@ -23167,6 +23168,7 @@ function renderGrid(){
         e.stopPropagation();
         if(_secSinBloques)return; // Secretaría: solo lectura
         var idx=parseInt(this.dataset.instIdx);
+        if(window._insAbrir){ window._insAbrir(instBlocks[idx]); return; }
         var lbl=(instBlocks[idx]&&instBlocks[idx].label)||'Cierre institucional';
         if(confirm('¿Eliminar bloque institucional "'+lbl+'"?')){
           instBlocks.splice(idx,1);
@@ -24597,8 +24599,8 @@ window._dspAbrirLista=function(){
   // ── Clasificación ──
   function esRecurrente(b){return (b.freq||'semanal')!=='unico';}
   function vigente(b){return !b.endDate||b.endDate>=hoyStr();}
-  function recurrentes(){return DSP.disp.filter(function(b){return b.prof===DSP.prof&&esRecurrente(b)&&(DSP.verVencidas||vigente(b));});}
-  function extras(){return DSP.disp.filter(function(b){return b.prof===DSP.prof&&!esRecurrente(b)&&(DSP.verVencidas||(b.startDate||'')>=hoyStr());});}
+  function recurrentes(){return DSP.disp.filter(function(b){return b.prof===DSP.prof&&!b.video&&esRecurrente(b)&&(DSP.verVencidas||vigente(b));});}
+  function extras(){return DSP.disp.filter(function(b){return b.prof===DSP.prof&&!b.video&&!esRecurrente(b)&&(DSP.verVencidas||(b.startDate||'')>=hoyStr());});}
   function ausencias(){
     var grupos={};
     DSP.nl.forEach(function(b,i){
@@ -24620,8 +24622,8 @@ window._dspAbrirLista=function(){
     var bg=document.getElementById('dsp-bg');
     if(!bg){
       bg=document.createElement('div'); bg.id='dsp-bg'; bg.className='dsp-bg';
-      bg.innerHTML='<div class="dsp-modal" role="dialog" aria-modal="true"><div class="dsp-head"><span style="font-size:22px">📅</span><div><h3>Disponibilidad</h3>'
-        +'<div class="dsp-sub">Armá la semana tipo de cada profesional y cargá las excepciones (vacaciones, congresos, días extra).</div></div>'
+      bg.innerHTML='<div class="dsp-modal" role="dialog" aria-modal="true"><div class="dsp-head"><span style="font-size:22px">📅</span><div><h3>Disponibilidad del consultorio</h3>'
+        +'<div class="dsp-sub">La semana tipo de cada profesional en el consultorio y sus excepciones (no atiendo, días extra). <b>La ve la Secretaría y entra en el Cierre.</b></div></div>'
         +'<button type="button" class="dsp-x" aria-label="Cerrar">✕</button></div><div class="dsp-body" id="dsp-body"></div>'
         +'<div class="dsp-foot"><button type="button" class="dsp-link" id="dsp-lista">Vista lista (avanzada)</button><span style="flex:1"></span>'
         +'<button type="button" class="dsp-btn sec" id="dsp-cancel">Cancelar</button><button type="button" class="dsp-btn" id="dsp-save">Guardar cambios</button></div></div>';
@@ -24635,6 +24637,7 @@ window._dspAbrirLista=function(){
       };
     }
     bg.style.display='flex'; render();
+    if(window._agHubTabs) window._agHubTabs('disp');
   }
   function cerrar(){
     if(DSP.cambios&&!confirm('¿Cerrar sin guardar los cambios?'))return;
@@ -24643,12 +24646,13 @@ window._dspAbrirLista=function(){
   function guardar(){
     // Validaciones finales
     var mal=DSP.disp.find(function(b){return t2m(b.from)>=t2m(b.to);});
-    if(mal){alert('Hay una franja con horario de fin anterior al de inicio ('+(PROF_LBL[mal.prof]||mal.prof)+' '+mal.from+'–'+mal.to+').');return;}
+    if(mal){alert('Hay una franja con horario de fin anterior al de inicio ('+(PROF_LBL[mal.prof]||mal.prof)+' '+mal.from+'–'+mal.to+').');return false;}
     DSP.disp.forEach(function(b){if(!b.endDate)delete b.endDate;if(!b.startDate)delete b.startDate;});
     dispBlocks=DSP.disp.slice(); nlBlocks=DSP.nl.slice();
     saveLocal(); DSP.cambios=false;
     document.getElementById('dsp-bg').style.display='none'; renderGrid();
     var t=document.getElementById('urcym-save-ok-toast'); if(t){t.textContent='✓ Disponibilidad guardada';t.style.display='block';setTimeout(function(){t.style.display='none';},2500);}
+    return true;
   }
   function cambio(){DSP.cambios=true; render();}
 
@@ -24703,7 +24707,7 @@ window._dspAbrirLista=function(){
           +'<span>'+(a.todoDia?'Todo el día':e_(a.from)+'–'+e_(a.to))+(a.label?' · '+e_(a.label):'')+'</span></button>';
       }).join(''):'<div class="dsp-vacio">No hay ausencias cargadas.</div>')
       +'<button type="button" class="dsp-btn sec" id="dsp-nueva-aus">+ No atiendo (día o período)</button></div>'
-      +'<div><div class="dsp-exc-t">➕ Días extra de atención</div><p class="dsp-ayuda">Un día puntual en que atendés fuera de tu semana tipo (consultorio o 📹 videollamada).</p>'
+      +'<div><div class="dsp-exc-t">➕ Días extra de atención</div><p class="dsp-ayuda">Un día puntual en que atendés en el consultorio fuera de tu semana tipo. (Las videollamadas extra van en 📍 Otros lugares.)</p>'
       +(ex.length?ex.map(function(b){
         return '<button type="button" class="dsp-exc-item'+(b.video?' video':'')+'" data-dextra="'+DSP.disp.indexOf(b)+'"><b>'+DIAS_L[b.day]+' '+fmtF(b.startDate)+'</b>'
           +'<span>'+(b.video?'📹 ':'')+e_(b.from)+'–'+e_(b.to)+' · '+(b.dur||durDef(b.prof))+' min'+(b.label?' · '+e_(b.label):'')+'</span></button>';
@@ -24724,8 +24728,8 @@ window._dspAbrirLista=function(){
     return '<select id="dp-dur">'+[15,20,30,40,45,60].map(function(m){return '<option value="'+m+'"'+(m===v?' selected':'')+'>'+m+' min</option>';}).join('')+'</select>';
   }
   function tipoHtml(video){
-    return '<div class="dsp-seg"><label><input type="radio" name="dp-tipo" value="c"'+(video?'':' checked')+'> 🏥 Consultorio</label>'
-      +'<label><input type="radio" name="dp-tipo" value="v"'+(video?' checked':'')+'> 📹 Videollamada</label></div>';
+    // Las videollamadas ahora se cargan en 📍 Otros lugares: acá siempre es consultorio
+    return '<input type="radio" name="dp-tipo" value="c" checked style="display:none">';
   }
   function diasHtml(sel){
     return '<div class="dsp-dias">'+DIAS_L.map(function(n,d){return '<label class="'+(sel.indexOf(d)>=0?'on':'')+'"><input type="checkbox" value="'+d+'"'+(sel.indexOf(d)>=0?' checked':'')+'>'+n.slice(0,3)+'</label>';}).join('')+'</div>';
@@ -24750,7 +24754,7 @@ window._dspAbrirLista=function(){
     panel('Nueva franja · '+e_(PROF_LBL[DSP.prof]||DSP.prof),
       '<label>Días</label>'+diasHtml(dia==null?[]:[dia])
       +'<div class="dsp-fila"><div><label>Desde</label><input type="time" id="dp-from" value="09:00"></div><div><label>Hasta</label><input type="time" id="dp-to" value="12:00"></div><div><label>Cada turno</label>'+campoDur(durDef(DSP.prof))+'</div></div>'
-      +'<label>Tipo</label>'+tipoHtml(false)
+      +tipoHtml(false)
       +'<div class="dsp-fila"><div><label>Se repite</label><select id="dp-freq"><option value="semanal">Todas las semanas</option><option value="quincenal">Cada 15 días</option><option value="mensual">Cada 4 semanas</option></select></div>'
       +'<div><label>Empieza</label><input type="date" id="dp-ini" value="'+hoyStr()+'"></div><div><label>Termina <small>(opcional)</small></label><input type="date" id="dp-fin"></div></div>'
       +'<div class="dsp-acc"><button type="button" class="dsp-btn sec" data-c>Cancelar</button><button type="button" class="dsp-btn" data-ok>Agregar</button></div>',
@@ -24779,7 +24783,7 @@ window._dspAbrirLista=function(){
     var usada=b.startDate?b.startDate<hoyStr():true; // ya tuvo días en el pasado
     panel(DIAS_L[b.day]+' · '+e_(PROF_LBL[b.prof]||b.prof),
       '<div class="dsp-fila"><div><label>Desde</label><input type="time" id="dp-from" value="'+e_(b.from)+'"></div><div><label>Hasta</label><input type="time" id="dp-to" value="'+e_(b.to)+'"></div><div><label>Cada turno</label>'+campoDur(b.dur||durDef(b.prof))+'</div></div>'
-      +'<label>Tipo</label>'+tipoHtml(!!b.video)
+      +tipoHtml(!!b.video)
       +'<div class="dsp-fila"><div><label>Se repite</label><select id="dp-freq">'+Object.keys(FREQ_L).map(function(k){return '<option value="'+k+'"'+((b.freq||'semanal')===k?' selected':'')+'>'+FREQ_L[k]+'</option>';}).join('')+'</select></div>'
       +'<div><label>Termina <small>(opcional)</small></label><input type="date" id="dp-fin" value="'+e_(b.endDate||'')+'"></div></div>'
       +(usada?'<div class="dsp-rige"><label>¿Desde cuándo rige el cambio?</label><div class="dsp-seg"><label><input type="radio" name="dp-rige" value="fecha" checked> Desde el <input type="date" id="dp-rige" value="'+hoyStr()+'"></label>'
@@ -24840,7 +24844,7 @@ window._dspAbrirLista=function(){
     var nuevo=!b;
     panel((nuevo?'Día extra de atención':'Día extra')+' · '+e_(PROF_LBL[DSP.prof]||DSP.prof),
       '<div class="dsp-fila"><div><label>Fecha</label><input type="date" id="dp-fecha" value="'+e_(b?b.startDate:'')+'"></div><div><label>Desde</label><input type="time" id="dp-from" value="'+e_(b?b.from:'16:00')+'"></div><div><label>Hasta</label><input type="time" id="dp-to" value="'+e_(b?b.to:'18:00')+'"></div></div>'
-      +'<div class="dsp-fila"><div><label>Cada turno</label>'+campoDur(b?(b.dur||durDef(b.prof)):durDef(DSP.prof))+'</div><div style="flex:2"><label>Tipo</label>'+tipoHtml(b?!!b.video:false)+'</div></div>'
+      +'<div class="dsp-fila"><div><label>Cada turno</label>'+campoDur(b?(b.dur||durDef(b.prof)):durDef(DSP.prof))+'</div><div style="flex:2">'+tipoHtml(false)+'</div></div>'
       +'<label>Nota <small>(opcional)</small></label><input type="text" id="dp-label" value="'+e_(b?b.label:'')+'" placeholder="Ej.: recupero feriado">'
       +'<div class="dsp-acc">'+(nuevo?'':'<button type="button" class="dsp-btn peligro" data-del>Borrar</button>')+'<span style="flex:1"></span><button type="button" class="dsp-btn sec" data-c>Cancelar</button><button type="button" class="dsp-btn" data-ok>'+(nuevo?'Agregar':'Guardar')+'</button></div>',
       function(p,close,err){
@@ -24906,6 +24910,7 @@ window._dspAbrirLista=function(){
   }
 
   window._dspAbrir=abrir;
+  window._dspEstado={cambios:function(){return DSP.cambios;},guardar:guardar,descartar:function(){DSP.cambios=false;var bg=document.getElementById('dsp-bg');if(bg)bg.style.display='none';}};
 })();
 
 /* ══ Agenda › 🔒 Otros, con el mismo editor que Disponibilidad ══
@@ -24916,7 +24921,7 @@ window._dspAbrirLista=function(){
 (function(){
   var DL = ['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
   var FQ = { semanal:'Todas las semanas', quincenal:'Cada 15 días', mensual:'Cada 4 semanas', unico:'Una sola vez' };
-  var O = { prof:'BG', nl:[], cambios:false, tab:'semana', venc:false };
+  var O = { prof:'BG', nl:[], disp:[], cambios:false, tab:'semana', venc:false };
   var E = function(t){ return String(t == null ? '' : t).replace(/[&<>"]/g, function(c){ return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' }[c]; }); };
   var hoy = function(){ return new Date().toLocaleDateString('sv-SE', { timeZone:'America/Argentina/Buenos_Aires' }); };
   var diaDe = function(f){ return (new Date(f + 'T12:00:00').getDay() + 6) % 7; };
@@ -24926,16 +24931,27 @@ window._dspAbrirLista=function(){
   var esOtro = function(b){ return b && !b.ausencia; };
   var unico = function(b){ return (b.freq || 'semanal') === 'unico'; };
   var vig = function(b){ return unico(b) ? (b.startDate || '') >= hoy() : (!b.endDate || b.endDate >= hoy()); };
-  var mios = function(){ return O.nl.filter(function(b){ return esOtro(b) && b.prof === O.prof && (O.venc || vig(b)); }); };
+  // Otros lugares de trabajo: las videollamadas viven en dispBlocks (video:true, porque ofrecen turnos online);
+  // el resto (Sapiens, CEM, CEQ, gimnasio, clases…) en nlBlocks. Acá se ven y se editan juntos.
+  var LUGARES = { BG: ['Sapiens', 'CEM'], OB: ['Sapiens', 'CEQ'], MA: [] };
+  var LUG_NOMBRE = { Sapiens: 'Sapiens · San Bernardo', CEM: 'CEM · San Clemente', CEQ: 'CEQ · Mar de Ajó' };
+  var mios = function(){
+    return O.nl.filter(function(b){ return esOtro(b) && b.prof === O.prof && (O.venc || vig(b)); })
+      .concat(O.disp.filter(function(b){ return b.video && b.prof === O.prof && (O.venc || vig(b)); }));
+  };
+  var arr = function(b){ return b && b.video && O.disp.indexOf(b) >= 0 ? O.disp : O.nl; };
+  var ref = function(b){ return (b.video ? 'v' : 'n') + ':' + arr(b).indexOf(b); };
+  var deRef = function(r){ var p = String(r).split(':'); return (p[0] === 'v' ? O.disp : O.nl)[+p[1]]; };
 
   function abrir(){
     O.nl = nlBlocks.map(function(b){ return JSON.parse(JSON.stringify(b)); });
+    O.disp = dispBlocks.map(function(b){ return JSON.parse(JSON.stringify(b)); });
     O.prof = window._su === 'omar' ? 'OB' : 'BG'; O.cambios = false; O.tab = 'semana';
     var bg = document.getElementById('otr-bg');
     if(!bg){
       bg = document.createElement('div'); bg.id = 'otr-bg'; bg.className = 'dsp-bg';
-      bg.innerHTML = '<div class="dsp-modal" role="dialog" aria-modal="true"><div class="dsp-head"><span style="font-size:22px">🔒</span><div><h3>Otros</h3>'
-        + '<div class="dsp-sub">Horarios ocupados que no son consulta: gimnasio, reuniones, clases, trámites. En esos horarios no se dan turnos.</div></div>'
+      bg.innerHTML = '<div class="dsp-modal" role="dialog" aria-modal="true"><div class="dsp-head"><span style="font-size:22px">📍</span><div><h3>Otros lugares y actividades</h3>'
+        + '<div class="dsp-sub">Videollamadas, Sapiens, CEM, CEQ, clases, gimnasio… <b>Solo los ven los profesionales</b> (la Secretaría no) y en esos horarios no se dan turnos del consultorio.</div></div>'
         + '<button type="button" class="dsp-x" aria-label="Cerrar">✕</button></div><div class="dsp-body" id="otr-body"></div>'
         + '<div class="dsp-foot"><button type="button" class="dsp-link" id="otr-lista">Vista lista (avanzada)</button><span style="flex:1"></span>'
         + '<button type="button" class="dsp-btn sec" id="otr-cancel">Cancelar</button><button type="button" class="dsp-btn" id="otr-save">Guardar cambios</button></div></div>';
@@ -24949,29 +24965,36 @@ window._dspAbrirLista=function(){
       };
     }
     bg.style.display = 'flex'; render();
+    if(window._agHubTabs) window._agHubTabs('otros');
   }
   function listaVieja(){
     nlTmp = nlBlocks.map(function(b){ return Object.assign({}, b); });
     initCfgV2('ag-nl-bg', 'ag-nl-prof-pills', 'ag-nl-list', NL_PROFS, nlTmp, nlTmp.length ? nlTmp[0].prof : NL_PROFS[0]);
     document.getElementById('ag-nl-bg').style.display = 'flex';
   }
-  function cerrar(){ if(O.cambios && !confirm('¿Cerrar sin guardar los cambios?')) return; document.getElementById('otr-bg').style.display = 'none'; }
+  function cerrar(){ if(O.cambios && !confirm('¿Cerrar sin guardar los cambios?')) return; O.cambios = false; document.getElementById('otr-bg').style.display = 'none'; }
   function guardar(){
-    var mal = O.nl.find(function(b){ return esOtro(b) && t2m(b.from) >= t2m(b.to); });
-    if(mal){ alert('Hay un bloque con hora de fin anterior a la de inicio (' + DIAS[mal.day] + ' ' + mal.from + '–' + mal.to + ').'); return; }
+    var mal = O.nl.concat(O.disp.filter(function(b){ return b.video; })).find(function(b){ return esOtro(b) && t2m(b.from) >= t2m(b.to); });
+    if(mal){ alert('Hay un bloque con hora de fin anterior a la de inicio (' + DIAS[mal.day] + ' ' + mal.from + '–' + mal.to + ').'); return false; }
     O.nl.forEach(function(b){ if(!b.endDate) delete b.endDate; });
-    nlBlocks = O.nl.slice(); saveLocal(); O.cambios = false;
+    O.disp.forEach(function(b){ if(!b.endDate) delete b.endDate; });
+    nlBlocks = O.nl.slice(); dispBlocks = O.disp.slice(); saveLocal(); O.cambios = false;
     document.getElementById('otr-bg').style.display = 'none'; renderGrid();
-    var t = document.getElementById('urcym-save-ok-toast'); if(t){ t.textContent = '✓ Otros guardado'; t.style.display = 'block'; setTimeout(function(){ t.style.display = 'none'; }, 2500); }
+    var t = document.getElementById('urcym-save-ok-toast'); if(t){ t.textContent = '✓ Otros lugares guardado'; t.style.display = 'block'; setTimeout(function(){ t.style.display = 'none'; }, 2500); }
+    return true;
   }
   function cambio(){ O.cambios = true; render(); }
+  window._otrEstado = { cambios: function(){ return O.cambios; }, guardar: guardar, descartar: function(){ O.cambios = false; var bg = document.getElementById('otr-bg'); if(bg) bg.style.display = 'none'; } };
 
+  function nombreLugar(b){ return b.video ? '📹 Videollamada' : (LUG_NOMBRE[b.label] || b.label || 'Otro'); }
   function chip(b){
-    var i = O.nl.indexOf(b), ex = [];
+    var ex = [];
     if((b.freq || 'semanal') !== 'semanal') ex.push(FQ[b.freq] || b.freq);
     if(b.startDate && b.startDate > hoy()) ex.push('desde ' + fF(b.startDate));
     if(b.endDate) ex.push((vig(b) ? 'hasta ' : 'terminó ') + fF(b.endDate));
-    return '<button type="button" class="dsp-chip otr-chip' + (vig(b) ? '' : ' venc') + '" data-oi="' + i + '"><b>' + E(b.from) + '–' + E(b.to) + '</b><span>' + E(b.label || 'Otro') + '</span>' + (ex.length ? '<i>' + E(ex.join(' · ')) + '</i>' : '') + '</button>';
+    if(b.video) ex.push((b.dur || 30) + ' min · turnos online');
+    var col = window._agLugarColor ? window._agLugarColor(b, b.video ? 'disp' : 'nl') : '#7B6EA6';
+    return '<button type="button" class="dsp-chip otr-chip' + (vig(b) ? '' : ' venc') + '" style="border-left:5px solid ' + col + '" data-ok2="' + ref(b) + '"><b>' + E(b.from) + '–' + E(b.to) + '</b><span>' + E(nombreLugar(b)) + '</span>' + (ex.length ? '<i>' + E(ex.join(' · ')) + '</i>' : '') + '</button>';
   }
   function render(){
     var body = document.getElementById('otr-body'), m = mios();
@@ -24979,22 +25002,22 @@ window._dspAbrirLista=function(){
     var x = '<div class="dsp-bar"><div class="dsp-pills">' + NL_PROFS.map(function(p){ return '<button type="button" class="dsp-pill' + (O.prof === p ? ' on ' + p.toLowerCase() : '') + '" data-oprof="' + p + '">' + E(PROF_LBL[p] || p) + '</button>'; }).join('') + '</div>'
       + '<div class="dsp-tabs"><button type="button" class="dsp-tab' + (O.tab === 'semana' ? ' on' : '') + '" data-otab="semana">🗓️ Todas las semanas</button><button type="button" class="dsp-tab' + (O.tab === 'fechas' ? ' on' : '') + '" data-otab="fechas">📌 Fechas puntuales (' + pun.length + ')</button></div></div>';
     if(O.tab === 'semana'){
-      x += '<p class="dsp-ayuda">Cada tarjeta es un día. <b>Tocá un bloque para cambiar el día, el horario o borrarlo.</b> Con <b>+ Agregar</b> lo cargás para varios días de una vez.</p><div class="dsp-sem">';
+      x += '<p class="dsp-ayuda">Cada tarjeta es un día. <b>Tocá un bloque para cambiar el lugar, el día, el horario o borrarlo.</b> Con <b>+ Agregar</b> lo cargás para varios días de una vez.</p><div class="dsp-sem">';
       for(var d = 0; d < 6; d++){
         var del = rec.filter(function(b){ return b.day === d; }).sort(function(a, b){ return t2m(a.from) - t2m(b.from); });
         x += '<div class="dsp-dia"><div class="dsp-dia-t">' + DL[d] + '</div>' + (del.length ? del.map(chip).join('') : '<div class="dsp-vacio">—</div>') + '<button type="button" class="dsp-mas" data-onuevo="' + d + '">+ Agregar</button></div>';
       }
       x += '</div><button type="button" class="dsp-btn" data-onuevo="" style="margin-top:12px">+ Agregar (varios días)</button>';
     } else {
-      x += '<p class="dsp-ayuda">Un día puntual (un trámite, una reunión). Tocá uno para cambiarlo o borrarlo.</p>'
-        + (pun.length ? pun.map(function(b){ return '<button type="button" class="dsp-exc-item otr-item' + (vig(b) ? '' : ' venc') + '" data-oi="' + O.nl.indexOf(b) + '"><b>' + DL[b.day] + ' ' + fF(b.startDate) + '</b><span>' + E(b.from) + '–' + E(b.to) + (b.label ? ' · ' + E(b.label) : '') + '</span></button>'; }).join('') : '<div class="dsp-vacio">No hay fechas puntuales.</div>')
+      x += '<p class="dsp-ayuda">Un día puntual (una videollamada extra, un trámite, una reunión). Tocá uno para cambiarlo o borrarlo.</p>'
+        + (pun.length ? pun.map(function(b){ var col = window._agLugarColor ? window._agLugarColor(b, b.video ? 'disp' : 'nl') : '#7B6EA6'; return '<button type="button" class="dsp-exc-item otr-item' + (vig(b) ? '' : ' venc') + '" style="border-left:5px solid ' + col + '" data-ok2="' + ref(b) + '"><b>' + DL[b.day] + ' ' + fF(b.startDate) + '</b><span>' + E(b.from) + '–' + E(b.to) + ' · ' + E(nombreLugar(b)) + '</span></button>'; }).join('') : '<div class="dsp-vacio">No hay fechas puntuales.</div>')
         + '<button type="button" class="dsp-btn sec" data-ounico style="margin-top:10px">+ Fecha puntual</button>';
     }
     x += '<label class="dsp-venc"><input type="checkbox" id="otr-venc"' + (O.venc ? ' checked' : '') + '> Mostrar también lo vencido / pasado</label>';
     body.innerHTML = x;
     body.querySelectorAll('[data-oprof]').forEach(function(b){ b.onclick = function(){ O.prof = b.dataset.oprof; render(); }; });
     body.querySelectorAll('[data-otab]').forEach(function(b){ b.onclick = function(){ O.tab = b.dataset.otab; render(); }; });
-    body.querySelectorAll('[data-oi]').forEach(function(c){ c.onclick = function(){ editar(O.nl[+c.dataset.oi]); }; });
+    body.querySelectorAll('[data-ok2]').forEach(function(c){ c.onclick = function(){ editar(deRef(c.dataset.ok2)); }; });
     body.querySelectorAll('[data-onuevo]').forEach(function(b){ b.onclick = function(){ editar(null, b.dataset.onuevo === '' ? null : +b.dataset.onuevo); }; });
     var nu = body.querySelector('[data-ounico]'); if(nu) nu.onclick = function(){ editar(null, null, true); };
     document.getElementById('otr-venc').onchange = function(){ O.venc = this.checked; render(); };
@@ -25003,12 +25026,17 @@ window._dspAbrirLista=function(){
   function editar(b, dia, esUnico){
     var nuevo = !b, fq = b ? (b.freq || 'semanal') : (esUnico ? 'unico' : 'semanal');
     var sel = b ? [b.day] : (dia == null ? [] : [dia]);
+    var pres = LUGARES[O.prof] || [];
+    var lug = !b ? (O.prof === 'BG' ? 'video' : (pres[0] || 'otro')) : b.video ? 'video' : (pres.indexOf(b.label) >= 0 ? b.label : 'otro');
+    var opcL = [['video', '📹 Videollamada']].concat(pres.map(function(k){ return [k, LUG_NOMBRE[k] || k]; })).concat([['otro', '✏️ Otro']]);
     var p = document.createElement('div'); p.className = 'dsp-panel-bg';
     p.innerHTML = '<div class="dsp-panel"><h4>' + (nuevo ? 'Agregar' : 'Cambiar') + ' · ' + E(PROF_LBL[O.prof] || O.prof) + '</h4>'
-      + '<label>Motivo <small>(se ve en la agenda)</small></label><input type="text" id="op-label" value="' + E(b ? b.label || '' : '') + '" placeholder="Ej.: Gimnasio, Reunión, Clase UCA">'
+      + '<label>Lugar o actividad</label><div class="dsp-seg otr-lug">' + opcL.map(function(o){ return '<label><input type="radio" name="op-lug" value="' + o[0] + '"' + (o[0] === lug ? ' checked' : '') + '> ' + E(o[1]) + '</label>'; }).join('') + '</div>'
+      + '<div id="op-otro-w"><label>¿Qué es? <small>(se ve en la agenda)</small></label><input type="text" id="op-label" value="' + E(b && !b.video && lug === 'otro' ? b.label || '' : '') + '" placeholder="Ej.: Gimnasio, Reunión, Clase UCA"></div>'
+      + '<div id="op-vid-w"><label>Cada turno de videollamada</label><select id="op-dur">' + [15, 20, 30, 40, 45, 60].map(function(mn){ return '<option value="' + mn + '"' + (mn === ((b && b.dur) || 30) ? ' selected' : '') + '>' + mn + ' min</option>'; }).join('') + '</select><p class="dsp-ayuda" style="margin:4px 0 0">En estos horarios los pacientes pueden sacar turno de videollamada desde la página.</p></div>'
       + '<label>Se repite</label><select id="op-freq">' + Object.keys(FQ).map(function(k){ return '<option value="' + k + '"' + (k === fq ? ' selected' : '') + '>' + FQ[k] + '</option>'; }).join('') + '</select>'
       + '<div id="op-rec"><label>Día' + (nuevo ? 's' : '') + '</label><div class="dsp-dias">' + DL.map(function(n, d){ return '<label class="' + (sel.indexOf(d) >= 0 ? 'on' : '') + '"><input type="' + (nuevo ? 'checkbox' : 'radio') + '" name="op-dia" value="' + d + '"' + (sel.indexOf(d) >= 0 ? ' checked' : '') + '>' + n.slice(0, 3) + '</label>'; }).join('') + '</div></div>'
-      + '<div class="dsp-fila"><div><label>Desde</label><input type="time" id="op-from" value="' + E(b ? b.from : '08:00') + '"></div><div><label>Hasta</label><input type="time" id="op-to" value="' + E(b ? b.to : '09:00') + '"></div></div>'
+      + '<div class="dsp-fila"><div><label>Desde</label><input type="time" id="op-from" value="' + E(b ? b.from : '08:00') + '"></div><div><label>Hasta</label><input type="time" id="op-to" value="' + E(b ? b.to : '12:00') + '"></div></div>'
       + '<div class="dsp-fila"><div><label id="op-ini-l">' + (fq === 'unico' ? 'Fecha' : 'Empieza') + '</label><input type="date" id="op-ini" value="' + E(b ? b.startDate || '' : hoy()) + '"></div>'
       + '<div id="op-fin-w"><label>Termina <small>(opcional)</small></label><input type="date" id="op-fin" value="' + E(b && !unico(b) ? b.endDate || '' : '') + '"></div></div>'
       + '<div class="dsp-acc">' + (nuevo ? '' : '<button type="button" class="dsp-btn peligro" data-del>Borrar</button>') + '<span style="flex:1"></span><button type="button" class="dsp-btn sec" data-c>Cancelar</button><button type="button" class="dsp-btn" data-ok>' + (nuevo ? 'Agregar' : 'Listo') + '</button></div>'
@@ -25017,32 +25045,43 @@ window._dspAbrirLista=function(){
     var close = function(){ p.remove(); }, err = function(m){ p.querySelector('#op-err').textContent = m; };
     p.addEventListener('mousedown', function(e){ if(e.target === p) close(); });
     var fsel = p.querySelector('#op-freq');
-    var ajustar = function(){ var u = fsel.value === 'unico'; p.querySelector('#op-rec').style.display = u ? 'none' : ''; p.querySelector('#op-fin-w').style.visibility = u ? 'hidden' : ''; p.querySelector('#op-ini-l').textContent = u ? 'Fecha' : 'Empieza'; };
-    fsel.onchange = ajustar; ajustar();
+    var lugSel = function(){ var r = p.querySelector('input[name=op-lug]:checked'); return r ? r.value : 'otro'; };
+    var ajustar = function(){ var u = fsel.value === 'unico'; p.querySelector('#op-rec').style.display = u ? 'none' : ''; p.querySelector('#op-fin-w').style.visibility = u ? 'hidden' : ''; p.querySelector('#op-ini-l').textContent = u ? 'Fecha' : 'Empieza';
+      var l = lugSel(); p.querySelector('#op-otro-w').style.display = l === 'otro' ? '' : 'none'; p.querySelector('#op-vid-w').style.display = l === 'video' ? '' : 'none'; };
+    fsel.onchange = ajustar; p.querySelectorAll('input[name=op-lug]').forEach(function(r){ r.onchange = ajustar; }); ajustar();
     p.querySelectorAll('.dsp-dias input').forEach(function(c){ c.onchange = function(){ if(c.type === 'radio') p.querySelectorAll('.dsp-dias label').forEach(function(l){ l.classList.remove('on'); }); c.parentNode.classList.toggle('on', c.checked); }; });
     p.querySelector('[data-c]').onclick = close;
-    var del = p.querySelector('[data-del]'); if(del) del.onclick = function(){ if(!confirm('¿Borrar "' + (b.label || 'este bloque') + '" (' + DIAS[b.day] + ' ' + b.from + '–' + b.to + ')?')) return; O.nl.splice(O.nl.indexOf(b), 1); close(); cambio(); };
+    var quitar = function(x){ var a = arr(x), i = a.indexOf(x); if(i >= 0) a.splice(i, 1); };
+    var del = p.querySelector('[data-del]'); if(del) del.onclick = function(){ if(!confirm('¿Borrar "' + nombreLugar(b) + '" (' + DIAS[b.day] + ' ' + b.from + '–' + b.to + ')?')) return; quitar(b); close(); cambio(); };
     p.querySelector('[data-ok]').onclick = function(){
-      var label = p.querySelector('#op-label').value.trim() || 'Otro', freq = fsel.value;
+      var l = lugSel(), video = l === 'video';
+      var label = video ? '' : (l === 'otro' ? (p.querySelector('#op-label').value.trim() || 'Otro') : l);
+      var freq = fsel.value, dur = +p.querySelector('#op-dur').value;
       var from = p.querySelector('#op-from').value, to = p.querySelector('#op-to').value;
       if(!from || !to) return err('Completá el horario.');
       if(t2m(from) >= t2m(to)) return err('La hora de fin tiene que ser posterior a la de inicio.');
       var ini = p.querySelector('#op-ini').value, fin = p.querySelector('#op-fin').value;
       if(ini && !anioOk(ini) || fin && !anioOk(fin)) return err('Revisá el año de las fechas.');
+      var base = function(o){ if(video){ o.video = true; o.dur = dur; } else { delete o.video; delete o.dur; } return o; };
+      var poner = function(viejo, nuevoB){
+        var dest = video ? O.disp : O.nl;
+        if(viejo && arr(viejo) === dest){ dest[dest.indexOf(viejo)] = nuevoB; return; }
+        if(viejo) quitar(viejo); dest.push(nuevoB);
+      };
       if(freq === 'unico'){
         if(!ini) return err('Elegí la fecha.');
         if(diaDe(ini) > 5) return err('Ese día es domingo: la agenda va de lunes a sábado.');
-        var nb = { prof: O.prof, day: diaDe(ini), from: from, to: to, label: label, freq: 'unico', startDate: ini };
-        if(b) O.nl[O.nl.indexOf(b)] = Object.assign({}, b, nb, { endDate: undefined }); else O.nl.push(nb);
+        var nb = base(Object.assign({}, b || {}, { prof: O.prof, day: diaDe(ini), from: from, to: to, label: label, freq: 'unico', startDate: ini }));
+        delete nb.endDate; poner(b, nb);
         close(); cambio(); return;
       }
       var dias = Array.prototype.map.call(p.querySelectorAll('.dsp-dias input:checked'), function(c){ return +c.value; });
       if(!dias.length) return err('Elegí ' + (nuevo ? 'al menos un día' : 'el día') + '.');
       if(ini && fin && fin < ini) return err('La fecha de fin es anterior a la de inicio.');
       var armar = function(d){ var st = ini || ''; if(st && freq !== 'semanal'){ var n = 0; while(diaDe(st) !== d && n++ < 7) st = mas1(st); }
-        var x = { prof: O.prof, day: d, from: from, to: to, label: label, freq: freq, startDate: st }; if(fin) x.endDate = fin; return x; };
-      if(b){ var nb2 = Object.assign({}, b, armar(dias[0])); if(!fin) delete nb2.endDate; O.nl[O.nl.indexOf(b)] = nb2; }
-      else dias.forEach(function(d){ O.nl.push(armar(d)); });
+        var x = base(Object.assign({}, b || {}, { prof: O.prof, day: d, from: from, to: to, label: label, freq: freq, startDate: st })); if(fin) x.endDate = fin; else delete x.endDate; return x; };
+      if(b) poner(b, armar(dias[0]));
+      else dias.forEach(function(d){ poner(null, armar(d)); });
       close(); cambio();
     };
   }
@@ -25063,6 +25102,495 @@ window._dspAbrirLista=function(){
   }
   if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', enganchar); else enganchar();
   setTimeout(enganchar, 1500);
+})();
+
+
+/* ══ Agenda · colores por lugar (vista mensual, Otros lugares) ══ */
+(function(){
+  var LCOL = { Sapiens:'#F59E0B', CEM:'#14B8A6', CEQ:'#0EA5E9' };
+  var PAL = ['#EC4899','#84CC16','#A855F7','#F97316','#06B6D4','#64748B'];
+  window._agLugarColor = function(b, tipo){
+    if(tipo === 'inst') return '#6B7280';
+    if(tipo === 'disp') return b.video ? '#7B3FC4' : '#55B474';
+    if(b.ausencia) return '#EF4444';
+    if(LCOL[b.label]) return LCOL[b.label];
+    var h = 0, s = String(b.label || ''); for(var i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+    return PAL[h % PAL.length];
+  };
+})();
+
+/* ══ Agenda › 🏛 Institucional, con el mismo editor ══
+   Congresos, feriados, cierres: cierran TODAS las agendas (las ve la Secretaría, pero no las cambia).
+   Un cierre puede ser un día o un período, todo el día o algunas horas. Se guarda un bloque por día
+   (freq 'unico'), agrupados con "grupo", así la agenda, la Secretaría y la página de pacientes no cambian. */
+(function(){
+  var I = { inst:[], cambios:false, venc:false };
+  var DL = ['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'];
+  var E = function(t){ return String(t == null ? '' : t).replace(/[&<>"]/g, function(c){ return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' }[c]; }); };
+  var hoy = function(){ return new Date().toLocaleDateString('sv-SE', { timeZone:'America/Argentina/Buenos_Aires' }); };
+  var diaDe = function(f){ return (new Date(f + 'T12:00:00').getDay() + 6) % 7; };
+  var mas1 = function(f){ var d = new Date(f + 'T12:00:00'); d.setDate(d.getDate() + 1); return d.toLocaleDateString('sv-SE'); };
+  var fF = function(f){ var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(f || ''); return m ? m[3] + '/' + m[2] + '/' + m[1] : ''; };
+  var anioOk = function(f){ var y = +String(f).slice(0, 4); return y >= 2000 && y <= 2100; };
+  var TD_FROM = '07:00', TD_TO = '22:00';
+  var esTodoDia = function(b){ return !!b.todoDia || (t2m(b.from) <= t2m(TD_FROM) && t2m(b.to) >= t2m(TD_TO)); };
+
+  function grupos(){
+    var g = {};
+    I.inst.forEach(function(b, i){
+      var k = b.grupo || ('i' + i);
+      if(!g[k]) g[k] = { k:k, label:b.label || '', desde:b.startDate, hasta:b.startDate, from:b.from, to:b.to, todoDia:esTodoDia(b), items:[] };
+      var x = g[k]; x.items.push(b);
+      if((b.startDate || '') < (x.desde || '')) x.desde = b.startDate;
+      if((b.startDate || '') > (x.hasta || '')) x.hasta = b.startDate;
+    });
+    return Object.keys(g).map(function(k){ return g[k]; })
+      .filter(function(x){ return I.venc || (x.hasta || '') >= hoy(); })
+      .sort(function(a, b){ return (a.desde || '').localeCompare(b.desde || ''); });
+  }
+  function abrir(bl){
+    I.inst = instBlocks.map(function(b){ return JSON.parse(JSON.stringify(b)); }); I.cambios = false;
+    var bg = document.getElementById('ins-bg');
+    if(!bg){
+      bg = document.createElement('div'); bg.id = 'ins-bg'; bg.className = 'dsp-bg';
+      bg.innerHTML = '<div class="dsp-modal" role="dialog" aria-modal="true"><div class="dsp-head"><span style="font-size:22px">🏛</span><div><h3>Institucional</h3>'
+        + '<div class="dsp-sub">Congresos, feriados, cierres: <b>cierran todas las agendas</b> (no se dan turnos, tampoco online). La Secretaría los ve, pero no los cambia.</div></div>'
+        + '<button type="button" class="dsp-x" aria-label="Cerrar">✕</button></div><div class="dsp-body" id="ins-body"></div>'
+        + '<div class="dsp-foot"><span style="flex:1"></span><button type="button" class="dsp-btn sec" id="ins-cancel">Cancelar</button><button type="button" class="dsp-btn" id="ins-save">Guardar cambios</button></div></div>';
+      document.body.appendChild(bg);
+      bg.querySelector('.dsp-x').onclick = cerrar; document.getElementById('ins-cancel').onclick = cerrar;
+      bg.addEventListener('mousedown', function(e){ if(e.target === bg) cerrar(); });
+      document.getElementById('ins-save').onclick = guardar;
+    }
+    bg.style.display = 'flex'; render();
+    if(window._agHubTabs) window._agHubTabs('inst');
+    if(bl && typeof bl === 'object'){
+      var k = JSON.stringify(bl), b = I.inst.find(function(x){ return JSON.stringify(x) === k; });
+      if(b){
+        var bus = function(){ return grupos().find(function(x){ return x.items.indexOf(b) >= 0; }); };
+        var g = bus(); if(!g){ I.venc = true; g = bus(); }
+        render(); if(g) editar(g);
+      }
+    }
+  }
+  function cerrar(){ if(I.cambios && !confirm('¿Cerrar sin guardar los cambios?')) return; I.cambios = false; document.getElementById('ins-bg').style.display = 'none'; }
+  function guardar(){
+    instBlocks = I.inst.slice(); saveLocal(); I.cambios = false;
+    document.getElementById('ins-bg').style.display = 'none'; renderGrid();
+    var t = document.getElementById('urcym-save-ok-toast'); if(t){ t.textContent = '✓ Cierres institucionales guardados'; t.style.display = 'block'; setTimeout(function(){ t.style.display = 'none'; }, 2500); }
+    return true;
+  }
+  function cambio(){ I.cambios = true; render(); }
+  window._insEstado = { cambios: function(){ return I.cambios; }, guardar: guardar, descartar: function(){ I.cambios = false; var bg = document.getElementById('ins-bg'); if(bg) bg.style.display = 'none'; } };
+
+  function render(){
+    var gs = grupos(), body = document.getElementById('ins-body');
+    body.innerHTML = '<p class="dsp-ayuda">Tocá un cierre para cambiar las fechas, el horario o el motivo, o para borrarlo.</p>'
+      + (gs.length ? gs.map(function(g, i){
+          var fechas = g.hasta && g.hasta !== g.desde ? DL[diaDe(g.desde)].slice(0, 3) + ' ' + fF(g.desde) + ' al ' + DL[diaDe(g.hasta)].slice(0, 3) + ' ' + fF(g.hasta) : DL[diaDe(g.desde)] + ' ' + fF(g.desde);
+          return '<button type="button" class="dsp-exc-item ins-item' + ((g.hasta || '') < hoy() ? ' venc' : '') + '" data-ig="' + E(g.k) + '"><b>🏛 ' + E(g.label || 'Cierre institucional') + '</b><span>' + fechas + ' · ' + (g.todoDia ? 'todo el día' : E(g.from) + '–' + E(g.to)) + '</span></button>';
+        }).join('') : '<div class="dsp-vacio">No hay cierres institucionales cargados.</div>')
+      + '<button type="button" class="dsp-btn" id="ins-nuevo" style="margin-top:12px">+ Nuevo cierre (día o período)</button>'
+      + '<label class="dsp-venc"><input type="checkbox" id="ins-venc"' + (I.venc ? ' checked' : '') + '> Mostrar también los pasados</label>';
+    body.querySelectorAll('[data-ig]').forEach(function(c){ c.onclick = function(){ var g = grupos().find(function(x){ return x.k === c.dataset.ig; }); if(g) editar(g); }; });
+    document.getElementById('ins-nuevo').onclick = function(){ editar(null); };
+    document.getElementById('ins-venc').onchange = function(){ I.venc = this.checked; render(); };
+  }
+  function editar(g){
+    var nuevo = !g, td = g ? g.todoDia : true;
+    var p = document.createElement('div'); p.className = 'dsp-panel-bg';
+    p.innerHTML = '<div class="dsp-panel"><h4>' + (nuevo ? 'Nuevo cierre institucional' : 'Cambiar cierre') + '</h4>'
+      + '<label>Motivo <small>(se ve en todas las agendas)</small></label><input type="text" id="ip-label" value="' + E(g ? g.label : '') + '" placeholder="Ej.: Feriado, Congreso SAC, Vacaciones de URCyM">'
+      + '<div class="dsp-fila"><div><label>Desde</label><input type="date" id="ip-desde" value="' + E(g ? g.desde : hoy()) + '"></div><div><label>Hasta <small>(si es más de un día)</small></label><input type="date" id="ip-hasta" value="' + E(g && g.hasta !== g.desde ? g.hasta : '') + '"></div></div>'
+      + '<label class="dsp-check"><input type="checkbox" id="ip-td"' + (td ? ' checked' : '') + '> Todo el día</label>'
+      + '<div class="dsp-fila" id="ip-hs"><div><label>Desde la hora</label><input type="time" id="ip-from" value="' + E(g && !td ? g.from : '08:00') + '"></div><div><label>Hasta la hora</label><input type="time" id="ip-to" value="' + E(g && !td ? g.to : '13:00') + '"></div></div>'
+      + '<div class="dsp-acc">' + (nuevo ? '' : '<button type="button" class="dsp-btn peligro" data-del>Borrar</button>') + '<span style="flex:1"></span><button type="button" class="dsp-btn sec" data-c>Cancelar</button><button type="button" class="dsp-btn" data-ok>' + (nuevo ? 'Agregar' : 'Listo') + '</button></div>'
+      + '<div class="dsp-err" id="ip-err"></div></div>';
+    document.body.appendChild(p);
+    var close = function(){ p.remove(); }, err = function(m){ p.querySelector('#ip-err').textContent = m; };
+    p.addEventListener('mousedown', function(e){ if(e.target === p) close(); });
+    var tdc = p.querySelector('#ip-td'), aj = function(){ p.querySelector('#ip-hs').style.display = tdc.checked ? 'none' : ''; }; tdc.onchange = aj; aj();
+    p.querySelector('[data-c]').onclick = close;
+    var quitarGrupo = function(){ I.inst = I.inst.filter(function(b){ return g.items.indexOf(b) < 0; }); };
+    var del = p.querySelector('[data-del]'); if(del) del.onclick = function(){ if(!confirm('¿Borrar el cierre "' + (g.label || 'institucional') + '"?')) return; quitarGrupo(); close(); cambio(); };
+    p.querySelector('[data-ok]').onclick = function(){
+      var label = p.querySelector('#ip-label').value.trim() || 'Cierre institucional';
+      var desde = p.querySelector('#ip-desde').value, hasta = p.querySelector('#ip-hasta').value || desde;
+      if(!desde) return err('Elegí la fecha.');
+      if(!anioOk(desde) || !anioOk(hasta)) return err('Revisá el año de las fechas.');
+      if(hasta < desde) return err('La fecha "hasta" es anterior a "desde".');
+      var todo = tdc.checked, from = todo ? TD_FROM : p.querySelector('#ip-from').value, to = todo ? TD_TO : p.querySelector('#ip-to').value;
+      if(!todo && (!from || !to || t2m(from) >= t2m(to))) return err('Revisá el horario.');
+      var dias = [], f = desde, n = 0; while(f <= hasta && n++ < 120){ if(diaDe(f) <= 5) dias.push(f); f = mas1(f); }
+      if(!dias.length) return err('Entre esas fechas no hay días de agenda (lunes a sábado).');
+      if(n >= 120) return err('El período es muy largo (más de 4 meses).');
+      if(!nuevo) quitarGrupo();
+      var gid = 'ins' + Date.now().toString(36);
+      dias.forEach(function(ds){ var b = { grupo:gid, label:label, from:from, to:to, freq:'unico', startDate:ds, day:diaDe(ds) }; if(todo) b.todoDia = true; I.inst.push(b); });
+      close(); cambio();
+    };
+  }
+  window._insAbrir = abrir;
+})();
+
+/* ══ Agenda › un solo botón "🗓️ Horarios y lugares" con tres pestañas ══
+   🏥 Disponibilidad (consultorio: la ve la Secretaría y va al Cierre) · 📍 Otros lugares (solo profesionales)
+   · 🏛 Institucional (cierra todas las agendas). Cada pestaña es su editor de siempre. */
+(function(){
+  var TABS = [
+    { k:'disp', ic:'🏥', t:'Disponibilidad', s:'Consultorio · la ve la Secretaría · va al Cierre', bg:'dsp-bg', est:function(){ return window._dspEstado; }, abrir:function(){ window._dspAbrir && window._dspAbrir(); } },
+    { k:'otros', ic:'📍', t:'Otros lugares', s:'Videollamadas, Sapiens, CEM… · solo profesionales', bg:'otr-bg', est:function(){ return window._otrEstado; }, abrir:function(){ window._otrosAbrir && window._otrosAbrir(); } },
+    { k:'inst', ic:'🏛', t:'Institucional', s:'Congresos, feriados · cierra todas las agendas', bg:'ins-bg', est:function(){ return window._insEstado; }, abrir:function(){ window._insAbrir && window._insAbrir(); } }
+  ];
+  window._agHubTabs = function(activo){
+    var t = TABS.find(function(x){ return x.k === activo; }); if(!t) return;
+    var bg = document.getElementById(t.bg); if(!bg) return;
+    var modal = bg.querySelector('.dsp-modal'), bar = modal.querySelector('.agh-tabs');
+    if(!bar){ bar = document.createElement('div'); bar.className = 'agh-tabs'; modal.insertBefore(bar, modal.firstChild); }
+    bar.innerHTML = TABS.map(function(x){ return '<button type="button" class="agh-tab agh-' + x.k + (x.k === activo ? ' on' : '') + '" data-agh="' + x.k + '"><b>' + x.ic + ' ' + x.t + '</b><span>' + x.s + '</span></button>'; }).join('');
+    bar.querySelectorAll('[data-agh]').forEach(function(b){ b.onclick = function(){
+      var dest = TABS.find(function(x){ return x.k === b.dataset.agh; }); if(!dest || dest.k === activo) return;
+      var est = t.est();
+      if(est && est.cambios()){
+        if(confirm('Tenés cambios sin guardar en ' + t.t + '.\n\nAceptar: guardarlos y seguir.\nCancelar: quedarte acá.')){ if(est.guardar() === false) return; }
+        else return;
+      } else if(est) est.descartar();
+      dest.abrir();
+    }; });
+  };
+  function init(){
+    var d = document.getElementById('ag-btn-disp'); if(!d) return;
+    if(!d._agh){ d._agh = true; d.innerHTML = '🗓️ Horarios y lugares'; d.title = 'Disponibilidad del consultorio, otros lugares (videollamadas, Sapiens, CEM…) y cierres institucionales'; }
+    ['ag-btn-nl', 'ag-btn-inst'].forEach(function(id){ var b = document.getElementById(id); if(b) b.style.setProperty('display', 'none', 'important'); });
+  }
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
+  setTimeout(init, 1600); setTimeout(init, 4000);
+})();
+
+/* ══ Agenda › 📆 Vista mensual: franjas de colores por lugar / actividad ══ */
+(function(){
+  var M = { on:false, y:0, m:0 };
+  var MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+  var DCORTO = ['Lun','Mar','Mié','Jue','Vie','Sáb'];
+  var INI = { BG:'G', OB:'B', MA:'M' };
+  var E = function(t){ return String(t == null ? '' : t).replace(/[&<>"]/g, function(c){ return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' }[c]; }); };
+  var hh = function(t){ var p = String(t || '').split(':'); return +p[0] + (p[1] && p[1] !== '00' ? ':' + p[1] : ''); };
+  var col = function(b, t){ return window._agLugarColor ? window._agLugarColor(b, t) : '#999'; };
+  var LUG_NOMBRE = { Sapiens:'Sapiens', CEM:'CEM', CEQ:'CEQ' };
+
+  function profs(){
+    var f = (typeof profFilter !== 'undefined' && profFilter && profFilter.length) ? profFilter.slice() : ['BG','OB','MA'];
+    return f.filter(function(p){ return ['BG','OB','MA'].indexOf(p) >= 0; });
+  }
+  function items(ds){
+    var sec = _esSecretariaLogueada(), out = [], ps = profs();
+    instBlocks.forEach(function(b){ if(b.startDate === ds || isBlockActiveOnDate(b, ds)) out.push({ inst:true, f:b.from, t:b.to, txt:'🏛 ' + (b.label || 'Cierre'), c:col(b, 'inst'), td:!!b.todoDia || (t2m(b.from) <= 420 && t2m(b.to) >= 1320) }); });
+    var imps = (!sec && window._impDelDia) ? window._impDelDia(ds).map(function(ev){ return { imp:true, f:ev.hora || '00:00', t:ev.horaFin || ev.hora || '', txt:'⭐ ' + ev.titulo, c:'#EAB308', td:!ev.hora }; }) : [];
+    if(out.some(function(i){ return i.td; })) return out.concat(imps);   // cierre institucional todo el día: solo eso (y los importantes)
+    ps.forEach(function(p){
+      var aus = nlBlocks.filter(function(b){ return b.prof === p && b.ausencia && isBlockActiveOnDate(b, ds); });
+      var ausTodo = aus.some(function(b){ return b.todoDia; });
+      aus.forEach(function(b){ out.push({ p:p, f:b.todoDia ? '00:00' : b.from, t:b.to, txt:'No atiende' + (b.label && !sec ? ' · ' + b.label : ''), c:col(b, 'nl'), td:!!b.todoDia }); });
+      if(ausTodo) return;
+      dispBlocks.forEach(function(b){
+        if(b.prof !== p || !isBlockActiveOnDate(b, ds)) return;
+        if(b.video && sec) return;
+        out.push({ p:p, f:getEffectiveFrom(b, ds), t:getEffectiveTo(b, ds), txt:b.video ? 'Video' : 'Consultorio', c:col(b, 'disp') });
+      });
+      if(!sec) nlBlocks.forEach(function(b){
+        if(b.prof !== p || b.ausencia || !isBlockActiveOnDate(b, ds)) return;
+        out.push({ p:p, f:b.from, t:b.to, txt:LUG_NOMBRE[b.label] || b.label || 'Otro', c:col(b, 'nl') });
+      });
+    });
+    out = out.concat(imps);
+    return out.sort(function(a, b){ return (b.inst ? 1 : 0) - (a.inst ? 1 : 0) || (b.imp ? 1 : 0) - (a.imp ? 1 : 0) || t2m(a.f) - t2m(b.f); });
+  }
+  function cuentaTurnos(){
+    var sec = _esSecretariaLogueada(), ps = profs(), c = {};
+    Object.keys(turnos || {}).forEach(function(k){
+      var pr = k.split('_'), t = turnos[k]; if(!t || ps.indexOf(pr[2]) < 0) return;
+      if(sec && (t.video || t.esVideo)) return;
+      c[pr[0]] = (c[pr[0]] || 0) + 1;
+    });
+    return c;
+  }
+  function pintar(){
+    var box = document.getElementById('ag-mes'); if(!box) return;
+    var hoyS = kd(new Date()), cnt = cuentaTurnos(), multi = profs().length > 1;
+    var d1 = new Date(M.y, M.m, 1), lun = getMonday(d1), fin = new Date(M.y, M.m + 1, 0);
+    var x = '<div class="mv-grid"><div class="mv-h">' + DCORTO.map(function(d){ return '<div>' + d + '</div>'; }).join('') + '</div>';
+    var d = new Date(lun);
+    while(d <= fin || diOf(kd(d)) !== 0){
+      if(diOf(kd(d)) === 0) x += '<div class="mv-row">';
+      var ds = kd(d), di = diOf(ds);
+      if(di <= 5){
+        var its = items(ds), fuera = d.getMonth() !== M.m, max = 4;
+        x += '<button type="button" class="mv-c' + (fuera ? ' fuera' : '') + (ds === hoyS ? ' hoy' : '') + (its.some(function(i){ return i.inst && i.td; }) ? ' cerrado' : '') + '" data-mvd="' + ds + '">'
+          + '<div class="mv-n"><span>' + d.getDate() + '</span>' + (cnt[ds] ? '<em title="Turnos dados">' + cnt[ds] + ' turno' + (cnt[ds] > 1 ? 's' : '') + '</em>' : '') + '</div>'
+          + its.slice(0, max).map(function(i){ return '<div class="mv-b" style="--c:' + i.c + '">' + (multi && i.p ? '<i>' + INI[i.p] + '</i>' : '') + (i.td ? '' : '<small>' + hh(i.f) + '–' + hh(i.t) + '</small>') + E(i.txt) + '</div>'; }).join('')
+          + (its.length > max ? '<div class="mv-mas">+' + (its.length - max) + ' más</div>' : '') + '</button>';
+      }
+      if(di === 6) x += '</div>';
+      d.setDate(d.getDate() + 1);
+      if(diOf(kd(d)) === 0 && d > fin) break;
+    }
+    x += '</div>';
+    var sec = _esSecretariaLogueada();
+    var ley = [['#55B474', 'Consultorio']].concat(sec ? [] : [['#7B3FC4', 'Videollamada'], ['#F59E0B', 'Sapiens'], ['#14B8A6', 'CEM'], ['#0EA5E9', 'CEQ'], ['#EC4899', 'Otros (cada uno su color)']]).concat([['#EF4444', 'No atiende'], ['#6B7280', 'Institucional']]).concat(sec ? [] : [['#EAB308', '⭐ Importante']]);
+    x += '<div class="mv-ley">' + ley.map(function(l){ return '<span><b style="background:' + l[0] + '"></b>' + l[1] + '</span>'; }).join('') + (multi ? '<span class="mv-ley-p">G = Guerrero · B = Bertani · M = MAPA</span>' : '') + '<span class="mv-ley-p">Tocá un día para ir a esa semana</span></div>';
+    box.innerHTML = x;
+    box.querySelectorAll('[data-mvd]').forEach(function(c){ c.onclick = function(){
+      var ds = c.dataset.mvd; salir();
+      currentMonday = getMonday(parseLocalDate(ds));
+      if(_esSecretariaLogueada()) currentMonday = agClampMonday(currentMonday);
+      if(typeof agEsMovil === 'function' && agEsMovil()) agDiaIdx = diOf(ds);
+      renderGrid();
+    }; });
+    var lb = document.getElementById('ag-week-label'); if(lb) lb.textContent = MESES[M.m] + ' ' + M.y;
+  }
+  function entrar(){
+    var base = currentMonday ? new Date(currentMonday) : new Date(); base.setDate(base.getDate() + 3);
+    M.on = true; M.y = base.getFullYear(); M.m = base.getMonth();
+    var w = document.querySelector('#agenda-app .ag-grid-wrap'); if(w) w.style.display = 'none';
+    var lg = document.querySelector('#agenda-app .ag-legend'); if(lg) lg.style.display = 'none';
+    var box = document.getElementById('ag-mes'); if(box) box.style.display = '';
+    boton(); pintar();
+  }
+  function salir(){
+    M.on = false;
+    var w = document.querySelector('#agenda-app .ag-grid-wrap'); if(w) w.style.display = '';
+    var lg = document.querySelector('#agenda-app .ag-legend'); if(lg) lg.style.display = '';
+    var box = document.getElementById('ag-mes'); if(box) box.style.display = 'none';
+    boton();
+  }
+  function boton(){
+    var b = document.getElementById('ag-btn-mes'); if(!b) return;
+    b.textContent = M.on ? '🗓 Semana' : '📆 Mes'; b.title = M.on ? 'Volver a la semana' : 'Ver el mes con franjas de colores por lugar';
+  }
+  function init(){
+    var nav = document.querySelector('#agenda-app .ag-week-nav'), wrap = document.querySelector('#agenda-app .ag-grid-wrap');
+    if(!nav || !wrap) return;
+    if(!document.getElementById('ag-btn-mes')){
+      var b = document.createElement('button'); b.id = 'ag-btn-mes'; b.type = 'button'; b.style.fontSize = '12px';
+      b.onclick = function(){ if(M.on){ salir(); renderGrid(); } else entrar(); };
+      nav.appendChild(b); boton();
+      var box = document.createElement('div'); box.id = 'ag-mes'; box.style.display = 'none'; wrap.parentNode.insertBefore(box, wrap);
+      // Con el mes abierto, ‹ › y "Hoy" mueven el mes
+      nav.addEventListener('click', function(e){
+        if(!M.on) return; var t = e.target.closest('button'); if(!t || t.id === 'ag-btn-mes') return;
+        if(t.id === 'ag-prev' || t.id === 'ag-next' || t.id === 'ag-today-btn'){
+          e.stopPropagation(); e.preventDefault();
+          if(t.id === 'ag-today-btn'){ var n = new Date(); M.y = n.getFullYear(); M.m = n.getMonth(); }
+          else { M.m += t.id === 'ag-next' ? 1 : -1; if(M.m < 0){ M.m = 11; M.y--; } if(M.m > 11){ M.m = 0; M.y++; } }
+          pintar();
+        }
+      }, true);
+    }
+  }
+  // Si la agenda se redibuja (refresco automático, cambio de filtro) con el mes abierto, se repinta el mes
+  var _rg = renderGrid;
+  renderGrid = function(){ var r = _rg.apply(this, arguments); if(M.on){ pintar(); } return r; };
+  if(window.renderGrid === _rg) window.renderGrid = renderGrid;
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
+  setTimeout(init, 1500);
+})();
+
+
+/* ══ Agenda › 📌 Importante: zoom, webinar, clase, congreso, entregas ══
+   Lo ven los dos profesionales (la Secretaría no). Se guarda en urcym_agenda_config, clave 'importantes'.
+   Cada importante: título, tipo, de quién (Guerrero / Bertani / los dos), fecha (o período), hora, link y notas.
+   Se ve arriba de ese día en la semana, con ⭐ en el mes y en "Próximos importantes" del Inicio.
+   Opcional: "Bloquear turnos" crea un bloque en Otros lugares (con impId) para ese horario. */
+(function(){
+  var KEY = 'importantes', LSK = 'urcym_ag_imp';
+  var TIPOS = { zoom:['🎥','Zoom / Meet'], webinar:['📡','Webinar'], clase:['🎓','Clase'], congreso:['🏛','Congreso / jornada'], reunion:['👥','Reunión'], entrega:['📝','Entrega / fecha límite'], otro:['⭐','Otro'] };
+  var QUIEN = { BG:'Guerrero', OB:'Bertani', ambos:'Los dos' };
+  var IMP = []; try { IMP = JSON.parse(localStorage.getItem(LSK) || '[]'); } catch(e){ IMP = []; }
+  var S = { venc:false };
+  var E = function(t){ return String(t == null ? '' : t).replace(/[&<>"]/g, function(c){ return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' }[c]; }); };
+  var hoy = function(){ return new Date().toLocaleDateString('sv-SE', { timeZone:'America/Argentina/Buenos_Aires' }); };
+  var mas1 = function(f){ var d = new Date(f + 'T12:00:00'); d.setDate(d.getDate() + 1); return d.toLocaleDateString('sv-SE'); };
+  var diaDe = function(f){ return (new Date(f + 'T12:00:00').getDay() + 6) % 7; };
+  var DL = ['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'];
+  var fCorta = function(f){ var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(f || ''); return m ? DL[diaDe(f)] + ' ' + m[3] + '/' + m[2] : ''; };
+  var esProf = function(){ return !(window._cu && window._cu.secretaria); };
+  var link = function(u){ u = String(u || '').trim(); if(!u) return ''; return /^https?:\/\//i.test(u) ? u : 'https://' + u; };
+  var hasta = function(ev){ return ev.hasta && ev.hasta > ev.fecha ? ev.hasta : ev.fecha; };
+  var cuando = function(ev){ return (ev.hora ? ev.hora + (ev.horaFin ? '–' + ev.horaFin : '') : 'todo el día'); };
+  window._impDelDia = function(ds){ if(!esProf()) return []; return IMP.filter(function(ev){ return ev.fecha <= ds && ds <= hasta(ev); }).sort(function(a, b){ return (a.hora || '00').localeCompare(b.hora || '00'); }); };
+
+  async function cargar(){
+    if(typeof sb === 'undefined' || !sb) return IMP;
+    try {
+      var r = await sb.from('urcym_agenda_config').select('value').eq('key', KEY).maybeSingle();
+      if(!r.error){ IMP = r.data && r.data.value ? JSON.parse(r.data.value) : []; try { localStorage.setItem(LSK, JSON.stringify(IMP)); } catch(e){} }
+    } catch(e){}
+    return IMP;
+  }
+  // Guarda leyendo antes lo último (así no se pisa lo que cargó el otro profesional)
+  async function guardarEv(ev, borrar){
+    await cargar();
+    var i = IMP.findIndex(function(x){ return x.id === ev.id; });
+    if(borrar){ if(i >= 0) IMP.splice(i, 1); } else if(i >= 0) IMP[i] = ev; else IMP.push(ev);
+    var lim = new Date(Date.now() - 400 * 86400e3).toLocaleDateString('sv-SE');
+    IMP = IMP.filter(function(x){ return hasta(x) >= lim; });     // lo de hace más de un año se limpia
+    try { localStorage.setItem(LSK, JSON.stringify(IMP)); } catch(e){}
+    var r = await sb.from('urcym_agenda_config').upsert({ key:KEY, value:JSON.stringify(IMP) }, { onConflict:'key' });
+    if(r.error) throw r.error;
+    // Bloqueo de turnos ligado (en Otros lugares)
+    nlBlocks = nlBlocks.filter(function(b){ return b.impId !== ev.id; });
+    if(!borrar && ev.bloquea){
+      var profs = ev.quien === 'ambos' ? ['BG','OB'] : [ev.quien], f = ev.fecha, n = 0;
+      while(f <= hasta(ev) && n++ < 60){
+        if(diaDe(f) <= 5) profs.forEach(function(p){ nlBlocks.push({ prof:p, day:diaDe(f), from:ev.hora || '07:00', to:ev.horaFin || (ev.hora ? ev.hora : '22:00'), label:'📌 ' + ev.titulo, freq:'unico', startDate:f, impId:ev.id }); });
+        f = mas1(f);
+      }
+      nlBlocks.forEach(function(b){ if(b.impId === ev.id && t2m(b.to) <= t2m(b.from)) b.to = String(Math.min(23, +b.from.slice(0, 2) + 1)).padStart(2, '0') + ':' + b.from.slice(3); });
+    }
+    saveLocal(); renderGrid(); pintarTodo();
+  }
+
+  /* ── Ventana principal ── */
+  function abrir(){
+    var bg = document.getElementById('imp-bg');
+    if(!bg){
+      bg = document.createElement('div'); bg.id = 'imp-bg'; bg.className = 'dsp-bg';
+      bg.innerHTML = '<div class="dsp-modal" role="dialog" aria-modal="true" style="width:820px"><div class="dsp-head"><span style="font-size:22px">📌</span><div><h3>Importante</h3>'
+        + '<div class="dsp-sub">Zoom, webinars, clases, congresos, entregas. Lo ven los dos profesionales (la Secretaría no).</div></div>'
+        + '<button type="button" class="dsp-x" aria-label="Cerrar">✕</button></div><div class="dsp-body" id="imp-body"></div>'
+        + '<div class="dsp-foot"><span style="flex:1"></span><button type="button" class="dsp-btn" id="imp-nuevo">+ Agregar importante</button></div></div>';
+      document.body.appendChild(bg);
+      var c = function(){ bg.style.display = 'none'; };
+      bg.querySelector('.dsp-x').onclick = c; bg.addEventListener('mousedown', function(e){ if(e.target === bg) c(); });
+      document.getElementById('imp-nuevo').onclick = function(){ editar(null); };
+    }
+    bg.style.display = 'flex'; render(); cargar().then(render);
+  }
+  function itemHtml(ev){
+    var t = TIPOS[ev.tipo] || TIPOS.otro, pas = hasta(ev) < hoy();
+    var fecha = fCorta(ev.fecha) + (hasta(ev) !== ev.fecha ? ' al ' + fCorta(hasta(ev)) : '');
+    return '<div class="imp-it' + (pas ? ' venc' : '') + (ev.tipo === 'entrega' ? ' entrega' : '') + '" data-iev="' + E(ev.id) + '"><div class="imp-ic">' + t[0] + '</div>'
+      + '<div class="imp-tx"><b>' + E(ev.titulo) + '</b><span>' + fecha + ' · ' + E(cuando(ev)) + ' · <em class="imp-q ' + E(ev.quien) + '">' + E(QUIEN[ev.quien] || '') + '</em>' + (ev.bloquea ? ' · 🔒 bloquea turnos' : '') + '</span>'
+      + (ev.notas ? '<i>' + E(ev.notas) + '</i>' : '') + '</div>'
+      + (ev.link ? '<a class="imp-unir" href="' + E(link(ev.link)) + '" target="_blank" rel="noopener">Unirme ↗</a>' : '') + '</div>';
+  }
+  function render(){
+    var body = document.getElementById('imp-body'); if(!body) return;
+    var lista = IMP.filter(function(ev){ return S.venc || hasta(ev) >= hoy(); }).sort(function(a, b){ return (a.fecha + (a.hora || '')).localeCompare(b.fecha + (b.hora || '')); });
+    var x = '', mesAnt = '';
+    lista.forEach(function(ev){
+      var mes = new Date(ev.fecha + 'T12:00:00').toLocaleDateString('es-AR', { month:'long', year:'numeric' });
+      if(mes !== mesAnt){ x += '<div class="imp-mes">' + mes + '</div>'; mesAnt = mes; }
+      x += itemHtml(ev);
+    });
+    body.innerHTML = (x || '<div class="dsp-vacio" style="padding:20px 0">No hay importantes cargados. Tocá <b>+ Agregar importante</b>.</div>')
+      + '<label class="dsp-venc"><input type="checkbox" id="imp-venc"' + (S.venc ? ' checked' : '') + '> Mostrar también los pasados</label>';
+    body.querySelectorAll('[data-iev]').forEach(function(it){ it.onclick = function(e){ if(e.target.closest('a')) return; var ev = IMP.find(function(x){ return x.id === it.dataset.iev; }); if(ev) editar(ev); }; });
+    document.getElementById('imp-venc').onchange = function(){ S.venc = this.checked; render(); };
+  }
+  function editar(ev, fechaIni){
+    var nuevo = !ev, yo = window._su === 'omar' ? 'OB' : 'BG';
+    ev = ev || { tipo:'zoom', quien:yo, fecha:fechaIni || hoy() };
+    var p = document.createElement('div'); p.className = 'dsp-panel-bg';
+    p.innerHTML = '<div class="dsp-panel" style="width:520px"><h4>' + (nuevo ? 'Nuevo importante' : 'Importante') + '</h4>'
+      + '<label>Qué es</label><div class="dsp-seg imp-tipos">' + Object.keys(TIPOS).map(function(k){ return '<label><input type="radio" name="ie-tipo" value="' + k + '"' + (ev.tipo === k ? ' checked' : '') + '> ' + TIPOS[k][0] + ' ' + TIPOS[k][1] + '</label>'; }).join('') + '</div>'
+      + '<label>Título</label><input type="text" id="ie-tit" value="' + E(ev.titulo || '') + '" placeholder="Ej.: Webinar SAHA · HTA en la mujer">'
+      + '<label>De quién</label><div class="dsp-seg">' + Object.keys(QUIEN).map(function(k){ return '<label><input type="radio" name="ie-q" value="' + k + '"' + (ev.quien === k ? ' checked' : '') + '> ' + QUIEN[k] + '</label>'; }).join('') + '</div>'
+      + '<div class="dsp-fila"><div><label>Fecha</label><input type="date" id="ie-f" value="' + E(ev.fecha || '') + '"></div><div><label>Hasta <small>(si dura varios días)</small></label><input type="date" id="ie-h" value="' + E(ev.hasta && ev.hasta !== ev.fecha ? ev.hasta : '') + '"></div></div>'
+      + '<div class="dsp-fila"><div><label>Hora <small>(vacío = todo el día)</small></label><input type="time" id="ie-hi" value="' + E(ev.hora || '') + '"></div><div><label>Hasta la hora</label><input type="time" id="ie-hf" value="' + E(ev.horaFin || '') + '"></div></div>'
+      + '<label>Link <small>(Zoom, Meet, YouTube, inscripción…)</small></label><input type="text" id="ie-l" value="' + E(ev.link || '') + '" placeholder="https://zoom.us/j/…">'
+      + '<label>Notas <small>(ID, contraseña, qué preparar…)</small></label><textarea id="ie-n" rows="3" style="width:100%;box-sizing:border-box;border:1.5px solid #d1d5db;border-radius:8px;padding:7px 9px;font:inherit">' + E(ev.notas || '') + '</textarea>'
+      + '<label class="dsp-check"><input type="checkbox" id="ie-b"' + (ev.bloquea ? ' checked' : '') + '> Bloquear turnos en ese horario <small style="font-weight:400;color:#6b7280">(no se dan turnos del consultorio ni online)</small></label>'
+      + '<div class="dsp-acc">' + (nuevo ? '' : '<button type="button" class="dsp-btn peligro" data-del>Borrar</button>') + (!nuevo && ev.link ? '<a class="dsp-btn sec" href="' + E(link(ev.link)) + '" target="_blank" rel="noopener" style="text-decoration:none">Unirme ↗</a>' : '')
+      + '<span style="flex:1"></span><button type="button" class="dsp-btn sec" data-c>Cancelar</button><button type="button" class="dsp-btn" data-ok>' + (nuevo ? 'Agregar' : 'Guardar') + '</button></div>'
+      + '<div class="dsp-err" id="ie-err"></div></div>';
+    document.body.appendChild(p);
+    var close = function(){ p.remove(); }, err = function(m){ p.querySelector('#ie-err').textContent = m; };
+    p.addEventListener('mousedown', function(e){ if(e.target === p) close(); });
+    p.querySelector('[data-c]').onclick = close;
+    var ok = p.querySelector('[data-ok]');
+    var del = p.querySelector('[data-del]'); if(del) del.onclick = async function(){
+      if(!confirm('¿Borrar "' + ev.titulo + '"?')) return;
+      del.disabled = true; try { await guardarEv(ev, true); close(); render(); } catch(e){ del.disabled = false; err('No se pudo borrar: ' + (e.message || e)); } };
+    ok.onclick = async function(){
+      var v = function(id){ return p.querySelector(id).value.trim(); };
+      var tipo = (p.querySelector('input[name=ie-tipo]:checked') || {}).value || 'otro';
+      var tit = v('#ie-tit') || (TIPOS[tipo] || TIPOS.otro)[1];
+      var f = v('#ie-f'), h = v('#ie-h'), hi = v('#ie-hi'), hf = v('#ie-hf');
+      if(!f) return err('Elegí la fecha.');
+      if(h && h < f) return err('La fecha "hasta" es anterior a la fecha.');
+      if(hi && hf && t2m(hf) <= t2m(hi)) return err('La hora de fin tiene que ser posterior a la de inicio.');
+      var bloq = p.querySelector('#ie-b').checked;
+      var nv = { id: ev.id || ('imp' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5)), tipo:tipo, titulo:tit, quien:(p.querySelector('input[name=ie-q]:checked') || {}).value || yo,
+        fecha:f, hora:hi, horaFin:hf, link:v('#ie-l'), notas:p.querySelector('#ie-n').value.trim(), bloquea:bloq, autor:yo, actualizado:new Date().toISOString() };
+      if(h && h > f) nv.hasta = h;
+      ok.disabled = true; ok.textContent = 'Guardando…';
+      try { await guardarEv(nv, false); close(); render(); var t = document.getElementById('urcym-save-ok-toast'); if(t){ t.textContent = '✓ Importante guardado'; t.style.display = 'block'; setTimeout(function(){ t.style.display = 'none'; }, 2500); } }
+      catch(e){ ok.disabled = false; ok.textContent = nuevo ? 'Agregar' : 'Guardar'; err('No se pudo guardar: ' + (e.message || e)); }
+    };
+  }
+  window._impAbrir = abrir; window._impEditar = function(id){ var ev = IMP.find(function(x){ return x.id === id; }); if(ev) editar(ev); };
+
+  /* ── Semana: arriba de cada día ── */
+  function pintarSemana(){
+    if(!esProf()) return;
+    document.querySelectorAll('#ag-grid .ag-cell-head[data-ds]').forEach(function(h){
+      h.querySelectorAll('.imp-hd').forEach(function(x){ x.remove(); });
+      window._impDelDia(h.dataset.ds).forEach(function(ev){
+        var d = document.createElement('div'); d.className = 'imp-hd' + (ev.tipo === 'entrega' ? ' entrega' : '');
+        d.title = ev.titulo + ' · ' + cuando(ev) + (ev.link ? ' · tocá para ver el link' : '');
+        d.innerHTML = (TIPOS[ev.tipo] || TIPOS.otro)[0] + ' ' + (ev.hora ? '<small>' + E(ev.hora) + '</small> ' : '') + E(ev.titulo);
+        d.onclick = function(e){ e.stopPropagation(); editar(ev); };
+        h.appendChild(d);
+      });
+    });
+  }
+  /* ── Inicio: próximos importantes ── */
+  function pintarInicio(){
+    var dash = document.getElementById('page-dashboard'); if(!dash) return;
+    var box = document.getElementById('dash-imp');
+    if(!box){ box = document.createElement('div'); box.id = 'dash-imp'; var ref = document.getElementById('dash-pendientes'); if(ref) ref.insertAdjacentElement('afterend', box); else dash.insertBefore(box, dash.firstChild); }
+    if(!esProf()){ box.innerHTML = ''; return; }
+    var h = hoy(), lim = new Date(Date.now() + 14 * 86400e3).toLocaleDateString('sv-SE');
+    var prox = IMP.filter(function(ev){ return hasta(ev) >= h && ev.fecha <= lim; }).sort(function(a, b){ return (a.fecha + (a.hora || '')).localeCompare(b.fecha + (b.hora || '')); }).slice(0, 6);
+    if(!prox.length){ box.innerHTML = ''; return; }
+    var man = mas1(h);
+    box.innerHTML = '<div class="imp-dash"><div class="imp-dash-h"><b>📌 Próximos importantes</b><button type="button" id="imp-dash-ver">Ver todos</button></div>'
+      + prox.map(function(ev){
+          var cu = ev.fecha <= h ? 'Hoy' : ev.fecha === man ? 'Mañana' : fCorta(ev.fecha);
+          return '<div class="imp-dash-it" data-iev="' + E(ev.id) + '"><span class="imp-dash-c' + (cu === 'Hoy' ? ' hoy' : '') + '">' + cu + (ev.hora ? ' · ' + E(ev.hora) : '') + '</span><span class="imp-dash-t">' + (TIPOS[ev.tipo] || TIPOS.otro)[0] + ' ' + E(ev.titulo) + ' <em class="imp-q ' + E(ev.quien) + '">' + E(QUIEN[ev.quien] || '') + '</em></span>'
+            + (ev.link ? '<a class="imp-unir" href="' + E(link(ev.link)) + '" target="_blank" rel="noopener">Unirme ↗</a>' : '') + '</div>';
+        }).join('') + '</div>';
+    box.querySelector('#imp-dash-ver').onclick = abrir;
+    box.querySelectorAll('[data-iev]').forEach(function(it){ it.onclick = function(e){ if(e.target.closest('a')) return; window._impEditar(it.dataset.iev); }; });
+  }
+  function pintarBoton(){
+    var b = document.getElementById('ag-btn-imp');
+    if(!b){
+      var ref = document.getElementById('ag-btn-disp'); if(!ref) return;
+      b = document.createElement('button'); b.type = 'button'; b.id = 'ag-btn-imp'; b.className = 'ag-solo-prof';
+      b.onclick = abrir; ref.insertAdjacentElement('afterend', b);
+    }
+    var h = hoy(), sem = new Date(Date.now() + 7 * 86400e3).toLocaleDateString('sv-SE');
+    var n = IMP.filter(function(ev){ return hasta(ev) >= h && ev.fecha <= sem; }).length;
+    b.innerHTML = '📌 Importante' + (n ? ' <span class="imp-n">' + n + '</span>' : '');
+    b.title = n ? n + ' importante' + (n > 1 ? 's' : '') + ' en los próximos 7 días' : 'Zoom, webinars, clases, congresos, entregas';
+  }
+  function pintarTodo(){ try { pintarBoton(); pintarSemana(); pintarInicio(); } catch(e){ console.warn('[imp]', e); } }
+  window._impPintar = pintarTodo;
+  var _rg2 = renderGrid;
+  renderGrid = function(){ var r = _rg2.apply(this, arguments); try { pintarSemana(); } catch(e){} return r; };
+  if(window.renderGrid === _rg2) window.renderGrid = renderGrid;
+  function init(){ pintarTodo(); cargar().then(pintarTodo); }
+  // Al volver al Inicio (o cambiar de usuario) se repinta
+  if(typeof showPage === 'function' && !showPage._imp){
+    var _sp = showPage;
+    showPage = function(){ var r = _sp.apply(this, arguments); setTimeout(pintarTodo, 50); return r; };
+    showPage._imp = true; window.showPage = showPage;
+  }
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
+  setTimeout(init, 2500);
+  setInterval(function(){ if(esProf()) cargar().then(pintarTodo); }, 5 * 60e3);
 })();
 
 
@@ -44354,11 +44882,169 @@ function _invToggleDroga(key){
 </style>
 
 <style>
-.otr-chip{background:#F3F0FA!important;border-color:#c4b8e6!important;color:#4c3d82!important}
+.otr-chip{background:#F3F0FA!important;border-top-color:#c4b8e6!important;border-right-color:#c4b8e6!important;border-bottom-color:#c4b8e6!important;color:#4c3d82!important}
 .otr-chip b{color:#4c3d82}
-.otr-item{border-left:4px solid #7B6EA6!important}
+.otr-item{border-left:4px solid #7B6EA6}
 .dsp-chip.venc,.otr-item.venc{opacity:.5}
 </style>
 
+<style>
+/* Pestañas: Horarios y lugares */
+.agh-tabs{display:flex;gap:8px;padding:14px 20px 0;background:#f8fafc;border-bottom:1px solid #e5e7eb;border-radius:14px 14px 0 0;flex-wrap:wrap}
+.agh-tab{flex:1;min-width:180px;text-align:left;border:1.5px solid #e5e7eb;border-bottom:none;border-radius:12px 12px 0 0;background:#fff;padding:9px 12px 8px;cursor:pointer;font-family:inherit;color:#374151;opacity:.7;transition:opacity .15s}
+.agh-tab:hover{opacity:1}
+.agh-tab b{display:block;font-size:14px}
+.agh-tab span{display:block;font-size:11px;color:#6b7280;margin-top:2px;font-weight:400}
+.agh-tab.on{opacity:1;box-shadow:inset 0 3px 0 var(--agc)}
+.agh-disp{--agc:#55B474}.agh-otros{--agc:#7B3FC4}.agh-inst{--agc:#6B7280}
+.agh-tab.on.agh-disp{background:#f0fdf4;border-color:#86efac}.agh-tab.on.agh-otros{background:#faf5ff;border-color:#d8b4fe}.agh-tab.on.agh-inst{background:#f3f4f6;border-color:#d1d5db}
+.ins-item{border-left:5px solid #6B7280!important}
+.ins-item.venc{opacity:.5}
+.dsp-check{display:flex!important;align-items:center;gap:8px;margin:10px 0 4px!important;font-weight:600!important;text-transform:none!important;letter-spacing:0!important;font-size:13px!important;color:#374151!important}.dsp-check small{text-transform:none}
+.otr-lug{flex-wrap:wrap}
+@media (max-width:700px){.agh-tab{min-width:0}.agh-tab span{display:none}}
+/* Vista mensual */
+#ag-mes{margin-top:8px}
+.mv-grid{border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;background:#fff}
+.mv-h{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));background:#f8fafc;font-size:12px;font-weight:700;color:#6b7280;text-align:center;padding:6px 0;border-bottom:1px solid #e5e7eb}
+.mv-row{display:grid;grid-template-columns:repeat(6,minmax(0,1fr))}
+.mv-c{min-height:108px;border:none;border-right:1px solid #eef2f5;border-bottom:1px solid #eef2f5;background:#fff;padding:5px 5px 6px;text-align:left;font-family:inherit;cursor:pointer;display:flex;flex-direction:column;gap:3px;min-width:0}
+.mv-c:hover{background:#f8fafc}
+.mv-c.fuera{background:#fafafa}.mv-c.fuera>*{opacity:.45}
+.mv-c.hoy .mv-n span{background:#185FA5;color:#fff;border-radius:999px;padding:0 7px}
+.mv-c.cerrado{background:repeating-linear-gradient(45deg,#f3f4f6,#f3f4f6 6px,#fff 6px,#fff 12px)}
+.mv-n{display:flex;justify-content:space-between;align-items:center;font-size:13px;font-weight:700;color:#374151;margin-bottom:1px}
+.mv-n em{font-style:normal;font-size:10px;font-weight:600;color:#185FA5;background:#e6f1fb;border-radius:999px;padding:0 6px;white-space:nowrap}
+.mv-b{font-size:11px;line-height:1.3;background:color-mix(in srgb,var(--c) 15%,#fff);border-left:4px solid var(--c);border-radius:4px;padding:2px 5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#1f2937}
+.mv-b i{font-style:normal;font-weight:800;margin-right:4px;color:var(--c)}
+.mv-b small{color:#6b7280;margin-right:4px;font-size:10px}
+.mv-mas{font-size:10px;color:#6b7280;padding-left:3px}
+.mv-ley{display:flex;flex-wrap:wrap;gap:8px 14px;font-size:11.5px;color:#4b5563;margin:10px 2px}
+.mv-ley b{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:5px;vertical-align:-2px}
+.mv-ley-p{color:#9ca3af}
+@media (max-width:700px){.mv-c{min-height:80px;padding:3px}.mv-b{font-size:9.5px;padding:1px 3px;border-left-width:3px}.mv-b small,.mv-b i{display:none}.mv-n em{font-size:9px;padding:0 4px}}
+/* Aviso de evoluciones por cerrarse (48 h) */
+#ev48-pill{position:fixed;left:16px;bottom:16px;z-index:9000;border:1.5px solid #f59e0b;background:#fffbeb;color:#92400e;border-radius:999px;padding:8px 15px;font:600 13px/1.2 inherit;font-family:inherit;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.12)}
+#ev48-pill.urg{border-color:#ef4444;background:#fef2f2;color:#991b1b}
+#ev48-panel{position:fixed;left:16px;bottom:62px;z-index:9001;width:min(430px,calc(100vw - 32px));max-height:62vh;overflow:auto;background:#fff;border-radius:14px;box-shadow:0 14px 40px rgba(0,0,0,.2);border:1px solid #e5e7eb;padding:12px 14px;font-family:inherit}
+.ev48-h{display:flex;justify-content:space-between;align-items:center;font-size:15px}
+.ev48-x{border:none;background:none;font-size:16px;cursor:pointer;color:#6b7280}
+.ev48-ay{font-size:12px;color:#6b7280;margin:4px 0 10px}
+.ev48-it{display:flex;gap:10px;align-items:center;justify-content:space-between;border:1px solid #fde68a;background:#fffbeb;border-radius:10px;padding:8px 10px;margin-bottom:6px}
+.ev48-it.urg{border-color:#fca5a5;background:#fef2f2}
+.ev48-n{min-width:0}.ev48-n>b{display:block;font-size:13.5px}.ev48-n span{font-size:12px;color:#4b5563}
+.ev48-a{display:flex;gap:6px;flex-shrink:0}
+.ev48-a button{border:1.5px solid #185FA5;background:#fff;color:#185FA5;border-radius:8px;padding:4px 10px;font:600 12px inherit;font-family:inherit;cursor:pointer}
+.ev48-a button.ok{border-color:#16a34a;color:#16a34a}
+</style>
+
+<script>
+/* ══ Aviso: evoluciones que se cierran a las 48 h ══
+   Cada profesional ve, abajo a la izquierda, cuántas de SUS evoluciones (de pacientes con plazo de 48 h)
+   todavía se pueden editar y cuánto les falta para cerrarse, para completarlas antes de que se olvide.
+   "✓ Está completa" la saca de la lista (solo en esta compu). */
+(function(){
+  var MS48 = (typeof EVOL_HORAS_EDICION !== 'undefined' ? EVOL_HORAS_EDICION : 48) * 3600e3;
+  var LS = 'urcym-evol48-ok', lista = [], ultimo = 0, abierto = false;
+  var E = function(t){ return String(t == null ? '' : t).replace(/[&<>"]/g, function(c){ return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' }[c]; }); };
+  function okIds(){ try { return JSON.parse(localStorage.getItem(LS) || '{}'); } catch(e){ return {}; } }
+  function marcarOk(id){ try { var o = okIds(), lim = Date.now() - 3 * 86400e3; Object.keys(o).forEach(function(k){ if(o[k] < lim) delete o[k]; }); o[id] = Date.now(); localStorage.setItem(LS, JSON.stringify(o)); } catch(e){} }
+  function soyProfesional(){
+    return typeof sb !== 'undefined' && sb && typeof currentUser !== 'undefined' && currentUser && currentUser.titulo
+      && !(window._cu && window._cu.secretaria);
+  }
+  function faltaTxt(ms){
+    var h = Math.floor(ms / 3600e3), m = Math.floor((ms % 3600e3) / 60e3);
+    return h >= 1 ? 'se cierra en ' + h + ' h' + (h < 6 && m ? ' ' + m + ' min' : '') : 'se cierra en ' + m + ' min';
+  }
+  async function buscar(){
+    if(!soyProfesional()) { lista = []; pintar(); return; }
+    ultimo = Date.now();
+    var desde = new Date(Date.now() - MS48).toISOString();
+    var q = function(campos, filtroOr){
+      var r = sb.from('evoluciones').select(campos).ilike('medico', String(currentUser.titulo).replace(/[%_]/g, '') + '%');
+      return (filtroOr ? r.or(filtroOr) : r.gte('fecha_hora', desde)).order('fecha_hora', { ascending:false }).limit(60);
+    };
+    var res = await q('id,dni_paciente,fecha_hora,creado_at,medico', 'creado_at.gte.' + desde + ',fecha_hora.gte.' + desde);
+    if(res.error) res = await q('id,dni_paciente,fecha_hora,medico', null);
+    if(res.error || !res.data){ return; }
+    var ok = okIds(), ahora = Date.now();
+    var pacs = (typeof pacientesData !== 'undefined' && pacientesData) || [];
+    lista = res.data.map(function(e){
+      var p = pacs.find(function(x){ return String(x.dni) === String(e.dni_paciente); });
+      if(!p || !p.creado_at) return null;                // pacientes viejos: no se cierran
+      var t = new Date(e.creado_at || e.fecha_hora).getTime(); if(isNaN(t)) return null;
+      var falta = t + MS48 - ahora; if(falta <= 0 || ok[e.id]) return null;
+      return { id:e.id, dni:e.dni_paciente, nombre:(p.apellido || '') + (p.nombre ? ', ' + p.nombre : ''), fecha:e.fecha_hora, cierra:t + MS48, falta:falta };
+    }).filter(Boolean).sort(function(a, b){ return a.falta - b.falta; });
+    pintar();
+  }
+  function pintar(){
+    var pill = document.getElementById('ev48-pill');
+    if(!lista.length){ if(pill) pill.remove(); var pn = document.getElementById('ev48-panel'); if(pn) pn.remove(); abierto = false; return; }
+    if(!pill){ pill = document.createElement('button'); pill.type = 'button'; pill.id = 'ev48-pill'; document.body.appendChild(pill); pill.onclick = function(){ abierto = !abierto; panel(); }; }
+    var urg = lista[0].falta < 6 * 3600e3;
+    pill.className = urg ? 'urg' : '';
+    pill.innerHTML = '🕒 <b>' + lista.length + '</b> evoluci' + (lista.length > 1 ? 'ones' : 'ón') + ' se cierra' + (lista.length > 1 ? 'n' : '') + ' pronto';
+    pill.title = 'Evoluciones tuyas que todavía se pueden editar (a las 48 h quedan cerradas)';
+    if(abierto) panel();
+  }
+  function panel(){
+    var pn = document.getElementById('ev48-panel');
+    if(!abierto){ if(pn) pn.remove(); return; }
+    if(!pn){ pn = document.createElement('div'); pn.id = 'ev48-panel'; document.body.appendChild(pn); }
+    var ahora = Date.now();
+    pn.innerHTML = '<div class="ev48-h"><b>🕒 Evoluciones por cerrarse</b><button type="button" class="ev48-x" title="Cerrar">✕</button></div>'
+      + '<p class="ev48-ay">A las 48 h de guardarla, la evolución ya no se puede modificar (solo se le agregan aclaraciones). Completalas antes.</p>'
+      + lista.map(function(it){
+          var f = it.cierra - ahora, d = new Date(it.cierra), urg = f < 6 * 3600e3;
+          var cuando = d.toLocaleString('es-AR', { weekday:'short', hour:'2-digit', minute:'2-digit' });
+          var fc = new Date(it.fecha).toLocaleDateString('es-AR', { day:'2-digit', month:'2-digit' });
+          return '<div class="ev48-it' + (urg ? ' urg' : '') + '"><div class="ev48-n"><b>' + E(it.nombre || it.dni) + '</b><span>Consulta del ' + fc + ' · <b>' + faltaTxt(f) + '</b> (' + E(cuando) + ')</span></div>'
+            + '<div class="ev48-a"><button type="button" data-ab="' + E(it.dni) + '">Abrir</button><button type="button" class="ok" data-ok="' + it.id + '" title="Ya está completa: sacarla de esta lista">✓ Completa</button></div></div>';
+        }).join('');
+    pn.querySelector('.ev48-x').onclick = function(){ abierto = false; panel(); };
+    pn.querySelectorAll('[data-ab]').forEach(function(b){ b.onclick = function(){ abierto = false; panel(); try { if(typeof abrirEvolucion === 'function') abrirEvolucion(b.dataset.ab); } catch(e){} }; });
+    pn.querySelectorAll('[data-ok]').forEach(function(b){ b.onclick = function(){ marcarOk(b.dataset.ok); lista = lista.filter(function(x){ return String(x.id) !== String(b.dataset.ok); }); pintar(); }; });
+  }
+  window._ev48Refrescar = function(){ buscar().catch(function(){}); };
+  // Revisa al entrar, cada 10 minutos, y un rato después de guardar una evolución
+  setInterval(function(){ if(soyProfesional() && Date.now() - ultimo > 10 * 60e3) window._ev48Refrescar(); else if(!soyProfesional() && lista.length){ lista = []; pintar(); } }, 30e3);
+  setInterval(function(){ if(lista.length){ var a = Date.now(); lista = lista.filter(function(x){ return x.cierra > a; }); pintar(); } }, 60e3);
+  setTimeout(function(){ window._ev48Refrescar(); }, 8000);
+  var g0 = window.guardarEvolucion;
+  if(typeof g0 === 'function' && !g0._ev48){
+    var w = function(){ var r = g0.apply(this, arguments); setTimeout(window._ev48Refrescar, 4000); return r; };
+    w._ev48 = true; try { window.guardarEvolucion = guardarEvolucion = w; } catch(e){ window.guardarEvolucion = w; }
+  }
+})();
+</script>
+<style>
+/* 📌 Importante */
+#ag-btn-imp{background:none;border:1px solid #CA8A04;border-radius:6px;padding:5px 10px;font-size:12px;color:#A16207;cursor:pointer;font-family:inherit}
+#ag-btn-imp:hover{background:#FEFCE8}
+.imp-n{background:#EAB308;color:#fff;border-radius:999px;padding:0 6px;font-size:10.5px;font-weight:700;margin-left:3px}
+.imp-mes{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:#6b7280;margin:14px 0 6px}
+.imp-it{display:flex;gap:12px;align-items:center;border:1px solid #fde68a;background:#fffdf5;border-left:5px solid #EAB308;border-radius:10px;padding:9px 12px;margin-bottom:6px;cursor:pointer}
+.imp-it:hover{background:#fefce8}
+.imp-it.entrega{border-left-color:#DC2626}
+.imp-it.venc{opacity:.5}
+.imp-ic{font-size:22px;flex-shrink:0}
+.imp-tx{flex:1;min-width:0}.imp-tx b{display:block;font-size:14.5px}.imp-tx span{font-size:12.5px;color:#4b5563}.imp-tx i{display:block;font-style:normal;font-size:12px;color:#6b7280;margin-top:2px;white-space:pre-wrap}
+.imp-q{font-style:normal;font-weight:600;border-radius:999px;padding:0 7px;font-size:11px;background:#e5e7eb;color:#374151}
+.imp-q.BG{background:#ede9fe;color:#5b21b6}.imp-q.OB{background:#dbeafe;color:#1e40af}.imp-q.ambos{background:#dcfce7;color:#166534}
+.imp-unir{flex-shrink:0;background:#2563eb;color:#fff!important;border-radius:8px;padding:6px 12px;font-size:12.5px;font-weight:700;text-decoration:none;white-space:nowrap}
+.imp-unir:hover{background:#1d4ed8}
+.imp-tipos{flex-wrap:wrap}
+.imp-hd{margin-top:3px;font-size:10.5px;font-weight:600;color:#713f12;background:#fef9c3;border:1px solid #fde047;border-radius:5px;padding:1px 5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer;text-align:left}
+.imp-hd.entrega{background:#fee2e2;border-color:#fca5a5;color:#7f1d1d}
+.imp-hd small{font-size:10px;color:#a16207}
+.imp-dash{max-width:900px;margin:6px auto 18px;background:#fff;border:1.5px solid #fde68a;border-radius:14px;padding:12px 16px;box-shadow:0 2px 10px rgba(0,0,0,.04)}
+.imp-dash-h{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;font-size:15px}
+.imp-dash-h button{border:1px solid #CA8A04;background:#fff;color:#A16207;border-radius:8px;padding:3px 10px;font:600 12px inherit;font-family:inherit;cursor:pointer}
+.imp-dash-it{display:flex;gap:10px;align-items:center;padding:6px 4px;border-top:1px solid #f3f4f6;cursor:pointer}
+.imp-dash-c{flex-shrink:0;min-width:110px;font-size:12.5px;font-weight:700;color:#6b7280}.imp-dash-c.hoy{color:#b45309}
+.imp-dash-t{flex:1;min-width:0;font-size:14px}
+</style>
 </body>
 </html>
