@@ -2,7 +2,7 @@
 <html lang="es-AR">
 <head>
   <meta charset="UTF-8" />
-  <script>var URCYM_BUILD = '2026-11-21-1500';</script>
+  <script>var URCYM_BUILD = '2026-11-21-1600';</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Evaluaciones cardiometabólicas — Sistema de Historia Clínica</title>
 
@@ -22634,6 +22634,10 @@ function isBlockActiveOnDate(b, dateStr){
   var freq=b.freq||'semanal';
   if(freq==='unico'){return b.startDate===dateStr;} // solo ese día exacto
   if(b.endDate&&dateStr>b.endDate)return false; // después de la fecha de finalización (inclusive)
+  if(freq==='mes'){ // algunas semanas del mes: semMes=[1,2,3] → 1º, 2º y 3º de ese día en el mes
+    if(b.startDate&&dateStr<b.startDate)return false;
+    return (b.semMes||[]).indexOf(Math.ceil((+dateStr.slice(8,10))/7))>=0;
+  }
   if(!b.startDate)return true; // sin fecha de inicio → aplica siempre
   var startD=parseLocalDate(b.startDate);
   var checkD=parseLocalDate(dateStr);
@@ -24414,7 +24418,7 @@ function _agPacienteDeTurno(t){
 // freq: 'semanal'(default)|'quincenal'|'mensual'
 
 var FREQ_OPTS=['semanal','quincenal','mensual','unico'];
-var FREQ_LBL={semanal:'Semanal',quincenal:'Quincenal',mensual:'Mensual',unico:'Solo este día'};
+var FREQ_LBL={semanal:'Semanal',quincenal:'Quincenal',mensual:'Mensual',mes:'Algunas semanas del mes',unico:'Solo este día'};
 var PROF_COLOR={BG:'bg',OB:'ob'};
 
 // ─── Genérico: render de la barra de pills y la lista de bloques ───
@@ -24586,7 +24590,7 @@ window._dspAbrirLista=function(){
   var DSP={prof:'BG', tab:'semana', disp:[], nl:[], verVencidas:false};
   var DSP_PROFS=['BG','OB','MA'];
   var DIAS_L=['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
-  var FREQ_L={semanal:'Todas las semanas',quincenal:'Cada 15 días',mensual:'Cada 4 semanas'};
+  var FREQ_L={semanal:'Todas las semanas',quincenal:'Cada 15 días',mensual:'Cada 4 semanas',mes:'Algunas semanas del mes'};
   function e_(v){return String(v==null?'':v).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
   function hoyStr(){return kd(new Date());}
   function fmtF(ds){if(!ds)return '';var p=ds.split('-');return p[2]+'/'+p[1]+'/'+p[0];}
@@ -24920,7 +24924,8 @@ window._dspAbrirLista=function(){
    (Las ausencias "No atiendo" siguen en Disponibilidad › Excepciones.) */
 (function(){
   var DL = ['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
-  var FQ = { semanal:'Todas las semanas', quincenal:'Cada 15 días', mensual:'Cada 4 semanas', unico:'Una sola vez' };
+  var FQ = { semanal:'Todas las semanas', quincenal:'Cada 15 días', mensual:'Cada 4 semanas', mes:'Algunas semanas del mes (ej.: 3 de 4)', unico:'Una sola vez' };
+  var semMesTxt = function(a){ a = (a || []).slice().sort(); var n = a.map(function(x){ return x + 'º'; }); return (n.length > 1 ? n.slice(0, -1).join(', ') + ' y ' + n[n.length - 1] : n[0] || '—') + ' del mes'; };
   var O = { prof:'BG', nl:[], disp:[], cambios:false, tab:'semana', venc:false };
   var E = function(t){ return String(t == null ? '' : t).replace(/[&<>"]/g, function(c){ return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' }[c]; }); };
   var hoy = function(){ return new Date().toLocaleDateString('sv-SE', { timeZone:'America/Argentina/Buenos_Aires' }); };
@@ -24989,7 +24994,7 @@ window._dspAbrirLista=function(){
   function nombreLugar(b){ return b.video ? '📹 Videollamada' : (LUG_NOMBRE[b.label] || b.label || 'Otro'); }
   function chip(b){
     var ex = [];
-    if((b.freq || 'semanal') !== 'semanal') ex.push(FQ[b.freq] || b.freq);
+    if((b.freq || 'semanal') !== 'semanal') ex.push(b.freq === 'mes' ? semMesTxt(b.semMes) : (FQ[b.freq] || b.freq));
     if(b.startDate && b.startDate > hoy()) ex.push('desde ' + fF(b.startDate));
     if(b.endDate) ex.push((vig(b) ? 'hasta ' : 'terminó ') + fF(b.endDate));
     if(b.video) ex.push((b.dur || 30) + ' min · turnos online');
@@ -25035,6 +25040,7 @@ window._dspAbrirLista=function(){
       + '<div id="op-otro-w"><label>¿Qué es? <small>(se ve en la agenda)</small></label><input type="text" id="op-label" value="' + E(b && !b.video && lug === 'otro' ? b.label || '' : '') + '" placeholder="Ej.: Gimnasio, Reunión, Clase UCA"></div>'
       + '<div id="op-vid-w"><label>Cada turno de videollamada</label><select id="op-dur">' + [15, 20, 30, 40, 45, 60].map(function(mn){ return '<option value="' + mn + '"' + (mn === ((b && b.dur) || 30) ? ' selected' : '') + '>' + mn + ' min</option>'; }).join('') + '</select><p class="dsp-ayuda" style="margin:4px 0 0">En estos horarios los pacientes pueden sacar turno de videollamada desde la página.</p></div>'
       + '<label>Se repite</label><select id="op-freq">' + Object.keys(FQ).map(function(k){ return '<option value="' + k + '"' + (k === fq ? ' selected' : '') + '>' + FQ[k] + '</option>'; }).join('') + '</select>'
+      + '<div id="op-mes"><label>¿Qué semanas del mes? <small>(por ej. 1º, 2º y 3º jueves; el 5º solo existe algunos meses)</small></label><div class="dsp-dias">' + [1,2,3,4,5].map(function(n){ var on = (b && b.semMes ? b.semMes : [1,2,3]).indexOf(n) >= 0; return '<label class="' + (on ? 'on' : '') + '"><input type="checkbox" name="op-sm" value="' + n + '"' + (on ? ' checked' : '') + '> ' + n + 'º</label>'; }).join('') + '</div></div>'
       + '<div id="op-rec"><label>Día' + (nuevo ? 's' : '') + '</label><div class="dsp-dias">' + DL.map(function(n, d){ return '<label class="' + (sel.indexOf(d) >= 0 ? 'on' : '') + '"><input type="' + (nuevo ? 'checkbox' : 'radio') + '" name="op-dia" value="' + d + '"' + (sel.indexOf(d) >= 0 ? ' checked' : '') + '>' + n.slice(0, 3) + '</label>'; }).join('') + '</div></div>'
       + '<div class="dsp-fila"><div><label>Desde</label><input type="time" id="op-from" value="' + E(b ? b.from : '08:00') + '"></div><div><label>Hasta</label><input type="time" id="op-to" value="' + E(b ? b.to : '12:00') + '"></div></div>'
       + '<div class="dsp-fila"><div><label id="op-ini-l">' + (fq === 'unico' ? 'Fecha' : 'Empieza') + '</label><input type="date" id="op-ini" value="' + E(b ? b.startDate || '' : hoy()) + '"></div>'
@@ -25046,10 +25052,10 @@ window._dspAbrirLista=function(){
     p.addEventListener('mousedown', function(e){ if(e.target === p) close(); });
     var fsel = p.querySelector('#op-freq');
     var lugSel = function(){ var r = p.querySelector('input[name=op-lug]:checked'); return r ? r.value : 'otro'; };
-    var ajustar = function(){ var u = fsel.value === 'unico'; p.querySelector('#op-rec').style.display = u ? 'none' : ''; p.querySelector('#op-fin-w').style.visibility = u ? 'hidden' : ''; p.querySelector('#op-ini-l').textContent = u ? 'Fecha' : 'Empieza';
+    var ajustar = function(){ var u = fsel.value === 'unico'; p.querySelector('#op-mes').style.display = fsel.value === 'mes' ? '' : 'none'; p.querySelector('#op-rec').style.display = u ? 'none' : ''; p.querySelector('#op-fin-w').style.visibility = u ? 'hidden' : ''; p.querySelector('#op-ini-l').textContent = u ? 'Fecha' : 'Empieza';
       var l = lugSel(); p.querySelector('#op-otro-w').style.display = l === 'otro' ? '' : 'none'; p.querySelector('#op-vid-w').style.display = l === 'video' ? '' : 'none'; };
     fsel.onchange = ajustar; p.querySelectorAll('input[name=op-lug]').forEach(function(r){ r.onchange = ajustar; }); ajustar();
-    p.querySelectorAll('.dsp-dias input').forEach(function(c){ c.onchange = function(){ if(c.type === 'radio') p.querySelectorAll('.dsp-dias label').forEach(function(l){ l.classList.remove('on'); }); c.parentNode.classList.toggle('on', c.checked); }; });
+    p.querySelectorAll('.dsp-dias input').forEach(function(c){ c.onchange = function(){ if(c.type === 'radio') c.closest('.dsp-dias').querySelectorAll('label').forEach(function(l){ l.classList.remove('on'); }); c.parentNode.classList.toggle('on', c.checked); }; });
     p.querySelector('[data-c]').onclick = close;
     var quitar = function(x){ var a = arr(x), i = a.indexOf(x); if(i >= 0) a.splice(i, 1); };
     var del = p.querySelector('[data-del]'); if(del) del.onclick = function(){ if(!confirm('¿Borrar "' + nombreLugar(b) + '" (' + DIAS[b.day] + ' ' + b.from + '–' + b.to + ')?')) return; quitar(b); close(); cambio(); };
@@ -25075,11 +25081,13 @@ window._dspAbrirLista=function(){
         delete nb.endDate; poner(b, nb);
         close(); cambio(); return;
       }
-      var dias = Array.prototype.map.call(p.querySelectorAll('.dsp-dias input:checked'), function(c){ return +c.value; });
+      var dias = Array.prototype.map.call(p.querySelectorAll('#op-rec .dsp-dias input:checked'), function(c){ return +c.value; });
+      var semMes = Array.prototype.map.call(p.querySelectorAll('input[name=op-sm]:checked'), function(c){ return +c.value; });
+      if(freq === 'mes' && !semMes.length) return err('Marcá qué semanas del mes.');
       if(!dias.length) return err('Elegí ' + (nuevo ? 'al menos un día' : 'el día') + '.');
       if(ini && fin && fin < ini) return err('La fecha de fin es anterior a la de inicio.');
       var armar = function(d){ var st = ini || ''; if(st && freq !== 'semanal'){ var n = 0; while(diaDe(st) !== d && n++ < 7) st = mas1(st); }
-        var x = base(Object.assign({}, b || {}, { prof: O.prof, day: d, from: from, to: to, label: label, freq: freq, startDate: st })); if(fin) x.endDate = fin; else delete x.endDate; return x; };
+        var x = base(Object.assign({}, b || {}, { prof: O.prof, day: d, from: from, to: to, label: label, freq: freq, startDate: st })); if(fin) x.endDate = fin; else delete x.endDate; if(freq === 'mes') x.semMes = semMes; else delete x.semMes; return x; };
       if(b) poner(b, armar(dias[0]));
       else dias.forEach(function(d){ poner(null, armar(d)); });
       close(); cambio();
