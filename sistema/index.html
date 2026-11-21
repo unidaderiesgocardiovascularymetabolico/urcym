@@ -2,7 +2,7 @@
 <html lang="es-AR">
 <head>
   <meta charset="UTF-8" />
-  <script>var URCYM_BUILD = '2026-11-21-1900';</script>
+  <script>var URCYM_BUILD = '2026-11-21-2000';</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Evaluaciones cardiometabólicas — Sistema de Historia Clínica</title>
 
@@ -23035,6 +23035,7 @@ function renderGrid(){
         if(!_blqAca.length)return;
         // Es de videollamada si todos los bloques que lo cubren son de video
         var _esVideoSlot=_blqAca.every(function(b){return !!b.video;});
+        var _esDoct=_esVideoSlot&&_blqAca.every(function(b){return !!b.doctoralia;});
         var inNL=nlBlocks.some(function(b){
           return b.prof===p&&isBlockActiveOnDate(b,ds)&&t2m(b.from)<=startM&&startM<t2m(b.to);
         });
@@ -23050,7 +23051,7 @@ function renderGrid(){
         if(turnos[tkProf]&&turnos[tkProf].prof===p)return;
         var tk=ds+'_'+tm;
         if(turnos[tk]&&turnos[tk].prof===p)return;
-        allItems.push({prof:p,tm:tm,startM:startM,endM:endM,dur:slotDur,tipo:'free',video:_esVideoSlot});
+        allItems.push({prof:p,tm:tm,startM:startM,endM:endM,dur:slotDur,tipo:'free',video:_esVideoSlot,doct:_esDoct});
       });
     });
 
@@ -23144,7 +23145,7 @@ function renderGrid(){
       });
       uLayout.push({
         prof:item.prof,tm:item.tm,startM:item.startM,endM:item.endM,
-        dur:item.endM-item.startM,tipo:item.tipo,key:item.key,turno:item.turno,video:item.video,nl:item.nl,
+        dur:item.endM-item.startM,tipo:item.tipo,key:item.key,turno:item.turno,video:item.video,doct:item.doct,nl:item.nl,
         col:itemLane[idx],totalCols:maxLane+1,mixProf:mixProf
       });
     });
@@ -23231,7 +23232,8 @@ function renderGrid(){
       if(item.tipo==='free'){
         var el=document.createElement('div');
         el.className='ag-disp-slot '+p.toLowerCase()+(wPct<50?' ag-slot-narrow':'')+(item.video?' ag-slot-video':'');
-        if(item.video)el.title='Videollamada · '+(PROF_LBL[p]||p);
+        if(item.video)el.title=(item.doct?'Doctoralia (se reserva por Doctoralia)':'Videollamada')+' · '+(PROF_LBL[p]||p);
+        if(item.doct)el.className+=' ag-slot-doct';
         el.style.cssText='position:absolute;top:'+topPx+'px;height:'+hPx+'px;'
           +'left:calc('+leftPct+'% + 1px);width:calc('+wPct+'% - 2px);'
           +'box-sizing:border-box;cursor:pointer;z-index:'+(3+item.col)+';'
@@ -23242,7 +23244,7 @@ function renderGrid(){
         el.dataset.date=ds;
         var tl=document.createElement('span');
         tl.className='ag-slot-time';
-        tl.textContent=(item.video?'📹 ':'')+item.tm;
+        tl.textContent=(item.video?(item.doct?'🩺 ':'📹 '):'')+item.tm;
         el.appendChild(tl);
         if(hPx>=28&&wPct>=30){
           var pl=document.createElement('span');
@@ -25001,7 +25003,7 @@ window._dspAbrirLista=function(){
   function cambio(){ O.cambios = true; render(); }
   window._otrEstado = { cambios: function(){ return O.cambios; }, guardar: guardar, descartar: function(){ O.cambios = false; var bg = document.getElementById('otr-bg'); if(bg) bg.style.display = 'none'; } };
 
-  function nombreLugar(b){ var ex = !b.video && extraDe(b.prof || O.prof, b.label); return b.video ? '📹 Videollamada' : ex ? nombreExtra(ex) : (LUG_NOMBRE[b.label] || b.label || 'Otro'); }
+  function nombreLugar(b){ var ex = !b.video && extraDe(b.prof || O.prof, b.label); return b.video ? (b.doctoralia ? '🩺 Doctoralia' : '📹 Videollamada') : ex ? nombreExtra(ex) : (LUG_NOMBRE[b.label] || b.label || 'Otro'); }
   function chip(b){
     var ex = [];
     if((b.freq || 'semanal') !== 'semanal') ex.push(b.freq === 'fechas' ? fechasTxt(b.fechas) : b.freq === 'mes' ? semMesTxt(b.semMes) : (FQ[b.freq] || b.freq));
@@ -25053,7 +25055,11 @@ window._dspAbrirLista=function(){
       + '<div id="op-nuevo-w" class="dsp-fila"><div><label>Nombre del lugar <small>(queda guardado para elegirlo siempre)</small></label><input type="text" id="op-nnom" placeholder="Ej.: Hospital Municipal"></div><div><label>Localidad <small>(opcional)</small></label><input type="text" id="op-nloc" placeholder="Ej.: Mar de Ajó"></div></div>'
       + (exs.length ? '<div id="op-xgest" class="op-xgest">Lugares guardados: ' + exs.map(function(e){ return '<span class="op-xchip"><i style="background:' + E(e.color) + '"></i>' + E(nombreExtra(e)) + ' <button type="button" data-xdel="' + E(e.nombre) + '" title="Quitar de la lista (lo ya cargado queda)">✕</button></span>'; }).join('') + '</div>' : '')
       + '<div id="op-otro-w"><label>¿Qué es? <small>(se ve en la agenda)</small></label><input type="text" id="op-label" value="' + E(b && !b.video && lug === 'otro' ? b.label || '' : '') + '" placeholder="Ej.: Gimnasio, Reunión, Clase UCA"></div>'
-      + '<div id="op-vid-w"><label>Cada turno de videollamada</label><select id="op-dur">' + [15, 20, 30, 40, 45, 60].map(function(mn){ return '<option value="' + mn + '"' + (mn === ((b && b.dur) || 30) ? ' selected' : '') + '>' + mn + ' min</option>'; }).join('') + '</select><p class="dsp-ayuda" style="margin:4px 0 0">En estos horarios los pacientes pueden sacar turno de videollamada desde la página.</p></div>'
+      + '<div id="op-vid-w"><label>¿Por dónde reservan?</label><div class="dsp-dias op-plat">'
+        + '<label class="' + (b && b.doctoralia ? '' : 'on') + '"><input type="radio" name="op-plat" value="urcym"' + (b && b.doctoralia ? '' : ' checked') + '> 📹 Videollamada (página URCyM)</label>'
+        + '<label class="' + (b && b.doctoralia ? 'on' : '') + '"><input type="radio" name="op-plat" value="doctoralia"' + (b && b.doctoralia ? ' checked' : '') + '> 🩺 Doctoralia</label></div>'
+        + '<p class="dsp-ayuda" id="op-plat-ay" style="margin:2px 0 8px"></p>'
+        + '<label>Cada turno de videollamada</label><select id="op-dur">' + [15, 20, 30, 40, 45, 60].map(function(mn){ return '<option value="' + mn + '"' + (mn === ((b && b.dur) || 30) ? ' selected' : '') + '>' + mn + ' min</option>'; }).join('') + '</select></div>'
       + '<label>Se repite</label><select id="op-freq">' + Object.keys(FQ).map(function(k){ return '<option value="' + k + '"' + (k === fq ? ' selected' : '') + '>' + FQ[k] + '</option>'; }).join('') + '</select>'
       + '<div id="op-mes"><label>¿Qué semanas del mes? <small>(por ej. 1º, 2º y 3º jueves; el 5º solo existe algunos meses)</small></label><div class="dsp-dias">' + [1,2,3,4,5].map(function(n){ var on = (b && b.semMes ? b.semMes : [1,2,3]).indexOf(n) >= 0; return '<label class="' + (on ? 'on' : '') + '"><input type="checkbox" name="op-sm" value="' + n + '"' + (on ? ' checked' : '') + '> ' + n + 'º</label>'; }).join('') + '</div></div>'
       + '<div id="op-cal"></div>'
@@ -25094,6 +25100,10 @@ window._dspAbrirLista=function(){
         var todos = fs.every(function(f){ return selF[f]; }); fs.forEach(function(f){ if(todos) delete selF[f]; else selF[f] = 1; }); pintarCal(); }; });
     };
     pintarCal();
+    var platAy = function(){ var d = (p.querySelector('input[name=op-plat]:checked') || {}).value === 'doctoralia', a = p.querySelector('#op-plat-ay');
+      if(a) a.textContent = d ? 'Los pacientes reservan por Doctoralia: la página URCyM no ofrece estos horarios. En la agenda se ven con 🩺.' : 'En estos horarios los pacientes pueden sacar turno de videollamada desde la página URCyM.'; };
+    p.querySelectorAll('input[name=op-plat]').forEach(function(r){ r.addEventListener('change', function(){ p.querySelectorAll('.op-plat label').forEach(function(l){ l.classList.toggle('on', l.querySelector('input').checked); }); platAy(); }); });
+    platAy();
     var ajustar = function(){ var u = fsel.value === 'unico', fz = fsel.value === 'fechas'; p.querySelector('#op-mes').style.display = fsel.value === 'mes' ? '' : 'none';
       p.querySelector('#op-cal').style.display = fz ? '' : 'none'; p.querySelector('#op-ini').closest('.dsp-fila').style.display = fz ? 'none' : ''; p.querySelector('#op-rec').style.display = (u || fz) ? 'none' : ''; p.querySelector('#op-fin-w').style.visibility = u ? 'hidden' : ''; p.querySelector('#op-ini-l').textContent = u ? 'Fecha' : 'Empieza';
       var l = lugSel(); p.querySelector('#op-otro-w').style.display = l === 'otro' ? '' : 'none'; p.querySelector('#op-nuevo-w').style.display = l === 'nuevo' ? '' : 'none'; p.querySelector('#op-vid-w').style.display = l === 'video' ? '' : 'none'; };
@@ -25125,7 +25135,8 @@ window._dspAbrirLista=function(){
       if(t2m(from) >= t2m(to)) return err('La hora de fin tiene que ser posterior a la de inicio.');
       var ini = p.querySelector('#op-ini').value, fin = p.querySelector('#op-fin').value;
       if(ini && !anioOk(ini) || fin && !anioOk(fin)) return err('Revisá el año de las fechas.');
-      var base = function(o){ if(video){ o.video = true; o.dur = dur; } else { delete o.video; delete o.dur; } return o; };
+      var doct = video && (p.querySelector('input[name=op-plat]:checked') || {}).value === 'doctoralia';
+      var base = function(o){ if(video){ o.video = true; o.dur = dur; if(doct) o.doctoralia = true; else delete o.doctoralia; } else { delete o.video; delete o.dur; delete o.doctoralia; } return o; };
       var poner = function(viejo, nuevoB){
         var dest = video ? O.disp : O.nl;
         if(viejo && arr(viejo) === dest){ dest[dest.indexOf(viejo)] = nuevoB; return; }
@@ -45743,6 +45754,9 @@ html.urcym-sec .cierre-solo-prof, html.urcym-sec .dash-card.dash-pacientes, html
 /* Videollamadas de Bertani en sus tonos (celeste/azul), las de Guerrero siguen lila */
 #agenda-app .ag-disp-slot.ob.ag-slot-video{background:#E0F2FE;border:1.5px dashed #0284C7;color:#075985;}
 #agenda-app .ag-turno.ob.ag-turno-video{border:1.5px dashed #0284C7 !important;box-shadow:inset 2px 0 0 #0284C7;}
+</style>
+<style>
+.op-plat label{font-size:12.5px}
 </style>
 </body>
 </html>
