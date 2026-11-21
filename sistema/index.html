@@ -1853,6 +1853,19 @@
                 <input type="time" id="ag-f-video-time" style="border:1px solid #d1d5db;border-radius:6px;padding:4px 7px;font-size:13px;display:none;width:100px;border-color:#7B3FC4;">
               </span>
             </div>
+            <!-- Videollamada que viene de Doctoralia: crea el Meet y le manda el mail como a los turnos online -->
+            <div id="ag-doc-row" style="display:none;margin-top:8px;padding:8px 11px;border:1px dashed #0f766e;border-radius:8px;background:#f0fdfa;">
+              <label style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:700;color:#0f766e;margin:0;cursor:pointer;">
+                <input type="checkbox" id="ag-f-doctoralia" style="width:14px;height:14px;accent-color:#0f766e;cursor:pointer;"> 🩺 Viene de Doctoralia
+              </label>
+              <div id="ag-doc-extra" style="display:none;margin-top:6px;">
+                <input type="email" id="ag-f-doc-email" placeholder="Mail del paciente (recibe el Meet y la confirmación)" autocomplete="off" style="width:100%;box-sizing:border-box;border:1px solid #99f6e4;border-radius:6px;padding:5px 8px;font-size:13px;">
+                <label id="ag-doc-enviar-w" style="display:flex;align-items:center;gap:6px;font-size:11.5px;color:#374151;margin:6px 0 0;cursor:pointer;">
+                  <input type="checkbox" id="ag-f-doc-enviar" checked style="width:13px;height:13px;accent-color:#0f766e;cursor:pointer;"> Al guardar, crear el Meet y mandarle el mail (link + indicaciones + seña)
+                </label>
+                <div id="ag-doc-estado" style="display:none;font-size:11.5px;color:#0f766e;font-weight:600;margin-top:6px;"></div>
+              </div>
+            </div>
           </div>
           <div class="ag-form-row" style="position:relative">
             <label>Paciente</label>
@@ -23035,6 +23048,7 @@ function renderGrid(){
         if(!_blqAca.length)return;
         // Es de videollamada si todos los bloques que lo cubren son de video
         var _esVideoSlot=_blqAca.every(function(b){return !!b.video;});
+        var _esDocSlot=_esVideoSlot&&_blqAca.every(function(b){return !!b.doctoralia;});
         var inNL=nlBlocks.some(function(b){
           return b.prof===p&&isBlockActiveOnDate(b,ds)&&t2m(b.from)<=startM&&startM<t2m(b.to);
         });
@@ -23050,7 +23064,7 @@ function renderGrid(){
         if(turnos[tkProf]&&turnos[tkProf].prof===p)return;
         var tk=ds+'_'+tm;
         if(turnos[tk]&&turnos[tk].prof===p)return;
-        allItems.push({prof:p,tm:tm,startM:startM,endM:endM,dur:slotDur,tipo:'free',video:_esVideoSlot});
+        allItems.push({prof:p,tm:tm,startM:startM,endM:endM,dur:slotDur,tipo:'free',video:_esVideoSlot,doc:_esDocSlot});
       });
     });
 
@@ -23144,7 +23158,7 @@ function renderGrid(){
       });
       uLayout.push({
         prof:item.prof,tm:item.tm,startM:item.startM,endM:item.endM,
-        dur:item.endM-item.startM,tipo:item.tipo,key:item.key,turno:item.turno,video:item.video,nl:item.nl,
+        dur:item.endM-item.startM,tipo:item.tipo,key:item.key,turno:item.turno,video:item.video,doc:item.doc,nl:item.nl,
         col:itemLane[idx],totalCols:maxLane+1,mixProf:mixProf
       });
     });
@@ -23231,7 +23245,7 @@ function renderGrid(){
       if(item.tipo==='free'){
         var el=document.createElement('div');
         el.className='ag-disp-slot '+p.toLowerCase()+(wPct<50?' ag-slot-narrow':'')+(item.video?' ag-slot-video':'');
-        if(item.video)el.title='Videollamada · '+(PROF_LBL[p]||p);
+        if(item.video)el.title=(item.doc?'Videollamada · solo Doctoralia · ':'Videollamada · ')+(PROF_LBL[p]||p);
         el.style.cssText='position:absolute;top:'+topPx+'px;height:'+hPx+'px;'
           +'left:calc('+leftPct+'% + 1px);width:calc('+wPct+'% - 2px);'
           +'box-sizing:border-box;cursor:pointer;z-index:'+(3+item.col)+';'
@@ -23242,7 +23256,7 @@ function renderGrid(){
         el.dataset.date=ds;
         var tl=document.createElement('span');
         tl.className='ag-slot-time';
-        tl.textContent=(item.video?'📹 ':'')+item.tm;
+        tl.textContent=(item.video?(item.doc?'🩺 ':'📹 '):'')+item.tm;
         el.appendChild(tl);
         if(hPx>=28&&wPct>=30){
           var pl=document.createElement('span');
@@ -23250,7 +23264,7 @@ function renderGrid(){
           pl.textContent=PROF_LBL[p]||p;
           el.appendChild(pl);
         }
-        (function(el2,ds2,tm2,prof2,esVid){
+        (function(el2,ds2,tm2,prof2,esVid,esDoc){
           var offKey=ds2+'_'+tm2+'_'+prof2;
           if(offeredSlots[offKey]) el2.classList.add('ofrecido');
           el2.addEventListener('click',function(e){
@@ -23263,11 +23277,14 @@ function renderGrid(){
                 var vc=document.getElementById('ag-f-video'), vt=document.getElementById('ag-f-video-time');
                 if(vc)vc.checked=true;
                 if(vt){vt.style.display='inline-block';vt.value=tm2;}
+                // Bloque "solo Doctoralia": el turno ya sale marcado como de Doctoralia
+                var dcb=document.getElementById('ag-f-doctoralia'); if(dcb) dcb.checked=!!esDoc;
+                _agDocSync();
               }
             }
           });
           el2.addEventListener('contextmenu',function(e){openBlockPopup(e,ds2,tm2,prof2);});
-        })(el,ds,item.tm,p,!!item.video);
+        })(el,ds,item.tm,p,!!item.video,!!item.doc);
         col.appendChild(el);
 
       } else {
@@ -23398,7 +23415,7 @@ function makeTurnoEl(t,key,hPx){
   var motivoShort=turnoMotivosArr(t).join(', ');
 
   var estBadge=t.estado?'<span class="ag-badge">'+(EST_L[t.estado]||'')+'</span>':'';
-  var videoBadge=t.video?'<span style="font-size:10px;line-height:1;" title="'+(t.reserva_pendiente?'Sacado online · esperando el pago de Mercado Pago':t.autogestion?'Videollamada sacada online':'Videollamada')+'">📹'+(t.reserva_pendiente?'⏳':t.autogestion?'🌐':'')+'</span>':'';
+  var videoBadge=t.video?'<span style="font-size:10px;line-height:1;" title="'+(t.reserva_pendiente?'Sacado online · esperando el pago de Mercado Pago':t.origen==='doctoralia'?('Videollamada de Doctoralia'+(t.reserva_id?' · Meet y mail enviados':' · falta mandar el Meet')):t.autogestion?'Videollamada sacada online':'Videollamada')+'">📹'+(t.reserva_pendiente?'⏳':t.origen==='doctoralia'?(t.reserva_id?'🩺':'🩺❗'):t.autogestion?'🌐':'')+'</span>':'';
 
   // Nombre del paciente — si la altura es muy chica, usar solo apellido (primer fragmento)
   var paciente=t.paciente||'—';
@@ -23700,6 +23717,7 @@ function openModal(ds,time,key,forcedProf,freeTime){
     vidTm2.style.display=isVid?'inline-block':'none';
     vidTm2.value=isVid?(pendingTime||''):'';
   }
+  _agDocCargar(key&&turnos[key]?turnos[key]:null);
   // Modo horario libre (click en área vacía del grid)
   var freeTmEl=document.getElementById('ag-f-free-time');
   var timeSel=document.getElementById('ag-f-time');
@@ -24023,6 +24041,14 @@ function openReprog(key){
   var isFreeMode=freeTmEl&&freeTmEl.style.display!=='none';
   var isVideo3=vidCb3&&vidCb3.checked;
   var isExtra=exCb&&exCb.checked;
+  // Doctoralia: solo en videollamadas; si hay que mandar el Meet, hace falta un mail válido
+  var _docOn=!!(isVideo3&&(document.getElementById('ag-f-doctoralia')||{}).checked);
+  var _docEmail=_docOn?String((document.getElementById('ag-f-doc-email')||{}).value||'').trim():'';
+  var _docEnviar=_docOn&&!!(document.getElementById('ag-f-doc-enviar')||{}).checked&&(document.getElementById('ag-doc-enviar-w')||{style:{}}).style.display!=='none';
+  if(_docEnviar&&!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(_docEmail)){
+    alert('Para crear el Meet y mandarle el mail necesito el mail del paciente.\n\n(Si no lo tenés todavía, destildá "Al guardar, crear el Meet…" y lo mandás después desde el menú del turno.)');
+    return;
+  }
   var newTime;
   if(isExtra){
     newTime=exTm&&exTm.value?exTm.value:(document.getElementById('ag-f-time').value||pendingTime);
@@ -24226,11 +24252,18 @@ function openReprog(key){
   ['autogestion','reserva_id','meet_link','email','telefono','sena_via','saldo_via','reserva_pendiente'].forEach(function(f){
     if(_prevTurnoParaCobro[f]!==undefined) turnos[newKey][f]=_prevTurnoParaCobro[f];
   });
+  // Origen Doctoralia (lo decide el tilde, no se arrastra del turno anterior)
+  if(_docOn){
+    turnos[newKey].origen='doctoralia';
+    if(_docEmail) turnos[newKey].email=_docEmail;
+  }
+  var _docCrear=_docEnviar&&!turnos[newKey].reserva_id;
 
   editKey=null;
   // Guardar turno y verificar cascada y cierre de modal
   _finalizeSave({profVal:profVal,ds:ds,newTime:newTime,oldKey:oldKey,newKey:newKey,
     isFreeMode:isFreeMode,freeTmEl:freeTmEl,durCasc:durAt(profVal,ds,newTime)});
+  if(_docCrear) _agDocCrearMeet(newKey);
 });
 // ── Handlers del modal cascada ────────────────────────────────────────────
 // ── Handlers modal extender franja ───────────────────────────────────────
@@ -24370,7 +24403,9 @@ document.addEventListener('change',function(e){
       vidTm.style.display='none';
       vidTm.value='';
     }
+    _agDocSync();
   }
+  if(e.target.id==='ag-f-doctoralia') _agDocSync();
 });
 
 // Paciente del turno: por DNI si lo tiene, si no por "Apellido, Nombre"
@@ -24387,8 +24422,8 @@ function _agPacienteDeTurno(t){
   var _pkey=editKey.split('_');
   var _dsDel=_pkey[0], _tmDel=_pkey[1], _profDel=_pkey[2]||_tDel.prof;
   var _nombreDel=_tDel.paciente||'este turno';
-  if(!confirm('¿Eliminar el turno de '+_nombreDel+'? Esta acción no se puede deshacer.'+(_tDel.autogestion&&_tDel.reserva_id?'\n\nEs un turno sacado online: se cancela también el Google Meet (al paciente le llega el aviso de Google Calendar). Si había seña, la devolución se coordina aparte.':'')))return;
-  var _vidResDel=_tDel.autogestion&&_tDel.reserva_id?_tDel.reserva_id:null;
+  if(!confirm('¿Eliminar el turno de '+_nombreDel+'? Esta acción no se puede deshacer.'+(_tDel.reserva_id?'\n\nEs un turno con Meet: se cancela también el Google Meet (al paciente le llega el aviso de Google Calendar). Si había seña, la devolución se coordina aparte.':'')))return;
+  var _vidResDel=_tDel.reserva_id||null;
   delete turnos[editKey];
   saveLocal();
   if(_vidResDel)_vidCancelarReserva(_vidResDel);
@@ -24994,13 +25029,13 @@ window._dspAbrirLista=function(){
   function cambio(){ O.cambios = true; render(); }
   window._otrEstado = { cambios: function(){ return O.cambios; }, guardar: guardar, descartar: function(){ O.cambios = false; var bg = document.getElementById('otr-bg'); if(bg) bg.style.display = 'none'; } };
 
-  function nombreLugar(b){ return b.video ? '📹 Videollamada' : (LUG_NOMBRE[b.label] || b.label || 'Otro'); }
+  function nombreLugar(b){ return b.video ? (b.doctoralia ? '🩺 Videollamada · Doctoralia' : '📹 Videollamada') : (LUG_NOMBRE[b.label] || b.label || 'Otro'); }
   function chip(b){
     var ex = [];
     if((b.freq || 'semanal') !== 'semanal') ex.push(b.freq === 'fechas' ? fechasTxt(b.fechas) : b.freq === 'mes' ? semMesTxt(b.semMes) : (FQ[b.freq] || b.freq));
     if(b.freq !== 'fechas' && b.startDate && b.startDate > hoy()) ex.push('desde ' + fF(b.startDate));
     if(b.endDate && b.freq !== 'fechas') ex.push((vig(b) ? 'hasta ' : 'terminó ') + fF(b.endDate));
-    if(b.video) ex.push((b.dur || 30) + ' min · turnos online');
+    if(b.video) ex.push((b.dur || 30) + ' min · ' + (b.doctoralia ? 'solo Doctoralia' : 'turnos online'));
     var col = window._agLugarColor ? window._agLugarColor(b, b.video ? 'disp' : 'nl') : '#7B6EA6';
     return '<button type="button" class="dsp-chip otr-chip' + (vig(b) ? '' : ' venc') + '" style="border-left:5px solid ' + col + '" data-ok2="' + ref(b) + '"><b>' + E(b.from) + '–' + E(b.to) + '</b><span>' + E(nombreLugar(b)) + '</span>' + (ex.length ? '<i>' + E(ex.join(' · ')) + '</i>' : '') + '</button>';
   }
@@ -25041,7 +25076,7 @@ window._dspAbrirLista=function(){
     p.innerHTML = '<div class="dsp-panel"><h4>' + (nuevo ? 'Agregar' : 'Cambiar') + ' · ' + E(PROF_LBL[O.prof] || O.prof) + '</h4>'
       + '<label>Lugar o actividad</label><div class="dsp-seg otr-lug">' + opcL.map(function(o){ return '<label><input type="radio" name="op-lug" value="' + o[0] + '"' + (o[0] === lug ? ' checked' : '') + '> ' + E(o[1]) + '</label>'; }).join('') + '</div>'
       + '<div id="op-otro-w"><label>¿Qué es? <small>(se ve en la agenda)</small></label><input type="text" id="op-label" value="' + E(b && !b.video && lug === 'otro' ? b.label || '' : '') + '" placeholder="Ej.: Gimnasio, Reunión, Clase UCA"></div>'
-      + '<div id="op-vid-w"><label>Cada turno de videollamada</label><select id="op-dur">' + [15, 20, 30, 40, 45, 60].map(function(mn){ return '<option value="' + mn + '"' + (mn === ((b && b.dur) || 30) ? ' selected' : '') + '>' + mn + ' min</option>'; }).join('') + '</select><p class="dsp-ayuda" style="margin:4px 0 0">En estos horarios los pacientes pueden sacar turno de videollamada desde la página.</p></div>'
+      + '<div id="op-vid-w"><label>Cada turno de videollamada</label><select id="op-dur">' + [15, 20, 30, 40, 45, 60].map(function(mn){ return '<option value="' + mn + '"' + (mn === ((b && b.dur) || 30) ? ' selected' : '') + '>' + mn + ' min</option>'; }).join('') + '</select><label style="display:flex;align-items:center;gap:6px;margin:8px 0 0;font-weight:600;color:#0f766e;cursor:pointer;"><input type="checkbox" id="op-doc"' + (b && b.doctoralia ? ' checked' : '') + ' style="width:auto;margin:0;"> 🩺 Solo Doctoralia</label><p class="dsp-ayuda" style="margin:4px 0 0" id="op-vid-ayuda">' + (b && b.doctoralia ? 'Estos horarios son para los turnos que reservan en Doctoralia: no se ofrecen en la página de turnos de URCyM. Abrí los mismos horarios en la agenda de Doctoralia.' : 'En estos horarios los pacientes pueden sacar turno de videollamada desde la página.') + '</p></div>'
       + '<label>Se repite</label><select id="op-freq">' + Object.keys(FQ).map(function(k){ return '<option value="' + k + '"' + (k === fq ? ' selected' : '') + '>' + FQ[k] + '</option>'; }).join('') + '</select>'
       + '<div id="op-mes"><label>¿Qué semanas del mes? <small>(por ej. 1º, 2º y 3º jueves; el 5º solo existe algunos meses)</small></label><div class="dsp-dias">' + [1,2,3,4,5].map(function(n){ var on = (b && b.semMes ? b.semMes : [1,2,3]).indexOf(n) >= 0; return '<label class="' + (on ? 'on' : '') + '"><input type="checkbox" name="op-sm" value="' + n + '"' + (on ? ' checked' : '') + '> ' + n + 'º</label>'; }).join('') + '</div></div>'
       + '<div id="op-cal"></div>'
@@ -25086,6 +25121,7 @@ window._dspAbrirLista=function(){
       p.querySelector('#op-cal').style.display = fz ? '' : 'none'; p.querySelector('#op-ini').closest('.dsp-fila').style.display = fz ? 'none' : ''; p.querySelector('#op-rec').style.display = (u || fz) ? 'none' : ''; p.querySelector('#op-fin-w').style.visibility = u ? 'hidden' : ''; p.querySelector('#op-ini-l').textContent = u ? 'Fecha' : 'Empieza';
       var l = lugSel(); p.querySelector('#op-otro-w').style.display = l === 'otro' ? '' : 'none'; p.querySelector('#op-vid-w').style.display = l === 'video' ? '' : 'none'; };
     fsel.onchange = ajustar; p.querySelectorAll('input[name=op-lug]').forEach(function(r){ r.onchange = ajustar; }); ajustar();
+    p.querySelector('#op-doc').onchange = function(){ p.querySelector('#op-vid-ayuda').textContent = this.checked ? 'Estos horarios son para los turnos que reservan en Doctoralia: no se ofrecen en la página de turnos de URCyM. Abrí los mismos horarios en la agenda de Doctoralia.' : 'En estos horarios los pacientes pueden sacar turno de videollamada desde la página.'; };
     p.querySelectorAll('.dsp-dias input').forEach(function(c){ c.onchange = function(){ if(c.type === 'radio') c.closest('.dsp-dias').querySelectorAll('label').forEach(function(l){ l.classList.remove('on'); }); c.parentNode.classList.toggle('on', c.checked); }; });
     p.querySelector('[data-c]').onclick = close;
     var quitar = function(x){ var a = arr(x), i = a.indexOf(x); if(i >= 0) a.splice(i, 1); };
@@ -25093,13 +25129,13 @@ window._dspAbrirLista=function(){
     p.querySelector('[data-ok]').onclick = function(){
       var l = lugSel(), video = l === 'video';
       var label = video ? '' : (l === 'otro' ? (p.querySelector('#op-label').value.trim() || 'Otro') : l);
-      var freq = fsel.value, dur = +p.querySelector('#op-dur').value;
+      var freq = fsel.value, dur = +p.querySelector('#op-dur').value, soloDoc = video && p.querySelector('#op-doc').checked;
       var from = p.querySelector('#op-from').value, to = p.querySelector('#op-to').value;
       if(!from || !to) return err('Completá el horario.');
       if(t2m(from) >= t2m(to)) return err('La hora de fin tiene que ser posterior a la de inicio.');
       var ini = p.querySelector('#op-ini').value, fin = p.querySelector('#op-fin').value;
       if(ini && !anioOk(ini) || fin && !anioOk(fin)) return err('Revisá el año de las fechas.');
-      var base = function(o){ if(video){ o.video = true; o.dur = dur; } else { delete o.video; delete o.dur; } return o; };
+      var base = function(o){ if(video){ o.video = true; o.dur = dur; } else { delete o.video; delete o.dur; } if(soloDoc) o.doctoralia = true; else delete o.doctoralia; return o; };
       var poner = function(viejo, nuevoB){
         var dest = video ? O.disp : O.nl;
         if(viejo && arr(viejo) === dest){ dest[dest.indexOf(viejo)] = nuevoB; return; }
@@ -26306,6 +26342,62 @@ async function loadLocal(){
 
   renderGrid();
 }
+// ===== DOCTORALIA · videollamadas reservadas en Doctoralia =====
+// El paciente reserva en Doctoralia (así suma al posicionamiento) y acá se carga
+// el turno tildando "🩺 Viene de Doctoralia". Al guardar, la función del servidor
+// (accion staff_turno_doctoralia) crea la reserva en video_reservas, el Google
+// Meet y le manda el mail de confirmación con el link, las indicaciones y la seña,
+// igual que a los turnos sacados en la página de URCyM.
+function _agDocEls(){
+  var g=function(id){return document.getElementById(id);};
+  return {vc:g('ag-f-video'),row:g('ag-doc-row'),dc:g('ag-f-doctoralia'),ex:g('ag-doc-extra'),
+    em:g('ag-f-doc-email'),env:g('ag-f-doc-enviar'),envW:g('ag-doc-enviar-w'),est:g('ag-doc-estado')};
+}
+function _agDocSync(){
+  var d=_agDocEls(); if(!d.row) return;
+  var on=!!(d.vc&&d.vc.checked)&&!(typeof _esSecretariaLogueada==='function'&&_esSecretariaLogueada());
+  d.row.style.display=on?'':'none';
+  if(!on&&d.dc) d.dc.checked=false;
+  var doc=!!(d.dc&&d.dc.checked);
+  if(d.ex) d.ex.style.display=doc?'':'none';
+  // Si el mail está vacío, se completa con el de la ficha del paciente
+  if(doc&&d.em&&!d.em.value.trim()&&typeof _agPacienteDeTurno==='function'){
+    var pac=_agPacienteDeTurno({dni_paciente:(document.getElementById('ag-f-paciente-dni')||{}).value||'',
+      paciente:(document.getElementById('ag-f-paciente')||{}).value||''});
+    if(pac&&pac.email) d.em.value=String(pac.email).trim();
+  }
+}
+function _agDocCargar(t){
+  var d=_agDocEls(); if(!d.row) return;
+  var ya=!!(t&&t.reserva_id);
+  if(d.dc) d.dc.checked=!!(t&&t.origen==='doctoralia');
+  if(d.em) d.em.value=(t&&t.email)||'';
+  if(d.env) d.env.checked=!ya;
+  if(d.envW) d.envW.style.display=ya?'none':'';
+  if(d.est){ d.est.style.display=ya?'':'none'; d.est.textContent=ya?'✓ Meet creado y mail enviado'+(t.meet_link?' · '+t.meet_link:''):''; }
+  _agDocSync();
+}
+var _agDocEnCurso={};
+async function _agDocCrearMeet(key){
+  var t=turnos[key]; if(!t||t.reserva_id||_agDocEnCurso[key]) return;
+  _agDocEnCurso[key]=true;
+  var p=key.split('_');
+  _vidToast('Creando el Meet y mandando el mail…','#0f766e');
+  try{
+    var j=await _vidStaff({accion:'staff_turno_doctoralia',fecha:p[0],hora:p[1],prof:t.prof||p[2]||'BG',
+      paciente:t.paciente||'',dni:t.dni_paciente||'',email:t.email||'',motivo:turnoMotivosTxt(t)||''});
+    var cur=turnos[key];
+    if(cur){
+      cur.reserva_id=j.reserva_id||j.id;
+      if(j.meet_link) cur.meet_link=j.meet_link;
+      saveLocal(); renderGrid();
+    }
+    _vidToast('✓ Meet creado y mail enviado a '+(t.email||'el paciente'));
+  }catch(e){
+    alert('El turno quedó guardado, pero no se pudo crear el Meet ni mandar el mail:\n'+(e.message||e)
+      +'\n\nPodés reintentarlo desde el menú del turno (tocá el turno → "Crear Meet y mandar mail").');
+  }finally{ delete _agDocEnCurso[key]; }
+}
 // ===== VIDEOLLAMADAS · AUTOGESTIÓN (página pública turnos-video.html) =====
 // Los pacientes sacan turno solos en los bloques 📹 de Disponibilidad. La
 // función del servidor (Supabase → video-turnos) escribe el turno acá con
@@ -26340,12 +26432,27 @@ async function _vidReserva(id){
 }
 // Items extra del menú contextual para turnos sacados online
 function _vidItemsMenu(menu,key,mkItem){
-  var t=turnos[key]; if(!t||!t.autogestion||!t.reserva_id)return;
+  var t=turnos[key]; if(!t)return;
+  var _doc=t.origen==='doctoralia';
+  if(!t.reserva_id&&!(_doc&&t.video))return;
   var sep=document.createElement('div');sep.style.cssText='height:1px;background:#e5e7eb;margin:4px 0;';menu.appendChild(sep);
   var hdr=document.createElement('div');
-  hdr.style.cssText='padding:4px 14px 2px;font-size:10.5px;color:#7B3FC4;font-weight:700;letter-spacing:.04em;text-transform:uppercase;';
-  hdr.textContent=t.reserva_pendiente?'🌐 Online · esperando pago MP':'🌐 Turno sacado online';
+  hdr.style.cssText='padding:4px 14px 2px;font-size:10.5px;color:'+(_doc?'#0f766e':'#7B3FC4')+';font-weight:700;letter-spacing:.04em;text-transform:uppercase;';
+  hdr.textContent=_doc?'🩺 Doctoralia':t.reserva_pendiente?'🌐 Online · esperando pago MP':'🌐 Turno sacado online';
   menu.appendChild(hdr);
+  if(_doc&&!t.reserva_id){
+    menu.appendChild(mkItem('🎥 &nbsp;Crear Meet y mandar mail','#0f766e',function(){
+      var cur=turnos[key]; if(!cur) return;
+      var em=String(cur.email||'').trim();
+      if(!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(em)){
+        em=String(prompt('Mail del paciente para mandarle el Meet:',em)||'').trim();
+        if(!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(em)){ if(em) alert('Ese mail no parece válido.'); return; }
+        cur.email=em; saveLocal();
+      }
+      _agDocCrearMeet(key);
+    }));
+    return;
+  }
   if(t.meet_link) menu.appendChild(mkItem('🎥 &nbsp;Abrir Meet','#1d9e75',function(){window.open(t.meet_link,'_blank');}));
   menu.appendChild(mkItem('📎 &nbsp;Comprobantes / detalle','#374151',function(){_vidDetalle(t.reserva_id);}));
 }
@@ -28968,7 +29075,7 @@ window.cargarProxConsultas = cargarProxConsultas;
   // ¿Este turno (no OSDE) ya entra a Finanzas por el cierre de su día?
   // Las videollamadas nunca van por el cierre: siempre suman acá como "Videollamadas".
   function finEnCierre(cf, fecha, t){ return !!(cf && !t.video && fecha >= cf.corte && cf.profs[t.prof]); }
-  var CAT_ING_LBL = {costa_bucal_guerrero:'Costa Bucal Guerrero',costa_bucal_bertani:'Costa Bucal Bertani',urcym:'Evaluaciones cardiometabólicas',sapiens_bar:'SAPIENS Bar',sapiens_omar:'SAPIENS Omar',ceq:'CEQ',cem:'CEM',salita:'Salita',otro:'Otros',manual:'Manual',receta_particular:'Receta particular',receta_osde:'Receta OSDE',osde:'OSDE',videollamadas:'Videollamadas',online_receta:'Recetas online',online_consulta:'Consultas por mensaje'};
+  var CAT_ING_LBL = {costa_bucal_guerrero:'Costa Bucal Guerrero',costa_bucal_bertani:'Costa Bucal Bertani',urcym:'Evaluaciones cardiometabólicas',sapiens_bar:'SAPIENS Bar',sapiens_omar:'SAPIENS Omar',ceq:'CEQ',cem:'CEM',salita:'Salita',otro:'Otros',manual:'Manual',receta_particular:'Receta particular',receta_osde:'Receta OSDE',osde:'OSDE',videollamadas:'Videollamadas',videollamadas_doctoralia:'Videollamadas · Doctoralia',online_receta:'Recetas online',online_consulta:'Consultas por mensaje'};
 
   function $id(id){ return document.getElementById(id); }
   function moneda(n){ return '$'+Number(n||0).toLocaleString('es-AR',{minimumFractionDigits:0,maximumFractionDigits:0}); }
@@ -29092,6 +29199,7 @@ window.cargarProxConsultas = cargarProxConsultas;
             ausente: t.asistencia==='ausente',
             notas:   turnoMotivosTxt(t),
             video:   !!t.video,
+            doctoralia: t.origen==='doctoralia',
             enCierre: finEnCierre(cf, fecha, t)
           });
         }
@@ -29211,7 +29319,7 @@ window.cargarProxConsultas = cargarProxConsultas;
       turnosList.forEach(function(t){
         if(t.enCierre) return;
         var v = t.monto + t.sena;
-        var _orig = t.video ? 'videollamadas' : 'urcym';
+        var _orig = t.video ? (t.doctoralia ? 'videollamadas_doctoralia' : 'videollamadas') : 'urcym';
         if(v > 0) origenes[_orig] = (origenes[_orig]||0) + v;
       });
       recList.forEach(function(r){ if(r.enCierre) return; origenes[r.origen]=(origenes[r.origen]||0)+r.monto; });
@@ -29227,6 +29335,7 @@ window.cargarProxConsultas = cargarProxConsultas;
         var ING_ORDER = [
           {k:'urcym',       icon:'🩺', label:'URCyM',              sub:'Consultas cobradas'},
           {k:'videollamadas', icon:'📹', label:'Videollamadas',      sub:'consultas cobradas · fuera del cierre'},
+          {k:'videollamadas_doctoralia', icon:'🩺', label:'Videollamadas · Doctoralia', sub:'reservadas en Doctoralia · fuera del cierre'},
           {k:'online_receta', icon:'🌐', label:'Recetas online',     sub:'pedidas por la web · fuera del cierre'},
           {k:'online_consulta', icon:'💬', label:'Consultas por mensaje', sub:'por la web · fuera del cierre'},
           {k:'costa_bucal_guerrero', icon:'🏢', label:'Costa Bucal Guerrero', sub:'cierres · ya descontado el alquiler'},
@@ -31998,6 +32107,7 @@ window.gpCargar = async function() {
         osde:    !!(t.osde || t.pago==='osde'),
         ausente: t.asistencia === 'ausente',   // único campo real
         video:   esVideo,
+        doctoralia: t.origen==='doctoralia',
         notas:   turnoMotivosTxt(t)
       });
     });
@@ -32012,6 +32122,7 @@ window.gpCargar = async function() {
     var totalPart  = total - totalOsde;
     var ausentes   = turnos.filter(function(t){ return t.ausente; }).length;
     var totalVideo = turnos.filter(function(t){ return t.video; }).length;
+    var totalDoc   = turnos.filter(function(t){ return t.doctoralia; }).length;
     // Reconsulta: mismo paciente, mismo prof, 2+ veces en el mes
     var frecGlobal = {};
     turnos.forEach(function(t){
@@ -32043,6 +32154,7 @@ window.gpCargar = async function() {
       {label:'OSDE',                    val:totalOsde+' <small style="font-size:14px">('+pctOsde+'%)</small>', sub:totalPart+' particulares', color:'#0369a1'},
       {label:'Ausentismo',              val:pctAus+'%',   sub:ausentes+' marcado'+(ausentes!==1?'s':'')+' ausente', color:pctAus>15?'var(--red)':'#1D9E75'},
       {label:'Videollamadas',           val:totalVideo,   sub:(total-totalVideo)+' presenciales', color:'#7B3FC4'},
+      {label:'Doctoralia',              val:totalDoc,     sub:'videollamadas reservadas ahí', color:'#0f766e'},
       {label:'Reconsultas',             val:reconsultas,  sub:'pacientes c/ 2+ visitas al mismo prof', color:'var(--teal)'},
       {label:'Recetas del mes',         val:totalRecetas, sub:recetasOsde+' OSDE · '+recetasParticular+' particular', color:'#7c5cbf'},
     ];
