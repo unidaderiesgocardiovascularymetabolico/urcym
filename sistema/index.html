@@ -2,7 +2,7 @@
 <html lang="es-AR">
 <head>
   <meta charset="UTF-8" />
-  <script>var URCYM_BUILD = '2026-11-21-1600';</script>
+  <script>var URCYM_BUILD = '2026-11-21-1700';</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Evaluaciones cardiometabólicas — Sistema de Historia Clínica</title>
 
@@ -22629,6 +22629,7 @@ function diOf(ds){var dw=dowOf(ds);return dw===0?6:dw-1;}// 0=Lun..5=Sáb
 // Sin startDate → siempre aplica. Con startDate → solo a partir de esa fecha.
 // semanal+startDate → aplica cada semana DESDE startDate (no antes)
 function isBlockActiveOnDate(b, dateStr){
+  if(b.freq==='fechas') return (b.fechas||[]).indexOf(dateStr)>=0; // fechas elegidas en el calendario
   var di=diOf(dateStr);
   if(b.day!==di)return false; // día de semana no coincide
   var freq=b.freq||'semanal';
@@ -24418,7 +24419,7 @@ function _agPacienteDeTurno(t){
 // freq: 'semanal'(default)|'quincenal'|'mensual'
 
 var FREQ_OPTS=['semanal','quincenal','mensual','unico'];
-var FREQ_LBL={semanal:'Semanal',quincenal:'Quincenal',mensual:'Mensual',mes:'Algunas semanas del mes',unico:'Solo este día'};
+var FREQ_LBL={semanal:'Semanal',quincenal:'Quincenal',mensual:'Mensual',mes:'Algunas semanas del mes',fechas:'Fechas elegidas',unico:'Solo este día'};
 var PROF_COLOR={BG:'bg',OB:'ob'};
 
 // ─── Genérico: render de la barra de pills y la lista de bloques ───
@@ -24590,7 +24591,7 @@ window._dspAbrirLista=function(){
   var DSP={prof:'BG', tab:'semana', disp:[], nl:[], verVencidas:false};
   var DSP_PROFS=['BG','OB','MA'];
   var DIAS_L=['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
-  var FREQ_L={semanal:'Todas las semanas',quincenal:'Cada 15 días',mensual:'Cada 4 semanas',mes:'Algunas semanas del mes'};
+  var FREQ_L={semanal:'Todas las semanas',quincenal:'Cada 15 días',mensual:'Cada 4 semanas',mes:'Algunas semanas del mes',fechas:'Fechas elegidas'};
   function e_(v){return String(v==null?'':v).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
   function hoyStr(){return kd(new Date());}
   function fmtF(ds){if(!ds)return '';var p=ds.split('-');return p[2]+'/'+p[1]+'/'+p[0];}
@@ -24924,7 +24925,9 @@ window._dspAbrirLista=function(){
    (Las ausencias "No atiendo" siguen en Disponibilidad › Excepciones.) */
 (function(){
   var DL = ['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
-  var FQ = { semanal:'Todas las semanas', quincenal:'Cada 15 días', mensual:'Cada 4 semanas', mes:'Algunas semanas del mes (ej.: 3 de 4)', unico:'Una sola vez' };
+  var FQ = { semanal:'Todas las semanas', quincenal:'Cada 15 días', mensual:'Cada 4 semanas', mes:'Algunas semanas del mes (ej.: 3 de 4)', fechas:'Elijo los días en el calendario', unico:'Una sola vez' };
+  var fechasTxt = function(a){ var h = hoy(), f = (a || []).filter(function(x){ return x >= h; }); var dm = function(x){ return +x.slice(8, 10) + '/' + +x.slice(5, 7); };
+    return f.length ? f.length + ' fecha' + (f.length > 1 ? 's' : '') + ': ' + f.slice(0, 4).map(dm).join(', ') + (f.length > 4 ? '…' : '') : 'fechas elegidas (ya pasaron)'; };
   var semMesTxt = function(a){ a = (a || []).slice().sort(); var n = a.map(function(x){ return x + 'º'; }); return (n.length > 1 ? n.slice(0, -1).join(', ') + ' y ' + n[n.length - 1] : n[0] || '—') + ' del mes'; };
   var O = { prof:'BG', nl:[], disp:[], cambios:false, tab:'semana', venc:false };
   var E = function(t){ return String(t == null ? '' : t).replace(/[&<>"]/g, function(c){ return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' }[c]; }); };
@@ -24994,9 +24997,9 @@ window._dspAbrirLista=function(){
   function nombreLugar(b){ return b.video ? '📹 Videollamada' : (LUG_NOMBRE[b.label] || b.label || 'Otro'); }
   function chip(b){
     var ex = [];
-    if((b.freq || 'semanal') !== 'semanal') ex.push(b.freq === 'mes' ? semMesTxt(b.semMes) : (FQ[b.freq] || b.freq));
-    if(b.startDate && b.startDate > hoy()) ex.push('desde ' + fF(b.startDate));
-    if(b.endDate) ex.push((vig(b) ? 'hasta ' : 'terminó ') + fF(b.endDate));
+    if((b.freq || 'semanal') !== 'semanal') ex.push(b.freq === 'fechas' ? fechasTxt(b.fechas) : b.freq === 'mes' ? semMesTxt(b.semMes) : (FQ[b.freq] || b.freq));
+    if(b.freq !== 'fechas' && b.startDate && b.startDate > hoy()) ex.push('desde ' + fF(b.startDate));
+    if(b.endDate && b.freq !== 'fechas') ex.push((vig(b) ? 'hasta ' : 'terminó ') + fF(b.endDate));
     if(b.video) ex.push((b.dur || 30) + ' min · turnos online');
     var col = window._agLugarColor ? window._agLugarColor(b, b.video ? 'disp' : 'nl') : '#7B6EA6';
     return '<button type="button" class="dsp-chip otr-chip' + (vig(b) ? '' : ' venc') + '" style="border-left:5px solid ' + col + '" data-ok2="' + ref(b) + '"><b>' + E(b.from) + '–' + E(b.to) + '</b><span>' + E(nombreLugar(b)) + '</span>' + (ex.length ? '<i>' + E(ex.join(' · ')) + '</i>' : '') + '</button>';
@@ -25041,6 +25044,7 @@ window._dspAbrirLista=function(){
       + '<div id="op-vid-w"><label>Cada turno de videollamada</label><select id="op-dur">' + [15, 20, 30, 40, 45, 60].map(function(mn){ return '<option value="' + mn + '"' + (mn === ((b && b.dur) || 30) ? ' selected' : '') + '>' + mn + ' min</option>'; }).join('') + '</select><p class="dsp-ayuda" style="margin:4px 0 0">En estos horarios los pacientes pueden sacar turno de videollamada desde la página.</p></div>'
       + '<label>Se repite</label><select id="op-freq">' + Object.keys(FQ).map(function(k){ return '<option value="' + k + '"' + (k === fq ? ' selected' : '') + '>' + FQ[k] + '</option>'; }).join('') + '</select>'
       + '<div id="op-mes"><label>¿Qué semanas del mes? <small>(por ej. 1º, 2º y 3º jueves; el 5º solo existe algunos meses)</small></label><div class="dsp-dias">' + [1,2,3,4,5].map(function(n){ var on = (b && b.semMes ? b.semMes : [1,2,3]).indexOf(n) >= 0; return '<label class="' + (on ? 'on' : '') + '"><input type="checkbox" name="op-sm" value="' + n + '"' + (on ? ' checked' : '') + '> ' + n + 'º</label>'; }).join('') + '</div></div>'
+      + '<div id="op-cal"></div>'
       + '<div id="op-rec"><label>Día' + (nuevo ? 's' : '') + '</label><div class="dsp-dias">' + DL.map(function(n, d){ return '<label class="' + (sel.indexOf(d) >= 0 ? 'on' : '') + '"><input type="' + (nuevo ? 'checkbox' : 'radio') + '" name="op-dia" value="' + d + '"' + (sel.indexOf(d) >= 0 ? ' checked' : '') + '>' + n.slice(0, 3) + '</label>'; }).join('') + '</div></div>'
       + '<div class="dsp-fila"><div><label>Desde</label><input type="time" id="op-from" value="' + E(b ? b.from : '08:00') + '"></div><div><label>Hasta</label><input type="time" id="op-to" value="' + E(b ? b.to : '12:00') + '"></div></div>'
       + '<div class="dsp-fila"><div><label id="op-ini-l">' + (fq === 'unico' ? 'Fecha' : 'Empieza') + '</label><input type="date" id="op-ini" value="' + E(b ? b.startDate || '' : hoy()) + '"></div>'
@@ -25052,7 +25056,34 @@ window._dspAbrirLista=function(){
     p.addEventListener('mousedown', function(e){ if(e.target === p) close(); });
     var fsel = p.querySelector('#op-freq');
     var lugSel = function(){ var r = p.querySelector('input[name=op-lug]:checked'); return r ? r.value : 'otro'; };
-    var ajustar = function(){ var u = fsel.value === 'unico'; p.querySelector('#op-mes').style.display = fsel.value === 'mes' ? '' : 'none'; p.querySelector('#op-rec').style.display = u ? 'none' : ''; p.querySelector('#op-fin-w').style.visibility = u ? 'hidden' : ''; p.querySelector('#op-ini-l').textContent = u ? 'Fecha' : 'Empieza';
+    var selF = {}; (b && b.freq === 'fechas' ? b.fechas || [] : []).forEach(function(x){ selF[x] = 1; });
+    var ks = Object.keys(selF).sort(), h0 = hoy();
+    var calIni = ((ks.filter(function(x){ return x >= h0; })[0]) || h0).slice(0, 7);
+    var mesMas = function(ym, n){ var y = +ym.slice(0, 4), m = +ym.slice(5, 7) - 1 + n; y += Math.floor(m / 12); m = ((m % 12) + 12) % 12; return y + '-' + String(m + 1).padStart(2, '0'); };
+    var MESES = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+    var pintarCal = function(){
+      var box = p.querySelector('#op-cal'), n = Object.keys(selF).length;
+      var mesHtml = function(ym){
+        var y = +ym.slice(0, 4), m = +ym.slice(5, 7), dias = new Date(y, m, 0).getDate(), pri = diaDe(ym + '-01');
+        var h = '<div class="ocal-mes"><div class="ocal-tit">' + MESES[m - 1] + ' ' + y + '</div><div class="ocal-g">'
+          + ['L','M','M','J','V','S','D'].map(function(l, i){ return '<span class="ocal-h"' + (i < 6 ? ' data-col="' + i + '" data-ym="' + ym + '" title="Marcar o desmarcar todos los ' + ['lunes','martes','miércoles','jueves','viernes','sábados'][i] + ' de este mes"' : '') + '>' + l + '</span>'; }).join('');
+        for(var i = 0; i < pri; i++) h += '<span></span>';
+        for(var d = 1; d <= dias; d++){ var f = ym + '-' + String(d).padStart(2, '0'), dw = diaDe(f);
+          h += dw === 6 ? '<span class="ocal-d dom">' + d + '</span>' : '<button type="button" class="ocal-d' + (selF[f] ? ' on' : '') + (f < h0 ? ' pas' : '') + (f === h0 ? ' hoy' : '') + '" data-f="' + f + '">' + d + '</button>'; }
+        return h + '</div></div>';
+      };
+      box.innerHTML = '<label>Tocá los días que vas <small>(tocá la letra del día para marcar todo ese día del mes)</small></label>'
+        + '<div class="ocal-nav"><button type="button" data-cm="-1">‹</button><span>' + n + ' día' + (n === 1 ? '' : 's') + ' marcado' + (n === 1 ? '' : 's') + '</span><button type="button" data-cm="1">›</button></div>'
+        + '<div class="ocal-wrap">' + mesHtml(calIni) + mesHtml(mesMas(calIni, 1)) + '</div>';
+      box.querySelectorAll('[data-f]').forEach(function(x){ x.onclick = function(){ var f = x.dataset.f; if(selF[f]) delete selF[f]; else selF[f] = 1; pintarCal(); }; });
+      box.querySelectorAll('[data-cm]').forEach(function(x){ x.onclick = function(){ calIni = mesMas(calIni, +x.dataset.cm); pintarCal(); }; });
+      box.querySelectorAll('[data-col]').forEach(function(x){ x.onclick = function(){ var ym = x.dataset.ym, col = +x.dataset.col, fs = [];
+        for(var d = 1; d <= new Date(+ym.slice(0, 4), +ym.slice(5, 7), 0).getDate(); d++){ var f = ym + '-' + String(d).padStart(2, '0'); if(diaDe(f) === col && f >= h0) fs.push(f); }
+        var todos = fs.every(function(f){ return selF[f]; }); fs.forEach(function(f){ if(todos) delete selF[f]; else selF[f] = 1; }); pintarCal(); }; });
+    };
+    pintarCal();
+    var ajustar = function(){ var u = fsel.value === 'unico', fz = fsel.value === 'fechas'; p.querySelector('#op-mes').style.display = fsel.value === 'mes' ? '' : 'none';
+      p.querySelector('#op-cal').style.display = fz ? '' : 'none'; p.querySelector('#op-ini').closest('.dsp-fila').style.display = fz ? 'none' : ''; p.querySelector('#op-rec').style.display = (u || fz) ? 'none' : ''; p.querySelector('#op-fin-w').style.visibility = u ? 'hidden' : ''; p.querySelector('#op-ini-l').textContent = u ? 'Fecha' : 'Empieza';
       var l = lugSel(); p.querySelector('#op-otro-w').style.display = l === 'otro' ? '' : 'none'; p.querySelector('#op-vid-w').style.display = l === 'video' ? '' : 'none'; };
     fsel.onchange = ajustar; p.querySelectorAll('input[name=op-lug]').forEach(function(r){ r.onchange = ajustar; }); ajustar();
     p.querySelectorAll('.dsp-dias input').forEach(function(c){ c.onchange = function(){ if(c.type === 'radio') c.closest('.dsp-dias').querySelectorAll('label').forEach(function(l){ l.classList.remove('on'); }); c.parentNode.classList.toggle('on', c.checked); }; });
@@ -25081,13 +25112,22 @@ window._dspAbrirLista=function(){
         delete nb.endDate; poner(b, nb);
         close(); cambio(); return;
       }
+      if(freq === 'fechas'){
+        var fs = Object.keys(selF).sort(); if(!fs.length) return err('Marcá al menos un día en el calendario.');
+        var porDia = {}; fs.forEach(function(f){ var d = diaDe(f); (porDia[d] = porDia[d] || []).push(f); });
+        var primero = true;
+        Object.keys(porDia).forEach(function(d){ var a = porDia[d];
+          var x = base(Object.assign({}, b || {}, { prof: O.prof, day: +d, from: from, to: to, label: label, freq: 'fechas', fechas: a, startDate: a[0], endDate: a[a.length - 1] })); delete x.semMes; delete x.dayOverrides;
+          poner(primero ? b : null, x); primero = false; });
+        close(); cambio(); return;
+      }
       var dias = Array.prototype.map.call(p.querySelectorAll('#op-rec .dsp-dias input:checked'), function(c){ return +c.value; });
       var semMes = Array.prototype.map.call(p.querySelectorAll('input[name=op-sm]:checked'), function(c){ return +c.value; });
       if(freq === 'mes' && !semMes.length) return err('Marcá qué semanas del mes.');
       if(!dias.length) return err('Elegí ' + (nuevo ? 'al menos un día' : 'el día') + '.');
       if(ini && fin && fin < ini) return err('La fecha de fin es anterior a la de inicio.');
       var armar = function(d){ var st = ini || ''; if(st && freq !== 'semanal'){ var n = 0; while(diaDe(st) !== d && n++ < 7) st = mas1(st); }
-        var x = base(Object.assign({}, b || {}, { prof: O.prof, day: d, from: from, to: to, label: label, freq: freq, startDate: st })); if(fin) x.endDate = fin; else delete x.endDate; if(freq === 'mes') x.semMes = semMes; else delete x.semMes; return x; };
+        var x = base(Object.assign({}, b || {}, { prof: O.prof, day: d, from: from, to: to, label: label, freq: freq, startDate: st })); if(fin) x.endDate = fin; else delete x.endDate; if(freq === 'mes') x.semMes = semMes; else delete x.semMes; delete x.fechas; return x; };
       if(b) poner(b, armar(dias[0]));
       else dias.forEach(function(d){ poner(null, armar(d)); });
       close(); cambio();
@@ -45640,6 +45680,24 @@ html.urcym-sec .cierre-solo-prof, html.urcym-sec .dash-card.dash-pacientes, html
 .evol-topbar > .evol-paciente-header .evol-faltan{flex:0 1 auto;max-width:100%}
 .evol-topbar > div:last-child{flex:0 1 auto;margin-left:auto;justify-content:flex-end}
 .evol-topbar > .btn-volver{align-self:center}
+</style>
+<style>
+/* Otros lugares: calendario para elegir días sueltos */
+#op-cal .ocal-nav{display:flex;align-items:center;justify-content:space-between;margin:4px 0 6px;font-size:12.5px;font-weight:700;color:#475569}
+#op-cal .ocal-nav button{border:1px solid #cbd5e1;background:#fff;border-radius:8px;width:32px;height:28px;font-size:16px;cursor:pointer}
+#op-cal .ocal-wrap{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+#op-cal .ocal-tit{font-weight:800;font-size:13px;text-transform:capitalize;color:#1e293b;margin-bottom:4px;text-align:center}
+#op-cal .ocal-g{display:grid;grid-template-columns:repeat(7,1fr);gap:3px}
+#op-cal .ocal-h{font-size:10.5px;font-weight:800;color:#94a3b8;text-align:center;padding:2px 0;border-radius:6px}
+#op-cal .ocal-h[data-col]{cursor:pointer;color:#475569}
+#op-cal .ocal-h[data-col]:hover{background:#eef2ff}
+#op-cal .ocal-d{height:30px;border:1px solid #e2e8f0;background:#fff;border-radius:8px;font:600 12.5px var(--font-main);color:#334155;cursor:pointer;display:flex;align-items:center;justify-content:center}
+#op-cal .ocal-d:hover{border-color:#7B6EA6}
+#op-cal .ocal-d.on{background:#7B6EA6;border-color:#7B6EA6;color:#fff;font-weight:800}
+#op-cal .ocal-d.pas{opacity:.45}
+#op-cal .ocal-d.hoy{box-shadow:inset 0 0 0 2px #f59e0b}
+#op-cal .ocal-d.dom{border:none;background:none;color:#cbd5e1;cursor:default}
+@media (max-width:560px){#op-cal .ocal-wrap{grid-template-columns:1fr}}
 </style>
 </body>
 </html>
