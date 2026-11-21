@@ -2,7 +2,7 @@
 <html lang="es-AR">
 <head>
   <meta charset="UTF-8" />
-  <script>var URCYM_BUILD = '2026-11-21-1030';</script>
+  <script>var URCYM_BUILD = '2026-11-21-1230';</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Evaluaciones cardiometabólicas — Sistema de Historia Clínica</title>
 
@@ -1729,7 +1729,7 @@
           <button class="ag-btn-inst ag-solo-prof" id="ag-btn-inst">&#127970; Institucional</button>
           <button class="ag-btn-tasks" id="ag-btn-tasks" title="Tareas por profesional">&#9989; Tareas</button>
           <button id="ag-btn-video-online" class="ag-solo-prof" onclick="window.vidAbrirPanel&&vidAbrirPanel(window._vidHayConsultas?'con':'')" style="background:none;border:1px solid #7B3FC4;border-radius:6px;padding:5px 10px;font-size:12px;color:#7B3FC4;cursor:pointer;font-family:inherit;" title="Videoconsultas, recetas y consultas que piden los pacientes desde la web">🌐 Online <span class="vid-count" title="Consultas por responder" style="display:none;background:#f59e0b;color:#fff;border-radius:999px;padding:0 6px;font-size:10.5px;font-weight:700;margin-left:2px;">0</span><span class="vid-comp" title="Comprobantes sin revisar" style="display:none;background:#ede9fe;color:#5b21b6;border-radius:999px;padding:0 6px;font-size:10.5px;font-weight:700;margin-left:3px;"></span></button>
-          <button id="ag-btn-buscar" class="ag-solo-prof" style="background:none;border:1px solid #185FA5;border-radius:6px;padding:5px 10px;font-size:12px;color:#185FA5;cursor:pointer;font-family:inherit;" title="Buscar turnos de un paciente">&#128269; Buscar paciente</button>
+          <button id="ag-btn-buscar" style="background:none;border:1px solid #185FA5;border-radius:6px;padding:5px 10px;font-size:12px;color:#185FA5;cursor:pointer;font-family:inherit;" title="Buscar turnos de un paciente">&#128269; Buscar paciente</button>
           <button id="ag-btn-aranceles" class="ag-solo-prof" style="background:none;border:1px solid #059669;border-radius:6px;padding:5px 10px;font-size:12px;color:#059669;cursor:pointer;font-family:inherit;" title="Configurar aranceles por consulta">💲 Aranceles</button>
           <button class="ag-solo-prof" onclick="agRecuperarLocalStorage()" style="background:none;border:1px solid #b45309;border-radius:6px;padding:5px 10px;font-size:12px;color:#b45309;cursor:pointer;font-family:inherit;" title="Si se perdieron turnos: fusiona el caché local con Supabase">🔁 Recuperar turnos</button>
           <button id="ag-btn-refresh" class="ag-solo-prof" onclick="agRefreshManual()" style="background:none;border:1px solid #0369a1;border-radius:6px;padding:5px 10px;font-size:12px;color:#0369a1;cursor:pointer;font-family:inherit;" title="Actualizar agenda desde la nube (útil si otro profesional agregó turnos)">🔄 Actualizar</button>
@@ -2270,7 +2270,7 @@
         </select>
         <div class="ci-profs" id="ci-profs"><button type="button" data-p="BG" onclick="ciElegirProf('BG')">Dra. Bárbara Guerrero</button><button type="button" data-p="OB" onclick="ciElegirProf('OB')">Dr. Omar Bertani</button></div>
         <button class="fin-btn-nuevo" style="background:#1a2335" onclick="window.cierreDescargarPDF && cierreDescargarPDF()">📄 Descargar PDF</button>
-        <button class="fin-btn-nuevo teal" onclick="window.cierreAbrirConfig && cierreAbrirConfig()">⚙️ Configuración</button>
+        <button class="fin-btn-nuevo teal cierre-solo-prof" onclick="window.cierreAbrirConfig && cierreAbrirConfig()">⚙️ Configuración</button>
       </div>
       <div class="cierre-tabs">
         <button class="fin-tab active" id="cierre-tab-dia" onclick="window.cierreShowTab && cierreShowTab('dia')">Cierre del día</button>
@@ -25105,17 +25105,22 @@ window._dspAbrirLista=function(){
 })();
 
 
-/* ══ Agenda · colores por lugar (vista mensual, Otros lugares) ══ */
+/* ══ Agenda · colores por lugar (vista mensual, Otros lugares) ══
+   Se respetan los colores de siempre de la agenda: consultorio = color de cada profesional,
+   videollamada = violeta, otros = el oscuro de cada profesional, institucional = gris.
+   Solo los lugares nuevos tienen color propio, y zoom / meet / importantes van en amarillo. */
 (function(){
-  var LCOL = { Sapiens:'#F59E0B', CEM:'#14B8A6', CEQ:'#0EA5E9' };
-  var PAL = ['#EC4899','#84CC16','#A855F7','#F97316','#06B6D4','#64748B'];
+  var CONS = { BG:'#7F77DD', OB:'#378ADD', MA:'#22C55E' };
+  var OTRO = { BG:'#7B6EA6', OB:'#2B4E8C', MA:'#64748B' };
+  var NUEVOS = { Sapiens:'#F59E0B', CEM:'#14B8A6', CEQ:'#DB2777' };
+  var REM = /zoom|meet|webinar|online|virtual/i;
   window._agLugarColor = function(b, tipo){
     if(tipo === 'inst') return '#6B7280';
-    if(tipo === 'disp') return b.video ? '#7B3FC4' : '#55B474';
+    if(tipo === 'disp') return b.video ? '#7B3FC4' : (CONS[b.prof] || '#185FA5');
     if(b.ausencia) return '#EF4444';
-    if(LCOL[b.label]) return LCOL[b.label];
-    var h = 0, s = String(b.label || ''); for(var i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
-    return PAL[h % PAL.length];
+    if(NUEVOS[b.label]) return NUEVOS[b.label];
+    if(REM.test(b.label || '')) return '#EAB308';
+    return OTRO[b.prof] || '#64748B';
   };
 })();
 
@@ -25278,66 +25283,88 @@ window._dspAbrirLista=function(){
   var col = function(b, t){ return window._agLugarColor ? window._agLugarColor(b, t) : '#999'; };
   var LUG_NOMBRE = { Sapiens:'Sapiens', CEM:'CEM', CEQ:'CEQ' };
 
+  // Franja horaria que muestra cada día (como la agenda de papel)
+  var H0 = 7 * 60, H1 = 21 * 60, HSPAN = H1 - H0;
+  var pos = function(t){ return Math.max(0, Math.min(100, (t2m(t) - H0) / HSPAN * 100)); };
+  var REMOTO = /video|zoom|online|virtual|remoto|desde casa|meet/i;
   function profs(){
-    var f = (typeof profFilter !== 'undefined' && profFilter && profFilter.length) ? profFilter.slice() : ['BG','OB','MA'];
-    return f.filter(function(p){ return ['BG','OB','MA'].indexOf(p) >= 0; });
+    var f = (typeof profFilter !== 'undefined' && profFilter && profFilter.length) ? profFilter.slice() : [];
+    if(f.length === 1 && f[0] === 'MA') return ['MA'];
+    var p = f.filter(function(x){ return x === 'BG' || x === 'OB'; });
+    return p.length ? p : ['BG','OB'];
   }
-  function items(ds){
-    var sec = _esSecretariaLogueada(), out = [], ps = profs();
-    instBlocks.forEach(function(b){ if(b.startDate === ds || isBlockActiveOnDate(b, ds)) out.push({ inst:true, f:b.from, t:b.to, txt:'🏛 ' + (b.label || 'Cierre'), c:col(b, 'inst'), td:!!b.todoDia || (t2m(b.from) <= 420 && t2m(b.to) >= 1320) }); });
-    var imps = (!sec && window._impDelDia) ? window._impDelDia(ds).map(function(ev){ return { imp:true, f:ev.hora || '00:00', t:ev.horaFin || ev.hora || '', txt:'⭐ ' + ev.titulo, c:'#EAB308', td:!ev.hora }; }) : [];
-    if(out.some(function(i){ return i.td; })) return out.concat(imps);   // cierre institucional todo el día: solo eso (y los importantes)
-    ps.forEach(function(p){
-      var aus = nlBlocks.filter(function(b){ return b.prof === p && b.ausencia && isBlockActiveOnDate(b, ds); });
-      var ausTodo = aus.some(function(b){ return b.todoDia; });
-      aus.forEach(function(b){ out.push({ p:p, f:b.todoDia ? '00:00' : b.from, t:b.to, txt:'No atiende' + (b.label && !sec ? ' · ' + b.label : ''), c:col(b, 'nl'), td:!!b.todoDia }); });
-      if(ausTodo) return;
+  function corto(t){ t = String(t || ''); return t === 'Videollamada' ? 'Video' : t.replace(/^No atiende.*/, 'No atiende'); }
+  // Bloques del día por profesional: {f,t,txt,c,rem(oto),aus,imp}
+  function dia(ds){
+    var sec = _esSecretariaLogueada(), r = { inst:[], cols:{} };
+    instBlocks.forEach(function(b){ if(b.startDate === ds || isBlockActiveOnDate(b, ds)) r.inst.push({ f:b.from, t:b.to, txt:b.label || 'Cierre institucional', td:!!b.todoDia || (t2m(b.from) <= H0 && t2m(b.to) >= H1) }); });
+    profs().forEach(function(p){
+      var L = r.cols[p] = [];
+      nlBlocks.forEach(function(b){ if(b.prof === p && b.ausencia && isBlockActiveOnDate(b, ds)) L.push({ f:b.todoDia ? '07:00' : b.from, t:b.todoDia ? '21:00' : b.to, txt:'No atiende' + (b.label && !sec ? ' · ' + b.label : ''), c:'#EF4444', aus:true }); });
+      if(L.some(function(x){ return x.aus && t2m(x.f) <= H0 && t2m(x.t) >= H1; })) return;
       dispBlocks.forEach(function(b){
-        if(b.prof !== p || !isBlockActiveOnDate(b, ds)) return;
-        if(b.video && sec) return;
-        out.push({ p:p, f:getEffectiveFrom(b, ds), t:getEffectiveTo(b, ds), txt:b.video ? 'Video' : 'Consultorio', c:col(b, 'disp') });
+        if(b.prof !== p || !isBlockActiveOnDate(b, ds) || (b.video && sec)) return;
+        L.push({ f:getEffectiveFrom(b, ds), t:getEffectiveTo(b, ds), txt:b.video ? 'Videollamada' : 'Consultorio', c:col(b, 'disp'), rem:!!b.video });
       });
       if(!sec) nlBlocks.forEach(function(b){
         if(b.prof !== p || b.ausencia || !isBlockActiveOnDate(b, ds)) return;
-        out.push({ p:p, f:b.from, t:b.to, txt:LUG_NOMBRE[b.label] || b.label || 'Otro', c:col(b, 'nl') });
+        L.push({ f:b.from, t:b.to, txt:LUG_NOMBRE[b.label] || b.label || 'Otro', c:col(b, 'nl'), rem:REMOTO.test(b.label || '') });
+      });
+      if(!sec && window._impDelDia) window._impDelDia(ds).forEach(function(ev){
+        if(ev.quien !== p && ev.quien !== 'ambos') return;
+        L.push({ f:ev.hora || '07:00', t:ev.horaFin || (ev.hora ? String(Math.min(21, +ev.hora.slice(0, 2) + 1)).padStart(2, '0') + ':' + ev.hora.slice(3) : '21:00'), txt:'⭐ ' + ev.titulo, c:'#EAB308', imp:true, rem:ev.tipo === 'zoom' || ev.tipo === 'webinar' });
       });
     });
-    out = out.concat(imps);
-    return out.sort(function(a, b){ return (b.inst ? 1 : 0) - (a.inst ? 1 : 0) || (b.imp ? 1 : 0) - (a.imp ? 1 : 0) || t2m(a.f) - t2m(b.f); });
+    return r;
   }
   function cuentaTurnos(){
     var sec = _esSecretariaLogueada(), ps = profs(), c = {};
     Object.keys(turnos || {}).forEach(function(k){
       var pr = k.split('_'), t = turnos[k]; if(!t || ps.indexOf(pr[2]) < 0) return;
-      if(sec && (t.video || t.esVideo)) return;
+      if(sec && t.video) return;
       c[pr[0]] = (c[pr[0]] || 0) + 1;
     });
     return c;
   }
+  function blk(b, p){
+    var top = pos(b.f), h = Math.max(2.5, pos(b.t) - top), dur = t2m(b.t) - t2m(b.f);
+    var cls = 'mv-blk' + (b.rem ? ' rem' : '') + (b.aus ? ' aus' : '') + (b.imp ? ' imp' : '');
+    return '<div class="' + cls + '" style="top:' + top + '%;height:' + h + '%;--c:' + b.c + '" title="' + E(INI[p] + ' · ' + hh(b.f) + '–' + hh(b.t) + ' · ' + b.txt + (b.rem ? ' (desde casa)' : '')) + '">' + (dur >= 90 && !b.imp ? '<span>' + E(corto(b.txt)) + '</span>' : '') + '</div>';
+  }
+  function celda(ds, fuera, hoyS, cnt){
+    var dd = dia(ds), ps = profs(), cerrado = dd.inst.some(function(i){ return i.td; }), dn = +ds.slice(8);
+    var x = '<button type="button" class="mv-c' + (fuera ? ' fuera' : '') + (ds === hoyS ? ' hoy' : '') + '" data-mvd="' + ds + '">'
+      + '<div class="mv-n"><span>' + dn + '</span>' + (cnt[ds] ? '<em title="Turnos dados">' + cnt[ds] + ' t.</em>' : '') + '</div>'
+      + (ps.length > 1 ? '<div class="mv-lt">' + ps.map(function(p){ return '<i>' + INI[p] + '</i>'; }).join('') + '</div>' : '')
+      + '<div class="mv-tl">' + [8, 12, 16, 20].map(function(hr){ return '<b class="mv-hl" style="top:' + pos(hr + ':00') + '%"></b>'; }).join('');
+    ps.forEach(function(p){ x += '<div class="mv-col">' + (dd.cols[p] || []).map(function(b){ return blk(b, p); }).join('') + '</div>'; });
+    dd.inst.forEach(function(i){ var top = i.td ? 0 : pos(i.f), h = i.td ? 100 : Math.max(3, pos(i.t) - top);
+      x += '<div class="mv-inst" style="top:' + top + '%;height:' + h + '%" title="' + E('🏛 ' + i.txt + (i.td ? '' : ' · ' + hh(i.f) + '–' + hh(i.t))) + '">' + (h > 25 ? '<span>🏛 ' + E(i.txt) + '</span>' : '') + '</div>'; });
+    return x + '</div></button>';
+  }
   function pintar(){
     var box = document.getElementById('ag-mes'); if(!box) return;
-    var hoyS = kd(new Date()), cnt = cuentaTurnos(), multi = profs().length > 1;
+    var hoyS = kd(new Date()), cnt = cuentaTurnos(), ps = profs();
     var d1 = new Date(M.y, M.m, 1), lun = getMonday(d1), fin = new Date(M.y, M.m + 1, 0);
-    var x = '<div class="mv-grid"><div class="mv-h">' + DCORTO.map(function(d){ return '<div>' + d + '</div>'; }).join('') + '</div>';
+    var eje = '<div class="mv-ax"><div class="mv-ax-tl">' + [8, 12, 16, 20].map(function(hr){ return '<span style="top:' + pos(hr + ':00') + '%">' + hr + '</span>'; }).join('') + '</div></div>';
+    var x = '<div class="mv-grid' + (ps.length > 1 ? ' multi' : '') + '"><div class="mv-h"><div></div>' + DCORTO.map(function(d){ return '<div>' + d + '</div>'; }).join('') + '</div>';
     var d = new Date(lun);
     while(d <= fin || diOf(kd(d)) !== 0){
-      if(diOf(kd(d)) === 0) x += '<div class="mv-row">';
+      if(diOf(kd(d)) === 0) x += '<div class="mv-row">' + eje;
       var ds = kd(d), di = diOf(ds);
-      if(di <= 5){
-        var its = items(ds), fuera = d.getMonth() !== M.m, max = 4;
-        x += '<button type="button" class="mv-c' + (fuera ? ' fuera' : '') + (ds === hoyS ? ' hoy' : '') + (its.some(function(i){ return i.inst && i.td; }) ? ' cerrado' : '') + '" data-mvd="' + ds + '">'
-          + '<div class="mv-n"><span>' + d.getDate() + '</span>' + (cnt[ds] ? '<em title="Turnos dados">' + cnt[ds] + ' turno' + (cnt[ds] > 1 ? 's' : '') + '</em>' : '') + '</div>'
-          + its.slice(0, max).map(function(i){ return '<div class="mv-b" style="--c:' + i.c + '">' + (multi && i.p ? '<i>' + INI[i.p] + '</i>' : '') + (i.td ? '' : '<small>' + hh(i.f) + '–' + hh(i.t) + '</small>') + E(i.txt) + '</div>'; }).join('')
-          + (its.length > max ? '<div class="mv-mas">+' + (its.length - max) + ' más</div>' : '') + '</button>';
-      }
+      if(di <= 5) x += celda(ds, d.getMonth() !== M.m, hoyS, cnt);
       if(di === 6) x += '</div>';
       d.setDate(d.getDate() + 1);
       if(diOf(kd(d)) === 0 && d > fin) break;
     }
     x += '</div>';
     var sec = _esSecretariaLogueada();
-    var ley = [['#55B474', 'Consultorio']].concat(sec ? [] : [['#7B3FC4', 'Videollamada'], ['#F59E0B', 'Sapiens'], ['#14B8A6', 'CEM'], ['#0EA5E9', 'CEQ'], ['#EC4899', 'Otros (cada uno su color)']]).concat([['#EF4444', 'No atiende'], ['#6B7280', 'Institucional']]).concat(sec ? [] : [['#EAB308', '⭐ Importante']]);
-    x += '<div class="mv-ley">' + ley.map(function(l){ return '<span><b style="background:' + l[0] + '"></b>' + l[1] + '</span>'; }).join('') + (multi ? '<span class="mv-ley-p">G = Guerrero · B = Bertani · M = MAPA</span>' : '') + '<span class="mv-ley-p">Tocá un día para ir a esa semana</span></div>';
+    var ley = [['#7F77DD', 'Consultorio Guerrero'], ['#378ADD', 'Consultorio Bertani']].concat(sec ? [] : [['#7B3FC4', 'Videollamada'], ['#7B6EA6', 'Otros Guerrero'], ['#2B4E8C', 'Otros Bertani'], ['#F59E0B', 'Sapiens'], ['#14B8A6', 'CEM'], ['#DB2777', 'CEQ'], ['#EAB308', 'Zoom, Meet e importantes']]);
+    x += '<div class="mv-ley">'
+      + (ps.length > 1 ? '<span class="mv-ley-c">Cada día: <strong>' + ps.map(function(p){ return INI[p] + ' = ' + (PROF_LBL[p] || p); }).join('</strong> a la izquierda · <strong>') + '</strong> a la derecha · de 7 a 21 h</span>' : '')
+      + '<span><b class="mv-k lleno"></b>Lleno = presencial</span>' + (sec ? '' : '<span><b class="mv-k rayado"></b>Rayado = desde casa (video, zoom)</span>')
+      + '<span><b class="mv-k libre"></b>Blanco = libre</span><span><b class="mv-k aus"></b>No atiende</span><span><b class="mv-k inst"></b>Cierre institucional</span></div>'
+      + '<div class="mv-ley">' + ley.map(function(l){ return '<span><b style="background:' + l[0] + '"></b>' + l[1] + '</span>'; }).join('') + '<span class="mv-ley-p">Pasá el mouse por una franja para ver el detalle · tocá un día para ir a esa semana</span></div>';
     box.innerHTML = x;
     box.querySelectorAll('[data-mvd]').forEach(function(c){ c.onclick = function(){
       var ds = c.dataset.mvd; salir();
@@ -25591,6 +25618,209 @@ window._dspAbrirLista=function(){
   if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
   setTimeout(init, 2500);
   setInterval(function(){ if(esProf()) cargar().then(pintarTodo); }, 5 * 60e3);
+})();
+
+
+/* ══ Agenda › 📋 Recepción (pensado para la Secretaría, lo pueden usar todos) ══
+   Un botón, tres pestañas, todo opcional (no cambia cómo se trabaja en la agenda):
+   · Hoy: los pacientes del día en orden, para tildar Presente / Atendido / Ausente y "Pagó" (lo mismo que en la agenda).
+   · Recordatorios de mañana: un toque abre WhatsApp con el mensaje armado y queda tildado "enviado".
+   · A reprogramar: turnos que quedaron en días/horas que el profesional no atiende o con cierre institucional.
+   La Secretaría no ve turnos de videollamada. Los mensajes se editan y quedan guardados (clave 'msg_recepcion'). */
+(function(){
+  var R = { tab:'hoy', dia:null, msgs:null };
+  var MSG_DEF = {
+    recordatorio: 'Hola {nombre}! Te recordamos tu turno {con_quien} el {dia} a las {hora} hs en Costa Bucal (Av. 32 Nº 626, Santa Teresita). Si no podés venir, avisanos por acá. ¡Gracias!',
+    reprogramar: 'Hola {nombre}! Te escribimos del consultorio: {motivo} el {dia}, así que tenemos que reprogramar tu turno de las {hora} hs. ¿Qué día y horario te queda cómodo?'
+  };
+  var DIAS_L = ['lunes','martes','miércoles','jueves','viernes','sábado','domingo'];
+  var E = function(t){ return String(t == null ? '' : t).replace(/[&<>"]/g, function(c){ return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' }[c]; }); };
+  var hoyS = function(){ return new Date().toLocaleDateString('sv-SE', { timeZone:'America/Argentina/Buenos_Aires' }); };
+  var mas = function(f, n){ var d = new Date(f + 'T12:00:00'); d.setDate(d.getDate() + n); return d.toLocaleDateString('sv-SE'); };
+  var dw = function(f){ return (new Date(f + 'T12:00:00').getDay() + 6) % 7; };
+  var sec = function(){ return _esSecretariaLogueada(); };
+  var diaTxt = function(f){ var p = f.split('-'); return DIAS_L[dw(f)] + ' ' + (+p[2]) + '/' + (+p[1]); };
+  var pila = function(n){ var s = String(n || '').split(',').pop().trim().split(/\s+/)[0] || ''; return s ? s.charAt(0).toUpperCase() + s.slice(1).toLowerCase() : ''; };
+  var CON = { BG:'la Dra. Bárbara Guerrero', OB:'el Dr. Omar Bertani' };
+  var conQuien = function(p){ return p === 'MA' ? 'para el MAPA' : 'con ' + (CON[p] || PROF_FULL[p] || p); };
+  function proxHabil(f){ var d = mas(f, 1); while(dw(d) === 6) d = mas(d, 1); return d; }
+
+  function delDia(ds){
+    var out = [];
+    Object.keys(turnos || {}).forEach(function(k){
+      var t = turnos[k], p = k.split('_'); if(!t || p[0] !== ds || !t.paciente) return;
+      if(t.estado === 'cancelado') return;
+      if(t.video && sec()) return;
+      out.push({ k:k, t:t, hora:p[1], prof:p[2] || t.prof });
+    });
+    return out.sort(function(a, b){ return a.hora.localeCompare(b.hora) || String(a.prof).localeCompare(String(b.prof)); });
+  }
+  function datos(t){
+    var p = (typeof _agPacienteDeTurno === 'function') ? _agPacienteDeTurno(t) : null;
+    var tel = String((p && p.telefono) || t.telefono || t.tel || '').trim();
+    return { tel:tel, wa: tel && window._agWaNum ? window._agWaNum(tel) : '' };
+  }
+  function armar(tipo, it, motivo){
+    var m = (R.msgs && R.msgs[tipo]) || MSG_DEF[tipo];
+    return m.replace(/\{nombre\}/g, pila(it.t.paciente)).replace(/\{con_quien\}/g, conQuien(it.prof)).replace(/\{dia\}/g, diaTxt(it.k.split('_')[0]))
+      .replace(/\{hora\}/g, it.hora).replace(/\{motivo\}/g, motivo || 'el profesional no va a atender').replace(/\{profesional\}/g, PROF_FULL[it.prof] || it.prof);
+  }
+  // Turnos que caen en un "no atiende" del profesional o en un cierre institucional (de hoy en adelante, 90 días)
+  function aReprogramar(){
+    var h = hoyS(), lim = mas(h, 90), out = [];
+    Object.keys(turnos || {}).forEach(function(k){
+      var t = turnos[k], p = k.split('_'), ds = p[0], hora = p[1], prof = p[2] || t.prof;
+      if(!t || !t.paciente || ds < h || ds > lim || t.estado === 'cancelado' || t.asistencia) return;
+      if(t.video && sec()) return;
+      var tm = t2m(hora), motivo = '';
+      var inst = instBlocks.find(function(b){ return (b.startDate === ds || isBlockActiveOnDate(b, ds)) && t2m(b.from) <= tm && tm < t2m(b.to); });
+      if(inst) motivo = 'el consultorio está cerrado (' + (inst.label || 'cierre institucional') + ')';
+      else {
+        var aus = nlBlocks.find(function(b){ return b.prof === prof && b.ausencia && isBlockActiveOnDate(b, ds) && (b.todoDia || (t2m(b.from) <= tm && tm < t2m(b.to))); });
+        if(aus) motivo = (prof === 'MA' ? 'no hay MAPA' : ({ BG:'la Dra. Bárbara Guerrero', OB:'el Dr. Omar Bertani' }[prof] || prof) + ' no va a atender');
+      }
+      if(motivo) out.push({ k:k, t:t, hora:hora, prof:prof, motivo:motivo });
+    });
+    return out.sort(function(a, b){ return a.k.localeCompare(b.k); });
+  }
+  window._recAReprogramar = aReprogramar;
+
+  async function cargarMsgs(){
+    if(R.msgs) return;
+    try { var v = await sbGetAgendaConfig('msg_recepcion'); R.msgs = (v && typeof v === 'object') ? Object.assign({}, MSG_DEF, v) : Object.assign({}, MSG_DEF); }
+    catch(e){ R.msgs = Object.assign({}, MSG_DEF); }
+  }
+  function abrir(tab){
+    R.tab = tab || R.tab || 'hoy'; R.dia = R.dia || hoyS();
+    var bg = document.getElementById('rec-bg');
+    if(!bg){
+      bg = document.createElement('div'); bg.id = 'rec-bg'; bg.className = 'dsp-bg';
+      bg.innerHTML = '<div class="dsp-modal" role="dialog" aria-modal="true" style="width:880px"><div class="dsp-head"><span style="font-size:22px">📋</span><div><h3>Recepción</h3>'
+        + '<div class="dsp-sub">Atajos para el día a día. Es lo mismo que marcás en la agenda: usalo si te resulta más cómodo.</div></div>'
+        + '<button type="button" class="dsp-x" aria-label="Cerrar">✕</button></div><div class="rec-tabs" id="rec-tabs"></div><div class="dsp-body" id="rec-body"></div></div>';
+      document.body.appendChild(bg);
+      var c = function(){ bg.style.display = 'none'; };
+      bg.querySelector('.dsp-x').onclick = c; bg.addEventListener('mousedown', function(e){ if(e.target === bg) c(); });
+    }
+    bg.style.display = 'flex'; render();
+    cargarMsgs().then(function(){ if(bg.style.display !== 'none') render(); });
+  }
+  window._recAbrir = abrir;
+  function abierto(){ var bg = document.getElementById('rec-bg'); return bg && bg.style.display !== 'none'; }
+
+  function render(){
+    var rp = aReprogramar();
+    document.getElementById('rec-tabs').innerHTML = [['hoy','🗓️ Día de atención'],['rec','📲 Recordatorios de mañana'],['rep','🔁 A reprogramar' + (rp.length ? ' <b class="rec-n">' + rp.length + '</b>' : '')]]
+      .map(function(x){ return '<button type="button" class="rec-tab' + (R.tab === x[0] ? ' on' : '') + '" data-rt="' + x[0] + '">' + x[1] + '</button>'; }).join('');
+    document.querySelectorAll('#rec-tabs [data-rt]').forEach(function(b){ b.onclick = function(){ R.tab = b.dataset.rt; render(); }; });
+    var body = document.getElementById('rec-body');
+    if(R.tab === 'hoy') body.innerHTML = htmlHoy(); else if(R.tab === 'rec') body.innerHTML = htmlRec(); else body.innerHTML = htmlRep(rp);
+    enganchar(body, rp);
+  }
+  function chipPago(t){
+    if(t.osde || t.pago === 'osde') return '<span class="rec-pg osde">OSDE</span>';
+    if(t.sinCargo) return '<span class="rec-pg">Sin cargo</span>';
+    if(t.pago === 'pagado') return '<span class="rec-pg ok">✓ Pagó</span>';
+    if(t.pago === 'señado') return '<span class="rec-pg sena">Señó' + (t.sena ? ' $' + Number(t.sena).toLocaleString('es-AR') : '') + '</span>';
+    return '<span class="rec-pg no">Sin pago</span>';
+  }
+  function htmlHoy(){
+    var ds = R.dia, its = delDia(ds), h = hoyS();
+    var minS = sec() && typeof AGENDA_FECHA_MIN_SECRETARIA !== 'undefined' ? AGENDA_FECHA_MIN_SECRETARIA : '';
+    var x = '<div class="rec-nav"><button type="button" data-rd="-1"' + (minS && mas(ds, -1) < minS ? ' disabled' : '') + '>‹</button><b>' + (ds === h ? 'Hoy · ' : '') + diaTxt(ds) + '</b><button type="button" data-rd="1">›</button>' + (ds !== h ? '<button type="button" class="rec-hoy" data-rd="0">Hoy</button>' : '') + '<span class="rec-cnt">' + its.length + ' paciente' + (its.length === 1 ? '' : 's') + '</span></div>';
+    if(!its.length) return x + '<div class="dsp-vacio" style="padding:24px 0">No hay turnos este día.</div>';
+    var prof = null;
+    its.forEach(function(it){
+      if(it.prof !== prof){ prof = it.prof; x += '<div class="rec-prof">' + E(PROF_FULL[prof] || prof) + '</div>'; }
+      var t = it.t, a = (t.asistencia === 'asistio' ? 'atendido' : t.asistencia) || '', d = datos(t);
+      x += '<div class="rec-it a-' + (a || 'nada') + '"><span class="rec-h">' + E(it.hora) + '</span><span class="rec-p"><b data-ropen="' + E(it.k) + '" title="Abrir el turno">' + E(t.paciente) + '</b>' + (t.motivo ? '<small>' + E(t.motivo) + '</small>' : '') + (t.video ? '<small>📹 videollamada</small>' : '') + '</span>'
+        + chipPago(t)
+        + '<span class="rec-as">' + [['presente','● Llegó'],['atendido','✓ Atendido'],['ausente','✕ Ausente']].map(function(o){ return '<button type="button" class="' + (a === o[0] ? 'sel ' : '') + o[0] + '" data-ras="' + o[0] + '" data-k="' + E(it.k) + '">' + o[1] + '</button>'; }).join('') + '</span>'
+        + '<span class="rec-acc">' + (!t.osde && t.pago !== 'pagado' && t.pago !== 'osde' && !t.sinCargo ? '<button type="button" class="rec-pagar" data-rpago="' + E(it.k) + '">💲 Pagó</button>' : '')
+        + (d.wa ? '<a class="rec-wa" href="https://wa.me/' + d.wa + '" target="_blank" rel="noopener" title="' + E(d.tel) + '">💬</a>' : '') + '</span></div>';
+    });
+    return x;
+  }
+  function htmlRec(){
+    var ds = proxHabil(hoyS()), its = delDia(ds).filter(function(it){ return !it.t.video; });
+    var env = its.filter(function(it){ return it.t.recordatorio_wa; }).length;
+    var x = '<div class="rec-nav"><b>Turnos del ' + diaTxt(ds) + '</b><span class="rec-cnt">' + env + ' de ' + its.length + ' avisados</span><button type="button" class="rec-edit" data-redit="recordatorio">✏️ Editar mensaje</button></div>'
+      + '<p class="dsp-ayuda">Tocá <b>💬 Enviar</b>: se abre WhatsApp con el mensaje listo, lo mandás y acá queda tildado. A los que tienen mail también les llega el recordatorio por mail.</p>';
+    if(!its.length) return x + '<div class="dsp-vacio" style="padding:24px 0">No hay turnos ese día.</div>';
+    its.forEach(function(it){
+      var t = it.t, d = datos(t), ok = t.recordatorio_wa;
+      x += '<div class="rec-it' + (ok ? ' a-atendido' : '') + '"><span class="rec-h">' + E(it.hora) + '</span><span class="rec-p"><b>' + E(t.paciente) + '</b><small>' + E(PROF_LBL[it.prof] || it.prof) + (d.tel ? ' · ' + E(d.tel) : '') + '</small></span>'
+        + (ok ? '<span class="rec-ok">✓ Enviado ' + new Date(ok).toLocaleTimeString('es-AR', { hour:'2-digit', minute:'2-digit' }) + '</span>' : '')
+        + '<span class="rec-acc">' + (d.wa ? '<button type="button" class="rec-env" data-renv="' + E(it.k) + '">' + (ok ? 'Reenviar' : '💬 Enviar') + '</button>' : '<span class="rec-sin">sin celular</span>')
+        + '<button type="button" class="rec-tick" data-rtick="' + E(it.k) + '" title="' + (ok ? 'Desmarcar' : 'Marcar como avisado (si le avisaste por otro lado)') + '">' + (ok ? '↺' : '✓') + '</button></span></div>';
+    });
+    return x;
+  }
+  function htmlRep(rp){
+    var x = '<div class="rec-nav"><b>Turnos a reprogramar</b><span class="rec-cnt">' + rp.length + '</span><button type="button" class="rec-edit" data-redit="reprogramar">✏️ Editar mensaje</button></div>'
+      + '<p class="dsp-ayuda">Son turnos que quedaron en un día u horario en que el profesional ya no atiende, o con cierre institucional. Avisale al paciente y movelo a otro día desde <b>Abrir turno</b>; al moverlo sale de esta lista.</p>';
+    if(!rp.length) return x + '<div class="dsp-vacio" style="padding:24px 0">✓ No hay turnos para reprogramar.</div>';
+    rp.forEach(function(it){
+      var t = it.t, d = datos(t), ok = t.reprog_wa;
+      x += '<div class="rec-it rep"><span class="rec-h">' + E(diaTxt(it.k.split('_')[0])) + '<br>' + E(it.hora) + '</span><span class="rec-p"><b>' + E(t.paciente) + '</b><small>' + E(PROF_LBL[it.prof] || it.prof) + ' · ' + E(it.motivo) + '</small></span>'
+        + (ok ? '<span class="rec-ok">✓ Avisado ' + new Date(ok).toLocaleDateString('es-AR', { day:'2-digit', month:'2-digit' }) + '</span>' : '')
+        + '<span class="rec-acc">' + (d.wa ? '<button type="button" class="rec-env" data-rrep="' + E(it.k) + '">' + (ok ? 'Reenviar' : '💬 Avisar') + '</button>' : '<span class="rec-sin">sin celular</span>')
+        + '<button type="button" class="rec-pagar" data-ropen="' + E(it.k) + '">Abrir turno</button></span></div>';
+    });
+    return x;
+  }
+  function enganchar(body, rp){
+    body.querySelectorAll('[data-rd]').forEach(function(b){ b.onclick = function(){ var n = +b.dataset.rd; R.dia = n === 0 ? hoyS() : mas(R.dia, n); if(dw(R.dia) === 6) R.dia = mas(R.dia, n < 0 ? -1 : 1); render(); }; });
+    body.querySelectorAll('[data-ras]').forEach(function(b){ b.onclick = function(){ var t = turnos[b.dataset.k]; if(!t) return; t.asistencia = (t.asistencia === b.dataset.ras || (b.dataset.ras === 'atendido' && t.asistencia === 'asistio')) ? null : b.dataset.ras; saveLocal(); renderGrid(); render(); }; });
+    body.querySelectorAll('[data-rpago]').forEach(function(b){ b.onclick = function(){ var r = b.getBoundingClientRect(); agPopupMedioPago(b.dataset.rpago, r.left - 60, r.bottom + 4); }; });
+    body.querySelectorAll('[data-ropen]').forEach(function(b){ b.onclick = function(){ var k = b.dataset.ropen, p = k.split('_'); document.getElementById('rec-bg').style.display = 'none'; openModal(p[0], p[1], k); }; });
+    body.querySelectorAll('[data-renv]').forEach(function(b){ b.onclick = function(){ var k = b.dataset.renv, p = k.split('_'), t = turnos[k]; if(!t) return; var d = datos(t);
+      window.open('https://wa.me/' + d.wa + '?text=' + encodeURIComponent(armar('recordatorio', { k:k, t:t, hora:p[1], prof:p[2] || t.prof })), '_blank', 'noopener');
+      t.recordatorio_wa = new Date().toISOString(); saveLocal(); render(); }; });
+    body.querySelectorAll('[data-rtick]').forEach(function(b){ b.onclick = function(){ var t = turnos[b.dataset.rtick]; if(!t) return; if(t.recordatorio_wa) delete t.recordatorio_wa; else t.recordatorio_wa = new Date().toISOString(); saveLocal(); render(); }; });
+    body.querySelectorAll('[data-rrep]').forEach(function(b){ b.onclick = function(){ var it = rp.find(function(x){ return x.k === b.dataset.rrep; }); if(!it) return; var d = datos(it.t);
+      window.open('https://wa.me/' + d.wa + '?text=' + encodeURIComponent(armar('reprogramar', it, it.motivo)), '_blank', 'noopener');
+      it.t.reprog_wa = new Date().toISOString(); saveLocal(); render(); }; });
+    body.querySelectorAll('[data-redit]').forEach(function(b){ b.onclick = function(){ editarMsg(b.dataset.redit); }; });
+  }
+  function editarMsg(tipo){
+    var p = document.createElement('div'); p.className = 'dsp-panel-bg';
+    p.innerHTML = '<div class="dsp-panel" style="width:540px"><h4>Mensaje de ' + (tipo === 'recordatorio' ? 'recordatorio' : 'reprogramación') + '</h4>'
+      + '<p class="dsp-ayuda">Se completan solos: <b>{nombre}</b>, <b>{con_quien}</b> (con la Dra./el Dr. o para el MAPA), <b>{dia}</b>, <b>{hora}</b>' + (tipo === 'reprogramar' ? ', <b>{motivo}</b>' : '') + '.</p>'
+      + '<textarea id="rm-t" rows="6" style="width:100%;box-sizing:border-box;border:1.5px solid #d1d5db;border-radius:8px;padding:8px 10px;font:inherit">' + E((R.msgs || MSG_DEF)[tipo]) + '</textarea>'
+      + '<div class="dsp-acc"><button type="button" class="dsp-btn sec" data-def>Volver al original</button><span style="flex:1"></span><button type="button" class="dsp-btn sec" data-c>Cancelar</button><button type="button" class="dsp-btn" data-ok>Guardar</button></div></div>';
+    document.body.appendChild(p);
+    var close = function(){ p.remove(); };
+    p.addEventListener('mousedown', function(e){ if(e.target === p) close(); });
+    p.querySelector('[data-c]').onclick = close;
+    p.querySelector('[data-def]').onclick = function(){ p.querySelector('#rm-t').value = MSG_DEF[tipo]; };
+    p.querySelector('[data-ok]').onclick = function(){
+      R.msgs = Object.assign({}, MSG_DEF, R.msgs || {}); R.msgs[tipo] = p.querySelector('#rm-t').value.trim() || MSG_DEF[tipo];
+      sbUpsertAgendaConfig('msg_recepcion', R.msgs); close(); render();
+    };
+  }
+
+  /* ── Botón y aviso chico en la agenda ── */
+  function pintarBoton(){
+    var tb = document.getElementById('ag-btn-wapp'); if(!tb) return;
+    var b = document.getElementById('ag-btn-rec');
+    if(!b){ b = document.createElement('button'); b.type = 'button'; b.id = 'ag-btn-rec'; b.onclick = function(){ abrir('hoy'); }; tb.insertAdjacentElement('beforebegin', b); }
+    var n = aReprogramar().length;
+    b.innerHTML = '📋 Recepción' + (n ? ' <span class="rec-n">' + n + '</span>' : '');
+    b.title = 'Día de atención, recordatorios de mañana' + (n ? ' · ' + n + ' turno' + (n > 1 ? 's' : '') + ' a reprogramar' : '');
+    var wrap = document.querySelector('#agenda-app .ag-grid-wrap'), av = document.getElementById('rec-aviso');
+    if(n && wrap){
+      if(!av){ av = document.createElement('div'); av.id = 'rec-aviso'; wrap.parentNode.insertBefore(av, document.getElementById('ag-mes') || wrap); av.onclick = function(e){ if(e.target.closest('.rec-av-x')){ av.dataset.cerrado = av.dataset.n; av.style.display = 'none'; return; } abrir('rep'); }; }
+      av.dataset.n = String(n);
+      av.innerHTML = '🔁 <b>' + n + ' turno' + (n > 1 ? 's' : '') + '</b> quedaron en días u horarios en que no se atiende: hay que avisar y reprogramar. <u>Ver</u><button type="button" class="rec-av-x" title="Ocultar por ahora">✕</button>';
+      av.style.display = av.dataset.cerrado === String(n) ? 'none' : '';
+    } else if(av) av.style.display = 'none';
+  }
+  var _rg3 = renderGrid;
+  renderGrid = function(){ var r = _rg3.apply(this, arguments); try { pintarBoton(); if(abierto()) render(); } catch(e){} return r; };
+  if(window.renderGrid === _rg3) window.renderGrid = renderGrid;
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', pintarBoton); else pintarBoton();
+  setTimeout(pintarBoton, 2000);
 })();
 
 
@@ -26523,7 +26753,8 @@ async function _avisoPendientes(){
   var miProf = { barbara:'BG', omar:'OB' }[window._su] || null;
   try {
     if(typeof window.rsRefrescar === 'function') { try { await window.rsRefrescar(); } catch(e) {} }
-    var rec = (window.rsPendientes || []).filter(function(r){ return !miProf || r.prof === miProf; });
+    var _esSec = !!(window._cu && window._cu.secretaria);
+    var rec = (window.rsPendientes || []).filter(function(r){ return (!miProf || r.prof === miProf) && !(_esSec && r.origen === 'online'); });
     var q = sb.from('online_pedidos').select('id,prof,vence_at').eq('tipo','consulta').eq('estado','pendiente');
     if(miProf) q = q.eq('prof', miProf);
     var rc = await q; var con = rc.data || [];
@@ -26531,7 +26762,7 @@ async function _avisoPendientes(){
     var q2 = sb.from('online_pedidos').select('id',{count:'exact',head:true}).eq('comprobante_revisado',false).not('pago_comprobante','is',null).not('estado','in','(vencida,cancelada)');
     if(miProf) { q1 = q1.eq('prof', miProf); q2 = q2.eq('prof', miProf); }   // cada profesional, solo sus comprobantes
     var r1 = await q1, r2 = await q2;
-    var nRec = rec.length, nCon = con.length, nComp = (r1.count||0) + (r2.count||0);
+    var nRec = rec.length, nCon = _esSec ? 0 : con.length, nComp = _esSec ? 0 : (r1.count||0) + (r2.count||0);   // Secretaría: ni consultas ni comprobantes online (son de los profesionales)
     var proxVence = con.map(function(c){ return c.vence_at; }).filter(Boolean).sort()[0];
     _pintarPendientes(nRec, nCon, nComp, proxVence);
     var total = nRec + nCon;
@@ -26594,7 +26825,7 @@ function _pintarPendientes(nRec, nCon, nComp, proxVence){
   var cont = document.getElementById('dash-pendientes');
   if(cont) cont.innerHTML = html
     ? '<div style="display:flex;flex-wrap:wrap;gap:10px;justify-content:center;margin:6px auto 18px;max-width:900px;">' + html + '</div>'
-    : '<div style="text-align:center;color:#16a34a;font-size:13px;margin:0 0 14px;">✓ Sin recetas ni consultas pendientes</div>';
+    : '<div style="text-align:center;color:#16a34a;font-size:13px;margin:0 0 14px;">✓ Sin ' + (esSecre ? 'recetas pendientes' : 'recetas ni consultas pendientes') + '</div>';
   // Pestaña Agenda y título del navegador
   var total = nRec + (esSecre ? 0 : nCon);
   var todos = total + nComp;
@@ -27237,6 +27468,7 @@ loadLocal();  // async, carga en background y llama renderGrid al final
       if(match){
         var kp=k.split('_'); // fecha_hora_prof
         if(_esSecretariaLogueada() && kp[0]<AGENDA_FECHA_MIN_SECRETARIA) return;
+        if(_esSecretariaLogueada() && t.video) return;   // las videollamadas no las ve la Secretaría
         resultados.push({fecha:kp[0],hora:kp[1],prof:t.prof,estado:t.estado,pago:t.pago,key:k});
       }
     });
@@ -30143,9 +30375,10 @@ window.cargarProxConsultas = cargarProxConsultas;
   }
 
   // ── Botón de la barra: cambia de color si hay pendientes ──
+  function visibles(){ return esSecre() ? lista.filter(function(r){ return r.origen!=='online'; }) : lista; }
   function pintarBoton(){
     window.rsPendientes = lista.filter(function(r){return r.estado!=='hecha';});
-    var n=lista.filter(function(r){return r.estado!=='hecha';}).length;
+    var n=visibles().filter(function(r){return r.estado!=='hecha';}).length;
     var b=$r('ag-btn-recetas'); if(b){
       b.classList.toggle('rs-pend', n>0);
       b.title = n>0 ? (n+' receta'+(n===1?'':'s')+' pendiente'+(n===1?'':'s')+' de hacer') : 'Recetas solicitadas';
@@ -30327,7 +30560,7 @@ window.cargarProxConsultas = cargarProxConsultas;
 
   function render(){
     var cont=$r('rs-list'); if(!cont) return;
-    var items=lista.filter(function(r){
+    var items=visibles().filter(function(r){
       if(filtroProf && r.prof!==filtroProf) return false;
       return vista==='pend' ? r.estado!=='hecha' : r.estado==='hecha';
     });
@@ -45045,6 +45278,89 @@ function _invToggleDroga(key){
 .imp-dash-it{display:flex;gap:10px;align-items:center;padding:6px 4px;border-top:1px solid #f3f4f6;cursor:pointer}
 .imp-dash-c{flex-shrink:0;min-width:110px;font-size:12.5px;font-weight:700;color:#6b7280}.imp-dash-c.hoy{color:#b45309}
 .imp-dash-t{flex:1;min-width:0;font-size:14px}
+</style>
+<script>
+/* ══ Secretaría: lo que no le corresponde ver queda oculto (además de los controles de cada módulo) ══ */
+(function(){
+  function aplicar(){
+    var sec = !!(window._cu && window._cu.secretaria);
+    document.documentElement.classList.toggle('urcym-sec', sec);
+  }
+  setInterval(aplicar, 1500); aplicar();
+  var c0 = window.cierreAbrirConfig;
+  if(typeof c0 === 'function') window.cierreAbrirConfig = function(){ if(window._cu && window._cu.secretaria){ alert('La configuración del cierre la cambian los profesionales.'); return; } return c0.apply(this, arguments); };
+})();
+</script>
+<style>
+html.urcym-sec .cierre-solo-prof, html.urcym-sec .dash-card.dash-pacientes, html.urcym-sec .dash-card.dash-finanzas, html.urcym-sec #ev48-pill, html.urcym-sec #ev48-panel, html.urcym-sec #dash-imp, html.urcym-sec #ag-btn-imp{display:none!important}
+</style>
+<style>
+/* 📋 Recepción */
+#ag-btn-rec{background:none;border:1px solid #0f766e;border-radius:6px;padding:5px 10px;font-size:12px;color:#0f766e;cursor:pointer;font-family:inherit}
+#ag-btn-rec:hover{background:#f0fdfa}
+.rec-n{background:#dc2626;color:#fff;border-radius:999px;padding:0 6px;font-size:10.5px;font-weight:700;margin-left:3px}
+#rec-aviso{margin:6px 0 8px;background:#fff7ed;border:1.5px solid #fdba74;color:#9a3412;border-radius:10px;padding:8px 12px;font-size:13px;cursor:pointer;display:flex;gap:6px;align-items:center}
+#rec-aviso u{margin-left:4px}
+.rec-av-x{margin-left:auto;border:none;background:none;color:#c2410c;font-size:14px;cursor:pointer}
+.rec-tabs{display:flex;gap:6px;padding:10px 20px 0;border-bottom:1px solid #e5e7eb;flex-wrap:wrap}
+.rec-tab{border:1.5px solid #e5e7eb;border-bottom:none;border-radius:10px 10px 0 0;background:#f8fafc;padding:8px 14px;font:600 13px inherit;font-family:inherit;cursor:pointer;color:#475569}
+.rec-tab.on{background:#fff;color:#0f766e;box-shadow:inset 0 3px 0 #0f766e}
+.rec-nav{display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap}
+.rec-nav b{font-size:15px}
+.rec-nav button{border:1px solid #cbd5e1;background:#fff;border-radius:8px;padding:3px 11px;font-size:15px;cursor:pointer}
+.rec-nav button:disabled{opacity:.35;cursor:default}
+.rec-nav .rec-hoy,.rec-nav .rec-edit{font-size:12px;font-weight:600}
+.rec-edit{margin-left:auto}
+.rec-cnt{font-size:12px;color:#64748b;background:#f1f5f9;border-radius:999px;padding:2px 9px}
+.rec-prof{font-size:11.5px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:#64748b;margin:12px 0 5px}
+.rec-it{display:flex;align-items:center;gap:10px;border:1px solid #e5e7eb;border-radius:10px;padding:8px 10px;margin-bottom:5px;background:#fff;flex-wrap:wrap}
+.rec-it.a-presente{background:#fefce8;border-color:#fde68a}.rec-it.a-atendido{background:#f0fdf4;border-color:#bbf7d0}.rec-it.a-ausente{background:#fef2f2;border-color:#fecaca}
+.rec-it.rep{border-left:4px solid #f97316}
+.rec-h{font-weight:800;font-size:13.5px;color:#334155;min-width:52px;text-transform:capitalize}
+.rec-p{flex:1;min-width:150px}.rec-p b{display:block;font-size:14px;cursor:pointer}.rec-p b:hover{text-decoration:underline}.rec-p small{display:block;font-size:11.5px;color:#64748b}
+.rec-pg{font-size:11px;font-weight:700;border-radius:999px;padding:2px 8px;background:#f1f5f9;color:#475569;white-space:nowrap}
+.rec-pg.ok{background:#dcfce7;color:#166534}.rec-pg.sena{background:#fef3c7;color:#92400e}.rec-pg.no{background:#fee2e2;color:#991b1b}.rec-pg.osde{background:#dbeafe;color:#1e40af}
+.rec-as{display:flex;gap:4px}
+.rec-as button{border:1.5px solid #d1d5db;background:#fff;border-radius:999px;padding:4px 9px;font:600 11.5px inherit;font-family:inherit;cursor:pointer;color:#475569}
+.rec-as button.sel.presente{background:#fef3c7;border-color:#b45309;color:#b45309}.rec-as button.sel.atendido{background:#dcfce7;border-color:#15803d;color:#15803d}.rec-as button.sel.ausente{background:#fee2e2;border-color:#b91c1c;color:#b91c1c}
+.rec-acc{display:flex;gap:5px;align-items:center}
+.rec-pagar,.rec-env,.rec-tick{border:1.5px solid #0f766e;background:#fff;color:#0f766e;border-radius:8px;padding:4px 10px;font:600 12px inherit;font-family:inherit;cursor:pointer;white-space:nowrap}
+.rec-env{background:#16a34a;border-color:#16a34a;color:#fff}
+.rec-tick{border-color:#cbd5e1;color:#64748b;padding:4px 8px}
+.rec-wa{text-decoration:none;font-size:17px}
+.rec-ok{font-size:12px;font-weight:700;color:#15803d}
+.rec-sin{font-size:11.5px;color:#94a3b8;font-style:italic}
+</style>
+<style>
+/* Vista mensual v2: franjas horarias por profesional (como la agenda de papel) */
+.mv-grid .mv-h,.mv-grid .mv-row{grid-template-columns:30px repeat(6,minmax(0,1fr))!important}
+.mv-c{min-height:0!important;padding:4px 5px 6px!important;gap:2px!important}
+.mv-n{height:18px;margin:0!important}
+.mv-n em{font-size:10px!important}
+.mv-lt{display:flex;gap:3px;height:11px}
+.mv-lt i{flex:1;font-style:normal;font-size:9px;font-weight:800;color:#94a3b8;text-align:center;line-height:11px}
+.mv-tl{position:relative;height:132px;display:flex;gap:3px;background:#fff;border:1px solid #eef2f5;border-radius:5px;overflow:hidden}
+.mv-hl{position:absolute;left:0;right:0;border-top:1px dashed #e5e7eb;pointer-events:none}
+.mv-col{position:relative;flex:1}
+.mv-blk{position:absolute;left:0;right:0;background:var(--c);border-radius:3px;overflow:hidden;box-shadow:inset 0 0 0 1px rgba(0,0,0,.08)}
+.mv-blk span{position:absolute;left:3px;right:2px;top:1px;font-size:9.5px;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-shadow:0 0 2px rgba(0,0,0,.35);line-height:1.2}
+.mv-blk.rem{background:repeating-linear-gradient(135deg,var(--c) 0 3px,color-mix(in srgb,var(--c) 22%,#fff) 3px 7px);box-shadow:inset 0 0 0 1.5px var(--c)}
+.mv-blk.rem span{color:#1f2937;text-shadow:0 0 3px #fff}
+.mv-blk.aus{background:repeating-linear-gradient(135deg,#fecaca 0 3px,#fff 3px 7px);box-shadow:inset 0 0 0 1px #f87171}
+.mv-blk.aus span{color:#b91c1c;text-shadow:none}
+.mv-blk.imp{left:45%;right:0;border-radius:2px;box-shadow:0 0 0 1px #fff,inset 0 0 0 1px #ca8a04;z-index:2}
+.mv-inst{position:absolute;left:0;right:0;background:repeating-linear-gradient(45deg,rgba(107,114,128,.35) 0 5px,rgba(243,244,246,.9) 5px 10px);z-index:3;display:flex;align-items:center;justify-content:center}
+.mv-inst span{font-size:9.5px;font-weight:700;color:#374151;background:rgba(255,255,255,.85);border-radius:4px;padding:1px 4px;max-width:92%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mv-ax{position:relative;border-right:1px solid #eef2f5;border-bottom:1px solid #eef2f5;background:#f8fafc}
+.mv-ax-tl{position:absolute;left:0;right:0;top:39px;height:132px}
+.mv-grid:not(.multi) .mv-ax-tl{top:28px}
+.mv-ax-tl span{position:absolute;right:4px;transform:translateY(-50%);font-size:9.5px;color:#94a3b8;font-weight:600}
+.mv-ley-c{color:#334155}
+.mv-k{display:inline-block;width:14px;height:12px;border-radius:3px;margin-right:5px;vertical-align:-2px}
+.mv-k.lleno{background:#7F77DD}.mv-k.rayado{background:repeating-linear-gradient(135deg,#7B3FC4 0 3px,#e9dcf8 3px 6px);box-shadow:inset 0 0 0 1px #7B3FC4}
+.mv-k.libre{background:#fff;box-shadow:inset 0 0 0 1px #cbd5e1}.mv-k.aus{background:repeating-linear-gradient(135deg,#fecaca 0 3px,#fff 3px 6px);box-shadow:inset 0 0 0 1px #f87171}
+.mv-k.inst{background:repeating-linear-gradient(45deg,rgba(107,114,128,.45) 0 3px,#f3f4f6 3px 6px)}
+@media (max-width:700px){.mv-grid .mv-h,.mv-grid .mv-row{grid-template-columns:20px repeat(6,minmax(0,1fr))!important}.mv-tl{height:96px;gap:1px}.mv-ax-tl{height:96px}.mv-blk span,.mv-inst span{display:none}}
 </style>
 </body>
 </html>
