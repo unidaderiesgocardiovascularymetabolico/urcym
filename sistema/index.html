@@ -2,7 +2,7 @@
 <html lang="es-AR">
 <head>
   <meta charset="UTF-8" />
-  <script>var URCYM_BUILD = '2026-11-23-1200';</script>
+  <script>var URCYM_BUILD = '2026-11-23-1300';</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Evaluaciones cardiometabólicas — Sistema de Historia Clínica</title>
 
@@ -29259,7 +29259,7 @@ window.cargarProxConsultas = cargarProxConsultas;
       if(x.tipo==='receta' && x.estado==='resuelta') sumar(fila('orec','🌐','Recetas online','enviadas'),x.prof,1);
       else if(x.tipo==='consulta' && (x.estado==='respondida'||x.estado==='resuelta')) sumar(fila('ocon','💬','Consultas por mensaje','respondidas'),x.prof,1);
     });
-    var rp=(recetas||[]).length; if(rp) sumar(fila('rec','💊','Recetas en consultorio','particulares y OSDE · no indica profesional'),'',rp);
+    var rp=(recetas||[]).length; if(rp) sumar(fila('rec','💊','Recetas en consultorio','particulares y OSDE · sin las online · no indica profesional'),'',rp);
     var tot={BG:0,OB:0,otro:0}; orden.forEach(function(k){ var f=filas[k]; tot.BG+=f.BG; tot.OB+=f.OB; tot.otro+=f.otro; });
     var gt=tot.BG+tot.OB+tot.otro;
     var c=function(n){ return n?'<b>'+n+'</b>':'<span class="fa-0">—</span>'; };
@@ -29375,7 +29375,8 @@ window.cargarProxConsultas = cargarProxConsultas;
         finCargarTarifasOsde(),                                                              // 5
         finRangoPer ? sb.from('urcym_personal').select('monto').in('mes', mesesEntre(desde,hasta)) : Promise.resolve(null), // 6: personales de todos los meses del período
         (typeof sbGetAgendaConfig==='function' ? sbGetAgendaConfig('otros_atendidos').catch(function(){return null;}) : Promise.resolve(null)), // 7: pacientes vistos en otros lugares
-        sb.from('online_pedidos').select('tipo,prof,estado,created_at').gte('created_at',desde+'T00:00:00-03:00').lte('created_at',hasta+'T23:59:59-03:00').then(function(r){return r;},function(){return null;}) // 8: recetas y consultas online
+        sb.from('online_pedidos').select('tipo,prof,estado,created_at').gte('created_at',desde+'T00:00:00-03:00').lte('created_at',hasta+'T23:59:59-03:00').then(function(r){return r;},function(){return null;}), // 8: recetas y consultas online
+        (typeof sbGetAgendaConfig==='function' ? sbGetAgendaConfig('recetas_solicitudes').catch(function(){return null;}) : Promise.resolve(null)) // 9: para no contar dos veces las recetas online OSDE (también quedan en urcym_recetas)
       ]);
 
       var turnosData = resultados[0] || {};
@@ -29450,7 +29451,9 @@ window.cargarProxConsultas = cargarProxConsultas;
       Object.keys(_otrosM).forEach(function(k){ var p=k.split('|'); if(p.length<3) return; var f=p[0]; if(f<desde||f>hasta) return; var x=_otrosM[k]; if(!x||x.nofui) return;
         var nom=p[2]+(p[1]==='OB'?' (Bertani)':p[1]==='BG'?' (Guerrero)':'');
         var a=_atdRes[nom]=_atdRes[nom]||{n:0,dias:0,monto:0}; a.n+=Number(x.n||0); a.dias++; a.monto+=Number(x.monto||0); });
-      try { finPintarAtendidos(turnosData, desde, hasta, _otrosM, resultados[8], (recRows&&recRows.data)||[]); } catch(_e){ console.warn('[Finanzas] atendidos', _e); }
+      var _recOnlineIds = {}; (Array.isArray(resultados[9]) ? resultados[9] : []).forEach(function(r){ if(r && r.origen==='online' && r.rec_id) _recOnlineIds[r.rec_id]=1; });
+      var _recCons = ((recRows&&recRows.data)||[]).filter(function(r){ return !_recOnlineIds[r.id]; });
+      try { finPintarAtendidos(turnosData, desde, hasta, _otrosM, resultados[8], _recCons); } catch(_e){ console.warn('[Finanzas] atendidos', _e); }
 
       // Gastos consultorio (NO incluye personal — tabla separada)
       var gasList = (gasRows.data||[]);
