@@ -2,7 +2,7 @@
 <html lang="es-AR">
 <head>
   <meta charset="UTF-8" />
-  <script>var URCYM_BUILD = '2026-11-21-2000';</script>
+  <script>var URCYM_BUILD = '2026-11-23-1100';</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Evaluaciones cardiometabólicas — Sistema de Historia Clínica</title>
 
@@ -3028,8 +3028,28 @@
       <!-- Filtros -->
       <div class="fin-filtros">
         <div>
+          <label>Ver</label>
+          <div class="fin-tabs" id="fin-modo-tabs">
+            <button class="fin-tab active" id="fin-modo-mes" onclick="finModo('mes')">Un mes</button>
+            <button class="fin-tab" id="fin-modo-per" onclick="finModo('per')">Entre fechas</button>
+          </div>
+        </div>
+        <div id="fin-box-mes">
           <label>Mes</label>
           <input type="month" id="fin-filtro-mes" onchange="finCargar()"/>
+        </div>
+        <div id="fin-box-per" style="display:none;">
+          <label>Desde · Hasta</label>
+          <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+            <input type="date" lang="es-AR" id="fin-per-desde" onchange="finCargar()"/>
+            <span style="color:var(--text-soft);font-size:12px;">al</span>
+            <input type="date" lang="es-AR" id="fin-per-hasta" onchange="finCargar()"/>
+            <span class="fin-per-atajos">
+              <button type="button" onclick="finPerAtajo('20a20')" title="Del 20 del mes pasado al 20 de este mes">20 al 20</button>
+              <button type="button" onclick="finPerAtajo('30d')">Últimos 30 días</button>
+              <button type="button" onclick="finPerAtajo('anio')">Este año</button>
+            </span>
+          </div>
         </div>
         <div>
           <label>Vista</label>
@@ -3047,7 +3067,7 @@
 
       <!-- KPIs -->
       <div class="fin-kpis" id="fin-kpis">
-        <div class="fin-kpi"><div class="fin-kpi-label">Ingresos del mes</div><div class="fin-kpi-val green" id="fin-kpi-ing">—</div><div class="fin-kpi-sub" id="fin-kpi-ing-sub">cargando...</div></div>
+        <div class="fin-kpi"><div class="fin-kpi-label" id="fin-kpi-ing-lbl">Ingresos del mes</div><div class="fin-kpi-val green" id="fin-kpi-ing">—</div><div class="fin-kpi-sub" id="fin-kpi-ing-sub">cargando...</div></div>
         <div class="fin-kpi"><div class="fin-kpi-label">Gastos consultorio</div><div class="fin-kpi-val red" id="fin-kpi-gas">—</div><div class="fin-kpi-sub" id="fin-kpi-gas-sub">operativos · sin personal</div></div>
         <div class="fin-kpi" style="border-color:rgba(48,137,202,.35);background:var(--blue-light);"><div class="fin-kpi-label" style="color:var(--blue);">Ganancia neta</div><div class="fin-kpi-val blue" id="fin-kpi-net">—</div><div class="fin-kpi-sub" style="color:var(--blue);opacity:.75;">ingresos − gastos consultorio</div></div>
         <div class="fin-kpi"><div class="fin-kpi-label">Recetas cobradas</div><div class="fin-kpi-val" id="fin-kpi-rec">—</div><div class="fin-kpi-sub" id="fin-kpi-rec-sub">cargando...</div></div>
@@ -3056,6 +3076,7 @@
       </div>
 
       <!-- ── Panel carga rápida GASTOS ── -->
+      <div id="fin-atendidos" class="fin-atendidos" style="display:none;"></div>
       <div class="fin-panel" id="fin-panel-gasto">
         <div class="fin-panel-header">
           <div>
@@ -3266,7 +3287,7 @@
         <div class="fin-resumen-grid" id="fin-resumen-grid">
           <div class="fin-resumen-card">
             <div class="fin-resumen-card-header">
-              <h4>📥 Ingresos del mes</h4>
+              <h4 id="fin-ing-h4">📥 Ingresos del mes</h4>
               <button class="fin-res-btn" onclick="finAbrirModalIngreso()">+ Agregar</button>
             </div>
             <div class="fin-resumen-card-body" id="fin-res-ing-origen"><div class="fin-loading" style="padding:16px 18px">Cargando...</div></div>
@@ -23225,7 +23246,8 @@ function renderGrid(){
         nlEl.style.zIndex=3+item.col;
         nlEl.textContent=item.nl.label+(visProfs.length>1?' ('+PROF_LBL[p]+')':'');
         nlEl.title=(item.nl.label||'No laborable')+' · '+(PROF_LBL[p]||p)+' · '+item.nl.from+'–'+item.nl.to+' · tocá para cambiarlo o borrarlo';
-        if(window._otrosEditarBloque){ nlEl.style.cursor='pointer'; nlEl.onclick=function(ev){ ev.stopPropagation(); window._otrosEditarBloque(item.nl); }; }
+        if(window._atdDecorar) window._atdDecorar(nlEl, ds, item.nl);
+        else if(window._otrosEditarBloque){ nlEl.style.cursor='pointer'; nlEl.onclick=function(ev){ ev.stopPropagation(); window._otrosEditarBloque(item.nl); }; }
         col.appendChild(nlEl);
         return;
       }
@@ -23317,6 +23339,7 @@ function renderGrid(){
       el.style.width='calc('+wPct+'% - 2px)';
       el.style.zIndex=2;
       el.textContent=b.label+(visProfs.length>1?' ('+PROF_LBL[p]+')':'');
+      if(window._atdDecorar) window._atdDecorar(el, ds, b);
       col.appendChild(el);
     });
 
@@ -25978,7 +26001,7 @@ window._dspAbrirLista=function(){
     var ds = proxHabil(hoyS()), its = delDia(ds).filter(function(it){ return !it.t.video; });
     var env = its.filter(function(it){ return it.t.recordatorio_wa; }).length;
     var x = '<div class="rec-nav"><b>Turnos del ' + diaTxt(ds) + '</b><span class="rec-cnt">' + env + ' de ' + its.length + ' avisados</span><button type="button" class="rec-edit" data-redit="recordatorio">✏️ Editar mensaje</button></div>'
-      + '<p class="dsp-ayuda">Tocá <b>💬 Enviar</b>: se abre WhatsApp con el mensaje listo, lo mandás y acá queda tildado. A los que tienen mail también les llega el recordatorio por mail.</p>';
+      + '<p class="dsp-ayuda">Tocá <b>💬 Enviar</b>: se abre WhatsApp con el mensaje listo, lo mandás y acá queda tildado. Las videoconsultas, además, reciben el recordatorio por mail automáticamente.</p>';
     if(!its.length) return x + '<div class="dsp-vacio" style="padding:24px 0">No hay turnos ese día.</div>';
     its.forEach(function(it){
       var t = it.t, d = datos(t), ok = t.recordatorio_wa;
@@ -26054,6 +26077,154 @@ window._dspAbrirLista=function(){
   if(window.renderGrid === _rg3) window.renderGrid = renderGrid;
   if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', pintarBoton); else pintarBoton();
   setTimeout(pintarBoton, 2000);
+})();
+
+
+// ─── ATENDIDOS EN OTROS LUGARES (CEM, CEQ, Sapiens…) ───
+// Al tocar el bloque de un día que ya pasó se anota cuántos pacientes viste y cuánto cobraste.
+// Cantidad: config 'otros_atendidos' = { 'fecha|prof|lugar': {n, monto, ingId, nofui, at} }.
+// Plata: una fila en urcym_ingresos (origen 'agenda'), así suma en Finanzas sin cargarla dos veces.
+(function(){
+  var KEY = 'otros_atendidos', D = null, prom = null, abierto = false;
+  var E = function(t){ return String(t == null ? '' : t).replace(/[&<>"]/g, function(c){ return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' }[c]; }); };
+  var DIAS = ['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];
+  function hoyStr(){ var d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+  function fLarga(ds){ var d = parseLocalDate(ds); return DIAS[d.getDay()] + ' ' + d.getDate() + '/' + (d.getMonth() + 1); }
+  function clave(ds, b){ return ds + '|' + b.prof + '|' + (b.label || ''); }
+  function excluidos(p){ return (D && D['_excluir|' + p]) || []; }
+  function cuenta(b){ return !!(b && !b.ausencia && !b.impId && !b.video && b.label && excluidos(b.prof).indexOf(b.label) < 0); }
+  async function excluir(b){ await cargar(true); var k = '_excluir|' + b.prof; D[k] = (D[k] || []).concat([b.label]).filter(function(x, i, a){ return a.indexOf(x) === i; }); await sbUpsertAgendaConfig(KEY, D); }
+  function cat(b){ var l = (b.label || '').toLowerCase().trim();
+    if(/^cem\b/.test(l)) return 'cem'; if(/^ceq\b/.test(l)) return 'ceq'; if(/sapiens/.test(l)) return b.prof === 'OB' ? 'sapiens_omar' : 'sapiens_bar';
+    if(/^salita/.test(l)) return 'salita'; return b.label; }
+  function cargar(forzar){
+    if(D && !forzar) return Promise.resolve(D);
+    if(prom) return prom;
+    prom = sbGetAgendaConfig(KEY).then(function(v){ D = (v && typeof v === 'object') ? v : {}; window._atendidosData = D; prom = null; return D; })
+      .catch(function(){ prom = null; D = D || {}; return D; });
+    return prom;
+  }
+  window._atendidosCargar = cargar;
+  window._atendidoDe = function(ds, b){ return D ? D[clave(ds, b)] : null; };
+  window._atendidoCuenta = cuenta;
+  function miProf(){ var cu = window._cu || (typeof currentUser !== 'undefined' ? currentUser : null); if(!cu || cu.secretaria) return null;
+    var em = String(cu.email || ''); return /bertani/i.test(em) ? 'OB' : /guerrero/i.test(em) ? 'BG' : null; }
+  function terminado(ds, b){ var h = hoyStr(); if(ds < h) return true; if(ds > h) return false; var n = new Date(); return n.getHours() * 60 + n.getMinutes() >= t2m(b.to); }
+  function cerrado(ds, p){ // feriado/congreso o ausencia de ese profesional
+    return instBlocks.some(function(i){ return isBlockActiveOnDate(i, ds); })
+      || nlBlocks.some(function(a){ return a.ausencia && a.prof === p && isBlockActiveOnDate(a, ds); }); }
+  function pendientes(){
+    var p = miProf(); if(!p || !D) return [];
+    var out = [], d = new Date(); d.setDate(d.getDate() - 14);
+    for(var i = 0; i <= 14; i++, d.setDate(d.getDate() + 1)){
+      var ds = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+      if(cerrado(ds, p)) continue;
+      nlBlocks.forEach(function(b){ if(b.prof === p && cuenta(b) && isBlockActiveOnDate(b, ds) && terminado(ds, b) && !D[clave(ds, b)]) out.push({ ds:ds, b:b }); });
+    }
+    return out.sort(function(a, b){ return a.ds < b.ds ? 1 : -1; });
+  }
+  function pintarPill(){
+    var lista = pendientes(), pill = document.getElementById('atd-pill');
+    if(!lista.length){ if(pill) pill.remove(); var pn0 = document.getElementById('atd-panel'); if(pn0) pn0.remove(); abierto = false; return; }
+    if(!pill){ pill = document.createElement('button'); pill.type = 'button'; pill.id = 'atd-pill'; pill.onclick = function(e){ e.stopPropagation(); abierto = !abierto; panel(); }; }
+    var ancla = document.getElementById('btn-cambiar-pwd');
+    if(ancla && pill.parentNode !== ancla.parentNode) ancla.parentNode.insertBefore(pill, ancla); else if(!ancla && !pill.parentNode) document.body.appendChild(pill);
+    pill.textContent = '📍 ' + lista.length + ' sin cargar';
+    pill.title = 'Días en otros lugares (CEM, CEQ, Sapiens…) sin anotar cuántos pacientes viste';
+    if(abierto) panel();
+  }
+  function panel(){
+    var pn = document.getElementById('atd-panel');
+    if(!abierto){ if(pn) pn.remove(); return; }
+    if(!pn){ pn = document.createElement('div'); pn.id = 'atd-panel'; document.body.appendChild(pn);
+      document.addEventListener('click', function fuera(e){ var x = document.getElementById('atd-panel'); if(!x){ document.removeEventListener('click', fuera); return; }
+        if(!x.contains(e.target) && e.target.id !== 'atd-pill' && !document.getElementById('atd-bg')){ abierto = false; x.remove(); document.removeEventListener('click', fuera); } }); }
+    var lista = pendientes();
+    pn.innerHTML = '<div class="atd-ph"><b>📍 Otros lugares sin cargar</b><button type="button" class="atd-x" title="Cerrar">✕</button></div>'
+      + '<p class="atd-ay">Anotá cuántos pacientes viste y cuánto cobraste. Si ese día no fuiste, tocá "No fui".</p>'
+      + lista.map(function(x, i){ return '<div class="atd-it"><div><b>' + E(x.b.label) + '</b><span>' + fLarga(x.ds) + ' · ' + x.b.from + '–' + x.b.to + '</span></div>'
+        + '<div class="atd-a"><button type="button" data-ex="' + i + '" title="En ' + E(x.b.label) + ' no atendés pacientes: no te lo pregunta más">No atiendo acá</button><button type="button" data-nf="' + i + '">No fui</button><button type="button" class="pri" data-ca="' + i + '">Cargar</button></div></div>'; }).join('');
+    pn.querySelector('.atd-x').onclick = function(){ abierto = false; pn.remove(); };
+    pn.querySelectorAll('[data-ca]').forEach(function(bt){ bt.onclick = function(e){ e.stopPropagation(); var x = lista[+bt.dataset.ca]; popup(x.ds, x.b); }; });
+    pn.querySelectorAll('[data-ex]').forEach(function(bt){ bt.onclick = async function(e){ e.stopPropagation(); var x = lista[+bt.dataset.ex];
+      if(!confirm('¿En "' + x.b.label + '" no atendés pacientes? No te lo va a preguntar más (se puede volver a activar tocando el bloque).')) return;
+      bt.disabled = true; try { await excluir(x.b); } catch(er){ alert('No se pudo guardar: ' + (er.message || er)); } refrescar(); }; });
+    pn.querySelectorAll('[data-nf]').forEach(function(bt){ bt.onclick = async function(e){ e.stopPropagation(); var x = lista[+bt.dataset.nf]; bt.disabled = true;
+      try { await guardar(x.ds, x.b, 0, 0, true); } catch(er){ alert('No se pudo guardar: ' + (er.message || er)); } refrescar(); }; });
+  }
+  async function guardar(ds, b, n, m, nofui){
+    await cargar(true);
+    var key = clave(ds, b), prev = D[key] || {}, ingId = prev.ingId || null, r;
+    var desc = (PROF_LBL[b.prof] || b.prof) + ' · ' + b.label + ' · ' + n + ' paciente' + (n === 1 ? '' : 's');
+    if(m > 0){
+      if(ingId){ r = await sb.from('urcym_ingresos').update({ fecha:ds, categoria:cat(b), descripcion:desc, monto:m }).eq('id', ingId).select('id'); if(r.error) throw r.error; if(!r.data || !r.data.length) ingId = null; }
+      if(!ingId){ r = await sb.from('urcym_ingresos').insert([{ fecha:ds, categoria:cat(b), descripcion:desc, monto:m, origen:'agenda' }]).select('id'); if(r.error) throw r.error; ingId = r.data && r.data[0] ? r.data[0].id : null; }
+    } else if(ingId){ r = await sb.from('urcym_ingresos').delete().eq('id', ingId); if(r.error) throw r.error; ingId = null; }
+    var o = { n:n, monto:m, at:new Date().toISOString() }; if(ingId) o.ingId = ingId; if(nofui) o.nofui = true;
+    D[key] = o;
+    await sbUpsertAgendaConfig(KEY, D);
+  }
+  async function borrar(ds, b){
+    await cargar(true); var key = clave(ds, b), prev = D[key] || {};
+    if(prev.ingId){ var r = await sb.from('urcym_ingresos').delete().eq('id', prev.ingId); if(r.error) throw r.error; }
+    delete D[key]; await sbUpsertAgendaConfig(KEY, D);
+  }
+  function refrescar(){ try { renderGrid(); } catch(e){} pintarPill(); if(window.finCargar && document.querySelector('#page-finanzas.active')) try { window.finCargar(); } catch(e){} }
+  function cerrar(){ var x = document.getElementById('atd-bg'); if(x) x.remove(); }
+  function popup(ds, b){
+    cerrar(); var r = D[clave(ds, b)] || {};
+    var bg = document.createElement('div'); bg.id = 'atd-bg';
+    bg.innerHTML = '<div class="atd-box"><div class="atd-ph"><b>📍 ' + E(b.label) + '</b><button type="button" class="atd-x" data-c title="Cerrar">✕</button></div>'
+      + '<div class="atd-sub">' + fLarga(ds) + ' · ' + b.from + '–' + b.to + ' · ' + E(PROF_FULL && PROF_FULL[b.prof] || PROF_LBL[b.prof] || b.prof) + '</div>'
+      + (r.nofui ? '<div class="atd-nofui">Marcado como "No fui". Si fuiste, cargalo abajo.</div>' : '')
+      + '<label>¿Cuántos pacientes viste?</label><input type="number" id="atd-n" min="0" step="1" inputmode="numeric" value="' + (r.n != null && !r.nofui ? r.n : '') + '">'
+      + '<label>¿Cuánto cobraste en total? <small>(suma en Finanzas como ingreso de ' + E(b.label) + ')</small></label><input type="number" id="atd-m" min="0" step="1" inputmode="numeric" placeholder="$" value="' + (r.monto ? r.monto : '') + '">'
+      + '<div class="atd-err" id="atd-err"></div>'
+      + '<div class="atd-ac"><span>' + (r.at ? '<button type="button" class="atd-lnk" data-del>Borrar lo cargado</button>' : '<button type="button" class="atd-lnk" data-nofui>No fui ese día</button>') + '<button type="button" class="atd-lnk" data-ed>Cambiar el horario</button></span>'
+      + '<span><button type="button" data-c>Cancelar</button><button type="button" class="pri" data-ok>Guardar</button></span></div></div>';
+    document.body.appendChild(bg);
+    var ni = bg.querySelector('#atd-n'); setTimeout(function(){ ni.focus(); }, 30);
+    bg.onclick = function(e){ if(e.target === bg) cerrar(); };
+    bg.querySelectorAll('[data-c]').forEach(function(x){ x.onclick = cerrar; });
+    var ed = bg.querySelector('[data-ed]'); ed.onclick = function(){ cerrar(); if(window._otrosEditarBloque) window._otrosEditarBloque(b); };
+    var nf = bg.querySelector('[data-nofui]'); if(nf) nf.onclick = async function(){ nf.disabled = true; try { await guardar(ds, b, 0, 0, true); cerrar(); refrescar(); } catch(er){ bg.querySelector('#atd-err').textContent = 'No se pudo guardar: ' + (er.message || er); nf.disabled = false; } };
+    var dl = bg.querySelector('[data-del]'); if(dl) dl.onclick = async function(){ if(!confirm('¿Borrar la cantidad y lo cobrado de este día? (también sale de Finanzas)')) return; try { await borrar(ds, b); cerrar(); refrescar(); } catch(er){ bg.querySelector('#atd-err').textContent = 'No se pudo borrar: ' + (er.message || er); } };
+    var ok = bg.querySelector('[data-ok]');
+    var enviar = async function(){
+      var n = ni.value === '' ? NaN : Math.round(+ni.value), m = Math.round(+(bg.querySelector('#atd-m').value || 0));
+      if(isNaN(n) || n < 0) return bg.querySelector('#atd-err').textContent = 'Poné cuántos pacientes viste (0 si no vino nadie).';
+      if(m < 0) return bg.querySelector('#atd-err').textContent = 'El monto no puede ser negativo.';
+      ok.disabled = true; ok.textContent = 'Guardando…';
+      try { await guardar(ds, b, n, m, false); cerrar(); refrescar(); }
+      catch(er){ ok.disabled = false; ok.textContent = 'Guardar'; bg.querySelector('#atd-err').textContent = 'No se pudo guardar: ' + (er.message || er); }
+    };
+    ok.onclick = enviar;
+    bg.querySelectorAll('input').forEach(function(x){ x.onkeydown = function(e){ if(e.key === 'Enter') enviar(); }; });
+  }
+  window._atendidoAbrir = function(ds, b){ cargar().then(function(){ popup(ds, b); }); };
+  window._atendidoTerminado = terminado;
+  // Agrega al bloque de la grilla la etiqueta (cantidad o "cargar pacientes") y el click
+  window._atdDecorar = function(el, ds, b){
+    var ok = cuenta(b) && !_esSecretariaLogueada() && b.prof === miProf();
+    if(ok){
+      var r = D && D[clave(ds, b)], tag = null;
+      if(r){ tag = document.createElement('span'); tag.className = 'atd-tag' + (r.nofui ? ' nf' : ''); tag.textContent = r.nofui ? 'no fui' : (r.n + ' pac.' + (r.monto ? ' · $' + Number(r.monto).toLocaleString('es-AR') : '')); }
+      else if(D && terminado(ds, b)){ tag = document.createElement('span'); tag.className = 'atd-tag falta'; tag.textContent = '✍️ cargar pacientes'; }
+      if(tag) el.appendChild(tag);
+      el.title = (el.title ? el.title + ' · ' : '') + 'Cuando ya pasó: tocá para anotar cuántos pacientes viste';
+    }
+    var exc = b && b.label && !_esSecretariaLogueada() && b.prof === miProf() && excluidos(b.prof).indexOf(b.label) >= 0;
+    if(exc && terminado(ds, b)){ el.title = (el.title ? el.title + ' · ' : '') + 'Marcaste que acá no atendés pacientes (doble clic para volver a contarlos)';
+      el.ondblclick = async function(ev){ ev.stopPropagation(); if(!confirm('¿Volver a anotar pacientes en "' + b.label + '"?')) return; await cargar(true); var k = '_excluir|' + b.prof; D[k] = excluidos(b.prof).filter(function(x){ return x !== b.label; }); await sbUpsertAgendaConfig(KEY, D); refrescar(); }; }
+    if(ok || window._otrosEditarBloque){
+      el.style.cursor = 'pointer';
+      el.onclick = function(ev){ ev.stopPropagation(); if(ok && terminado(ds, b)) window._atendidoAbrir(ds, b); else if(window._otrosEditarBloque) window._otrosEditarBloque(b); };
+    }
+  };
+  var _rg = renderGrid;
+  renderGrid = function(){ var r = _rg.apply(this, arguments); try { pintarPill(); } catch(e){} return r; };
+  setTimeout(function(){ cargar().then(function(){ try { renderGrid(); } catch(e){} pintarPill(); }); }, 3500);
+  setInterval(function(){ if(D) pintarPill(); }, 10 * 60e3);
 })();
 
 
@@ -29027,6 +29198,66 @@ window.cargarProxConsultas = cargarProxConsultas;
   function hoyISO(){
     var d=new Date(); return d.toISOString().split('T')[0];
   }
+  // ── Pacientes atendidos en el período, por profesional (consultorio, videollamadas, otros lugares, online, recetas)
+  function finPintarAtendidos(turnosData, desde, hasta, otros, onl, recetas){
+    var box=$id('fin-atendidos'); if(!box) return;
+    var hoy=hoyISO(), filas={}, orden=[];
+    var fila=function(k,icon,label,sub){ if(!filas[k]){ filas[k]={icon:icon,label:label,sub:sub||'',BG:0,OB:0,otro:0}; orden.push(k); } return filas[k]; };
+    var sumar=function(f,prof,n){ if(prof==='BG'||prof==='OB') f[prof]+=n; else f.otro+=n; };
+    fila('cons','🩺','Consultorio URCyM','turnos presentes · sin ausentes ni cancelados');
+    fila('video','📹','Videollamadas','');
+    Object.keys(turnosData||{}).forEach(function(key){
+      var p=key.split('_'); if(p.length<3) return; var f=p[0]; if(f<desde||f>hasta||f>hoy) return;
+      var t=turnosData[key]; if(!t||!t.paciente) return;
+      if(t.estado==='cancelado'||t.asistencia==='ausente'||t.reserva_pendiente) return;
+      if(t.prof==='MA'){ sumar(fila('mapa','🫀','MAPA',''),'MA',1); return; }
+      sumar(filas[t.video?'video':'cons'],t.prof,1);
+    });
+    if(otros&&typeof otros==='object') Object.keys(otros).forEach(function(k){
+      var p=k.split('|'); if(p.length<3) return; var f=p[0]; if(f<desde||f>hasta) return; var x=otros[k]; if(!x||x.nofui) return;
+      var lug=p.slice(2).join('|'); sumar(fila('o:'+lug,'📍',lug,'cargado desde la agenda'),p[1],Number(x.n||0));
+    });
+    var od=(onl&&onl.data)||[];
+    od.forEach(function(x){
+      if(x.tipo==='receta' && x.estado==='resuelta') sumar(fila('orec','🌐','Recetas online','enviadas'),x.prof,1);
+      else if(x.tipo==='consulta' && (x.estado==='respondida'||x.estado==='resuelta')) sumar(fila('ocon','💬','Consultas por mensaje','respondidas'),x.prof,1);
+    });
+    var rp=(recetas||[]).length; if(rp) sumar(fila('rec','💊','Recetas en consultorio','particulares y OSDE · no indica profesional'),'',rp);
+    var tot={BG:0,OB:0,otro:0}; orden.forEach(function(k){ var f=filas[k]; tot.BG+=f.BG; tot.OB+=f.OB; tot.otro+=f.otro; });
+    var gt=tot.BG+tot.OB+tot.otro;
+    var c=function(n){ return n?'<b>'+n+'</b>':'<span class="fa-0">—</span>'; };
+    box.style.display='';
+    box.innerHTML='<div class="fa-h"><b>👥 Pacientes atendidos</b><span>'+finPeriodoLabel()+' · hasta hoy</span><span class="fa-big">'+gt+'</span></div>'
+      +'<table class="fa-t"><thead><tr><th></th><th>Guerrero</th><th>Bertani</th><th>Sin profesional</th><th>Total</th></tr></thead><tbody>'
+      +orden.filter(function(k){ var f=filas[k]; return f.BG+f.OB+f.otro>0 || k==='cons' || k==='video'; }).map(function(k){ var f=filas[k];
+        return '<tr><td><span class="fa-i">'+f.icon+'</span>'+String(f.label).replace(/[<>&]/g,'')+(f.sub?'<small> · '+f.sub+'</small>':'')+'</td><td>'+c(f.BG)+'</td><td>'+c(f.OB)+'</td><td>'+c(f.otro)+'</td><td class="fa-tt">'+c(f.BG+f.OB+f.otro)+'</td></tr>'; }).join('')
+      +'</tbody><tfoot><tr><td>Total</td><td>'+c(tot.BG)+'</td><td>'+c(tot.OB)+'</td><td>'+c(tot.otro)+'</td><td class="fa-tt">'+c(gt)+'</td></tr></tfoot></table>'
+      +'<p class="fa-ay">Cuenta atenciones (si un paciente vino dos veces, suma dos). MAPA y las recetas cargadas en el consultorio no tienen profesional asignado.</p>';
+  }
+
+  // Período elegido: un mes (finRangoPer=null) o entre dos fechas
+  var finRangoPer = null;
+  function finRangoActual(){ return finRangoPer || mesRango(finMesActual || hoyYM()); }
+  function fmtDM(iso){ var p=iso.split('-'); return p[2]+'/'+p[1]+'/'+p[0]; }
+  function finPeriodoLabel(){ return finRangoPer ? 'del '+fmtDM(finRangoPer.desde)+' al '+fmtDM(finRangoPer.hasta) : mesLabel(finMesActual||hoyYM()); }
+  function mesesEntre(d,h){ var out=[], y=+d.slice(0,4), m=+d.slice(5,7), y2=+h.slice(0,4), m2=+h.slice(5,7);
+    while(y<y2||(y===y2&&m<=m2)){ out.push(y+'-'+(m<10?'0':'')+m); m++; if(m>12){m=1;y++;} if(out.length>36) break; } return out; }
+  window.finModo = function(modo){
+    var per = modo==='per';
+    var a=$id('fin-modo-mes'), b=$id('fin-modo-per'); if(a) a.classList.toggle('active',!per); if(b) b.classList.toggle('active',per);
+    var bm=$id('fin-box-mes'), bp=$id('fin-box-per'); if(bm) bm.style.display=per?'none':''; if(bp) bp.style.display=per?'':'none';
+    if(per){ var d=$id('fin-per-desde'), h=$id('fin-per-hasta');
+      if(d && !d.value){ var r=mesRango(finMesActual||hoyYM()); d.value=r.desde; if(h) h.value=r.hasta; } }
+    finCargar();
+  };
+  window.finPerAtajo = function(q){
+    var d=$id('fin-per-desde'), h=$id('fin-per-hasta'); if(!d||!h) return;
+    var hoy=new Date(), iso=function(x){ return x.getFullYear()+'-'+String(x.getMonth()+1).padStart(2,'0')+'-'+String(x.getDate()).padStart(2,'0'); };
+    if(q==='20a20'){ var fin=new Date(hoy.getFullYear(), hoy.getMonth(), 20), ini=new Date(hoy.getFullYear(), hoy.getMonth()-1, 20); d.value=iso(ini); h.value=iso(fin); }
+    else if(q==='30d'){ var i2=new Date(hoy); i2.setDate(i2.getDate()-29); d.value=iso(i2); h.value=iso(hoy); }
+    else if(q==='anio'){ d.value=hoy.getFullYear()+'-01-01'; h.value=iso(hoy); }
+    finCargar();
+  };
   function mesRango(ym){
     var p=ym.split('-'); var y=parseInt(p[0]); var m=parseInt(p[1]);
     var desde=ym+'-01';
@@ -29074,7 +29305,15 @@ window.cargarProxConsultas = cargarProxConsultas;
     var inp=$id('fin-filtro-mes');
     finMesActual=inp?inp.value:hoyYM();
     if(!finMesActual) finMesActual=hoyYM();
-    var r=mesRango(finMesActual);
+    var bp=$id('fin-box-per'), enPer=bp && bp.style.display!=='none';
+    finRangoPer=null;
+    if(enPer){
+      var dd=($id('fin-per-desde')||{}).value, hh=($id('fin-per-hasta')||{}).value;
+      if(dd && hh){ if(dd>hh){ var tmp=dd; dd=hh; hh=tmp; } finRangoPer={desde:dd, hasta:hh}; finMesActual=hh.slice(0,7); }
+    }
+    var lbl=$id('fin-kpi-ing-lbl'); if(lbl) lbl.textContent = finRangoPer ? 'Ingresos del período' : 'Ingresos del mes';
+    var h4=$id('fin-ing-h4'); if(h4) h4.textContent = finRangoPer ? '📥 Ingresos del período' : '📥 Ingresos del mes';
+    var r=finRangoActual();
     console.log('[Finanzas] rango:', r.desde, '->', r.hasta);
     _finTurnosCachePromise = null; // refrescar turnos una sola vez por carga, compartido entre ambas funciones
     finCargarDatos(r.desde, r.hasta);
@@ -29096,8 +29335,17 @@ window.cargarProxConsultas = cargarProxConsultas;
         sb.from('urcym_ingresos').select('*').gte('fecha',desde).lte('fecha',hasta).order('fecha',{ascending:true}), // 2
         sb.from('urcym_gastos').select('*').gte('fecha',desde).lte('fecha',hasta).order('fecha',{ascending:true}),   // 3
         sb.from('urcym_personal').select('*').eq('mes', mesActual),                          // 4
-        finCargarTarifasOsde()                                                               // 5
+        finCargarTarifasOsde(),                                                              // 5
+        finRangoPer ? sb.from('urcym_personal').select('monto').in('mes', mesesEntre(desde,hasta)) : Promise.resolve(null), // 6: personales de todos los meses del período
+        (typeof sbGetAgendaConfig==='function' ? sbGetAgendaConfig('otros_atendidos').catch(function(){return null;}) : Promise.resolve(null)), // 7: pacientes vistos en otros lugares
+        sb.from('online_pedidos').select('tipo,prof,estado,created_at').gte('created_at',desde+'T00:00:00-03:00').lte('created_at',hasta+'T23:59:59-03:00').then(function(r){return r;},function(){return null;}) // 8: recetas y consultas online
       ]);
+      // Pacientes atendidos en otros lugares (CEM, CEQ, Sapiens…), cargados desde la agenda
+      var _atdRes = {};
+      (function(){ var v = resultados[7]; if(!v || typeof v!=='object') return;
+        Object.keys(v).forEach(function(k){ var p=k.split('|'); if(p.length<3) return; var f=p[0]; if(f<desde||f>hasta) return; var x=v[k]; if(!x||x.nofui) return;
+          var nom=p.slice(2).join('|')+' ('+(p[1]==='OB'?'Bertani':p[1]==='BG'?'Guerrero':p[1])+')';
+          var a=_atdRes[nom]=_atdRes[nom]||{n:0,dias:0,monto:0}; a.n+=Number(x.n||0); a.dias++; a.monto+=Number(x.monto||0); }); })();
 
       var turnosData = resultados[0] || {};
       var recRows = resultados[1];
@@ -29110,6 +29358,7 @@ window.cargarProxConsultas = cargarProxConsultas;
       // cierre entra como "Costa Bucal <profesional>" (neto, sin OSDE) y esas
       // consultas/recetas dejan de sumar aparte para no contarse dos veces.
       var cf = await finCierres(desde, hasta, turnosData);
+      try { finPintarAtendidos(turnosData, desde, hasta, resultados[7], resultados[8], (recRows&&recRows.data)||[]); } catch(_e){ console.warn('[Finanzas] atendidos', _e); }
       var cbDias = [];
       if(cf) Object.keys(cf.profs).forEach(function(p){ cbDias = cbDias.concat(cf.profs[p].dias); });
       var totalCB = cf ? cf.total : 0;
@@ -29243,6 +29492,9 @@ window.cargarProxConsultas = cargarProxConsultas;
       var kpiRecSub=$id('fin-kpi-rec-sub'); if(kpiRecSub) kpiRecSub.textContent=recList.length+' recetas';
       // Cachear para banner personal (usa tabla urcym_personal)
       var totalPersonalMes = persList.reduce(function(a,g){return a+Number(g.monto||0);},0);
+      if(finRangoPer && resultados[6] && resultados[6].data) totalPersonalMes = resultados[6].data.reduce(function(a,g){return a+Number(g.monto||0);},0);
+      var _plTit=document.querySelector('.fin-plata-banner-title');
+      if(_plTit) _plTit.textContent = finRangoPer ? '💵 Tu plata '+finPeriodoLabel()+' (gastos personales: meses '+mesesEntre(desde,hasta).map(function(x){return x.slice(5,7)+'/'+x.slice(2,4);}).join(', ')+' completos)' : '💵 Tu plata del mes';
       window._finUltBalance = balance;
       window._finUltPersonal = totalPersonalMes;
       if(window.finActualizarBannerPersonal) window.finActualizarBannerPersonal(balance, totalPersonalMes);
@@ -29305,6 +29557,13 @@ window.cargarProxConsultas = cargarProxConsultas;
               +'</div>');
           }
         });
+        // Pacientes vistos en otros lugares (lo cobrado ya está sumado arriba en su rubro)
+        var _atdK = Object.keys(_atdRes).sort();
+        if(_atdK.length){
+          rows.push('<div class="fin-atd-box"><div class="fin-atd-tit">📍 Pacientes en otros lugares <span>· cargados desde la agenda</span></div>'
+            + _atdK.map(function(k){ var a=_atdRes[k]; return '<div class="fin-atd-row"><span>'+k.replace(/[<>&]/g,'')+'</span><span><b>'+a.n+'</b> paciente'+(a.n===1?'':'s')+' · '+a.dias+' día'+(a.dias===1?'':'s')+(a.monto?' · '+moneda(a.monto):'')+'</span></div>'; }).join('')
+            + '</div>');
+        }
         // Total ingresos reales
         rows.push('<div class="fin-resumen-row total-row">'
           +'<div class="fin-resumen-row-label"><span class="fin-row-icon">✅</span><span>Total ingresos</span></div>'
@@ -29319,7 +29578,7 @@ window.cargarProxConsultas = cargarProxConsultas;
           +'</div>');
         resIngEl.innerHTML = rows.length > 2
           ? rows.join('')
-          : '<div style="font-size:12px;color:var(--text-soft);padding:14px 18px">Sin ingresos registrados este mes</div>';
+          : '<div style="font-size:12px;color:var(--text-soft);padding:14px 18px">Sin ingresos registrados '+(finRangoPer?'este período':'este mes')+'</div>';
       }
 
       var catGas = {};
@@ -29359,7 +29618,7 @@ window.cargarProxConsultas = cargarProxConsultas;
           +'</div>');
         resGasEl.innerHTML = catRows.length > 1
           ? catRows.join('')
-          : '<div style="font-size:12px;color:var(--text-soft);padding:14px 18px">Sin gastos registrados este mes</div>';
+          : '<div style="font-size:12px;color:var(--text-soft);padding:14px 18px">Sin gastos registrados '+(finRangoPer?'este período':'este mes')+'</div>';
       }
 
       // ── Detalle colapsable por grupo
@@ -29494,7 +29753,7 @@ window.cargarProxConsultas = cargarProxConsultas;
           +'</div>';
         });
 
-        gruposEl.innerHTML = html || '<div class="fin-empty">Sin movimientos en este mes</div>';
+        gruposEl.innerHTML = html || '<div class="fin-empty">Sin movimientos en '+(finRangoPer?'este período':'este mes')+'</div>';
       }
 
       // tbody legacy — ya no se usa pero por si acaso
@@ -29504,7 +29763,7 @@ window.cargarProxConsultas = cargarProxConsultas;
       var tbodyG=$id('fin-tbody-gastos');
       if(tbodyG){
         var gasSort=gasList.slice().sort(function(a,b){return a.fecha>b.fecha?-1:1;});
-        if(!gasSort.length){ tbodyG.innerHTML='<tr><td colspan="6" class="fin-empty">Sin gastos en este mes</td></tr>'; }
+        if(!gasSort.length){ tbodyG.innerHTML='<tr><td colspan="6" class="fin-empty">Sin gastos en '+(finRangoPer?'este período':'este mes')+'</td></tr>'; }
         else {
           tbodyG.innerHTML=gasSort.map(function(g){
             var descEsc=(g.descripcion||'').replace(/'/g,"\\'");
@@ -29572,12 +29831,12 @@ window.cargarProxConsultas = cargarProxConsultas;
         var d=dataMap[ym];
         var hIng=Math.max(3,Math.round((d.ing/maxVal)*96));
         var hGas=Math.max(3,Math.round((d.gas/maxVal)*96));
-        var isCurrent=ym===finMesActual;
+        var isCurrent=!finRangoPer&&ym===finMesActual;
         var wrap=document.createElement('div');
         wrap.className='fin-chart-bar-wrap';
         wrap.style.cursor='pointer';
         wrap.title=mesLabel(ym)+': Ing '+moneda(d.ing)+' | Gas '+moneda(d.gas);
-        wrap.onclick=function(){var inp=$id('fin-filtro-mes');if(inp){inp.value=ym;finCargar();}};
+        wrap.onclick=function(){var inp=$id('fin-filtro-mes');if(inp){inp.value=ym;window.finModo('mes');}};
         wrap.innerHTML='<div class="fin-chart-bar-inner">'
           +'<div class="fin-chart-bar ing" style="height:'+hIng+'px'+(isCurrent?';box-shadow:0 0 0 2px #1D9E75':'')+'"></div>'
           +'<div style="height:3px"></div>'
@@ -30279,7 +30538,7 @@ window.cargarProxConsultas = cargarProxConsultas;
   };
 
   async function finContarOsdeMes(){
-    var r=mesRango(finMesActual);
+    var r=finRangoActual();
     var consultas=0, recetas=0;
     // Contar turnos OSDE del mes
     try{
@@ -30333,7 +30592,7 @@ window.cargarProxConsultas = cargarProxConsultas;
 
   // ── Exportar PDF
   window.finExportarPDF=function(){
-    var r=mesRango(finMesActual);
+    var r=finRangoActual();
     var win=window.open('','_blank','width=820,height=700');
     if(!win){alert('Permitir popups para exportar');return;}
     async function buildPDF(){
@@ -30370,7 +30629,7 @@ window.cargarProxConsultas = cargarProxConsultas;
       rows.sort(function(a,b){return a.fecha>b.fecha?1:-1;});
       var totalIng=totalConsultas+totalRec+totalIngM+totalCB;
       var balance=totalIng-totalGas;
-      win.document.write('<!DOCTYPE html><html lang="es-AR"><head><meta charset="UTF-8"><title>Finanzas '+mesLabel(finMesActual)+'</title>'
+      win.document.write('<!DOCTYPE html><html lang="es-AR"><head><meta charset="UTF-8"><title>Finanzas '+finPeriodoLabel()+'</title>'
         +'<style>body{font-family:Arial,sans-serif;margin:32px;color:#1a2535;font-size:13px}'
         +'h1{font-size:20px;margin-bottom:2px}h2{font-size:13px;color:#6b7a8d;margin-bottom:20px;font-weight:normal}'
         +'.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px}'
@@ -30381,7 +30640,7 @@ window.cargarProxConsultas = cargarProxConsultas;
         +'td{padding:7px 10px;border-top:1px solid #e5e7eb}'
         +'tfoot td{font-weight:700;border-top:2px solid #e5e7eb}'
         +'@media print{body{margin:16px}}</style></head><body>'
-        +'<h1>Resumen Financiero — '+mesLabel(finMesActual)+'</h1><h2>Evaluaciones cardiometabólicas</h2>'
+        +'<h1>Resumen Financiero — '+finPeriodoLabel()+'</h1><h2>Evaluaciones cardiometabólicas</h2>'
         +'<div class="kpis">'
           +'<div class="kpi"><div class="kpi-l">Ingresos</div><div class="kpi-v" style="color:#1D9E75">'+moneda(totalIng)+'</div></div>'
           +'<div class="kpi"><div class="kpi-l">Gastos</div><div class="kpi-v" style="color:#e25247">'+moneda(totalGas)+'</div></div>'
@@ -45757,6 +46016,64 @@ html.urcym-sec .cierre-solo-prof, html.urcym-sec .dash-card.dash-pacientes, html
 </style>
 <style>
 .op-plat label{font-size:12.5px}
+</style>
+<style>
+.fin-per-atajos{display:inline-flex;gap:4px;margin-left:4px}
+.fin-per-atajos button{border:1px solid var(--border);background:#fff;border-radius:999px;padding:5px 10px;font:600 11.5px var(--font-main);color:var(--text-soft);cursor:pointer}
+.fin-per-atajos button:hover{border-color:var(--blue);color:var(--blue)}
+#fin-box-per input[type=date]{padding:6px 8px;border:1.5px solid var(--border);border-radius:9px;font-family:var(--font-main);font-size:13px}
+</style>
+<style>
+/* Pacientes atendidos en otros lugares */
+.ag-nl-block .atd-tag{display:block;margin-top:3px;font-size:10.5px;font-weight:800;letter-spacing:0;text-transform:none;background:rgba(255,255,255,.92);color:#334155;border-radius:999px;padding:1px 7px;width:max-content;max-width:95%;margin-left:auto;margin-right:auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ag-nl-block .atd-tag.falta{background:#fef3c7;color:#92400e}
+.ag-nl-block .atd-tag.nf{background:rgba(255,255,255,.6);color:#64748b;font-weight:600}
+#atd-pill{border:1.5px solid #0d9488;background:#f0fdfa;color:#115e59;border-radius:999px;padding:5px 11px;font:600 11.5px inherit;font-family:inherit;cursor:pointer;margin-right:4px}
+html.urcym-sec #atd-pill{display:none!important}
+#atd-panel{position:fixed;right:16px;top:64px;z-index:9001;width:min(420px,calc(100vw - 32px));max-height:62vh;overflow:auto;background:#fff;border-radius:14px;box-shadow:0 14px 40px rgba(0,0,0,.2);border:1px solid #e5e7eb;padding:14px}
+.atd-ph{display:flex;justify-content:space-between;align-items:center;font-size:15px}
+.atd-x{border:none;background:none;font-size:16px;cursor:pointer;color:#6b7280}
+.atd-ay{font-size:12px;color:#6b7280;margin:4px 0 10px}
+.atd-it{display:flex;gap:10px;align-items:center;justify-content:space-between;border:1px solid #99f6e4;background:#f0fdfa;border-radius:10px;padding:8px 10px;margin-bottom:6px}
+.atd-it b{display:block;font-size:13.5px}.atd-it span{font-size:12px;color:#4b5563}
+.atd-a{display:flex;gap:6px;flex-shrink:0}
+.atd-a button,.atd-box .atd-ac button{border:1.5px solid #cbd5e1;background:#fff;color:#475569;border-radius:8px;padding:5px 11px;font:600 12.5px inherit;font-family:inherit;cursor:pointer}
+.atd-a button.pri,.atd-box button.pri{border-color:#0d9488;background:#0d9488;color:#fff}
+#atd-bg{position:fixed;inset:0;z-index:9500;background:rgba(15,23,42,.45);display:flex;align-items:center;justify-content:center;padding:16px}
+.atd-box{background:#fff;border-radius:16px;padding:18px 20px;width:min(400px,100%);box-shadow:0 20px 50px rgba(0,0,0,.25);font-family:var(--font-main)}
+.atd-sub{font-size:12.5px;color:#64748b;margin:2px 0 12px;text-transform:none}
+.atd-box label{display:block;font-size:12px;font-weight:700;color:#334155;margin:10px 0 4px}
+.atd-box label small{font-weight:500;color:#94a3b8}
+.atd-box input{width:100%;box-sizing:border-box;border:1.5px solid #cbd5e1;border-radius:10px;padding:9px 12px;font:700 17px var(--font-main)}
+.atd-box input:focus{outline:none;border-color:#0d9488}
+.atd-ac{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:16px;flex-wrap:wrap}
+.atd-ac span{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.atd-box .atd-ac .atd-lnk{border:none!important;background:none!important;color:#64748b!important;text-decoration:underline;padding:2px!important;font-weight:500!important;font-size:11.5px!important}
+.atd-err{color:#b91c1c;font-size:12px;margin-top:8px;min-height:1px}
+.atd-nofui{font-size:12px;background:#f1f5f9;border-radius:8px;padding:6px 10px;color:#475569}
+</style>
+<style>
+.fin-atd-box{margin:8px 14px;border:1px dashed #99f6e4;background:#f0fdfa;border-radius:10px;padding:8px 12px}
+.fin-atd-tit{font-size:12px;font-weight:800;color:#115e59;margin-bottom:4px}.fin-atd-tit span{font-weight:500;color:#5eaaa1}
+.fin-atd-row{display:flex;justify-content:space-between;gap:10px;font-size:12.5px;color:#334155;padding:2px 0}
+</style>
+<style>
+.fin-atendidos{background:#fff;border:1px solid var(--border);border-radius:16px;padding:14px 18px;margin:0 0 18px}
+.fin-atendidos .fa-h{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:8px}
+.fin-atendidos .fa-h b{font-size:15px}.fin-atendidos .fa-h span{font-size:12px;color:var(--text-soft)}
+.fin-atendidos .fa-big{margin-left:auto;font-size:26px!important;font-weight:800;color:#0f766e!important}
+.fa-t{width:100%;border-collapse:collapse;font-size:13px}
+.fa-t th{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-soft);font-weight:700;text-align:right;padding:6px 8px;border-bottom:1.5px solid var(--border)}
+.fa-t th:first-child{text-align:left}
+.fa-t td{padding:6px 8px;border-bottom:1px solid #f1f5f9;text-align:right;color:#334155}
+.fa-t td:first-child{text-align:left}
+.fa-t td small{color:#94a3b8;font-size:11px}
+.fa-t .fa-i{display:inline-block;width:22px}
+.fa-t .fa-tt{background:#f8fafc}
+.fa-t tfoot td{border-top:1.5px solid var(--border);border-bottom:none;font-weight:800}
+.fa-0{color:#cbd5e1}
+.fa-ay{font-size:11.5px;color:var(--text-soft);margin:8px 0 0}
+@media (max-width:640px){.fa-t td small{display:none}}
 </style>
 </body>
 </html>
