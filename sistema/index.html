@@ -2,7 +2,7 @@
 <html lang="es-AR">
 <head>
   <meta charset="UTF-8" />
-  <script>var URCYM_BUILD = '2026-11-23-1100';</script>
+  <script>var URCYM_BUILD = '2026-11-23-1200';</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Evaluaciones cardiometabólicas — Sistema de Historia Clínica</title>
 
@@ -26123,8 +26123,9 @@ window._dspAbrirLista=function(){
     }
     return out.sort(function(a, b){ return a.ds < b.ds ? 1 : -1; });
   }
+  var NAG_AGENDA = false; // la cantidad se carga en Finanzas; la agenda no insiste
   function pintarPill(){
-    var lista = pendientes(), pill = document.getElementById('atd-pill');
+    var lista = NAG_AGENDA ? pendientes() : [], pill = document.getElementById('atd-pill');
     if(!lista.length){ if(pill) pill.remove(); var pn0 = document.getElementById('atd-panel'); if(pn0) pn0.remove(); abierto = false; return; }
     if(!pill){ pill = document.createElement('button'); pill.type = 'button'; pill.id = 'atd-pill'; pill.onclick = function(e){ e.stopPropagation(); abierto = !abierto; panel(); }; }
     var ancla = document.getElementById('btn-cambiar-pwd');
@@ -26179,11 +26180,20 @@ window._dspAbrirLista=function(){
       + (r.nofui ? '<div class="atd-nofui">Marcado como "No fui". Si fuiste, cargalo abajo.</div>' : '')
       + '<label>¿Cuántos pacientes viste?</label><input type="number" id="atd-n" min="0" step="1" inputmode="numeric" value="' + (r.n != null && !r.nofui ? r.n : '') + '">'
       + '<label>¿Cuánto cobraste en total? <small>(suma en Finanzas como ingreso de ' + E(b.label) + ')</small></label><input type="number" id="atd-m" min="0" step="1" inputmode="numeric" placeholder="$" value="' + (r.monto ? r.monto : '') + '">'
+      + '<div class="atd-ya" id="atd-ya" style="display:none"></div>'
       + '<div class="atd-err" id="atd-err"></div>'
       + '<div class="atd-ac"><span>' + (r.at ? '<button type="button" class="atd-lnk" data-del>Borrar lo cargado</button>' : '<button type="button" class="atd-lnk" data-nofui>No fui ese día</button>') + '<button type="button" class="atd-lnk" data-ed>Cambiar el horario</button></span>'
       + '<span><button type="button" data-c>Cancelar</button><button type="button" class="pri" data-ok>Guardar</button></span></div></div>';
     document.body.appendChild(bg);
     var ni = bg.querySelector('#atd-n'); setTimeout(function(){ ni.focus(); }, 30);
+    // ¿Ya está cargada la plata de ese día a mano en Finanzas? Entonces solo va la cantidad (para no contarla dos veces)
+    try { sb.from('urcym_ingresos').select('id,monto,origen').eq('fecha', ds).eq('categoria', cat(b)).then(function(q){
+      var ya = ((q && q.data) || []).filter(function(x){ return x.origen !== 'agenda' && x.id !== r.ingId; });
+      if(!ya.length) return; var tot = ya.reduce(function(a, x){ return a + Number(x.monto || 0); }, 0);
+      var box = bg.querySelector('#atd-ya'); if(!box) return;
+      box.style.display = ''; box.innerHTML = '✅ Ya cargaste <b>$' + tot.toLocaleString('es-AR') + '</b> de ' + E(b.label) + ' en Finanzas para este día. Poné solo la cantidad de pacientes y dejá el monto vacío (si no, se cuenta dos veces).';
+      var mi = bg.querySelector('#atd-m'); if(mi && !r.monto){ mi.value = ''; mi.placeholder = 'ya está en Finanzas'; }
+    }); } catch(_){}
     bg.onclick = function(e){ if(e.target === bg) cerrar(); };
     bg.querySelectorAll('[data-c]').forEach(function(x){ x.onclick = cerrar; });
     var ed = bg.querySelector('[data-ed]'); ed.onclick = function(){ cerrar(); if(window._otrosEditarBloque) window._otrosEditarBloque(b); };
@@ -26209,7 +26219,7 @@ window._dspAbrirLista=function(){
     if(ok){
       var r = D && D[clave(ds, b)], tag = null;
       if(r){ tag = document.createElement('span'); tag.className = 'atd-tag' + (r.nofui ? ' nf' : ''); tag.textContent = r.nofui ? 'no fui' : (r.n + ' pac.' + (r.monto ? ' · $' + Number(r.monto).toLocaleString('es-AR') : '')); }
-      else if(D && terminado(ds, b)){ tag = document.createElement('span'); tag.className = 'atd-tag falta'; tag.textContent = '✍️ cargar pacientes'; }
+      else if(NAG_AGENDA && D && terminado(ds, b)){ tag = document.createElement('span'); tag.className = 'atd-tag falta'; tag.textContent = '✍️ cargar pacientes'; }
       if(tag) el.appendChild(tag);
       el.title = (el.title ? el.title + ' · ' : '') + 'Cuando ya pasó: tocá para anotar cuántos pacientes viste';
     }
@@ -26218,7 +26228,7 @@ window._dspAbrirLista=function(){
       el.ondblclick = async function(ev){ ev.stopPropagation(); if(!confirm('¿Volver a anotar pacientes en "' + b.label + '"?')) return; await cargar(true); var k = '_excluir|' + b.prof; D[k] = excluidos(b.prof).filter(function(x){ return x !== b.label; }); await sbUpsertAgendaConfig(KEY, D); refrescar(); }; }
     if(ok || window._otrosEditarBloque){
       el.style.cursor = 'pointer';
-      el.onclick = function(ev){ ev.stopPropagation(); if(ok && terminado(ds, b)) window._atendidoAbrir(ds, b); else if(window._otrosEditarBloque) window._otrosEditarBloque(b); };
+      el.onclick = function(ev){ ev.stopPropagation(); if(ok && terminado(ds, b) && (NAG_AGENDA || (D && D[clave(ds, b)]))) window._atendidoAbrir(ds, b); else if(window._otrosEditarBloque) window._otrosEditarBloque(b); };
     }
   };
   var _rg = renderGrid;
@@ -29198,6 +29208,33 @@ window.cargarProxConsultas = cargarProxConsultas;
   function hoyISO(){
     var d=new Date(); return d.toISOString().split('T')[0];
   }
+  // ── Cantidad de pacientes en ingresos de otros lugares (se guarda en agenda_config 'otros_atendidos' como 'ing|<id>')
+  var FIN_LUG_CATS = ['sapiens_bar','sapiens_omar','ceq','cem','salita','otro'];
+  function finMiProf(){ var cu=window._cu||null; var em=String(cu&&cu.email||''); return /bertani/i.test(em)?'OB':/guerrero/i.test(em)?'BG':''; }
+  function finPacCelda(r){
+    if(FIN_LUG_CATS.indexOf(r.categoria)<0 || r.monto<0) return '';
+    var d=window._finAtd||{}, x=d['ing|'+r.id];
+    if(!x && r.origen==='agenda'){ var k=Object.keys(d).find(function(k){ return d[k]&&d[k].ingId===r.id; }); if(k) return '<b>'+(d[k].n||0)+'</b> <small style="color:#94a3b8">(agenda)</small>'; }
+    return '<input type="number" class="fin-pac-in" min="0" step="1" inputmode="numeric" placeholder="—" title="¿Cuántos pacientes viste?" value="'+(x&&x.n!=null?x.n:'')+'" onchange="finIngSetPac('+r.id+',this)">';
+  }
+  window.finIngSetPac = async function(id, inp){
+    var v = inp.value===''?null:Math.max(0,Math.round(+inp.value)); inp.disabled=true;
+    try {
+      var d = await sbGetAgendaConfig('otros_atendidos'); d=(d&&typeof d==='object')?d:{};
+      if(v===null) delete d['ing|'+id]; else d['ing|'+id]={n:v, prof:(d['ing|'+id]&&d['ing|'+id].prof)||finMiProf(), at:new Date().toISOString()};
+      await sbUpsertAgendaConfig('otros_atendidos', d); window._finAtd=d; inp.style.borderColor='#16a34a';
+      // recargar los totales sin cerrar las listas que estaban abiertas
+      clearTimeout(window._finPacT); window._finPacT=setTimeout(function(){
+        var abiertos=[].map.call(document.querySelectorAll('.fin-detalle-grupo-header.open .fin-detalle-grupo-title'),function(e){return e.textContent;});
+        var y=window.scrollY; finCargar();
+        var n=0, re=setInterval(function(){ n++; var hs=document.querySelectorAll('.fin-detalle-grupo-header');
+          if(hs.length){ [].forEach.call(hs,function(h){ var t=h.querySelector('.fin-detalle-grupo-title'); if(t&&abiertos.indexOf(t.textContent)>=0&&!h.classList.contains('open')) finDetalleToggle(h); }); window.scrollTo(0,y); }
+          if(n>=6) clearInterval(re); }, 300);
+      }, 1500);
+    } catch(e){ alert('No se pudo guardar la cantidad: '+(e.message||e)); }
+    inp.disabled=false;
+  };
+
   // ── Pacientes atendidos en el período, por profesional (consultorio, videollamadas, otros lugares, online, recetas)
   function finPintarAtendidos(turnosData, desde, hasta, otros, onl, recetas){
     var box=$id('fin-atendidos'); if(!box) return;
@@ -29215,7 +29252,7 @@ window.cargarProxConsultas = cargarProxConsultas;
     });
     if(otros&&typeof otros==='object') Object.keys(otros).forEach(function(k){
       var p=k.split('|'); if(p.length<3) return; var f=p[0]; if(f<desde||f>hasta) return; var x=otros[k]; if(!x||x.nofui) return;
-      var lug=p.slice(2).join('|'); sumar(fila('o:'+lug,'📍',lug,'cargado desde la agenda'),p[1],Number(x.n||0));
+      var lug=p[2]; sumar(fila('o:'+lug,'📍',lug,''),p[1],Number(x.n||0));
     });
     var od=(onl&&onl.data)||[];
     od.forEach(function(x){
@@ -29340,12 +29377,6 @@ window.cargarProxConsultas = cargarProxConsultas;
         (typeof sbGetAgendaConfig==='function' ? sbGetAgendaConfig('otros_atendidos').catch(function(){return null;}) : Promise.resolve(null)), // 7: pacientes vistos en otros lugares
         sb.from('online_pedidos').select('tipo,prof,estado,created_at').gte('created_at',desde+'T00:00:00-03:00').lte('created_at',hasta+'T23:59:59-03:00').then(function(r){return r;},function(){return null;}) // 8: recetas y consultas online
       ]);
-      // Pacientes atendidos en otros lugares (CEM, CEQ, Sapiens…), cargados desde la agenda
-      var _atdRes = {};
-      (function(){ var v = resultados[7]; if(!v || typeof v!=='object') return;
-        Object.keys(v).forEach(function(k){ var p=k.split('|'); if(p.length<3) return; var f=p[0]; if(f<desde||f>hasta) return; var x=v[k]; if(!x||x.nofui) return;
-          var nom=p.slice(2).join('|')+' ('+(p[1]==='OB'?'Bertani':p[1]==='BG'?'Guerrero':p[1])+')';
-          var a=_atdRes[nom]=_atdRes[nom]||{n:0,dias:0,monto:0}; a.n+=Number(x.n||0); a.dias++; a.monto+=Number(x.monto||0); }); })();
 
       var turnosData = resultados[0] || {};
       var recRows = resultados[1];
@@ -29358,7 +29389,6 @@ window.cargarProxConsultas = cargarProxConsultas;
       // cierre entra como "Costa Bucal <profesional>" (neto, sin OSDE) y esas
       // consultas/recetas dejan de sumar aparte para no contarse dos veces.
       var cf = await finCierres(desde, hasta, turnosData);
-      try { finPintarAtendidos(turnosData, desde, hasta, resultados[7], resultados[8], (recRows&&recRows.data)||[]); } catch(_e){ console.warn('[Finanzas] atendidos', _e); }
       var cbDias = [];
       if(cf) Object.keys(cf.profs).forEach(function(p){ cbDias = cbDias.concat(cf.profs[p].dias); });
       var totalCB = cf ? cf.total : 0;
@@ -29405,6 +29435,22 @@ window.cargarProxConsultas = cargarProxConsultas;
         return {id:r.id, fecha:r.fecha, monto:Number(r.monto||0), origen:r.origen||'manual',
           categoria:r.categoria, descripcion:r.descripcion||'', prof:r.prof||''};
       });
+
+      // Pacientes vistos en otros lugares: lo anotado en la agenda + lo anotado en los ingresos manuales (CEM, CEQ…)
+      var _atdSrc = (resultados[7] && typeof resultados[7]==='object') ? resultados[7] : {};
+      window._finAtd = _atdSrc;
+      var _otrosM = {};
+      Object.keys(_atdSrc).forEach(function(k){ if(k.indexOf('ing|')!==0 && k.charAt(0)!=='_') _otrosM[k]=_atdSrc[k]; });
+      var _ingIds = {}; ingList.forEach(function(i){ _ingIds[i.id]=i; });
+      Object.keys(_atdSrc).forEach(function(k){ if(k.indexOf('ing|')!==0) return; var id=k.slice(4), x=_atdSrc[k], ing=_ingIds[id]; if(!ing||!x) return;
+        var pr = x.prof || (ing.categoria==='sapiens_omar'?'OB':ing.categoria==='sapiens_bar'?'BG':'');
+        var lug = ing.categoria==='sapiens_bar'||ing.categoria==='sapiens_omar' ? 'Sapiens' : (CAT_ING_LBL[ing.categoria]||ing.categoria);
+        var kk = ing.fecha+'|'+(pr||'-')+'|'+lug+'|'+id; _otrosM[kk] = {n:Number(x.n||0), monto:ing.monto}; });
+      var _atdRes = {};
+      Object.keys(_otrosM).forEach(function(k){ var p=k.split('|'); if(p.length<3) return; var f=p[0]; if(f<desde||f>hasta) return; var x=_otrosM[k]; if(!x||x.nofui) return;
+        var nom=p[2]+(p[1]==='OB'?' (Bertani)':p[1]==='BG'?' (Guerrero)':'');
+        var a=_atdRes[nom]=_atdRes[nom]||{n:0,dias:0,monto:0}; a.n+=Number(x.n||0); a.dias++; a.monto+=Number(x.monto||0); });
+      try { finPintarAtendidos(turnosData, desde, hasta, _otrosM, resultados[8], (recRows&&recRows.data)||[]); } catch(_e){ console.warn('[Finanzas] atendidos', _e); }
 
       // Gastos consultorio (NO incluye personal — tabla separada)
       var gasList = (gasRows.data||[]);
@@ -29560,7 +29606,7 @@ window.cargarProxConsultas = cargarProxConsultas;
         // Pacientes vistos en otros lugares (lo cobrado ya está sumado arriba en su rubro)
         var _atdK = Object.keys(_atdRes).sort();
         if(_atdK.length){
-          rows.push('<div class="fin-atd-box"><div class="fin-atd-tit">📍 Pacientes en otros lugares <span>· cargados desde la agenda</span></div>'
+          rows.push('<div class="fin-atd-box"><div class="fin-atd-tit">📍 Pacientes en otros lugares</div>'
             + _atdK.map(function(k){ var a=_atdRes[k]; return '<div class="fin-atd-row"><span>'+k.replace(/[<>&]/g,'')+'</span><span><b>'+a.n+'</b> paciente'+(a.n===1?'':'s')+' · '+a.dias+' día'+(a.dias===1?'':'s')+(a.monto?' · '+moneda(a.monto):'')+'</span></div>'; }).join('')
             + '</div>');
         }
@@ -29720,12 +29766,12 @@ window.cargarProxConsultas = cargarProxConsultas;
                 '<td>'+finFmtFecha(r.fecha)+'</td>'
                 +'<td><span class="fin-badge '+(esAjuste?'gasto':'ingreso')+'">'+lbl+'</span></td>'
                 +'<td style="max-width:180px;font-size:12px">'+(r.descripcion||'—')+'</td>'
-                +'<td></td><td>'+estadoBadge+'</td>'
+                +'<td>'+finPacCelda(r)+'</td><td>'+estadoBadge+'</td>'
                 +'<td>'+montoStr+'</td>'
                 +'<td><button class="fin-btn-del" onclick="finEliminarIngreso('+r.id+')">✕</button></td></tr>';
             },
             totalFn: function(items){ return items.reduce(function(a,i){return a+i.monto;},0); },
-            cols: ['Fecha','Categoría','Descripción','','','Monto','']
+            cols: ['Fecha','Categoría','Descripción','Pacientes','','Monto','']
           }
         ];
 
@@ -30361,6 +30407,7 @@ window.cargarProxConsultas = cargarProxConsultas;
       + '<select class="fin-i-fila-cat" onchange="finIngOnCatChange(this)">' + catOpts + '</select>'
       + '<input type="number" class="fin-i-fila-monto" placeholder="$ monto" min="0" step="0.01"'
       +   (monto !== undefined && monto !== '' ? ' value="' + Math.abs(monto) + '"' : '') + ' oninput="finIngActualizarTotal()"/>'
+      + '<input type="number" class="fin-i-fila-pac" placeholder="pacientes" min="0" step="1" inputmode="numeric" title="¿Cuántos pacientes viste? (opcional)" style="' + (FIN_LUG_CATS.indexOf(cat || 'sapiens_bar') < 0 ? 'display:none' : '') + '"/>'
       + '<input type="text" class="fin-i-fila-nota" placeholder="' + (isAjuste ? 'Motivo del ajuste...' : 'Nota / paciente (opcional)') + '"'
       +   (nota ? ' value="' + nota + '"' : '') + '/>'
       + '<button class="fin-i-fila-del" title="Eliminar" onclick="finIngQuitarFila(this,' + (rowId || 'null') + ')">×</button>';
@@ -30373,6 +30420,7 @@ window.cargarProxConsultas = cargarProxConsultas;
   window.finIngOnCatChange = function(sel) {
     var fila = sel.closest('.fin-i-fila');
     var nota = fila.querySelector('.fin-i-fila-nota');
+    var pacI = fila.querySelector('.fin-i-fila-pac'); if (pacI) pacI.style.display = FIN_LUG_CATS.indexOf(sel.value) < 0 ? 'none' : '';
     if (sel.value === 'ajuste') {
       fila.classList.add('fila-ajuste');
       nota.placeholder = 'Motivo del ajuste...';
@@ -30462,23 +30510,31 @@ window.cargarProxConsultas = cargarProxConsultas;
   window.finGuardarIngresosRapido = async function() {
     var fecha = $id('fin-i-fecha-global') ? $id('fin-i-fecha-global').value : hoyISO();
     if (!fecha) { alert('Seleccioná una fecha'); return; }
-    var registros = [];
+    var registros = [], pacs = [];
     document.querySelectorAll('.fin-i-fila').forEach(function(div) {
       if (div.getAttribute('data-row-id')) return;
       var cat = div.querySelector('.fin-i-fila-cat').value;
+      var pacEl = div.querySelector('.fin-i-fila-pac');
       var m = parseFloat(div.querySelector('.fin-i-fila-monto').value) || 0;
       var nota = div.querySelector('.fin-i-fila-nota').value.trim();
       if (m === 0) return;
       // Ajuste se guarda como negativo
       var montoFinal = cat === 'ajuste' ? -Math.abs(m) : Math.abs(m);
       registros.push({ fecha: fecha, categoria: cat, descripcion: nota, monto: montoFinal, origen: 'manual' });
+      pacs.push(pacEl && pacEl.style.display !== 'none' && pacEl.value !== '' ? Math.max(0, Math.round(+pacEl.value)) : null);
     });
     if (!registros.length) { alert('Ingresá al menos un monto'); return; }
     var btn = $id('fin-i-btn-save');
     if (btn) { btn.disabled = true; btn.textContent = 'Guardando…'; }
-    var r = await sb.from('urcym_ingresos').insert(registros);
+    var conPac = pacs.some(function(x){ return x !== null; });
+    var r = conPac ? await sb.from('urcym_ingresos').insert(registros).select('id') : await sb.from('urcym_ingresos').insert(registros);
     if (btn) { btn.disabled = false; btn.textContent = '💾 Guardar'; }
     if (r.error) { alert('Error: ' + r.error.message); return; }
+    if (conPac && r.data && r.data.length === registros.length) {
+      try { var d = await sbGetAgendaConfig('otros_atendidos'); d = (d && typeof d === 'object') ? d : {};
+        r.data.forEach(function(row, i){ if(pacs[i] !== null) d['ing|' + row.id] = { n:pacs[i], prof:finMiProf(), at:new Date().toISOString() }; });
+        await sbUpsertAgendaConfig('otros_atendidos', d); } catch(e){ alert('El ingreso se guardó, pero no la cantidad de pacientes: ' + (e.message || e)); }
+    }
     finCerrarModals();
     finCargar();
     finShowTab('detalle');
@@ -46074,6 +46130,13 @@ html.urcym-sec #atd-pill{display:none!important}
 .fa-0{color:#cbd5e1}
 .fa-ay{font-size:11.5px;color:var(--text-soft);margin:8px 0 0}
 @media (max-width:640px){.fa-t td small{display:none}}
+</style>
+<style>.atd-ya{margin-top:10px;font-size:12px;background:#ecfdf5;border:1px solid #a7f3d0;color:#065f46;border-radius:8px;padding:7px 10px}</style>
+<style>
+.fin-pac-in{width:74px;padding:5px 8px;border:1.5px solid var(--border);border-radius:8px;font:700 13px var(--font-main);text-align:center}
+.fin-pac-in:focus{outline:none;border-color:var(--blue)}
+.fin-i-fila-pac{width:92px;flex:0 0 92px;padding:8px 10px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;font-family:var(--font-main);background:var(--gray);outline:none}
+.fin-i-fila-pac:focus{border-color:var(--blue);background:#fff}
 </style>
 </body>
 </html>
