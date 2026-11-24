@@ -2,7 +2,7 @@
 <html lang="es-AR">
 <head>
   <meta charset="UTF-8" />
-  <script>var URCYM_BUILD = '2026-11-23-1300';</script>
+  <script>var URCYM_BUILD = '2026-11-24-0930';</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Evaluaciones cardiometabólicas — Sistema de Historia Clínica</title>
 
@@ -21,6 +21,37 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script>
+/* PDF: las fuentes estándar de jsPDF no tienen ≤ ≥ ≠ → ✓ ni emojis (salían como "d, "e o basura).
+   Se reemplazan por equivalentes que sí se imprimen, en todos los PDF del sistema. */
+(function(){
+  var M = {'≤':'<=','≥':'>=','≠':'!=','≈':'~','−':'-','→':'->','←':'<-','⇒':'=>','✓':'*','✔':'*','✗':'x','✘':'x',' ':' ',' ':' ','​':'','﻿':'','️':''};
+  var RE = /[≤≥≠≈−→←⇒✓✔✗✘  ​﻿️]/g;
+  function s(t){
+    if(typeof t === 'string') return t.replace(RE, function(c){ return M[c]; }).replace(/[\uD800-\uDBFF][\uDC00-\uDFFF]/g, '');
+    if(Array.isArray(t)) return t.map(s);
+    return t;
+  }
+  window._pdfTextoSeguro = s;
+  function parchar(doc){
+    ['text','splitTextToSize','getTextWidth','getStringUnitWidth'].forEach(function(k){
+      var o = doc[k]; if(typeof o !== 'function' || o._urcymTxt) return;
+      var w = function(){ var a = Array.prototype.slice.call(arguments); a[0] = s(a[0]); return o.apply(this, a); };
+      w._urcymTxt = 1; doc[k] = w;
+    });
+    return doc;
+  }
+  function fix(){
+    var NS = window.jspdf, J = NS && NS.jsPDF; if(!J || J._urcymTxt) return;
+    var Nuevo = function(){ var d = new (Function.prototype.bind.apply(J, [null].concat(Array.prototype.slice.call(arguments))))(); return parchar(d); };
+    Object.keys(J).forEach(function(k){ try { Nuevo[k] = J[k]; } catch(e){} });
+    Nuevo.API = J.API; Nuevo.prototype = J.prototype; Nuevo._urcymTxt = 1;
+    try { NS.jsPDF = Nuevo; } catch(e){}
+    if(window.jsPDF === J) window.jsPDF = Nuevo;
+  }
+  fix(); window.addEventListener('load', fix);
+})();
+</script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -3986,7 +4017,7 @@
               <div class="mdpa-tabla-wrap">
                 <div class="mdpa-tabla-header">
                   <div class="mdpa-tabla-title">📋 Registro de tomas</div>
-                  <button class="mdpa-toggle-pp" id="mdpa_btn_pp" onclick="mdpaTogglePP()">🤰 postPrandial</button>
+                  <button class="mdpa-btn-foto" type="button" onclick="mdpaLeerFoto()" title="Sacale una foto a la planilla en papel y se completa la tabla">📷 Leer planilla (foto)</button><button class="mdpa-toggle-pp" id="mdpa_btn_pp" onclick="mdpaTogglePP()">🤰 postPrandial</button>
                 </div>
                 <div class="mdpa-tabla-scroll"><div id="mdpa_tabla_inner"></div></div>
               </div>
@@ -37756,6 +37787,21 @@ function _cargaEstPrec(p){
     if(mf) mf = [mf[0], mf[2], mf[3], mf[4]]; else mf = tF.match(/\b(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})\b/);
     if(mf){ var y = mf[3].length === 2 ? '20' + mf[3] : mf[3]; fecha = y + '-' + String(mf[2]).padStart(2, '0') + '-' + String(mf[1]).padStart(2, '0'); if(isNaN(new Date(fecha + 'T12:00:00'))) fecha = ''; }
     var seccion = '', desdeSeccion = 99;
+    // Informes donde el resultado va en el renglón de abajo ("SODIO" / "Valor de referencia: 135-146 meq/l     140,4 meq/l"):
+    // se le pega al nombre el número que no es parte del rango.
+    var LIN = String(texto).split(/\r?\n/), LST0 = APRENDIDOS.concat(SIN);
+    for(var li = 0; li < LIN.length; li++){
+      var ls0 = sinAc(LIN[li]).trim(); if(!ls0 || /\d/.test(ls0.replace(/\([^)]*\)/g, '')) || ls0.length > 45) continue;
+      if(!LST0.some(function(x){ return x[0].exec(ls0); })) continue;
+      for(var lj = li + 1; lj <= li + 4 && lj < LIN.length; lj++){
+        var lt = sinAc(LIN[lj]);
+        if(LST0.some(function(x){ var m = x[0].exec(lt.trim()); return m && m.index <= 3; })) break;   // empezó otro parámetro
+        var limpio = lt.replace(/\d[\d.,]*\s*(?:-|–|a|al)\s*\d[\d.,]*/g, ' ').replace(/(hasta|menor|mayor|<|>|≤|≥)\s*(de\s*)?\d[\d.,]*/g, ' ').replace(/\b\d{1,2}\s*(?:-|a)\s*\d{1,2}\b/g, ' ').replace(/\b(edad|anos|hombres|mujeres|embarazadas)\b[^\d]{0,6}\d+/g, ' ');
+        var mv = /(\d+(?:[.,]\d+)?)\s*(mg\s*%|mg\s*\/\s*dl|g\s*\/\s*l|mg\s*\/\s*l|meq\s*\/?\s*l|mmol\s*\/?\s*l|nmol\s*\/?\s*l|%|u\s*\/\s*l|ui\s*\/\s*l)/i.exec(limpio);
+        if(mv){ LIN[li] = LIN[li] + ' ' + mv[1] + ' ' + mv[2]; break; }
+      }
+    }
+    texto = LIN.join('\n');
     texto.split(/\r?\n/).forEach(function(lineaEntera){
      var ls = sinAc(lineaEntera).trim();
      if(/^(relacion|indice|cociente|razon)\b/.test(ls) && !/alb\w*[^\n]{0,12}creat/.test(ls)) return;   // "Relación CT/HDL 2,96" no es el HDL
@@ -37836,6 +37882,9 @@ function _cargaEstPrec(p){
         var nv = parseFloat(val), enGL = /^g\s*\/\s*l/i.test(uTxt);
         if((key === 'Glucemia' || key === 'PTOG') && nv > 0 && nv < 3.5 && !/mmol/i.test(uTxt)){ val = String(Math.round(nv * 100)); unidad = 'mg/dL'; }
         else if(['CT','HDL','TG','LDL_MH','LDL_S','noHDL','AcidoUrico'].indexOf(key) >= 0 && enGL && nv < 30){ val = String(Math.round(nv * 100)); unidad = 'mg/dL'; }
+        // sin unidad legible: un CT de 2,08 o un HDL de 0,47 solo pueden estar en g/L
+        else if(['CT','TG','LDL_MH','LDL_S','noHDL'].indexOf(key) >= 0 && nv > 0.2 && nv < 6 && !/mmol/i.test(uTxt)){ val = String(Math.round(nv * 100)); unidad = 'mg/dL'; }
+        else if(key === 'HDL' && nv > 0.1 && nv < 2 && !/mmol/i.test(uTxt)){ val = String(Math.round(nv * 100)); unidad = 'mg/dL'; }
         out.push({ key:key, label:f.label, val:val, unidad:unidad, origen:origen });
         usadas[key] = 1;
         return siguiente;
@@ -45413,7 +45462,12 @@ function _invToggleDroga(key){
       var b = document.createElement('div'); b.className = 'fh-hl';
       b.style.left = (x.b[0] / h.w * 100) + '%'; b.style.top = (x.b[1] / h.h * 100) + '%'; b.style.width = ((x.b[2] - x.b[0]) / h.w * 100) + '%'; b.style.height = ((x.b[3] - x.b[1]) / h.h * 100) + '%';
       inn.appendChild(b); if(!primero) primero = b; });
-    if(primero) try { primero.scrollIntoView({ block: 'center', inline: 'center', behavior: 'smooth' }); } catch(e){}
+    // Solo se mueve la foto si el valor no está a la vista (si ya lo estás mirando, no la toca)
+    if(primero) try {
+      var cont = inn.closest('.fh-foto') || inn.parentElement, cr = cont.getBoundingClientRect();
+      var algunoVisible = Array.prototype.some.call(inn.querySelectorAll('.fh-hl'), function(x){ var r = x.getBoundingClientRect(); return r.bottom > cr.top + 10 && r.top < cr.bottom - 10 && r.right > cr.left + 10 && r.left < cr.right - 10; });
+      if(!algunoVisible) primero.scrollIntoView({ block: 'center', inline: 'center', behavior: 'smooth' });
+    } catch(e){}
   }
   function dudoso(h, val){ var n = numV(val); if(n == null || !h.words) return false; return h.words.some(function(x){ return x.c < 75 && (String(x.t).match(/-?\d+(?:[.,]\d+)*/g) || []).some(function(z){ var k = numV(z); return k != null && Math.abs(k - n) < 1e-9; }); }); }
   function qcMsg(h, v){ if(!v.key || !window._qcValor) return null; try { var q = window._qcValor(h.tipo, v.key, v.val, v.unidad); return q && q.msg; } catch(e){ return null; } }
@@ -45453,7 +45507,8 @@ function _invToggleDroga(key){
     p.querySelectorAll('.fh-otros select').forEach(function(s){ s.onchange = function(){ var o = h.otros[+s.dataset.o]; o.asignar = s.value || null; }; s.value = (h.otros[+s.dataset.o] || {}).asignar || ''; });
     var rl = p.querySelector('.fh-rel'); if(rl) rl.onclick = function(){ h.texto = p.querySelector('.fh-tx textarea').value; reconocer(h); pintarTira(); pintarHoja(); };
     p.querySelectorAll('.fh-v input, .fh-v select').forEach(function(x){ x.addEventListener('change', function(){ guardarEdits(h); refrescarQc(h, x.closest('.fh-v')); }); x.addEventListener('keydown', function(e){ if(e.key === 'Enter'){ e.preventDefault(); guardarEdits(h); refrescarQc(h, x.closest('.fh-v')); } }); });
-    p.querySelectorAll('.fh-v').forEach(function(r){ r.addEventListener('focusin', function(){ var v = h.vals[+r.dataset.k]; if(v) resaltar(h, r.querySelector('.fh-vv').value); }); r.addEventListener('click', function(){ var v = h.vals[+r.dataset.k]; if(v) resaltar(h, r.querySelector('.fh-vv').value); }); });
+    p.querySelectorAll('.fh-v').forEach(function(r){ var ult = null; var marcar = function(){ var v = h.vals[+r.dataset.k], val = r.querySelector('.fh-vv').value; if(v && val !== ult){ ult = val; resaltar(h, val); } };
+      r.addEventListener('focusin', marcar); r.addEventListener('click', marcar); r.addEventListener('focusout', function(){ ult = null; }); });
     armarNav(p);
   }
   function refrescarQc(h, r){ if(!r) return; var v = h.vals[+r.dataset.k]; if(!v) return; var m = qcMsg(h, v), d = r.nextElementSibling && r.nextElementSibling.classList.contains('fh-q') ? r.nextElementSibling : null;
@@ -46140,6 +46195,241 @@ html.urcym-sec #atd-pill{display:none!important}
 .fin-pac-in:focus{outline:none;border-color:var(--blue)}
 .fin-i-fila-pac{width:92px;flex:0 0 92px;padding:8px 10px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;font-family:var(--font-main);background:var(--gray);outline:none}
 .fin-i-fila-pac:focus{border-color:var(--blue);background:#fff}
+</style>
+<style>
+/* Carga de informes: que las filas de valores no se aplasten (se veía "CT" cortado) */
+.fh-panel > *{flex-shrink:0}
+.fh-vals{overflow:visible!important}
+.fh-v{min-height:40px}
+</style>
+<script>
+/* ══ MDPA: leer la planilla en papel desde una foto ══
+   Busca los renglones impresos MAÑANA / NOCHE y los encabezados TOMA 1 / TOMA 2, recorta cada casillero
+   y lee solo números ("135/85"). Lo dudoso queda en amarillo para revisar; la foto queda al costado. */
+(function(){
+  var CDN = {
+    tess: 'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js',
+    worker: 'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/worker.min.js',
+    core: 'https://cdn.jsdelivr.net/npm/tesseract.js-core@5.1.1',
+    lang: 'https://cdn.jsdelivr.net/npm/@tesseract.js-data/spa@1.0.0/4.0.0_best_int'
+  };
+  var CELDAS = {};   // clave → rectángulo en la foto (para mostrar dónde está)
+  var FOTO = null;   // dataURL de la foto
+  function sinAc(t){ return String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase(); }
+  function cargarScript(u){ return new Promise(function(ok, mal){ if(window.Tesseract) return ok(); var s = document.createElement('script'); s.src = u; s.onload = ok; s.onerror = mal; document.head.appendChild(s); }); }
+  function leerArchivo(f){ return new Promise(function(ok, mal){ var r = new FileReader(); r.onload = function(){ ok(r.result); }; r.onerror = mal; r.readAsDataURL(f); }); }
+  function imagen(src){ return new Promise(function(ok, mal){ var i = new Image(); i.onload = function(){ ok(i); }; i.onerror = mal; i.src = src; }); }
+  function aCanvas(img, ancho){
+    var e = Math.min(1, ancho / img.naturalWidth); if(img.naturalWidth < 1200) e = 1400 / img.naturalWidth;
+    var c = document.createElement('canvas'); c.width = Math.round(img.naturalWidth * e); c.height = Math.round(img.naturalHeight * e);
+    var x = c.getContext('2d'); x.drawImage(img, 0, 0, c.width, c.height);
+    var d = x.getImageData(0, 0, c.width, c.height), p = d.data;
+    for(var i = 0; i < p.length; i += 4){ var g = 0.299 * p[i] + 0.587 * p[i + 1] + 0.114 * p[i + 2]; g = Math.max(0, Math.min(255, (g - 60) * 1.45)); p[i] = p[i + 1] = p[i + 2] = g; }
+    x.putImageData(d, 0, 0); return c;
+  }
+  // recorte de un casillero, agrandado y con la tinta oscurecida
+  function recorte(can, cx, cy, w, h){
+    var c = document.createElement('canvas'), k = 2.2; c.width = Math.round(w * k); c.height = Math.round(h * k);
+    var x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, c.height);
+    x.drawImage(can, cx - w / 2, cy - h / 2, w, h, 0, 0, c.width, c.height);
+    var d = x.getImageData(0, 0, c.width, c.height), p = d.data, suma = 0;
+    for(var i = 0; i < p.length; i += 4) suma += p[i];
+    var media = suma / (p.length / 4), umbral = media - 45;
+    for(var j = 0; j < p.length; j += 4){ var v = p[j] < umbral ? 0 : 255; p[j] = p[j + 1] = p[j + 2] = v; }
+    x.putImageData(d, 0, 0);
+    // bordes del casillero (líneas de la tabla) en blanco
+    x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, 4); x.fillRect(0, c.height - 4, c.width, 4); x.fillRect(0, 0, 6, c.height); x.fillRect(c.width - 6, 0, 6, c.height);
+    return c;
+  }
+  function interpretar(txt){
+    var t = String(txt || '').replace(/[^\d\/\s]/g, ' ').trim(); if(!t) return null;
+    var g = t.split(/[\/\s]+/).filter(Boolean), s = null, d = null;
+    if(g.length >= 2){ s = +g[0]; d = +g[1]; }
+    else if(g.length === 1){ var n = g[0];
+      if(n.length === 5) { s = +n.slice(0, 3); d = +n.slice(3); }
+      else if(n.length === 6) { s = +n.slice(0, 3); d = +n.slice(3); if(d > 150){ d = +n.slice(3, 5); } }
+      else if(n.length === 4) { s = +n.slice(0, 2); d = +n.slice(2); }
+    }
+    if(s == null || d == null || isNaN(s) || isNaN(d)) return null;
+    if(s > 300 && String(s).length === 4) s = +String(s).slice(0, 3);   // "1357" (barra leída como 7)
+    return { s:s, d:d };
+  }
+  function valido(v){ return v && v.s >= 75 && v.s <= 250 && v.d >= 35 && v.d <= 150 && v.s > v.d + 8; }
+
+  async function leerPlanilla(dataURL, progreso){
+    await cargarScript(CDN.tess);
+    var img = await imagen(dataURL), can = aCanvas(img, 2000), esc = can.width / img.naturalWidth;
+    var worker = await Tesseract.createWorker('spa', 1, { workerPath:CDN.worker, corePath:CDN.core, langPath:CDN.lang });
+    try {
+      progreso('Buscando la tabla en la foto…');
+      var r = await worker.recognize(can, {}, { blocks:true });
+      var ws = []; (r.data.blocks || []).forEach(function(b){ (b.paragraphs || []).forEach(function(p){ (p.lines || []).forEach(function(l){ (l.words || []).forEach(function(w){ ws.push(w); }); }); }); });
+      if(!ws.length && r.data.words) ws = r.data.words;
+      window._mdpaWs = ws.map(function(w){ return w.text; });
+      var cen = function(w){ return { x:(w.bbox.x0 + w.bbox.x1) / 2, y:(w.bbox.y0 + w.bbox.y1) / 2, h:w.bbox.y1 - w.bbox.y0, w:w.bbox.x1 - w.bbox.x0 }; };
+      // 1) números escritos que ya se leyeron en la foto entera ("138/74")
+      var nums = [];
+      ws.forEach(function(w){ var t = String(w.text || ''); if((t.match(/\d/g) || []).length < 4) return; var v = corregir(interpretar(t)); if(!valido(v)) return; nums.push(Object.assign(cen(w), { v:v, txt:t, conf:w.confidence })); });
+      var heads = ws.filter(function(w){ return /^TOMA/.test(sinAc(w.text)); }).map(cen).sort(function(a, b){ return a.x - b.x; });
+      var anclas = [];
+      ws.forEach(function(w){ var t = sinAc(w.text).replace(/[^A-Z]/g, '');
+        if(/^M.?.?ANA$|^MANAN.?$|^MAN.NA$/.test(t)) anclas.push(Object.assign(cen(w), { fr:'mat' }));
+        else if(/^N.?OCHE$|^NOCH.?$/.test(t)) anclas.push(Object.assign(cen(w), { fr:'ves' })); });
+      if(nums.length < 4) throw new Error('No pude leer los números de la planilla. Sacá la foto derecha, de cerca, con toda la tabla a la vista y buena luz.');
+      // 2) giro de la foto: pares de números del mismo renglón (toma 1 y toma 2)
+      var W = can.width, hMed = nums.map(function(n){ return n.h; }).sort(function(a, b){ return a - b; })[Math.floor(nums.length / 2)];
+      var pend = [];
+      nums.forEach(function(a){ nums.forEach(function(b){ var dx = b.x - a.x; if(dx > W * 0.06 && Math.abs(b.y - a.y) < hMed * 0.9) pend.push((b.y - a.y) / dx); }); });
+      pend.sort(function(a, b){ return a - b; }); var m = pend.length ? pend[Math.floor(pend.length / 2)] : 0;
+      var yc = function(o){ return o.y - m * o.x; }, xc = function(o){ return o.x + m * o.y; };
+      // 3) columnas: dos grupos por x (corte en el hueco más grande)
+      var xsO = nums.map(xc).sort(function(a, b){ return a - b; }), gap = 0, corte = null;
+      for(var i = 1; i < xsO.length; i++){ var g = xsO[i] - xsO[i - 1]; if(g > gap){ gap = g; corte = (xsO[i] + xsO[i - 1]) / 2; } }
+      if(gap < W * 0.04) corte = null;
+      var col = function(o){ return corte == null ? (heads.length >= 2 && Math.abs(xc(o) - xc(heads[1])) < Math.abs(xc(o) - xc(heads[0])) ? 2 : 1) : (xc(o) < corte ? 1 : 2); };
+      var cx = { 1:[], 2:[] }; nums.forEach(function(n){ n.t = col(n); cx[n.t].push(xc(n)); });
+      var media = function(a){ return a.reduce(function(x, y){ return x + y; }, 0) / (a.length || 1); };
+      var cxm = { 1:media(cx[1]), 2:media(cx[2]) };
+      if(!cx[1].length) cxm[1] = cxm[2] - (heads.length >= 2 ? xc(heads[1]) - xc(heads[0]) : W * 0.13);
+      if(!cx[2].length) cxm[2] = cxm[1] + (heads.length >= 2 ? xc(heads[1]) - xc(heads[0]) : W * 0.13);
+      // 4) separación entre renglones
+      var dif = [];
+      [1, 2].forEach(function(t){ var ys = nums.filter(function(n){ return n.t === t; }).map(yc).sort(function(a, b){ return a - b; }); for(var i = 1; i < ys.length; i++) if(ys[i] - ys[i - 1] > hMed * 0.8) dif.push(ys[i] - ys[i - 1]); });
+      anclas.sort(function(a, b){ return a.y - b.y; }); for(var ai = 1; ai < anclas.length; ai++) if(anclas[ai].y - anclas[ai - 1].y > hMed * 0.8) dif.push(anclas[ai].y - anclas[ai - 1].y);
+      dif.sort(function(a, b){ return a - b; });
+      var dmin = dif.length ? dif[Math.floor(dif.length * 0.2)] : hMed * 1.8;
+      var cerca = dif.filter(function(d){ return d < dmin * 1.45; }); var sp = cerca.length ? media(cerca) : dmin;
+      // 5) qué renglón es cada uno: por el encabezado TOMA (el día 1 mañana está un renglón abajo), o por las palabras MAÑANA/NOCHE
+      var yTop = Math.min.apply(null, nums.map(yc)), base = null, hcab = null;
+      hcab = heads.filter(function(h){ var d = yTop - yc(h); return d > sp * 0.4 && d < sp * 2.6; });   // el encabezado de la tabla (no el "TOMA 1 y TOMA 2" del texto de arriba)
+      if(hcab.length){ var hy = Math.max.apply(null, hcab.map(yc)); base = hy + sp * Math.max(1, Math.round((yTop - hy) / sp)) - sp * Math.max(0, Math.round((yTop - hy) / sp) - 1); base = hy + sp; }
+      if(base == null && anclas.length){ var a0 = anclas.find(function(a){ return yc(a) >= yTop - sp * 0.6; }) || anclas[0], ka = Math.round((yc(a0) - yTop) / sp); if((ka % 2 === 0) !== (a0.fr === 'mat')) base = yTop - sp; }
+      if(base == null) base = yTop;
+      // ajuste fino: recta y = base + sp·k con todos los números (y se repite), así no se corre un renglón
+      for(var it = 0; it < 3; it++){
+        var pts = nums.map(function(n){ return { k:Math.round((yc(n) - base) / sp), y:yc(n) }; }).filter(function(p){ return p.k >= 0 && p.k <= 13; });
+        if(pts.length < 4) break;
+        var sk = 0, sy = 0, skk = 0, sky = 0; pts.forEach(function(p){ sk += p.k; sy += p.y; skk += p.k * p.k; sky += p.k * p.y; });
+        var nn = pts.length, den = nn * skk - sk * sk; if(!den) break;
+        var sp2 = (nn * sky - sk * sy) / den; if(!(sp2 > sp * 0.8 && sp2 < sp * 1.25)) break;
+        var b2 = (sy - sp2 * sk) / nn; if(hcab && hcab.length && Math.abs(b2 - base) > sp * 0.5) break;   // no correrse más de medio renglón del encabezado
+        sp = sp2; base = b2;
+      }
+      // cada columna: de arriba hacia abajo, sin dos números en el mismo renglón
+      [1, 2].forEach(function(t){ var prev = -1; nums.filter(function(n){ return n.t === t; }).sort(function(a, b){ return yc(a) - yc(b); }).forEach(function(n){ var k = Math.round((yc(n) - base) / sp); if(k <= prev) k = prev + 1; n.k = k; prev = k; }); });
+      var res = {}, leidas = 0, ok = 0;
+      nums.forEach(function(n){ var k = n.k; if(k < 0 || k > 13) return; var dia = Math.floor(k / 2) + 1, fr = k % 2 === 0 ? 'mat' : 'ves', cl = 'd' + dia + '_t' + n.t + '_' + fr;
+        if(res[cl] && res[cl].conf >= n.conf) return; res[cl] = { v:n.v, txt:n.txt, conf:Math.round(n.conf), ok:n.v._ok !== false && n.conf >= 85 }; });
+      // 6) casilleros: posición (para mostrarlos en la foto) y, los que faltan, se leen uno por uno
+      var cw = (Math.abs(cxm[2] - cxm[1]) || W * 0.13) * 0.95, ch = sp * 0.98;
+      var kMax = 13;
+      await worker.setParameters({ tessedit_char_whitelist:'0123456789/', tessedit_pageseg_mode:'7' });
+      for(var k = 0; k <= kMax; k++){
+        for(var t = 1; t <= 2; t++){
+          var dia = Math.floor(k / 2) + 1, fr = k % 2 === 0 ? 'mat' : 'ves', cl = 'd' + dia + '_t' + t + '_' + fr;
+          var yC = base + k * sp, xC = cxm[t];
+          // volver de coordenadas corregidas a la foto: y = yC + m·x ; x = xC - m·y
+          var X = xC - m * yC, Y = yC + m * X;
+          CELDAS[cl] = { x:(X - cw / 2) / esc, y:(Y - ch / 2) / esc, w:cw / esc, h:ch / esc };
+          if(res[cl]) continue;
+          progreso('Revisando día ' + dia + ' · ' + (fr === 'mat' ? 'mañana' : 'noche') + ' · toma ' + t + '…');
+          var rr = await worker.recognize(recorte(can, X, Y, cw, ch));
+          var txt = (rr.data.text || '').trim(); if((txt.match(/\d/g) || []).length < 3) continue;
+          var v = corregir(interpretar(txt));
+          res[cl] = { v:valido(v) ? v : null, txt:txt, conf:Math.round(rr.data.confidence), ok:false };
+        }
+      }
+      Object.keys(res).forEach(function(cl){ leidas++; if(res[cl].ok) ok++; });
+      return { res:res, leidas:leidas, ok:ok };
+    } finally { try { await worker.terminate(); } catch(_){} }
+  }
+  // errores típicos con números a mano: el "1" inicial leído como 4 o perdido
+  function corregir(v){
+    if(!v) return v; v = { s:v.s, d:v.d };
+    if(v.s >= 400 && v.s < 500){ v.s -= 300; v._ok = false; }
+    else if(v.s >= 30 && v.s < 75){ v.s += 100; v._ok = false; }
+    return v;
+  }
+
+  function marcar(){
+    document.querySelectorAll('.mdpa-ocr-ok,.mdpa-ocr-dudoso').forEach(function(x){ x.classList.remove('mdpa-ocr-ok', 'mdpa-ocr-dudoso'); });
+    var est = mdpaEstudios[mdpaIdx]; if(!est || !est._ocr) return;
+    Object.keys(est._ocr).forEach(function(cl){ var o = est._ocr[cl];
+      ['s','d'].forEach(function(sd){ var el = document.getElementById('mdpa_' + cl + '_' + sd); if(!el) return;
+        el.classList.add(o.ok ? 'mdpa-ocr-ok' : 'mdpa-ocr-dudoso'); el.title = 'Leído de la foto: "' + o.txt + '"' + (o.ok ? '' : ' · revisalo');
+        el.addEventListener('input', function(){ el.classList.remove('mdpa-ocr-ok', 'mdpa-ocr-dudoso'); }, { once:true });
+        el.addEventListener('focus', function(){ verCelda(cl); }); }); });
+  }
+  // Panel con la foto al costado: al tocar un casillero, se marca dónde está en la foto
+  function panelFoto(){
+    var p = document.getElementById('mdpa-foto-panel'); if(p) return p;
+    p = document.createElement('div'); p.id = 'mdpa-foto-panel';
+    p.innerHTML = '<div class="mfp-h"><b>📷 Planilla</b><span>tocá un casillero de la tabla para ver dónde está</span><button type="button" data-z="-">−</button><button type="button" data-z="+">+</button><button type="button" data-x>✕</button></div><div class="mfp-sc"><div class="mfp-in"><img><div class="mfp-hl"></div></div></div>';
+    document.body.appendChild(p);
+    var z = 1, inn = p.querySelector('.mfp-in');
+    p.querySelector('[data-x]').onclick = function(){ p.style.display = 'none'; };
+    p.querySelectorAll('[data-z]').forEach(function(b){ b.onclick = function(){ z = Math.max(0.6, Math.min(4, z * (b.dataset.z === '+' ? 1.3 : 1 / 1.3))); inn.style.width = (z * 100) + '%'; }; });
+    return p;
+  }
+  function verCelda(cl){
+    var p = document.getElementById('mdpa-foto-panel'), r = CELDAS[cl]; if(!p || p.style.display === 'none' || !r) return;
+    var img = p.querySelector('img'), hl = p.querySelector('.mfp-hl'), W = img.naturalWidth, H = img.naturalHeight; if(!W) return;
+    hl.style.display = 'block'; hl.style.left = (r.x / W * 100) + '%'; hl.style.top = (r.y / H * 100) + '%'; hl.style.width = (r.w / W * 100) + '%'; hl.style.height = (r.h / H * 100) + '%';
+    var sc = p.querySelector('.mfp-sc'), hr = hl.getBoundingClientRect(), sr = sc.getBoundingClientRect();
+    if(hr.top < sr.top || hr.bottom > sr.bottom || hr.left < sr.left || hr.right > sr.right) hl.scrollIntoView({ block:'center', inline:'center', behavior:'smooth' });
+  }
+  function mostrarFoto(){ if(!FOTO) return; var p = panelFoto(); p.querySelector('img').src = FOTO; p.style.display = ''; }
+  window._mdpaVerFoto = mostrarFoto;
+
+  window.mdpaLeerFoto = function(){
+    if(typeof mdpaIdx === 'undefined' || mdpaIdx < 0) return alert('Primero creá o abrí un estudio MDPA.');
+    var inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'image/*';
+    inp.onchange = async function(){ var f = inp.files && inp.files[0]; if(f) procesar(await leerArchivo(f)); };
+    inp.click();
+  };
+  async function procesar(dataURL){
+    var est = mdpaEstudios[mdpaIdx]; if(!est) return;
+    var hay = Object.keys(est.tomas || {}).length;
+    if(hay && !confirm('Este estudio ya tiene ' + hay + ' valores cargados. ¿Reemplazarlos por lo que se lea de la foto? (lo que no se lea queda como está)')) return;
+    var aviso = document.getElementById('mdpa-ocr-aviso');
+    if(!aviso){ aviso = document.createElement('div'); aviso.id = 'mdpa-ocr-aviso'; var cont = document.getElementById('mdpa_tabla_inner'); cont.parentNode.insertBefore(aviso, cont); }
+    var dec = function(h){ aviso.className = 'mdpa-ocr-aviso'; aviso.innerHTML = h; };
+    dec('⏳ <b>Leyendo la planilla…</b> <span id="mdpa-ocr-prog"></span>');
+    FOTO = dataURL;
+    try {
+      var r = await leerPlanilla(dataURL, function(m){ var x = document.getElementById('mdpa-ocr-prog'); if(x) x.textContent = m; });
+      est._ocr = {}; var maxDia = 0;
+      Object.keys(r.res).forEach(function(cl){ var o = r.res[cl]; if(!o.v) { est._ocr[cl] = { ok:false, txt:o.txt }; return; }
+        est.tomas[cl + '_s'] = o.v.s; est.tomas[cl + '_d'] = o.v.d; est._ocr[cl] = { ok:o.ok, txt:o.txt };
+        maxDia = Math.max(maxDia, +cl.match(/^d(\d+)/)[1]); });
+      if(maxDia >= 4){ var nd = document.getElementById('mdpa_ndias'); if(nd && +nd.value < maxDia){ nd.value = String(maxDia); } }
+      if(typeof marcarDirty === 'function') marcarDirty('mdpa');
+      mdpaRenderTabla(); marcar();
+      var dud = r.leidas - r.ok;
+      dec('📷 <b>Leí ' + r.leidas + ' de 28 tomas</b> de la foto' + (dud ? ' · <b style="color:#b45309">' + dud + ' dudosas en amarillo</b>' : '') + ' · en celeste las que se leyeron claras. La letra a mano puede leerse mal (un 9 como 7, por ejemplo): <b>revisá todas contra la foto</b> antes de guardar; al tocar un casillero se marca en la foto. <button type="button" onclick="_mdpaVerFoto()">Ver la foto al costado</button>');
+      mostrarFoto();
+    } catch(e){ dec('⚠️ ' + (e.message || e)); }
+  }
+  // al cambiar de estudio o redibujar la tabla, se vuelven a pintar las marcas
+  if(typeof mdpaRenderTabla === 'function'){ var _rt = mdpaRenderTabla; mdpaRenderTabla = function(){ var x = _rt.apply(this, arguments); try { marcar(); } catch(_){} return x; }; }
+  window._mdpaInterpretar = interpretar;
+})();
+</script>
+<style>
+.mdpa-btn-foto{display:inline-flex;align-items:center;gap:6px;padding:4px 12px;border-radius:20px;border:1.5px solid var(--blue);background:#fff;color:var(--blue);font-size:11px;font-weight:700;cursor:pointer;margin-left:auto;margin-right:8px}
+.mdpa-btn-foto:hover{background:var(--blue);color:#fff}
+.mdpa-ocr-aviso{font-size:12px;line-height:1.5;background:#eff6ff;border:1px solid #bfdbfe;color:#1e3a5f;border-radius:10px;padding:8px 12px;margin:0 0 10px}
+.mdpa-ocr-aviso button{margin-left:6px;border:1px solid #93c5fd;background:#fff;color:#1d4ed8;border-radius:8px;padding:3px 10px;font:600 11.5px var(--font-main);cursor:pointer}
+.mdpa-inp.mdpa-ocr-ok{background:#eff6ff!important;border-color:#93c5fd!important}
+.mdpa-inp.mdpa-ocr-dudoso{background:#fef3c7!important;border-color:#f59e0b!important}
+#mdpa-foto-panel{position:fixed;right:14px;top:80px;width:min(380px,32vw);height:calc(100vh - 110px);z-index:9000;background:#fff;border-radius:14px;box-shadow:0 18px 50px rgba(0,0,0,.25);display:flex;flex-direction:column;overflow:hidden}
+#mdpa-foto-panel .mfp-h{display:flex;align-items:center;gap:6px;padding:8px 10px;border-bottom:1px solid #e5e7eb;font-size:13px}
+#mdpa-foto-panel .mfp-h span{font-size:11px;color:#6b7280;flex:1}
+#mdpa-foto-panel .mfp-h button{border:1px solid #d1d5db;background:#fff;border-radius:7px;width:28px;height:26px;cursor:pointer;font-size:14px}
+#mdpa-foto-panel .mfp-sc{flex:1;overflow:auto;background:#111}
+#mdpa-foto-panel .mfp-in{position:relative;width:100%}
+#mdpa-foto-panel img{width:100%;display:block}
+#mdpa-foto-panel .mfp-hl{position:absolute;display:none;border:3px solid #22c55e;border-radius:6px;box-shadow:0 0 0 4000px rgba(0,0,0,.35);pointer-events:none}
 </style>
 </body>
 </html>
