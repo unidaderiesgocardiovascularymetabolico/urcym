@@ -2,7 +2,7 @@
 <html lang="es-AR">
 <head>
   <meta charset="UTF-8" />
-  <script>var URCYM_BUILD = '2026-11-24-1120';</script>
+  <script>var URCYM_BUILD = '2026-11-24-1600';</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Evaluaciones cardiometabólicas — Sistema de Historia Clínica</title>
 
@@ -26057,8 +26057,8 @@ window._dspAbrirLista=function(){
       x += '<div class="rec-it' + (ok ? ' a-atendido' : '') + '"><span class="rec-h">' + E(it.hora) + '</span><span class="rec-p"><b>' + E(t.paciente) + '</b><small>' + E(PROF_LBL[it.prof] || it.prof) + (d.tel ? ' · ' + E(d.tel) : '') + '</small></span>'
         + (ok ? '<span class="rec-ok">✓ Enviado ' + new Date(ok).toLocaleTimeString('es-AR', { hour:'2-digit', minute:'2-digit' }) + '</span>' : '')
         + (function(){ var me = R.mailEnv && R.mailEnv[it.k], pp = (typeof _agPacienteDeTurno === 'function') ? _agPacienteDeTurno(t) : null, tm = String((pp && pp.email) || t.email || '').trim();
-            return me ? '<span class="rec-mail ok" title="Recordatorio por mail enviado">📧 mail enviado</span>' : (tm ? '<span class="rec-mail" title="Se manda automáticamente el día anterior a ' + E(tm) + '">📧 se manda por mail</span>' : '<span class="rec-mail no" title="Cargale el mail en la ficha para que le llegue">📧 sin mail</span>'); })()
-        + '<span class="rec-acc">' + (d.wa ? '<button type="button" class="rec-env" data-renv="' + E(it.k) + '">' + (ok ? 'Reenviar' : '💬 Enviar') + '</button>' : '<span class="rec-sin">sin celular</span>')
+            return me ? '<span class="rec-mail ok" title="Recordatorio por mail enviado">📧 mail enviado</span>' : (tm ? '<span class="rec-mail" title="Se manda automáticamente el día anterior a ' + E(tm) + '">📧 se manda por mail</span>' : '<button type="button" class="rec-mail no" data-rmail="' + E(it.k) + '" title="Tocá para cargarle el mail (le llegan los recordatorios)">📧 sin mail · agregar</button>'); })()
+        + '<span class="rec-acc">' + (d.wa ? '<button type="button" class="rec-env" data-renv="' + E(it.k) + '">' + (ok ? 'Reenviar' : '💬 Enviar') + '</button>' : '<button type="button" class="rec-sin rec-addtel" data-rtel="' + E(it.k) + '" title="Tocá para cargarle el celular">sin celular · agregar</button>')
         + '<button type="button" class="rec-tick" data-rtick="' + E(it.k) + '" title="' + (ok ? 'Desmarcar' : 'Marcar como avisado (si le avisaste por otro lado)') + '">' + (ok ? '↺' : '✓') + '</button></span></div>';
     });
     return x;
@@ -40679,14 +40679,43 @@ function _cargaEstPrec(p){
     if(!p && !t){ b.style.display = 'none'; return; }
     var wa = tel && window._agWaNum ? window._agWaNum(tel) : '';
     b.innerHTML = '<div class="apd-t">Datos del paciente</div><div class="apd">'
-      + '<b>📞 Celular</b><div>' + chip(tel, 'celular') + (wa ? '<button type="button" class="apd-wa" data-n="' + wa + '">💬 WhatsApp</button>' : '') + '</div>'
-      + '<b>✉ Mail</b><div>' + chip(mail, 'mail') + '</div>'
+      + '<b>📞 Celular</b><div>' + chip(tel, 'celular') + (wa ? '<button type="button" class="apd-wa" data-n="' + wa + '">💬 WhatsApp</button>' : '') + '<button type="button" class="apd-ed" data-ed="telefono" title="' + (tel ? 'Corregir' : 'Agregar') + ' el celular">' + (tel ? '✏️' : '+ agregar') + '</button></div>'
+      + '<b>✉ Mail</b><div>' + chip(mail, 'mail') + '<button type="button" class="apd-ed" data-ed="email" title="' + (mail ? 'Corregir' : 'Agregar') + ' el mail (le llegan los recordatorios)">' + (mail ? '✏️' : '+ agregar') + '</button></div>'
       + '<b>🏥 Obra social</b><div>' + chip(os, 'obra social') + '</div>'
       + '<b>N.º afiliado</b><div>' + chip(af, 'n.º de afiliado') + '</div>'
       + '<b>DNI</b><div>' + chip(dni, 'DNI') + '</div>'
       + '</div><div class="apd-tip">Tocá un dato para copiarlo.' + (p ? '' : ' Paciente sin ficha: datos del turno.') + '</div>';
     ubicar();
     b.style.display = 'block';
+    // Celular y mail editables (los puede cargar la Secretaría): se guardan en la ficha del paciente
+    b.querySelectorAll('[data-ed]').forEach(function(btn){ btn.onclick = function(e){
+      e.preventDefault(); e.stopPropagation();
+      var campo = btn.dataset.ed, celda = btn.parentElement, actual = campo === 'email' ? mail : tel;
+      celda.innerHTML = '<input class="apd-in" type="' + (campo === 'email' ? 'email' : 'tel') + '" value="' + String(actual || '').replace(/"/g, '&quot;') + '" placeholder="' + (campo === 'email' ? 'nombre@mail.com' : '11 2345 6789') + '"><button type="button" class="apd-ok">Guardar</button><button type="button" class="apd-no">✕</button><span class="apd-msg"></span>';
+      var inp = celda.querySelector('input'), msg = celda.querySelector('.apd-msg'); inp.focus(); inp.select();
+      celda.querySelector('.apd-no').onclick = function(ev){ ev.stopPropagation(); pintar(p, t); };
+      var ok = celda.querySelector('.apd-ok');
+      var guardar = async function(ev){ if(ev) ev.stopPropagation();
+        var v = inp.value.trim();
+        if(campo === 'email' && v && !/^[^@\s]+@[^@\s]+\.[^@\s]{2,}$/.test(v)){ msg.textContent = 'Revisá el mail'; return; }
+        ok.disabled = true; ok.textContent = 'Guardando…';
+        try {
+          if(p && p.dni && typeof sb !== 'undefined'){
+            var upd = {}; upd[campo] = v || null;
+            var r = await sb.from('pacientes').update(upd).eq('dni', p.dni); if(r.error) throw r.error;
+            p[campo] = v;
+            try { var lp = (typeof pacientesData !== 'undefined' && pacientesData) ? pacientesData.find(function(x){ return String(x.dni) === String(p.dni); }) : null; if(lp) lp[campo] = v; } catch(_){}
+            cache[String(p.dni)] = p;
+          }
+          if(t){ if(v) t[campo] = v; else delete t[campo]; }
+          if(!(p && p.dni) && !t) throw new Error('el paciente no tiene ficha: guardá primero el turno');
+          pintar(p, t);
+          var b2 = caja(); if(b2){ var tip = b2.querySelector('.apd-tip'); if(tip) tip.innerHTML = '✅ ' + (campo === 'email' ? 'Mail' : 'Celular') + ' guardado' + (p && p.dni ? ' en la ficha del paciente.' : ': tocá <b>Guardar</b> en el turno para que quede.'); }
+        } catch(er){ ok.disabled = false; ok.textContent = 'Guardar'; msg.textContent = 'No se pudo guardar: ' + (er.message || er); }
+      };
+      ok.onclick = guardar;
+      inp.onkeydown = function(ev){ if(ev.key === 'Enter'){ ev.preventDefault(); guardar(ev); } if(ev.key === 'Escape'){ ev.preventDefault(); ev.stopPropagation(); pintar(p, t); } };
+    }; });
   }
   async function actualizar(){
     var b = caja(); if(!b) return;
@@ -46630,5 +46659,49 @@ html.urcym-sec #atd-pill{display:none!important}
 </script>
 <style>.rec-mail{font-size:11px;font-weight:600;color:#475569;background:#f1f5f9;border-radius:999px;padding:2px 8px;margin-right:6px;white-space:nowrap}.rec-mail.ok{background:#dcfce7;color:#166534}.rec-mail.no{background:#fef3c7;color:#92400e}</style>
 <style>#agenda-app .ag-turno .ag-mail{position:absolute;right:4px;bottom:2px;font-size:10px;line-height:1;color:#16a34a;opacity:.7;pointer-events:auto;cursor:default}</style>
+<style>
+#ag-pac-datos .apd-ed{border:none;background:none;color:#2563eb;font:600 11.5px var(--font-main);cursor:pointer;padding:2px 6px;margin-left:4px;border-radius:6px}
+#ag-pac-datos .apd-ed:hover{background:#eff6ff}
+#ag-pac-datos .apd-in{border:1.5px solid #93c5fd;border-radius:8px;padding:5px 8px;font:13px var(--font-main);width:210px;max-width:100%}
+#ag-pac-datos .apd-ok{border:none;background:#2563eb;color:#fff;border-radius:8px;padding:5px 10px;font:600 12px var(--font-main);cursor:pointer;margin-left:4px}
+#ag-pac-datos .apd-no{border:none;background:none;color:#94a3b8;cursor:pointer;font-size:13px;margin-left:2px}
+#ag-pac-datos .apd-msg{display:block;font-size:11px;color:#b91c1c}
+</style>
+<script>
+/* Recepción: "sin mail · agregar" → se carga el mail en la ficha del paciente */
+document.addEventListener('click', async function(e){
+  var b = e.target.closest && e.target.closest('[data-rmail]'); if(!b) return;
+  e.preventDefault(); e.stopPropagation();
+  var T = window.turnos || {}, t = T[b.dataset.rmail]; if(!t) return;
+  var p = (typeof _agPacienteDeTurno === 'function') ? _agPacienteDeTurno(t) : null;
+  var v = prompt('Mail de ' + (t.paciente || 'el paciente') + ':', ''); if(v == null) return; v = v.trim();
+  if(!/^[^@\s]+@[^@\s]+\.[^@\s]{2,}$/.test(v)){ alert('Ese mail no parece válido.'); return; }
+  try {
+    if(p && p.dni){ var r = await sb.from('pacientes').update({ email:v }).eq('dni', p.dni); if(r.error) throw r.error; p.email = v; }
+    else { t.email = v; if(typeof window._agGuardarTurnos === 'function') window._agGuardarTurnos(); }
+    b.outerHTML = '<span class="rec-mail" title="Se manda automáticamente el día anterior a ' + v.replace(/"/g, '') + '">📧 se manda por mail</span>';
+  } catch(er){ alert('No se pudo guardar el mail: ' + (er.message || er)); }
+}, true);
+</script>
+<style>button.rec-mail{border:none;cursor:pointer;font-family:inherit}button.rec-mail:hover{filter:brightness(.95)}</style>
+<script>
+/* Recepción: "sin celular · agregar" → se carga el celular en la ficha y queda el botón de WhatsApp */
+document.addEventListener('click', async function(e){
+  var b = e.target.closest && e.target.closest('[data-rtel]'); if(!b) return;
+  e.preventDefault(); e.stopPropagation();
+  var T = window.turnos || {}, t = T[b.dataset.rtel]; if(!t) return;
+  var p = (typeof _agPacienteDeTurno === 'function') ? _agPacienteDeTurno(t) : null;
+  var v = prompt('Celular de ' + (t.paciente || 'el paciente') + ' (con código de área, ej. 2257 123456):', ''); if(v == null) return; v = v.trim();
+  if(String(v).replace(/\D/g, '').length < 8){ alert('Ese número parece incompleto.'); return; }
+  try {
+    if(p && p.dni){ var r = await sb.from('pacientes').update({ telefono:v }).eq('dni', p.dni); if(r.error) throw r.error; p.telefono = v; }
+    t.telefono = v;
+    var wa = window._agWaNum ? window._agWaNum(v) : '';
+    b.outerHTML = wa ? '<a class="rec-env" href="https://wa.me/' + wa + '" target="_blank" rel="noopener">💬 Abrir WhatsApp</a>' : '<span class="rec-sin">' + v + '</span>';
+    if(!(p && p.dni)) alert('Este turno no tiene ficha de paciente: el celular queda en el turno. Abrilo y tocá Guardar para que no se pierda.');
+  } catch(er){ alert('No se pudo guardar el celular: ' + (er.message || er)); }
+}, true);
+</script>
+<style>button.rec-addtel{border:1px dashed #cbd5e1;background:#fff;border-radius:8px;padding:4px 8px;cursor:pointer;color:#64748b;font:italic 12px var(--font-main)}button.rec-addtel:hover{border-color:#16a34a;color:#16a34a}a.rec-env{text-decoration:none}</style>
 </body>
 </html>
