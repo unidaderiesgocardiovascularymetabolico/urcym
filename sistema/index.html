@@ -2,7 +2,7 @@
 <html lang="es-AR">
 <head>
   <meta charset="UTF-8" />
-  <script>var URCYM_BUILD = '2026-11-24-2350';</script>
+  <script>var URCYM_BUILD = '2026-11-25-0005';</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Evaluaciones cardiometabólicas — Sistema de Historia Clínica</title>
 
@@ -1159,7 +1159,23 @@
 .ag-task-conf button{border:1px solid #fca5a5;background:#fff;border-radius:5px;font-weight:600;font-size:11px;font-family:inherit;padding:1px 7px;cursor:pointer;color:#b91c1c}
 .ag-task-conf [data-del-si]{background:#dc2626;color:#fff;border-color:#dc2626}
 .ag-tasks-hechas-btn{border:none;background:none;color:#6b7280;font-weight:600;font-size:11.5px;font-family:inherit;cursor:pointer;padding:6px 2px 4px}
-.ag-task-item.urg{background:#fef2f2;border-left:3px solid #dc2626}
+.ag-tasks-body .ag-task-item{border:1px solid #e5e7eb;border-radius:9px;margin-bottom:6px;padding:8px 9px;align-items:flex-start;background:#fff}
+.ag-tasks-body .ag-task-item:hover{background:#f8fafc;border-color:#cbd5e1}
+.ag-tasks-body .ag-task-item .ag-task-check{margin-top:1px}
+.ag-task-item.urg{background:#fef2f2!important;border-color:#fecaca!important;border-left:3px solid #dc2626!important}
+.ag-task-item.nueva{border-left:3px solid #2563eb;background:#eff6ff}
+.ag-task-item.hecha{background:#fafafa}
+.ag-task-new{display:inline-block;background:#2563eb;color:#fff;font-size:9.5px;font-weight:800;letter-spacing:.04em;border-radius:4px;padding:1px 5px;vertical-align:1px}
+.ag-task-vista{align-self:flex-start;margin-top:5px;border:1px solid #93c5fd;background:#fff;color:#1d4ed8;border-radius:7px;padding:2px 9px;font-size:11.5px;font-weight:600;font-family:inherit;cursor:pointer}
+.ag-task-vista:hover{background:#dbeafe}
+.ag-task-sv{color:#94a3b8;font-style:italic}
+.ag-task-fb{border:none;background:none;cursor:pointer;font-size:12px;opacity:0;padding:2px 4px;border-radius:5px;filter:grayscale(1)}
+.ag-task-item:hover .ag-task-fb{opacity:.55}.ag-task-fb:hover,.ag-task-fb.on{opacity:1!important;filter:none;background:#fff7ed}
+@media(hover:none){.ag-task-fb{opacity:.45}}
+.ag-task-edf{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px;align-items:center}
+.ag-task-edf button,.ag-task-edf label{border:1px solid #e2e8f0;background:#fff;border-radius:7px;padding:2px 8px;font-size:11.5px;font-weight:600;font-family:inherit;color:#64748b;cursor:pointer}
+.ag-task-edf .on{background:#fff7ed;border-color:#fdba74;color:#c2410c}
+.ag-task-edf input{border:none;font:inherit;color:inherit;background:none;padding:0;width:118px}
 .ag-task-item.urg .ag-task-text{color:#b91c1c;font-weight:700}
 .ag-task-tools{display:flex;gap:2px;flex-shrink:0;align-self:flex-start}
 .ag-task-urgb{border:none;background:none;cursor:pointer;font-size:12px;opacity:0;padding:2px 4px;border-radius:5px;filter:grayscale(1)}
@@ -1171,7 +1187,7 @@
 .ag-task-pac a:hover,.ag-task-pac button:hover{background:#f0fdfa;border-color:#5eead4}
 .ag-task-sin{color:#9ca3af;font-size:11px}
 .ag-tasks-form{margin-bottom:8px}
-.ag-tasks-form:not(:focus-within):not(.abierto) .ag-tasks-opts{display:none}
+.ag-tasks-form:not(.abierto) .ag-tasks-opts{display:none}
 .ag-tasks-opts{display:flex;flex-wrap:wrap;gap:5px;margin-top:5px;align-items:center}
 .ag-tasks-opts>*{font-weight:600;font-size:11.5px;font-family:inherit;border:1px solid #e2e8f0;background:#fff;border-radius:7px;padding:3px 8px;color:#64748b;cursor:pointer}
 .ag-opt-d.on{background:#fff7ed;border-color:#fdba74;color:#c2410c}
@@ -28440,7 +28456,9 @@ loadLocal();  // async, carga en background y llama renderGrid al final
 
   var tasks = {};
   var openSections = {SEC:true,BG:true,OB:true,HOY:false}, verHechas = {}, borrando = null;
-  var nueva = {SEC:{},BG:{},OB:{}};   // borrador del formulario de cada sección: urg, vence, pac
+  var nueva = {SEC:{},BG:{},OB:{}}, editando = null;
+  function dueno(p){ return {SEC:'Delfina',BG:'Bárbara',OB:'Omar'}[p]; }
+  function diaMas(n){ var d = new Date(hoyAR()+'T12:00:00'); d.setDate(d.getDate()+n); return d.toLocaleDateString('sv-SE'); }   // borrador del formulario de cada sección: urg, vence, pac
 
   function quienSoy(){ if(window._cu && window._cu.secretaria) return 'Delfina'; return QUIEN[window._su] || (window._cu && (window._cu.titulo || window._cu.name)) || ''; }
   function miSeccion(){ return (window._cu && window._cu.secretaria) ? 'SEC' : ({barbara:'BG',omar:'OB'}[window._su] || null); }
@@ -28507,9 +28525,10 @@ loadLocal();  // async, carga en background y llama renderGrid al final
   function pintarBadge(){
     var b = document.getElementById('ag-btn-tasks'); if(!b) return;
     var mio = miSeccion(), arr = mio ? (tasks[mio]||[]).filter(function(t){return !t.done;}) : [];
-    var n = arr.length, alerta = arr.some(function(t){ return t.urg || (t.vence && t.vence <= hoyAR()); });
+    var n = arr.filter(function(t){ return !t.visto && t.por && t.por !== dueno(mio); }).length, alerta = arr.some(function(t){ return t.urg || (t.vence && t.vence <= hoyAR()); });
     var sp = b.querySelector('.ag-tasks-n');
-    if(n){ if(!sp){ sp=document.createElement('span'); sp.className='ag-tasks-n'; b.appendChild(sp); } sp.textContent=(alerta?'⚡':'')+n; sp.classList.toggle('alerta', alerta); }
+    b.title = n ? n + ' tarea' + (n>1?'s':'') + ' nueva' + (n>1?'s':'') + ' sin ver' : 'Tareas';
+    if(n || alerta){ if(!sp){ sp=document.createElement('span'); sp.className='ag-tasks-n'; b.appendChild(sp); } sp.textContent=(alerta?'⚡':'')+(n||''); sp.classList.toggle('alerta', alerta); }
     else if(sp) sp.remove();
   }
 
@@ -28536,8 +28555,8 @@ loadLocal();  // async, carga en background y llama renderGrid al final
     Object.keys(T).forEach(function(k){ var t=T[k]; if(!t||!t.paciente||t.estado==='cancelado') return;
       if(!((pac.dni && String(t.dni_paciente)===String(pac.dni)) || nrm(t.paciente)===nrm(pac.n))) return;
       if(t.video && window._cu && window._cu.secretaria) return;
-      if(k.split('_')[0] >= h){ if(!prox || k < prox) prox = k; } else if(!ult || k > ult) ult = k; });
-    return prox || ult;
+      if(k.split('_')[0] >= h){ if(!prox || k < prox) prox = k; } });
+    return prox;
   }
 
   function escT(s){ var d=document.createElement('div');d.textContent=s==null?'':s;return d.innerHTML; }
@@ -28552,23 +28571,28 @@ loadLocal();  // async, carga en background y llama renderGrid al final
     if(conSeccion) meta.push('<b style="color:'+T_COLOR[p]+'">'+T_LBL[p]+'</b>');
     if(t.at) meta.push('📝 '+cuando(t.at)+(t.por?' · '+escT(t.por):''));
     if(t.vence && !t.done){ var v = venceTxt(t.vence); meta.push('<span class="ag-task-v '+v.c+'">'+v.t+'</span>'); }
+    if(!t.done && t.visto) meta.push('👁 vista '+cuando(t.visto)+(t.vistoPor?' · '+escT(t.vistoPor):''));
     if(t.done && t.doneAt) meta.push('✓ hecha '+cuando(t.doneAt)+(t.donePor?' · '+escT(t.donePor):''));
-    var conf = borrando === t.id, pacH = '';
+    var conf = borrando === t.id, pacH = '', sinVer = !t.done && !t.visto && t.por && t.por !== dueno(p), esNueva = sinVer && quienSoy() === dueno(p);
+    if(sinVer && !esNueva) meta.push('<span class="ag-task-sv">sin ver todavía</span>');
+    var editF = editando === t.id ? '<div class="ag-task-edf">'+[['Hoy',diaMas(0)],['Mañana',diaMas(1)],['En 1 semana',diaMas(7)]].map(function(o){ return '<button type="button" data-tvence="'+o[1]+'"'+(t.vence===o[1]?' class="on"':'')+'>'+o[0]+'</button>'; }).join('')
+      + '<label>📅 <input type="date" data-tvence-i value="'+(t.vence||'')+'"></label>'+(t.vence?'<button type="button" data-tvence="">Sin fecha</button>':'')+'</div>' : '';
     if(t.pac && t.pac.n){
       var d = datosPac(t.pac), k = turnoDe(t.pac), wa = d.tel && window._agWaNum ? window._agWaNum(d.tel) : '';
       var sec = window._cu && window._cu.secretaria;
       pacH = '<div class="ag-task-pac">👤 <b>'+escT(t.pac.n)+'</b>'
-        + (k ? '<button type="button" data-tturno="'+escT(k)+'" title="Abrir el turno">📅 '+(k.split('_')[0] >= hoyAR() ? 'Turno '+k.slice(8,10)+'/'+k.slice(5,7) : 'Último turno')+'</button>' : '')
+        + (k ? '<button type="button" data-tturno="'+escT(k)+'" title="Abrir el turno">📅 Turno '+k.slice(8,10)+'/'+k.slice(5,7)+' '+escT(k.split('_')[1])+'</button>' : '')
         + (wa ? '<a href="https://wa.me/'+wa+'" target="_blank" rel="noopener" title="'+escT(d.tel)+'">💬 WhatsApp</a>' : '')
         + (d.mail ? '<a href="mailto:'+escT(d.mail)+'" title="Escribirle un mail">✉ '+escT(d.mail)+'</a><button type="button" data-tcopia="'+escT(d.mail)+'" title="Copiar el mail">⧉</button>' : '<span class="ag-task-sin">sin mail</span>')
         + (!sec && d.dni && typeof abrirHistoriaClinica==='function' ? '<button type="button" data-thc="'+escT(d.dni)+'" title="Abrir la historia clínica">📖 HC</button>' : '')
         + '</div>';
     }
-    return '<div class="ag-task-item'+(t.done?' hecha':'')+(t.urg&&!t.done?' urg':'')+'" data-task-id="'+escT(t.id)+'" data-task-prof="'+p+'">'
+    return '<div class="ag-task-item'+(t.done?' hecha':'')+(t.urg&&!t.done?' urg':'')+(esNueva?' nueva':'')+'" data-task-id="'+escT(t.id)+'" data-task-prof="'+p+'">'
       + '<div class="ag-task-check" title="'+(t.done?'Volver a pendiente':'Marcar hecha')+'">'+(t.done?'<span style="color:#059669;font-size:12px">✓</span>':'')+'</div>'
-      + '<div class="ag-task-main"><span class="ag-task-text">'+(t.urg&&!t.done?'⚡ ':'')+escT(t.text)+'</span>'+(meta.length?'<span class="ag-task-meta">'+meta.join(' &nbsp;·&nbsp; ')+'</span>':'')+pacH+'</div>'
+      + '<div class="ag-task-main"><span class="ag-task-text">'+(esNueva?'<span class="ag-task-new">NUEVA</span> ':'')+(t.urg&&!t.done?'⚡ ':'')+escT(t.text)+'</span>'+(meta.length?'<span class="ag-task-meta">'+meta.join(' &nbsp;·&nbsp; ')+'</span>':'')+pacH
+      + (esNueva ? '<button type="button" class="ag-task-vista" title="La vi: deja de figurar como nueva (no se borra)">👁 Marcar vista</button>' : '')+editF+'</div>'
       + (conf ? '<span class="ag-task-conf">¿Borrar? <button type="button" data-del-si>Sí</button><button type="button" data-del-no>No</button></span>'
-              : '<span class="ag-task-tools">'+(!t.done?'<button type="button" class="ag-task-urgb'+(t.urg?' on':'')+'" title="'+(t.urg?'Quitar urgente':'Marcar urgente')+'">⚡</button>':'')+'<button type="button" class="ag-task-del" title="Borrar (si se cargó por error)">🗑</button></span>')
+              : '<span class="ag-task-tools">'+(!t.done?'<button type="button" class="ag-task-urgb'+(t.urg?' on':'')+'" title="'+(t.urg?'Quitar urgente':'Marcar urgente')+'">⚡</button><button type="button" class="ag-task-fb'+(t.vence?' on':'')+'" title="Para cuándo">📅</button>':'')+'<button type="button" class="ag-task-del" title="Borrar (si se cargó por error)">🗑</button></span>')
       + '</div>';
   }
 
@@ -28667,7 +28691,12 @@ loadLocal();  // async, carga en background y llama renderGrid al final
         b.onmousedown = function(e){ e.preventDefault(); nueva[p].pac = hit; renderPanel(); var ti = cont.querySelector('[data-prof-input="'+p+'"]'); if(ti){ ti.focus(); ti.setSelectionRange(ti.value.length, ti.value.length); } };
         form.appendChild(b); }, 350); });
     });
-    cont.querySelectorAll('.ag-tasks-input').forEach(function(inp){ if(inp.value.trim()) inp.dispatchEvent(new Event('input')); });
+    cont.querySelectorAll('.ag-tasks-input').forEach(function(inp){
+      var form = inp.closest('.ag-tasks-form'), pp = inp.dataset.profInput;
+      var abrir = function(){ var n = nueva[pp] || {}; form.classList.toggle('abierto', !!(inp.value.trim() || n.urg || n.vence || n.pac)); };
+      inp.addEventListener('input', abrir);
+      if(inp.value.trim()) inp.dispatchEvent(new Event('input')); else abrir();
+    });
     cont.querySelectorAll('[data-opt-pacx]').forEach(function(b){ b.onclick = function(){ delete nueva[b.dataset.optPacx].pac; renderPanel(); }; });
     cont.querySelectorAll('[data-opt-pac]').forEach(function(i){
       var p = i.dataset.optPac, sug = cont.querySelector('[data-sug="'+p+'"]'), lista = [];
@@ -28683,6 +28712,7 @@ loadLocal();  // async, carga en background y llama renderGrid al final
         var ti = cont.querySelector('[data-prof-input="'+p+'"]'); if(ti) ti.focus(); });
     });
 
+    cont.querySelectorAll('[data-tvence-i]').forEach(function(i){ i.onchange = function(){ var it = i.closest('.ag-task-item'), arr = tasks[it.dataset.taskProf]||[], t = arr.find(function(x){ return x.id===it.dataset.taskId; }); if(!t) return; if(i.value) t.vence = i.value; else delete t.vence; editando = null; saveTasks(); renderPanel(); }; });
     // tildar / volver a pendiente / urgente / borrar / acciones del paciente
     cont.querySelectorAll('.ag-task-item').forEach(function(item){
       item.addEventListener('click', function(e){
@@ -28699,6 +28729,11 @@ loadLocal();  // async, carga en background y llama renderGrid al final
         if(bh){ var bg2=document.getElementById('ag-tasks-bg'); if(bg2) bg2.style.display='none'; try{ abrirHistoriaClinica(bh.dataset.thc); }catch(_){} return; }
         if(e.target.closest('.ag-task-pac')) return;
         if(e.target.closest('.ag-task-urgb')){ t.urg = !t.urg; saveTasks(); renderPanel(); return; }
+        if(e.target.closest('.ag-task-vista')){ t.visto = new Date().toISOString(); t.vistoPor = quienSoy(); saveTasks(); renderPanel(); return; }
+        if(e.target.closest('.ag-task-fb')){ editando = editando === id ? null : id; renderPanel(); return; }
+        var tv = e.target.closest('[data-tvence]');
+        if(tv){ if(tv.dataset.tvence) t.vence = tv.dataset.tvence; else delete t.vence; editando = null; saveTasks(); renderPanel(); return; }
+        if(e.target.closest('.ag-task-edf')) return;
         if(e.target.closest('.ag-task-del')){ borrando = id; renderPanel(); return; }
         if(e.target.closest('[data-del-no]')){ borrando = null; renderPanel(); return; }
         if(e.target.closest('[data-del-si]')){ borrando = null; tasks[p] = arr.filter(function(x){return x.id!==id;}); saveTasks(); renderPanel(); return; }
@@ -28719,6 +28754,7 @@ loadLocal();  // async, carga en background y llama renderGrid al final
     var id = Date.now()+'-'+Math.random().toString(36).slice(2,6), n = nueva[p] || {};
     if(!tasks[p]) tasks[p]=[];
     var t = {id:id,text:text,done:false,at:new Date().toISOString(),por:quienSoy()};
+    if(t.por === dueno(p)) t.visto = t.at;
     if(n.urg) t.urg = true;
     if(n.vence) t.vence = n.vence;
     if(n.pac) t.pac = {n:n.pac.n, dni:n.pac.dni||'', tel:n.pac.tel||'', mail:n.pac.mail||''};
@@ -28735,10 +28771,9 @@ loadLocal();  // async, carga en background y llama renderGrid al final
   function info(){
     var mio = miSeccion(), out = {nuevas:0, de:{}, urg:0, venc:0, hoy:0};
     if(!mio) return out;
-    var visto = ''; try { visto = localStorage.getItem(claveVisto()) || ''; } catch(e){}
-    var yo = quienSoy(), h = hoyAR();
+    var h = hoyAR();
     (tasks[mio]||[]).forEach(function(t){ if(t.done) return;
-      if(t.por && t.por !== yo && (!visto || t.at > visto)){ out.nuevas++; out.de[t.por] = (out.de[t.por]||0) + 1; }
+      if(t.por && t.por !== dueno(mio) && !t.visto){ out.nuevas++; out.de[t.por] = (out.de[t.por]||0) + 1; }
       if(t.urg) out.urg++;
       if(t.vence && t.vence < h) out.venc++; else if(t.vence === h) out.hoy++; });
     return out;
@@ -28757,7 +28792,7 @@ loadLocal();  // async, carga en background y llama renderGrid al final
   function marcarVisto(){ try { localStorage.setItem(claveVisto(), new Date().toISOString()); } catch(e){} }
 
   function openTasksPanel(){
-    loadTasks(); marcarVisto();
+    loadTasks();
     var bg = document.getElementById('ag-tasks-bg');
     if(!bg) return;
     bg.style.display='flex';
