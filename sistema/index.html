@@ -2,7 +2,7 @@
 <html lang="es-AR">
 <head>
   <meta charset="UTF-8" />
-  <script>var URCYM_BUILD = '2026-11-24-0930';</script>
+  <script>var URCYM_BUILD = '2026-11-24-1030';</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Evaluaciones cardiometabólicas — Sistema de Historia Clínica</title>
 
@@ -4017,7 +4017,7 @@
               <div class="mdpa-tabla-wrap">
                 <div class="mdpa-tabla-header">
                   <div class="mdpa-tabla-title">📋 Registro de tomas</div>
-                  <button class="mdpa-btn-foto" type="button" onclick="mdpaLeerFoto()" title="Sacale una foto a la planilla en papel y se completa la tabla">📷 Leer planilla (foto)</button><button class="mdpa-toggle-pp" id="mdpa_btn_pp" onclick="mdpaTogglePP()">🤰 postPrandial</button>
+                  <button class="mdpa-btn-foto" type="button" onclick="mdpaLeerFoto()" title="Sacale una foto a la planilla: queda al costado de la tabla y se intenta leer">📷 Foto de la planilla</button><button class="mdpa-btn-foto mdpa-btn-dict" id="mdpa_btn_dictar" type="button" onclick="mdpaDictar()" title="Decí los valores en orden y se van llenando">🎤 Dictar</button><button class="mdpa-toggle-pp" id="mdpa_btn_pp" onclick="mdpaTogglePP()">🤰 postPrandial</button>
                 </div>
                 <div class="mdpa-tabla-scroll"><div id="mdpa_tabla_inner"></div></div>
               </div>
@@ -14069,7 +14069,14 @@ const _INFORMES_MAIL = [
   { k:'dbt', nombre:'Diabetes', archivo:'Diabetes', fn: async function(){ if(typeof dbtIniciar === 'function') await dbtIniciar(pacienteActual.dni); return dbtImprimirInforme(); } },
   { k:'hab', nombre:'Hábitos (alimentación y actividad)', archivo:'Habitos', fn: function(){ return imprimirInformeHabitos({ antro:true, nutri:true, actOms:true }); } },
   { k:'ant', nombre:'Antropometría', archivo:'Antropometria', fn: function(){ return imprimirInformeAnt(); } },
-  { k:'mdpa', nombre:'MDPA (presión arterial)', archivo:'MDPA', disponible: function(){ return mdpaPacDni === pacienteActual.dni && mdpaIdx >= 0; }, fn: function(){ return mdpaImprimirInforme(); } },
+  { k:'mdpa', nombre:'MDPA (presión arterial)', archivo:'MDPA', disponible: function(){ return mdpaPacDni !== pacienteActual.dni || (mdpaEstudios && mdpaEstudios.length > 0); },
+    fn: async function(){
+      if(mdpaPacDni !== pacienteActual.dni && typeof mdpaIniciar === 'function') await mdpaIniciar(pacienteActual.dni);
+      if(mdpaIdx >= 0) return mdpaImprimirInforme();
+      const est = (mdpaEstudios || []).slice().sort(function(a, b){ return String(b.fecha_inicio || '').localeCompare(String(a.fecha_inicio || '')); })[0];
+      if(!est) throw new Error('no tiene estudios MDPA cargados');
+      return _mdpaGenerarHTMLInforme(est, false);
+    } },
 ];
 function _htmlInformesPaciente() {
   if(!pacienteActual) return '';
@@ -18459,9 +18466,17 @@ function _mdpaResumen(est) {
            dx: par(r.dx), mat: par(r.mat), pp: par(r.pp), ves: par(r.ves) };
 }
 
-function volcarMdpaAlEditor(est) {
+function volcarMdpaAlEditor(est, dniDestino) {
   const editor = document.getElementById('evol_editor');
   if(!editor || !est) return;
+  // Si la evolución abierta no es de este paciente, queda pendiente y se agrega al abrirla
+  const dniP = String(dniDestino || mdpaPacDni || (pacienteActual && pacienteActual.dni) || '');
+  const evDni = (document.getElementById('evol_dni') || {}).textContent || '';
+  if(dniP && evDni.replace(/\D/g, '') !== dniP.replace(/\D/g, '')) {
+    try { sessionStorage.setItem('urcym_mdpa_pend_' + dniP, JSON.stringify(est)); } catch(e) {}
+    if(typeof _toastDocLibre === 'function') _toastDocLibre('📋 El MDPA se agrega a la evolución cuando la abras');
+    return;
+  }
   const R = _mdpaResumen(est);
   if(!R.nTomas) return; // estudio vacío: nada que volcar
   const fechaStr = est.fecha_inicio ? est.fecha_inicio.split('-').reverse().join('/') : '';
@@ -18551,6 +18566,7 @@ async function mdpaEliminarPorIdx(i) {
 function mdpaImprimirInforme() {
   if(mdpaIdx < 0) return;
   const est   = mdpaEstudios[mdpaIdx];
+  try { if(pacienteActual && String(pacienteActual.dni) === String(mdpaPacDni)) volcarMdpaAlEditor(est); } catch(e) {}
   const p     = pacienteActual || {};
   const nDias = est.n_dias || 7;
   const tomas = est.tomas;
@@ -18876,6 +18892,7 @@ function mdpaInformeCerrar() {
 }
 
 function mdpaInformeModalImprimir() {
+  try { if(_mdpaInformeEstudio && pacienteActual && String(pacienteActual.dni) === String(mdpaPacDni)) volcarMdpaAlEditor(_mdpaInformeEstudio); } catch(e) {}
   const html = _mdpaGenerarHTMLInforme(_mdpaInformeEstudio, false);
   const win = window.open('', '_blank', 'width=960,height=720');
   if(!win) { alert('Bloqueador de popups activo. Permitir para este sitio.'); return; }
@@ -46236,13 +46253,19 @@ html.urcym-sec #atd-pill{display:none!important}
     for(var i = 0; i < p.length; i += 4) suma += p[i];
     var media = suma / (p.length / 4), umbral = media - 45;
     for(var j = 0; j < p.length; j += 4){ var v = p[j] < umbral ? 0 : 255; p[j] = p[j + 1] = p[j + 2] = v; }
+    // líneas verticales de la tabla (columna casi toda negra) → blanco
+    for(var cx0 = 0; cx0 < c.width; cx0++){ var neg = 0; for(var cy0 = 0; cy0 < c.height; cy0++) if(p[(cy0 * c.width + cx0) * 4] === 0) neg++;
+      if(neg > c.height * 0.6) for(var cy1 = 0; cy1 < c.height; cy1++){ var q = (cy1 * c.width + cx0) * 4; p[q] = p[q + 1] = p[q + 2] = 255; } }
+    // y horizontales (renglones)
+    for(var ry = 0; ry < c.height; ry++){ var nh = 0; for(var rx = 0; rx < c.width; rx++) if(p[(ry * c.width + rx) * 4] === 0) nh++;
+      if(nh > c.width * 0.6) for(var rx2 = 0; rx2 < c.width; rx2++){ var q2 = (ry * c.width + rx2) * 4; p[q2] = p[q2 + 1] = p[q2 + 2] = 255; } }
     x.putImageData(d, 0, 0);
     // bordes del casillero (líneas de la tabla) en blanco
     x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, 4); x.fillRect(0, c.height - 4, c.width, 4); x.fillRect(0, 0, 6, c.height); x.fillRect(c.width - 6, 0, 6, c.height);
     return c;
   }
   function interpretar(txt){
-    var t = String(txt || '').replace(/[^\d\/\s]/g, ' ').trim(); if(!t) return null;
+    var t = String(txt || '').replace(/(\d)\s*[-–—_.:,|]\s*(\d)/g, '$1/$2').replace(/[^\d\/\s]/g, ' ').trim(); if(!t) return null;
     var g = t.split(/[\/\s]+/).filter(Boolean), s = null, d = null;
     if(g.length >= 2){ s = +g[0]; d = +g[1]; }
     else if(g.length === 1){ var n = g[0];
@@ -46265,8 +46288,16 @@ html.urcym-sec #atd-pill{display:none!important}
       var r = await worker.recognize(can, {}, { blocks:true });
       var ws = []; (r.data.blocks || []).forEach(function(b){ (b.paragraphs || []).forEach(function(p){ (p.lines || []).forEach(function(l){ (l.words || []).forEach(function(w){ ws.push(w); }); }); }); });
       if(!ws.length && r.data.words) ws = r.data.words;
+      // "130-80" o "147 80" quedan como dos palabras: se juntan las que están pegadas en el mismo renglón
+      ws.sort(function(a, b){ return (a.bbox.y0 - b.bbox.y0) || (a.bbox.x0 - b.bbox.x0); });
+      var jun = [];
+      ws.forEach(function(w){ var p = jun[jun.length - 1];
+        if(p && /\d/.test(p.text) && /^\W*\d/.test(w.text) && Math.abs((p.bbox.y0 + p.bbox.y1) - (w.bbox.y0 + w.bbox.y1)) / 2 < (p.bbox.y1 - p.bbox.y0) * 0.7 && w.bbox.x0 - p.bbox.x1 < (p.bbox.y1 - p.bbox.y0) * 1.6 && w.bbox.x0 > p.bbox.x0 && (p.text.match(/\d/g) || []).length <= 3)
+          jun[jun.length - 1] = { text:p.text + ' ' + w.text, confidence:Math.min(p.confidence, w.confidence), bbox:{ x0:p.bbox.x0, y0:Math.min(p.bbox.y0, w.bbox.y0), x1:w.bbox.x1, y1:Math.max(p.bbox.y1, w.bbox.y1) } };
+        else jun.push(w); });
+      ws = jun;
       window._mdpaWs = ws.map(function(w){ return w.text; });
-      var cen = function(w){ return { x:(w.bbox.x0 + w.bbox.x1) / 2, y:(w.bbox.y0 + w.bbox.y1) / 2, h:w.bbox.y1 - w.bbox.y0, w:w.bbox.x1 - w.bbox.x0 }; };
+      var cen = function(w){ return { x:(w.bbox.x0 + w.bbox.x1) / 2, y:(w.bbox.y0 + w.bbox.y1) / 2, x0:w.bbox.x0, h:w.bbox.y1 - w.bbox.y0, w:w.bbox.x1 - w.bbox.x0 }; };
       // 1) números escritos que ya se leyeron en la foto entera ("138/74")
       var nums = [];
       ws.forEach(function(w){ var t = String(w.text || ''); if((t.match(/\d/g) || []).length < 4) return; var v = corregir(interpretar(t)); if(!valido(v)) return; nums.push(Object.assign(cen(w), { v:v, txt:t, conf:w.confidence })); });
@@ -46275,7 +46306,11 @@ html.urcym-sec #atd-pill{display:none!important}
       ws.forEach(function(w){ var t = sinAc(w.text).replace(/[^A-Z]/g, '');
         if(/^M.?.?ANA$|^MANAN.?$|^MAN.NA$/.test(t)) anclas.push(Object.assign(cen(w), { fr:'mat' }));
         else if(/^N.?OCHE$|^NOCH.?$/.test(t)) anclas.push(Object.assign(cen(w), { fr:'ves' })); });
-      if(nums.length < 4) throw new Error('No pude leer los números de la planilla. Sacá la foto derecha, de cerca, con toda la tabla a la vista y buena luz.');
+      if(nums.length < 6){
+        // pocos números legibles en la foto entera: la grilla se arma con los renglones impresos MAÑANA / NOCHE y se lee casillero por casillero
+        if(anclas.length < 3) throw new Error('No encontré la tabla de la planilla. Sacá la foto derecha, de cerca, con toda la tabla a la vista y buena luz.');
+        return await porCasilleros(worker, can, esc, anclas, progreso);
+      }
       // 2) giro de la foto: pares de números del mismo renglón (toma 1 y toma 2)
       var W = can.width, hMed = nums.map(function(n){ return n.h; }).sort(function(a, b){ return a - b; })[Math.floor(nums.length / 2)];
       var pend = [];
@@ -46319,11 +46354,11 @@ html.urcym-sec #atd-pill{display:none!important}
       [1, 2].forEach(function(t){ var prev = -1; nums.filter(function(n){ return n.t === t; }).sort(function(a, b){ return yc(a) - yc(b); }).forEach(function(n){ var k = Math.round((yc(n) - base) / sp); if(k <= prev) k = prev + 1; n.k = k; prev = k; }); });
       var res = {}, leidas = 0, ok = 0;
       nums.forEach(function(n){ var k = n.k; if(k < 0 || k > 13) return; var dia = Math.floor(k / 2) + 1, fr = k % 2 === 0 ? 'mat' : 'ves', cl = 'd' + dia + '_t' + n.t + '_' + fr;
-        if(res[cl] && res[cl].conf >= n.conf) return; res[cl] = { v:n.v, txt:n.txt, conf:Math.round(n.conf), ok:n.v._ok !== false && n.conf >= 85 }; });
+        if(res[cl] && res[cl].conf >= n.conf) return; res[cl] = { v:n.v, txt:n.txt, conf:Math.round(n.conf), ok:false }; });
       // 6) casilleros: posición (para mostrarlos en la foto) y, los que faltan, se leen uno por uno
       var cw = (Math.abs(cxm[2] - cxm[1]) || W * 0.13) * 0.95, ch = sp * 0.98;
       var kMax = 13;
-      await worker.setParameters({ tessedit_char_whitelist:'0123456789/', tessedit_pageseg_mode:'7' });
+      await worker.setParameters({ tessedit_char_whitelist:'0123456789/-', tessedit_pageseg_mode:'7' });
       for(var k = 0; k <= kMax; k++){
         for(var t = 1; t <= 2; t++){
           var dia = Math.floor(k / 2) + 1, fr = k % 2 === 0 ? 'mat' : 'ves', cl = 'd' + dia + '_t' + t + '_' + fr;
@@ -46339,9 +46374,42 @@ html.urcym-sec #atd-pill{display:none!important}
           res[cl] = { v:valido(v) ? v : null, txt:txt, conf:Math.round(rr.data.confidence), ok:false };
         }
       }
-      Object.keys(res).forEach(function(cl){ leidas++; if(res[cl].ok) ok++; });
+      Object.keys(res).forEach(function(cl){ if(!res[cl].v){ delete res[cl]; return; } leidas++; if(res[cl].ok) ok++; });
       return { res:res, leidas:leidas, ok:ok };
     } finally { try { await worker.terminate(); } catch(_){} }
+  }
+  async function porCasilleros(worker, can, esc, anclas, progreso){
+    anclas.sort(function(a, b){ return a.y - b.y; });
+    var dif = []; for(var i = 1; i < anclas.length; i++) dif.push(anclas[i].y - anclas[i - 1].y);
+    dif.sort(function(a, b){ return a - b; });
+    var sp0 = dif[Math.floor(dif.length * 0.25)] || 30, cerca = dif.filter(function(d){ return d > sp0 * 0.6 && d < sp0 * 1.45; });
+    var sp = cerca.length ? cerca.reduce(function(a, b){ return a + b; }, 0) / cerca.length : sp0;
+    // índice de renglón (0 = día 1 mañana) respetando MAÑANA = par, NOCHE = impar
+    var k = anclas[0].fr === 'mat' ? 0 : 1; anclas[0].k = k;
+    for(var j = 1; j < anclas.length; j++){ var paso = Math.max(1, Math.round((anclas[j].y - anclas[j - 1].y) / sp)); var kk = anclas[j - 1].k + paso; if((kk % 2 === 0) !== (anclas[j].fr === 'mat')) kk += 1; anclas[j].k = kk; }
+    var desf = anclas[anclas.length - 1].k > 13 ? anclas[anclas.length - 1].k - 13 : 0; if(desf % 2) desf++; anclas.forEach(function(a){ a.k -= desf; });
+    // recta y = a + b·k  y  x0 = c + d·k (giro de la foto)
+    var n = anclas.length, sk = 0, sy = 0, sx = 0, skk = 0, sky = 0, skx = 0;
+    anclas.forEach(function(a){ sk += a.k; sy += a.y; sx += a.x0; skk += a.k * a.k; sky += a.k * a.y; skx += a.k * a.x0; });
+    var den = (n * skk - sk * sk) || 1, bY = (n * sky - sk * sy) / den, aY = (sy - bY * sk) / n, dX = (n * skx - sk * sx) / den, cX = (sx - dX * sk) / n;
+    if(!(bY > sp * 0.7 && bY < sp * 1.35)){ bY = sp; aY = (sy - sp * sk) / n; dX = 0; cX = sx / n; }
+    var m = bY ? -dX / bY : 0, u = bY / 27.6;          // pendiente de los renglones; tamaño de "1 unidad" de la planilla
+    var cw = 88 * u, ch = bY * 1.02, res = {}, leidas = 0, ok = 0;
+    await worker.setParameters({ tessedit_char_whitelist:'0123456789/-', tessedit_pageseg_mode:'7' });
+    for(var kk2 = 0; kk2 <= 13; kk2++){
+      for(var t = 1; t <= 2; t++){
+        var dia = Math.floor(kk2 / 2) + 1, fr = kk2 % 2 === 0 ? 'mat' : 'ves', cl = 'd' + dia + '_t' + t + '_' + fr;
+        var x0 = cX + dX * kk2, y0 = aY + bY * kk2, X = x0 + ((t === 1 ? 250 : 330) - 83) * u, Y = y0 + m * (X - x0);
+        CELDAS[cl] = { x:(X - cw / 2) / esc, y:(Y - ch / 2) / esc, w:cw / esc, h:ch / esc };
+        progreso('Leyendo día ' + dia + ' · ' + (fr === 'mat' ? 'mañana' : 'noche') + ' · toma ' + t + '…');
+        var rcc = recorte(can, X, Y, cw, ch), rr = await worker.recognize(rcc);
+        var txt = (rr.data.text || '').trim(); if(window._mdpaDebug) window._mdpaDebug.push({ cl:cl, url:rcc.toDataURL(), txt:txt, X:X / esc, Y:Y / esc });
+        if((txt.match(/\d/g) || []).length < 3) continue;
+        var v = corregir(interpretar(txt)), bien = false;
+        if(valido(v)){ res[cl] = { v:v, txt:txt, conf:Math.round(rr.data.confidence), ok:bien }; leidas++; }
+      }
+    }
+    return { res:res, leidas:leidas, ok:ok };
   }
   // errores típicos con números a mano: el "1" inicial leído como 4 o perdido
   function corregir(v){
@@ -46367,7 +46435,7 @@ html.urcym-sec #atd-pill{display:none!important}
     p.innerHTML = '<div class="mfp-h"><b>📷 Planilla</b><span>tocá un casillero de la tabla para ver dónde está</span><button type="button" data-z="-">−</button><button type="button" data-z="+">+</button><button type="button" data-x>✕</button></div><div class="mfp-sc"><div class="mfp-in"><img><div class="mfp-hl"></div></div></div>';
     document.body.appendChild(p);
     var z = 1, inn = p.querySelector('.mfp-in');
-    p.querySelector('[data-x]').onclick = function(){ p.style.display = 'none'; };
+    p.querySelector('[data-x]').onclick = function(){ p.style.display = 'none'; document.body.classList.remove('mdpa-con-foto'); };
     p.querySelectorAll('[data-z]').forEach(function(b){ b.onclick = function(){ z = Math.max(0.6, Math.min(4, z * (b.dataset.z === '+' ? 1.3 : 1 / 1.3))); inn.style.width = (z * 100) + '%'; }; });
     return p;
   }
@@ -46378,7 +46446,7 @@ html.urcym-sec #atd-pill{display:none!important}
     var sc = p.querySelector('.mfp-sc'), hr = hl.getBoundingClientRect(), sr = sc.getBoundingClientRect();
     if(hr.top < sr.top || hr.bottom > sr.bottom || hr.left < sr.left || hr.right > sr.right) hl.scrollIntoView({ block:'center', inline:'center', behavior:'smooth' });
   }
-  function mostrarFoto(){ if(!FOTO) return; var p = panelFoto(); p.querySelector('img').src = FOTO; p.style.display = ''; }
+  function mostrarFoto(){ if(!FOTO) return; var p = panelFoto(); p.querySelector('img').src = FOTO; p.style.display = ''; document.body.classList.add('mdpa-con-foto'); }
   window._mdpaVerFoto = mostrarFoto;
 
   window.mdpaLeerFoto = function(){
@@ -46406,9 +46474,11 @@ html.urcym-sec #atd-pill{display:none!important}
       if(typeof marcarDirty === 'function') marcarDirty('mdpa');
       mdpaRenderTabla(); marcar();
       var dud = r.leidas - r.ok;
-      dec('📷 <b>Leí ' + r.leidas + ' de 28 tomas</b> de la foto' + (dud ? ' · <b style="color:#b45309">' + dud + ' dudosas en amarillo</b>' : '') + ' · en celeste las que se leyeron claras. La letra a mano puede leerse mal (un 9 como 7, por ejemplo): <b>revisá todas contra la foto</b> antes de guardar; al tocar un casillero se marca en la foto. <button type="button" onclick="_mdpaVerFoto()">Ver la foto al costado</button>');
+      dec(r.leidas
+        ? '📷 <b>Agregué ' + r.leidas + ' de 28 tomas</b> que se pudieron leer de la foto, <b>en amarillo: revisalas</b> (la letra a mano se lee mal a menudo). Lo que falta, cargalo <b>dictando</b> o tipeando. <button type="button" onclick="mdpaDictar()">🎤 Dictar</button> <button type="button" onclick="_mdpaVerFoto()">Ver la foto</button>'
+        : '📷 <b>No pude leer los números escritos a mano</b>: la foto quedó al costado para que los cargues <b>dictando</b> o tipeando. <button type="button" onclick="mdpaDictar()">🎤 Dictar ahora</button> <button type="button" onclick="_mdpaVerFoto()">Ver la foto</button>');
       mostrarFoto();
-    } catch(e){ dec('⚠️ ' + (e.message || e)); }
+    } catch(e){ dec('📷 La foto quedó al costado, pero no pude leer los números (' + (e.message || e).replace(/^No [^.]*\.\s*/, '') + '). Cargalos <b>dictando 🎤</b> o tipeando mientras mirás la foto.'); mostrarFoto(); }
   }
   // al cambiar de estudio o redibujar la tabla, se vuelven a pintar las marcas
   if(typeof mdpaRenderTabla === 'function'){ var _rt = mdpaRenderTabla; mdpaRenderTabla = function(){ var x = _rt.apply(this, arguments); try { marcar(); } catch(_){} return x; }; }
@@ -46431,5 +46501,107 @@ html.urcym-sec #atd-pill{display:none!important}
 #mdpa-foto-panel img{width:100%;display:block}
 #mdpa-foto-panel .mfp-hl{position:absolute;display:none;border:3px solid #22c55e;border-radius:6px;box-shadow:0 0 0 4000px rgba(0,0,0,.35);pointer-events:none}
 </style>
+<script>
+/* ══ MDPA: dictar los valores en orden ("130 80", "130 73"…) ══
+   Orden de la planilla: día 1 mañana toma 1, toma 2, noche toma 1, toma 2, día 2…
+   Palabras: "nada"/"saltear" (falta esa toma) · "atrás"/"borrar" (corrige la anterior) · "listo"/"parar" (termina) */
+(function(){
+  var rec = null, activo = false, cursor = 0, buffer = [];
+  function orden(){
+    var est = mdpaEstudios[mdpaIdx], nd = est ? (est.n_dias || 7) : 7, out = [];
+    for(var d = 1; d <= nd; d++) ['mat', 'ves'].forEach(function(fr){ for(var t = 1; t <= 2; t++) out.push('d' + d + '_t' + t + '_' + fr); });
+    return out;
+  }
+  function primeraVacia(){ var est = mdpaEstudios[mdpaIdx], o = orden(); for(var i = 0; i < o.length; i++) if(est.tomas[o[i] + '_s'] === undefined) return i; return o.length; }
+  function marcarCursor(){
+    document.querySelectorAll('.mdpa-dict-cur').forEach(function(x){ x.classList.remove('mdpa-dict-cur'); });
+    var o = orden(), cl = o[cursor]; if(!cl) return;
+    ['s', 'd'].forEach(function(sd){ var el = document.getElementById('mdpa_' + cl + '_' + sd); if(el){ el.classList.add('mdpa-dict-cur'); if(sd === 's') el.scrollIntoView({ block:'nearest' }); } });
+    var ex = document.getElementById('mdpa-dict-donde'); if(ex){ var m = cl.match(/^d(\d+)_t(\d)_(\w+)$/); ex.textContent = 'Ahora: día ' + m[1] + ' · ' + (m[3] === 'mat' ? 'mañana' : 'noche') + ' · toma ' + m[2]; }
+    var r = document.querySelector('#mdpa_' + cl + '_s'); if(r) r.dispatchEvent(new Event('focus'));   // marca el casillero en la foto
+  }
+  function poner(s, d){
+    var o = orden(), cl = o[cursor]; if(!cl) return;
+    mdpaSetToma(cl, 's', s); mdpaSetToma(cl, 'd', d);
+    ['s', 'd'].forEach(function(sd){ var el = document.getElementById('mdpa_' + cl + '_' + sd); if(el){ el.value = sd === 's' ? s : d; el.classList.remove('mdpa-ocr-ok', 'mdpa-ocr-dudoso'); el.classList.add('mdpa-dict-ok'); } });
+    cursor++; marcarCursor();
+  }
+  function procesar(txt){
+    var t = (window._normalizarDictado ? window._normalizarDictado(txt) : txt).toLowerCase();
+    var ult = document.getElementById('mdpa-dict-oido'); if(ult) ult.textContent = '«' + txt.trim() + '»';
+    t.replace(/\//g, ' ').split(/[\s,;]+/).forEach(function(w){
+      if(!w) return;
+      if(/^(listo|parar|terminar|fin)$/.test(w)){ parar(); return; }
+      if(/^(nada|saltear|salteo|vacio|vacío|siguiente|falta)$/.test(w)){ buffer = []; cursor++; marcarCursor(); return; }
+      if(/^(atras|atrás|borrar|corregir|volver)$/.test(w)){ buffer = []; cursor = Math.max(0, cursor - 1); var cl = orden()[cursor];
+        if(cl){ mdpaSetToma(cl, 's', ''); mdpaSetToma(cl, 'd', ''); ['s','d'].forEach(function(sd){ var el = document.getElementById('mdpa_' + cl + '_' + sd); if(el) el.value = ''; }); } marcarCursor(); return; }
+      var n = w.replace(/\D/g, ''); if(!n) return;
+      if(n.length >= 5 && buffer.length === 0){ var s0 = +n.slice(0, 3), d0 = +n.slice(3, 6); if(d0 > 150) d0 = +n.slice(3, 5); poner(s0, d0); return; }
+      buffer.push(+n);
+      if(buffer.length === 2){ poner(buffer[0], buffer[1]); buffer = []; }
+    });
+  }
+  function parar(){
+    activo = false; try { rec && rec.stop(); } catch(_){}
+    rec = null; buffer = [];
+    document.querySelectorAll('.mdpa-dict-cur').forEach(function(x){ x.classList.remove('mdpa-dict-cur'); });
+    var b = document.getElementById('mdpa_btn_dictar'); if(b){ b.textContent = '🎤 Dictar'; b.classList.remove('on'); }
+    var bx = document.getElementById('mdpa-dict-box'); if(bx) bx.remove();
+  }
+  window.mdpaDictarTexto = procesar;   // (también sirve para pruebas)
+  window.mdpaDictar = function(){
+    if(activo){ parar(); return; }
+    if(typeof mdpaIdx === 'undefined' || mdpaIdx < 0) return alert('Primero creá o abrí un estudio MDPA.');
+    var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    // desde el casillero donde estás parada, o desde el primero vacío
+    var foc = document.activeElement && /^mdpa_(d\d+_t\d_\w+)_[sd]$/.exec(document.activeElement.id || '');
+    cursor = foc ? Math.max(0, orden().indexOf(foc[1])) : primeraVacia(); buffer = [];
+    var cont = document.getElementById('mdpa_tabla_inner'), bx = document.getElementById('mdpa-dict-box');
+    if(!bx){ bx = document.createElement('div'); bx.id = 'mdpa-dict-box'; cont.parentNode.insertBefore(bx, cont); }
+    bx.innerHTML = '<b>🎤 Dictando</b> <span id="mdpa-dict-donde"></span> · decí los valores de a dos: <i>«130 80… 130 73…»</i>. <i>«nada»</i> si falta una toma, <i>«atrás»</i> para corregir, <i>«listo»</i> para terminar. <span id="mdpa-dict-oido" class="oido"></span>'
+      + (SR ? '' : '<div class="nosr">Este navegador no permite dictar: usá Chrome. Podés escribir los valores acá abajo igual y apretar Enter: <input id="mdpa-dict-tx" placeholder="130 80 130 73 …"></div>');
+    activo = true; marcarCursor();
+    var b = document.getElementById('mdpa_btn_dictar'); if(b){ b.textContent = '⏹ Parar dictado'; b.classList.add('on'); }
+    var tx = document.getElementById('mdpa-dict-tx'); if(tx) tx.onkeydown = function(e){ if(e.key === 'Enter'){ procesar(tx.value); tx.value = ''; } };
+    if(!SR) return;
+    var empezar = function(){
+      rec = new SR(); rec.lang = 'es-AR'; rec.continuous = true; rec.interimResults = false;
+      rec.onresult = function(e){ for(var i = e.resultIndex; i < e.results.length; i++) if(e.results[i].isFinal) procesar(e.results[i][0].transcript); };
+      rec.onerror = function(e){ if(e.error === 'not-allowed'){ alert('Permití el micrófono para dictar.'); parar(); } };
+      rec.onend = function(){ if(activo) try { empezar(); } catch(_){} };
+      rec.start();
+    };
+    try { empezar(); } catch(e){ alert('No se pudo usar el micrófono: ' + (e.message || e)); parar(); }
+  };
+})();
+</script>
+<style>
+.mdpa-btn-dict{margin-left:0!important;border-color:#16a34a!important;color:#16a34a!important}
+.mdpa-btn-dict:hover,.mdpa-btn-dict.on{background:#16a34a!important;color:#fff!important}
+#mdpa-dict-box{font-size:12px;line-height:1.55;background:#f0fdf4;border:1px solid #86efac;color:#14532d;border-radius:10px;padding:8px 12px;margin:0 0 10px}
+#mdpa-dict-box #mdpa-dict-donde{font-weight:700;background:#fff;border-radius:6px;padding:1px 7px}
+#mdpa-dict-box .oido{display:block;color:#64748b;font-style:italic;margin-top:2px}
+#mdpa-dict-box .nosr{margin-top:6px;color:#7c2d12}
+#mdpa-dict-box input{border:1.5px solid #86efac;border-radius:8px;padding:4px 8px;width:240px;font:13px var(--font-main)}
+.mdpa-inp.mdpa-dict-cur{outline:3px solid #22c55e;outline-offset:1px;background:#f0fdf4!important}
+.mdpa-inp.mdpa-dict-ok{background:#f0fdf4!important;border-color:#86efac!important}
+</style>
+<style>body.mdpa-con-foto{padding-right:calc(min(380px,32vw) + 24px)}@media (max-width:900px){body.mdpa-con-foto{padding-right:0}}</style>
+<script>
+/* MDPA guardado o informado sin la evolución abierta: se agrega al abrir la evolución de ese paciente */
+(function(){
+  if(typeof abrirEvolucion !== 'function') return;
+  var orig = abrirEvolucion;
+  abrirEvolucion = async function(dni){
+    var r = await orig.apply(this, arguments);
+    try {
+      var k = 'urcym_mdpa_pend_' + dni, v = sessionStorage.getItem(k);
+      if(v){ sessionStorage.removeItem(k); setTimeout(function(){ volcarMdpaAlEditor(JSON.parse(v), dni); if(typeof _toastDocLibre === 'function') _toastDocLibre('✅ MDPA agregado a la evolución'); }, 600); }
+    } catch(e) {}
+    return r;
+  };
+  window.abrirEvolucion = abrirEvolucion;
+})();
+</script>
 </body>
 </html>
