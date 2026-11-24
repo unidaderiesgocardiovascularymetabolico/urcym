@@ -2,7 +2,7 @@
 <html lang="es-AR">
 <head>
   <meta charset="UTF-8" />
-  <script>var URCYM_BUILD = '2026-11-24-1030';</script>
+  <script>var URCYM_BUILD = '2026-11-24-1115';</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Evaluaciones cardiometabólicas — Sistema de Historia Clínica</title>
 
@@ -25993,6 +25993,7 @@ window._dspAbrirLista=function(){
     if(R.msgs) return;
     try { var v = await sbGetAgendaConfig('msg_recepcion'); R.msgs = (v && typeof v === 'object') ? Object.assign({}, MSG_DEF, v) : Object.assign({}, MSG_DEF); }
     catch(e){ R.msgs = Object.assign({}, MSG_DEF); }
+    try { var me = await sbGetAgendaConfig('recordatorios_agenda'); R.mailEnv = (me && typeof me === 'object') ? me : {}; } catch(e){ R.mailEnv = {}; }
   }
   function abrir(tab){
     R.tab = tab || R.tab || 'hoy'; R.dia = R.dia || hoyS();
@@ -26049,12 +26050,14 @@ window._dspAbrirLista=function(){
     var ds = proxHabil(hoyS()), its = delDia(ds).filter(function(it){ return !it.t.video; });
     var env = its.filter(function(it){ return it.t.recordatorio_wa; }).length;
     var x = '<div class="rec-nav"><b>Turnos del ' + diaTxt(ds) + '</b><span class="rec-cnt">' + env + ' de ' + its.length + ' avisados</span><button type="button" class="rec-edit" data-redit="recordatorio">✏️ Editar mensaje</button></div>'
-      + '<p class="dsp-ayuda">Tocá <b>💬 Enviar</b>: se abre WhatsApp con el mensaje listo, lo mandás y acá queda tildado. Las videoconsultas, además, reciben el recordatorio por mail automáticamente.</p>';
+      + '<p class="dsp-ayuda">Tocá <b>💬 Enviar</b>: se abre WhatsApp con el mensaje listo, lo mandás y acá queda tildado. Además, <b>a todos los que tienen mail les llega un recordatorio por mail</b> el día anterior (📧).</p>';
     if(!its.length) return x + '<div class="dsp-vacio" style="padding:24px 0">No hay turnos ese día.</div>';
     its.forEach(function(it){
       var t = it.t, d = datos(t), ok = t.recordatorio_wa;
       x += '<div class="rec-it' + (ok ? ' a-atendido' : '') + '"><span class="rec-h">' + E(it.hora) + '</span><span class="rec-p"><b>' + E(t.paciente) + '</b><small>' + E(PROF_LBL[it.prof] || it.prof) + (d.tel ? ' · ' + E(d.tel) : '') + '</small></span>'
         + (ok ? '<span class="rec-ok">✓ Enviado ' + new Date(ok).toLocaleTimeString('es-AR', { hour:'2-digit', minute:'2-digit' }) + '</span>' : '')
+        + (function(){ var me = R.mailEnv && R.mailEnv[it.k], pp = (typeof _agPacienteDeTurno === 'function') ? _agPacienteDeTurno(t) : null, tm = String((pp && pp.email) || t.email || '').trim();
+            return me ? '<span class="rec-mail ok" title="Recordatorio por mail enviado">📧 mail enviado</span>' : (tm ? '<span class="rec-mail" title="Se manda automáticamente el día anterior a ' + E(tm) + '">📧 se manda por mail</span>' : '<span class="rec-mail no" title="Cargale el mail en la ficha para que le llegue">📧 sin mail</span>'); })()
         + '<span class="rec-acc">' + (d.wa ? '<button type="button" class="rec-env" data-renv="' + E(it.k) + '">' + (ok ? 'Reenviar' : '💬 Enviar') + '</button>' : '<span class="rec-sin">sin celular</span>')
         + '<button type="button" class="rec-tick" data-rtick="' + E(it.k) + '" title="' + (ok ? 'Desmarcar' : 'Marcar como avisado (si le avisaste por otro lado)') + '">' + (ok ? '↺' : '✓') + '</button></span></div>';
     });
@@ -26283,6 +26286,28 @@ window._dspAbrirLista=function(){
   renderGrid = function(){ var r = _rg.apply(this, arguments); try { pintarPill(); } catch(e){} return r; };
   setTimeout(function(){ cargar().then(function(){ try { renderGrid(); } catch(e){} pintarPill(); }); }, 3500);
   setInterval(function(){ if(D) pintarPill(); }, 10 * 60e3);
+})();
+
+
+// ─── MARCA SUTIL: recordatorio por mail enviado (✉ en la esquina del turno) ───
+(function(){
+  var ENV = {}, ult = 0, cargando = false;
+  function marcar(){
+    document.querySelectorAll('#agenda-app .ag-turno[data-key]').forEach(function(el){
+      var k = el.dataset.key, v = ENV[k], m = el.querySelector('.ag-mail');
+      if(v && !m){ m = document.createElement('span'); m.className = 'ag-mail'; m.textContent = '✉';
+        try { m.title = 'Recordatorio por mail enviado · ' + new Date(v).toLocaleString('es-AR', { weekday:'short', hour:'2-digit', minute:'2-digit' }); } catch(e){ m.title = 'Recordatorio por mail enviado'; }
+        el.appendChild(m); }
+      else if(!v && m) m.remove();
+    });
+  }
+  function cargar(){
+    if(cargando || typeof sbGetAgendaConfig !== 'function') return; cargando = true;
+    sbGetAgendaConfig('recordatorios_agenda').then(function(v){ ENV = (v && typeof v === 'object') ? v : {}; ult = Date.now(); cargando = false; marcar(); }, function(){ cargando = false; });
+  }
+  var _rg = renderGrid;
+  renderGrid = function(){ var r = _rg.apply(this, arguments); try { marcar(); if(Date.now() - ult > 5 * 60e3) cargar(); } catch(e){} return r; };
+  setTimeout(cargar, 3000);
 })();
 
 
@@ -46603,5 +46628,7 @@ html.urcym-sec #atd-pill{display:none!important}
   window.abrirEvolucion = abrirEvolucion;
 })();
 </script>
+<style>.rec-mail{font-size:11px;font-weight:600;color:#475569;background:#f1f5f9;border-radius:999px;padding:2px 8px;margin-right:6px;white-space:nowrap}.rec-mail.ok{background:#dcfce7;color:#166534}.rec-mail.no{background:#fef3c7;color:#92400e}</style>
+<style>#agenda-app .ag-turno{position:relative}#agenda-app .ag-turno .ag-mail{position:absolute;right:4px;bottom:2px;font-size:10px;line-height:1;color:#16a34a;opacity:.7;pointer-events:auto;cursor:default}</style>
 </body>
 </html>
