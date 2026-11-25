@@ -2,7 +2,7 @@
 <html lang="es-AR">
 <head>
   <meta charset="UTF-8" />
-  <script>var URCYM_BUILD = '2026-11-25-0050';</script>
+  <script>var URCYM_BUILD = '2026-11-25-0110';</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Evaluaciones cardiometabólicas — Sistema de Historia Clínica</title>
 
@@ -4071,7 +4071,8 @@
           <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap;background:var(--gray);border:1px solid var(--border);border-radius:10px;padding:8px 12px">
             <div style="display:flex;align-items:center;gap:7px">
               <span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-soft)">Motivo:</span>
-              <span id="mdpa_motivo_display" style="font-size:12px;font-weight:600;color:var(--text)">—</span>
+              <span id="mdpa_motivo_display" style="display:none">—</span>
+              <span class="mdpa-mot-btns"><button type="button" data-mot="diagnostico" onclick="mdpaSetMotivo('diagnostico')">🔍 Diagnóstico</button><button type="button" data-mot="control_tratamiento" onclick="mdpaSetMotivo('control_tratamiento')">💊 Eval. terapéutica</button></span>
             </div>
             <div style="width:1px;height:16px;background:var(--border)"></div>
             <div style="display:flex;align-items:center;gap:7px;flex:1;min-width:180px">
@@ -4094,6 +4095,7 @@
               </div>
               <div class="mdpa-acciones">
                 <button onclick="mdpaImprimirInforme()" style="padding:8px 16px;border:1.5px solid var(--blue);border-radius:9px;background:var(--blue-light);color:var(--blue);font-size:12px;font-weight:600;cursor:pointer;font-family:var(--font-main)">🖨️ Imprimir informe</button>
+                <button onclick="mdpaEnviarMail()" title="Arma el PDF del informe y lo manda al mail del paciente, sin descargar nada" style="padding:8px 16px;border:1.5px solid #00b894;border-radius:9px;background:#ecfdf5;color:#047857;font-size:12px;font-weight:600;cursor:pointer;font-family:var(--font-main)">✉️ Enviar por mail</button>
                 <button onclick="mdpaEliminarEstudio()" style="padding:8px 16px;border:1.5px solid var(--red);border-radius:9px;background:var(--red-light);color:var(--red);font-size:12px;font-weight:600;cursor:pointer;font-family:var(--font-main);margin-left:auto">🗑️ Eliminar estudio</button>
               </div>
             </div>
@@ -4503,6 +4505,7 @@
       </div>
       <div class="mdpa-informe-topbar-actions">
         <button onclick="if(_mdpaInformeEstudio){volcarMdpaAlEditor(_mdpaInformeEstudio);_toastDocLibre('✅ MDPA pasado a la evolución');}" style="padding:7px 16px;border:1.5px solid var(--teal);border-radius:9px;background:var(--teal-light);color:var(--teal);font-size:12px;font-weight:600;cursor:pointer;font-family:var(--font-main)">📝 Pasar a evolución</button>
+        <button onclick="mdpaEnviarMail(_mdpaInformeEstudio)" title="Manda este informe al mail del paciente, sin descargar nada" style="padding:7px 16px;border:1.5px solid #00b894;border-radius:9px;background:#ecfdf5;color:#047857;font-size:12px;font-weight:600;cursor:pointer;font-family:var(--font-main)">✉️ Enviar por mail</button>
         <button onclick="mdpaInformeModalImprimir()" style="padding:7px 16px;border:1.5px solid var(--blue);border-radius:9px;background:var(--blue-light);color:var(--blue);font-size:12px;font-weight:600;cursor:pointer;font-family:var(--font-main)">🖨️ Imprimir</button>
         <button onclick="mdpaInformeCerrar()" style="width:32px;height:32px;border:none;border-radius:50%;background:var(--gray);font-size:18px;cursor:pointer;color:var(--text-soft);display:flex;align-items:center;justify-content:center">✕</button>
       </div>
@@ -18184,6 +18187,7 @@ async function mdpaIniciar(dni) {
   mdpaRenderPills();
   if(mdpaEstudios.length > 0) { mdpaMostrarEmpty(false); mdpaMostrarFormulario(false); mdpaMostrarBanner(true); }
   else { mdpaMostrarEmpty(true); mdpaMostrarBanner(false); }
+  mdpaRecuperarBorrador(dni);
 }
 
 function mdpaRenderPills() {
@@ -18255,6 +18259,7 @@ function mdpaSeleccionarEstudio(i) {
     else if(est.motivo === 'control_tratamiento') { motivoEl.textContent = '💊 Control de tratamiento'; motivoEl.style.color = '#1D9E75'; }
     else { motivoEl.textContent = '—'; motivoEl.style.color = 'var(--text-soft)'; }
   }
+  mdpaPintarMotivo();
   // Fármacos
   const farmEl = document.getElementById('mdpa_farmacos_input');
   if(farmEl) farmEl.value = est.farmacos || '';
@@ -18269,7 +18274,7 @@ function mdpaActualizarPill() {
   if(mdpaIdx < 0) return;
   const fi = document.getElementById('mdpa_fecha_inicio');
   if(fi) mdpaEstudios[mdpaIdx].fecha_inicio = fi.value;
-  marcarDirty('mdpa');
+  marcarDirty('mdpa'); mdpaBorrador();
   mdpaRenderPills();
 }
 
@@ -18277,14 +18282,14 @@ function mdpaActualizarFarmacos() {
   if(mdpaIdx < 0) return;
   const farmEl = document.getElementById('mdpa_farmacos_input');
   if(farmEl) mdpaEstudios[mdpaIdx].farmacos = farmEl.value;
-  marcarDirty('mdpa');
+  marcarDirty('mdpa'); mdpaBorrador();
 }
 
 function mdpaActualizarNota() {
   if(mdpaIdx < 0) return;
   const notaEl = document.getElementById('mdpa_nota_input');
   if(notaEl) mdpaEstudios[mdpaIdx].nota = notaEl.value;
-  marcarDirty('mdpa');
+  marcarDirty('mdpa'); mdpaBorrador();
 }
 
 function mdpaTogglePP() {
@@ -18299,7 +18304,7 @@ function mdpaRenderTabla() {
   const est   = mdpaEstudios[mdpaIdx];
   const nd    = document.getElementById('mdpa_ndias');
   const nDias = nd ? parseInt(nd.value) || 7 : 7;
-  est.n_dias  = nDias;
+  if(est.n_dias !== nDias) { est.n_dias = nDias; mdpaBorrador(); }
   const showPP = mdpaMostrarPP;
 
   let thead = `<thead><tr>
@@ -18362,7 +18367,7 @@ function mdpaSetToma(prefix, tipo, val) {
   const key = `${prefix}_${tipo}`;
   if(val === '' || val === null) { delete mdpaEstudios[mdpaIdx].tomas[key]; }
   else { mdpaEstudios[mdpaIdx].tomas[key] = parseFloat(val); }
-  marcarDirty('mdpa');
+  marcarDirty('mdpa'); mdpaBorrador();
   mdpaCalcular();
 }
 
@@ -18445,13 +18450,81 @@ function mdpaCalcular() {
   }
 }
 
-function mdpaNuevoEstudio() {
-  const hoy = fechaHoy();
-  const fn = document.getElementById('mdpa_nuevo_fecha');
-  const nd = document.getElementById('mdpa_nuevo_dias');
-  if(fn) fn.value = hoy;
-  if(nd) nd.value = '7';
-  document.getElementById('mdpa_modal_nuevo').classList.add('open');
+// "+ Nuevo estudio": se crea directo (fecha de hoy, 7 días) y los fármacos antihipertensivos
+// registrados se cargan solos; motivo, fármacos y nota se completan en la misma pantalla.
+async function mdpaNuevoEstudio() {
+  if(mdpaIdx >= 0 && mdpaEstudios[mdpaIdx] && String(mdpaEstudios[mdpaIdx].id).startsWith('new_')) { mdpaSeleccionarEstudio(mdpaIdx); return; }
+  mdpaEstudios.unshift({ id: 'new_' + Date.now(), fecha_inicio: fechaHoy(), n_dias: 7, tomas: {}, farmacos: '', motivo: '', nota: '' });
+  mdpaRenderPills(); mdpaMostrarEmpty(false); mdpaMostrarBanner(false); mdpaMostrarFormulario(true);
+  mdpaSeleccionarEstudio(0);
+  const est = mdpaEstudios[0];
+  try {
+    const dni = mdpaPacDni || (pacienteActual && pacienteActual.dni);
+    const r = await sb.from('medicacion').select('grupo,farmaco,dosis,frecuencia').eq('dni_paciente', dni).eq('activo', true);
+    const ah = (r.data || []).filter(function(m){ return /antihiper/i.test(m.grupo || ''); })
+      .map(function(m){ return [m.farmaco, m.dosis, m.frecuencia].filter(Boolean).join(' ').trim(); }).filter(Boolean);
+    if(ah.length && !est.farmacos){
+      est.farmacos = ah.join(', ');
+      if(!est.motivo) est.motivo = 'control_tratamiento';
+      if(mdpaEstudios[mdpaIdx] === est){ const f = document.getElementById('mdpa_farmacos_input'); if(f) f.value = est.farmacos; mdpaPintarMotivo(); }
+    }
+  } catch(e) { console.warn('MDPA: antihipertensivos', e); }
+  mdpaBorrador();
+}
+function mdpaSetMotivo(m) {
+  if(mdpaIdx < 0) return;
+  const est = mdpaEstudios[mdpaIdx]; est.motivo = est.motivo === m ? '' : m;
+  mdpaPintarMotivo(); marcarDirty('mdpa'); mdpaBorrador();
+}
+function mdpaPintarMotivo() {
+  const est = mdpaIdx >= 0 ? mdpaEstudios[mdpaIdx] : null;
+  document.querySelectorAll('.mdpa-mot-btns button').forEach(function(b){ b.classList.toggle('on', !!est && est.motivo === b.dataset.mot); });
+}
+// Borrador local del estudio en curso: si cambiás de paciente/pestaña o minimizás sin guardar, no se pierde
+function mdpaBorrador() {
+  try {
+    if(mdpaIdx < 0 || !mdpaPacDni) return;
+    const est = mdpaEstudios[mdpaIdx]; if(!est) return;
+    localStorage.setItem('urcym_mdpa_borr_' + mdpaPacDni, JSON.stringify({ ts: Date.now(), est: est }));
+  } catch(e) {}
+}
+setInterval(function(){ try { if(typeof _dirty !== 'undefined' && _dirty.mdpa) mdpaBorrador(); } catch(e) {} }, 4000);
+document.addEventListener('visibilitychange', function(){ try { if(document.hidden && typeof _dirty !== 'undefined' && _dirty.mdpa) mdpaBorrador(); } catch(e) {} });
+function mdpaBorrarBorrador(dni) { try { localStorage.removeItem('urcym_mdpa_borr_' + (dni || mdpaPacDni)); } catch(e) {} }
+function mdpaRecuperarBorrador(dni) {
+  let b = null; try { b = JSON.parse(localStorage.getItem('urcym_mdpa_borr_' + dni) || 'null'); } catch(e) {}
+  if(!b || !b.est) return false;
+  if(Date.now() - (b.ts || 0) > 30 * 86400e3) { mdpaBorrarBorrador(dni); return false; }
+  const vacio = !Object.keys(b.est.tomas || {}).length && !String(b.est.nota || '').trim();
+  const i = mdpaEstudios.findIndex(function(x){ return String(x.id) === String(b.est.id); });
+  if(i >= 0) mdpaEstudios[i] = b.est;
+  else if(String(b.est.id).startsWith('new_')) { if(vacio) { mdpaBorrarBorrador(dni); return false; } mdpaEstudios.unshift(b.est); }
+  else { mdpaBorrarBorrador(dni); return false; }
+  const idx = mdpaEstudios.indexOf(b.est);
+  mdpaRenderPills(); mdpaMostrarEmpty(false); mdpaMostrarBanner(false); mdpaMostrarFormulario(true);
+  mdpaSeleccionarEstudio(idx);
+  if(typeof marcarDirty === 'function') marcarDirty('mdpa');
+  if(typeof showToast === 'function') showToast('📋 Recuperé el MDPA que quedó sin guardar. Revisalo y guardalo.', 'warning', 5000);
+  return true;
+}
+// ✉️ Enviar el informe MDPA por mail sin descargarlo (el actual o uno previo)
+async function mdpaEnviarMail(estPrevio) {
+  const p = pacienteActual; if(!p) { alert('Abrí primero un paciente.'); return; }
+  const est = estPrevio || (mdpaIdx >= 0 ? mdpaEstudios[mdpaIdx] : null);
+  if(!est) { alert('No hay un estudio MDPA abierto.'); return; }
+  const email = await _mailPacienteAsegurado(p); if(!email) return;
+  const eleccion = await _modalEnviarMail({ email: email, que: 'el informe MDPA (PDF)', marcado: true }); if(!eleccion) return;
+  const extras = (eleccion.extras || []).slice(), resumen = (eleccion.resumen || []).filter(function(x){ return !/^Informe MDPA/i.test(x); });
+  if(eleccion.incluirDoc) {
+    try {
+      const def = { archivo:'MDPA', fn: function(){ return (!estPrevio && mdpaIdx >= 0) ? mdpaImprimirInforme() : _mdpaGenerarHTMLInforme(est, false); } };
+      extras.unshift(await _informeAPdf(def));
+      resumen.unshift('Informe MDPA (PDF)');
+    } catch(e) { alert('No se pudo armar el PDF del MDPA: ' + (e.message || e)); return; }
+  }
+  if(!extras.length && !(eleccion.materiales || []).length) { alert('No elegiste nada para mandar.'); return; }
+  _enviarDocPorMail({ tipo:'material', p:p, texto:'', doc:null, filename:'', materiales: eleccion.materiales || [], extras: extras, resumen: resumen,
+    btn: document.querySelector('button[onclick^="mdpaEnviarMail"]') });
 }
 
 function mdpaCrearEstudio() {
@@ -18529,7 +18602,7 @@ async function mdpaGuardar() {
       if(!result.error && result.data) mdpaEstudios[mdpaIdx].id = result.data.id;
     }
     if(result.error) throw result.error;
-    limpiarDirty('mdpa');
+    limpiarDirty('mdpa'); mdpaBorrarBorrador();
     // Volcar el informe a la evolución en curso (solo si seguimos en el mismo paciente)
     if(pacienteActual && String(pacienteActual.dni) === String(mdpaPacDni)) volcarMdpaAlEditor(est);
     const badge = document.getElementById('mdpa_guardado_badge');
@@ -18652,6 +18725,7 @@ async function mdpaEliminarPorIdx(i) {
       await sb.from('mdpa_estudios').delete().eq('id', est.id);
     } catch(e) { console.error('MDPA delete:', e); }
   }
+  if(i === mdpaIdx) mdpaBorrarBorrador();
   mdpaEstudios.splice(i, 1);
   mdpaIdx = -1;
   if(mdpaEstudios.length > 0) { mdpaRenderPills(); mdpaSeleccionarEstudio(0); }
@@ -46533,6 +46607,11 @@ body.es-secretaria #nav-borr,body.es-secretaria #borr-aviso,body.es-secretaria #
 .np-chips button{border:1px solid #e2e8f0;background:#f8fafc;border-radius:7px;padding:3px 9px;font-size:12px;font-weight:600;font-family:inherit;color:#334155;cursor:pointer}
 .np-chips button:hover{border-color:#93c5fd;background:#eff6ff}
 .np-chips button.on{background:#185FA5;border-color:#185FA5;color:#fff}
+.mdpa-mot-btns{display:inline-flex;gap:5px}
+.mdpa-mot-btns button{border:1.5px solid var(--border);background:#fff;border-radius:8px;padding:3px 10px;font-size:12px;font-weight:600;font-family:var(--font-main);color:var(--text-soft);cursor:pointer}
+.mdpa-mot-btns button:hover{border-color:var(--blue)}
+.mdpa-mot-btns button[data-mot=diagnostico].on{background:var(--blue-light);border-color:var(--blue);color:var(--blue)}
+.mdpa-mot-btns button[data-mot=control_tratamiento].on{background:#ecfdf5;border-color:#1D9E75;color:#1D9E75}
 #rec-aviso{margin:6px 0 8px;background:#fff7ed;border:1.5px solid #fdba74;color:#9a3412;border-radius:10px;padding:8px 12px;font-size:13px;cursor:pointer;display:flex;gap:6px;align-items:center}
 #rec-aviso u{margin-left:4px}
 .rec-av-x{margin-left:auto;border:none;background:none;color:#c2410c;font-size:14px;cursor:pointer}
