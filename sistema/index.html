@@ -2,7 +2,7 @@
 <html lang="es-AR">
 <head>
   <meta charset="UTF-8" />
-  <script>var URCYM_BUILD = '2026-11-26-0930';</script>
+  <script>var URCYM_BUILD = '2026-11-26-2030';</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Evaluaciones cardiometabólicas — Sistema de Historia Clínica</title>
 
@@ -26872,6 +26872,7 @@ function saveLocal(){
   try{localStorage.setItem(LS_NL,JSON.stringify(nlBlocks));}catch(e){}
   try{localStorage.setItem(LS_D,JSON.stringify(dispBlocks));}catch(e){}
   try{localStorage.setItem(LS_INST,JSON.stringify(instBlocks));}catch(e){}
+  try { if(window._llegadasHook) window._llegadasHook(turnos); } catch(e){}
   // Guardar en Supabase (async)
   sbSaveTurnos();
   sbUpsertAgendaConfig('nl_blocks', nlBlocks);
@@ -38962,6 +38963,24 @@ function _cargaEstPrec(p){
     window._labAnalizarTexto = function(t){ t = String(t || '').replace(/\b\d{1,2}\s+de\s+[a-záéíóú]+(\s+de\s+\d{4})?\s+\d{1,2}\s?:\s?\d{2}\s*([ap]\.?\s?m\.?)?/gi, ' ').replace(/\b([A-Za-z]{2,6})\s*\/\s*([A-Za-z]{2,6})\b([^\d\n]{0,8})(\d+(?:[.,]\d+)?)\s*\/\s*(\d+(?:[.,]\d+)?)/g, '$1 $4\n$2 $5'); return oa(window._normalizarDictado(t).replace(/[,;]\s+(?=[A-Za-zÁÉÍÓÚáéíóúñ])/g, '\n').replace(/\.\s+(?=[A-Za-zÁÉÍÓÚáéíóúñ])/g, '.\n').replace(/\s+y\s+(?=(un|una|el|la)?\s*[A-Za-zÁÉÍÓÚáéíóúñ]{2,}[^\n]{0,25}?\d)/g, '\n')); };
   }
 
+  // Renglones que dependen del título de arriba (ej.: BILIRRUBINEMIA → "Total ..... 0.57"): se completa el nombre
+  if(typeof window._labAnalizarTexto === 'function'){
+    var oa2 = window._labAnalizarTexto;
+    window._labAnalizarTexto = function(t){
+      var L = String(t || '').split('\n'), ctx = 0;
+      for(var i = 0; i < L.length; i++){
+        var l = L[i];
+        if(/b[il1íÍ|]{1,3}[ue]?r{1,2}u?b[il1í]?n/i.test(l) && !/\d/.test(l.replace(/\b(?:v\.?\s*ref|hasta)[^\n]*/i, ''))){ ctx = 4; continue; }
+        if(ctx > 0){ ctx--;
+          if(/^\W{0,3}t[o0]ta[l1i]?\b/i.test(l)) L[i] = l.replace(/^\W{0,3}t[o0]ta[l1i]?\b/i, 'Bilirrubina total');
+          else if(/^\W{0,3}d[il1]rec/i.test(l)) L[i] = l.replace(/^\W{0,3}d[il1]rec\w*/i, 'Bilirrubina directa');
+          else if(/^\W{0,3}[il1]nd[il1]?rec/i.test(l)) L[i] = l.replace(/^\W{0,3}[il1]nd[il1]?rec\w*/i, 'Bilirrubina indirecta');
+        }
+      }
+      return oa2(L.join('\n'));
+    };
+  }
+
   // ── Leer foto / PDF → texto (todo local)
   var CDN = {
     tess: 'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js',
@@ -39091,6 +39110,46 @@ function _cargaEstPrec(p){
       })();
       for(i = 0; i < n; i++){ p[i*4] = p[i*4+1] = p[i*4+2] = fin[i]; p[i*4+3] = 255; }
       cx.putImageData(id, 0, 0);
+      if(window._ocrDeskewMin == null) window._ocrDeskewMin = 1.15;
+      // 6) foto torcida o con la hoja curvada: se mide la inclinación de los renglones por franjas (arriba, medio, abajo)
+      //    y se endereza cada altura con su propio ángulo (corrimiento vertical suave), así los nombres quedan en la misma línea que su valor
+      try {
+        var paso = Math.max(1, Math.round(W / 900));
+        var angFranja = function(ya, yb){
+          var pts2 = [];
+          for(var y3 = ya; y3 < yb; y3 += paso) for(var x3 = 0; x3 < W; x3 += paso) if(fin[y3 * W + x3] < 110) pts2.push(x3, y3 - ya);
+          if(pts2.length < 300) return null;
+          var nb = Math.ceil((yb - ya + W) / paso) + 4;
+          var puntua = function(deg){ var r = deg * Math.PI / 180, sn = Math.sin(r), cs = Math.cos(r), hb = new Float64Array(nb), off = W * Math.abs(sn) + 2;
+            for(var j = 0; j < pts2.length; j += 2){ var yq = ((pts2[j+1] * cs - pts2[j] * sn + off) / paso) | 0; if(yq >= 0 && yq < nb) hb[yq]++; }
+            var sc = 0; for(var j2 = 0; j2 < nb; j2++) sc += hb[j2] * hb[j2]; return sc; };
+          var mejor = 0, mejorS = -1;
+          for(var dg = -8; dg <= 8.001; dg += 0.5){ var sc0 = puntua(dg); if(sc0 > mejorS){ mejorS = sc0; mejor = dg; } }
+          for(var dg2 = mejor - 0.4; dg2 <= mejor + 0.401; dg2 += 0.1){ var sc1 = puntua(dg2); if(sc1 > mejorS){ mejorS = sc1; mejor = dg2; } }
+          var gan = mejorS / Math.max(puntua(0), 1);
+          return gan > 1.12 ? mejor : (Math.abs(mejor) < 0.4 ? 0 : null);
+        };
+        var NF = 4, centros = [], angs = [];
+        for(var f3 = 0; f3 < NF; f3++){ var ya = Math.max(0, Math.round(H * (f3 - 0.25) / NF)), yb = Math.min(H, Math.round(H * (f3 + 1.25) / NF)); var a3 = angFranja(ya, yb); if(a3 != null){ centros.push((ya + yb) / 2); angs.push(a3); } }
+        window._ocrDeskewInfo = { franjas: angs.map(function(a){ return Math.round(a * 10) / 10; }) };
+        if(angs.length && angs.some(function(a){ return Math.abs(a) >= 0.4; })){
+          var tanY = new Float32Array(H);
+          for(yy = 0; yy < H; yy++){
+            var a4;
+            if(yy <= centros[0]) a4 = angs[0]; else if(yy >= centros[centros.length - 1]) a4 = angs[angs.length - 1];
+            else { for(var c4 = 0; c4 < centros.length - 1; c4++) if(yy >= centros[c4] && yy <= centros[c4 + 1]){ var t4 = (yy - centros[c4]) / (centros[c4 + 1] - centros[c4]); a4 = angs[c4] * (1 - t4) + angs[c4 + 1] * t4; break; } }
+            tanY[yy] = Math.tan(a4 * Math.PI / 180);
+          }
+          var out2 = new Uint8ClampedArray(n), xc = W / 2;
+          for(yy = 0; yy < H; yy++){ var ty = tanY[yy];
+            for(x = 0; x < W; x++){ var ys2 = yy + (x - xc) * ty, y0i = Math.floor(ys2), fr = ys2 - y0i;
+              if(y0i < 0 || y0i >= H - 1){ out2[yy * W + x] = 255; continue; }
+              out2[yy * W + x] = fin[y0i * W + x] * (1 - fr) + fin[(y0i + 1) * W + x] * fr; } }
+          for(i = 0; i < n; i++){ p[i*4] = p[i*4+1] = p[i*4+2] = out2[i]; }
+          cx.putImageData(id, 0, 0);
+          cv._angulo = angs;
+        }
+      } catch(eA){ console.warn('[ocr] enderezar:', eA && eA.message); }
       cv._esc = esc;
       return cv;
     } catch(e){ console.warn('[ocr] sin mejora de imagen:', e && e.message); return img; }
@@ -44677,6 +44736,22 @@ input.fe-nat{position:absolute!important;right:4px;bottom:0;width:1px!important;
     cerrar(EST_FILAS.length);
     return out.length ? 'Estudios: ' + out.join('. ') + '.' : '';
   }
+  // La evolución que se está cargando ahora (aunque no esté guardada): texto, tomas de PA, antropometría e indicaciones
+  function enCurso(){
+    var ed = $('evol_editor'); if(!ed) return null;
+    var v = function(id){ var x = $(id); return x && x.value ? String(x.value).trim() : null; };
+    var e = { fecha_hora: new Date().toISOString(), _enCurso: true, contenido_html: ed.innerText.trim() ? ed.innerHTML : '' };
+    [1,2,3,4,5].forEach(function(k){ e['ta' + k + 's'] = v('evol_ta' + k + 's'); e['ta' + k + 'd'] = v('evol_ta' + k + 'd'); e['fc' + k] = v('evol_fc' + k); });
+    ['peso','talla','cintura','tap_s','tap_d'].forEach(function(k){ e[k] = v('evol_' + k); });
+    var ind = $('evol_indicaciones_editor'); e.indicaciones = ind && ind.innerText.trim() ? ind.innerHTML : '';
+    var hayTA = [1,2,3,4,5].some(function(k){ return e['ta' + k + 's']; });
+    if(hayTA){ var ss = [], dd = [], ff = [], ini = [2,3,4,5].some(function(k){ return e['ta' + k + 's']; }) ? 2 : 1;
+      for(var k = ini; k <= 5; k++){ if(e['ta' + k + 's'] && e['ta' + k + 'd']){ ss.push(+e['ta' + k + 's']); dd.push(+e['ta' + k + 'd']); } if(e['fc' + k]) ff.push(+e['fc' + k]); }
+      var avg = function(a){ return a.length ? Math.round(a.reduce(function(x, y){ return x + y; }, 0) / a.length) : null; };
+      if(ss.length) e.ta_promedio = avg(ss) + '/' + avg(dd); if(ff.length) e.fc_promedio = avg(ff); }
+    if(!e.contenido_html && !hayTA && !e.indicaciones) return null;
+    return e;
+  }
   async function datos(){
     var p = pacienteActual, dni = String(p.dni), r = await sb.from('evoluciones').select('*').eq('dni_paciente', dni).order('fecha_hora', { ascending:false }).limit(1);
     var e = (r.data || [])[0] || null;
@@ -44691,7 +44766,7 @@ input.fe-nat{position:absolute!important;right:4px;bottom:0;width:1px!important;
       if(pr.length) L.push('Diagnósticos: ' + pr.join(', ') + '.'); if(fam.length) L.push('Antecedentes familiares: ' + fam.join(', ') + '.'); }
     if(S.med){ var meds = (typeof _ttoMedsActuales === 'function' ? _ttoMedsActuales() : []); if(meds.length) L.push('Medicación: ' + meds.map(function(m){ return [m.farmaco, m.dosis, m.frecuencia].filter(Boolean).join(' '); }).join('; ') + '.'); }
     if(S.evo && e && e.contenido_html){ var t = plano(e.contenido_html); if(t) L.push('Evolución: ' + t); }
-    if(S.pa && e){
+    if(S.pa && e && !(S.evo && e.contenido_html && /(^|\n)\s*TA\s*:/i.test(plano(e.contenido_html)))){
       var tom = [1,2,3,4,5].map(function(k){ return e['ta' + k + 's'] && e['ta' + k + 'd'] ? e['ta' + k + 's'] + '/' + e['ta' + k + 'd'] : null; }).filter(Boolean);
       var fcs = [1,2,3,4,5].map(function(k){ return e['fc' + k]; }).filter(Boolean);
       if(tom.length) L.push('PA: ' + tom.join(', ') + ' mmHg' + (e.ta_promedio && tom.length > 1 ? ' (promedio ' + e.ta_promedio + ')' : '') + (e.fc_promedio || fcs.length ? '. FC ' + (e.fc_promedio || fcs[0]) + ' lpm' : '') + (e.tap_s && e.tap_d ? '. Ortostatismo: ' + e.tap_s + '/' + e.tap_d + ' mmHg' : '') + '.');
@@ -44713,10 +44788,10 @@ input.fe-nat{position:absolute!important;right:4px;bottom:0;width:1px!important;
   }
   window.copiarEvaluacionAbrir = async function(){
     if(typeof pacienteActual === 'undefined' || !pacienteActual){ alert('Abrí primero el paciente.'); return; }
-    var e = null; try { e = await datos(); } catch(err){ console.warn(err); }
+    var e = enCurso(); if(!e){ try { e = await datos(); } catch(err){ console.warn(err); } }
     var P = pref(), S = {}; SECC.forEach(function(s){ S[s[0]] = P[s[0]] != null ? P[s[0]] : s[2]; });
     var m = _uiModal('📋 Copiar última evaluación',
-      '<div style="font-size:12.5px;color:#475569;margin-bottom:6px">Un texto de corrido para pegar en la historia clínica de otro lugar. ' + (e ? 'Toma la última evolución guardada (<b>' + fAR(String(e.fecha_hora).slice(0, 10)) + '</b>).' : '<b>No hay evoluciones guardadas</b>: se arma con las tablas.') + ' Podés corregir el texto antes de copiar.</div>'
+      '<div style="font-size:12.5px;color:#475569;margin-bottom:6px">Un texto de corrido para pegar en la historia clínica de otro lugar. ' + (e && e._enCurso ? 'Toma la <b>evolución que estás cargando ahora</b> (aunque no esté guardada).' : e ? 'Toma la última evolución guardada (<b>' + fAR(String(e.fecha_hora).slice(0, 10)) + '</b>).' : '<b>No hay evoluciones guardadas</b>: se arma con las tablas.') + ' Podés corregir el texto antes de copiar.</div>'
       + '<div class="cop-secc">' + SECC.map(function(s){ return '<label><input type="checkbox" data-k="' + s[0] + '"' + (S[s[0]] ? ' checked' : '') + '> ' + s[1] + '</label>'; }).join('') + '</div>'
       + '<textarea class="cop-tx"></textarea>'
       + '<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:10px;align-items:center"><span class="cop-msg" style="font-size:12px;color:#16a34a;font-weight:600;margin-right:auto"></span><button type="button" class="cop-no" style="padding:8px 14px;border-radius:9px;border:1.5px solid #e5e7eb;background:#fff;cursor:pointer">Cerrar</button><button type="button" class="cop-si" style="padding:8px 18px;border-radius:9px;border:none;background:var(--teal);color:#fff;font-weight:700;cursor:pointer">📋 Copiar</button></div>');
@@ -46238,11 +46313,30 @@ function _invToggleDroga(key){
       return;
     }
     var nom = h.file ? h.file.name : '';
-    f.innerHTML = '<div class="fh-zb"><button type="button" data-z="-">−</button><button type="button" data-z="0">Ajustar</button><button type="button" data-z="+">+</button><span>Hoja ' + h.n + ' de ' + S.hojas.length + ' · ' + E(nom) + (h.pag ? ' · página ' + h.pag + ' de ' + h.pags : '') + '</span>' + (h.words && h.words.length ? '<span class="fh-tip">tocá un valor para ver dónde está</span>' : '') + '</div>'
+    f.innerHTML = '<div class="fh-zb"><button type="button" data-z="-">−</button><button type="button" data-z="0">Ajustar</button><button type="button" data-z="+">+</button>' + (h.url && !h.pdf ? '<button type="button" data-rot="-90" title="Girar a la izquierda (si la foto quedó acostada o al revés) y volver a leer">⟲</button><button type="button" data-rot="90" title="Girar a la derecha y volver a leer">⟳</button>' : '') + '<span>Hoja ' + h.n + ' de ' + S.hojas.length + ' · ' + E(nom) + (h.pag ? ' · página ' + h.pag + ' de ' + h.pags : '') + '</span>' + (h.words && h.words.length ? '<span class="fh-tip">tocá un valor para ver dónde está</span>' : '') + '</div>'
       + (h.url ? '<div class="fh-sc"><div class="fh-in" style="width:' + (S.zoom * 100) + '%"><img src="' + h.url + '"></div></div>'
         : h.pdfUrl ? '<iframe class="fh-pdfv" src="' + h.pdfUrl + '"></iframe>' : '<div class="fh-espera" style="color:#cbd5e1">Sin imagen</div>');
-    f.querySelector('.fh-zb').onclick = function(e){ var b = e.target.closest('[data-z]'); if(!b) return; var z = b.dataset.z; S.zoom = z === '0' ? 1 : Math.max(0.5, Math.min(4, S.zoom * (z === '+' ? 1.3 : 1 / 1.3))); var im = f.querySelector('.fh-in'); if(im) im.style.width = (S.zoom * 100) + '%'; };
+    f.querySelector('.fh-zb').onclick = function(e){ var br = e.target.closest('[data-rot]'); if(br){ girarHoja(h, +br.dataset.rot); return; } var b = e.target.closest('[data-z]'); if(!b) return; var z = b.dataset.z; S.zoom = z === '0' ? 1 : Math.max(0.5, Math.min(4, S.zoom * (z === '+' ? 1.3 : 1 / 1.3))); var im = f.querySelector('.fh-in'); if(im) im.style.width = (S.zoom * 100) + '%'; };
     var inn = f.querySelector('.fh-in'); if(inn) inn.addEventListener('dblclick', function(){ S.zoom = S.zoom > 1.5 ? 1 : 2; inn.style.width = (S.zoom * 100) + '%'; });
+  }
+  // ⟲ ⟳ Girar la foto 90° (subida acostada o al revés) y volver a leerla
+  async function girarHoja(h, grados){
+    if(!h || !h.file) return;
+    if(h.estado === 'leyendo'){ if(typeof showToast === 'function') showToast('Esperá que termine de leer esta hoja y girala de nuevo.', 'info', 2500); return; }
+    try {
+      var bm = await createImageBitmap(h.file), w = bm.width, hh = bm.height, cv = document.createElement('canvas');
+      var rec = Math.abs(grados) % 180 === 90; cv.width = rec ? hh : w; cv.height = rec ? w : hh;
+      var c = cv.getContext('2d'); c.translate(cv.width / 2, cv.height / 2); c.rotate(grados * Math.PI / 180); c.drawImage(bm, -w / 2, -hh / 2);
+      var blob = await new Promise(function(ok){ cv.toBlob(ok, 'image/jpeg', 0.93); });
+      var nom = (h.file.name || 'foto').replace(/\.[a-z0-9]+$/i, '') + '.jpg';
+      h.file = new File([blob], nom, { type:'image/jpeg' });
+      try { if(h.url) URL.revokeObjectURL(h.url); } catch(_){}
+      h.url = URL.createObjectURL(h.file);
+      h.words = null; h.vals = []; h.otros = []; h.revisada = false; h.texto = '';
+      if(h.sugerido){ h.tipo = null; h.cat = null; }
+      h.estado = 'cola'; pintarTira(); pintarHoja();
+      clearTimeout(girarHoja._t); girarHoja._t = setTimeout(function(){ if(S) leerCola(); }, 1100);   // si tocás dos veces seguidas (180°), lee una sola vez
+    } catch(e){ alert('No se pudo girar la foto: ' + (e.message || e)); }
   }
   // Marca en la foto dónde se leyó un valor
   function resaltar(h, val){
@@ -47435,6 +47529,69 @@ html.urcym-sec #atd-pill{display:none!important}
 #ag-pac-datos .apd-ok{border:none;background:#2563eb;color:#fff;border-radius:8px;padding:5px 10px;font:600 12px var(--font-main);cursor:pointer;margin-left:4px}
 #ag-pac-datos .apd-no{border:none;background:none;color:#94a3b8;cursor:pointer;font-size:13px;margin-left:2px}
 #ag-pac-datos .apd-msg{display:block;font-size:11px;color:#b91c1c}
+</style>
+<script>
+/* ═══ 🟢 Llegó el paciente: cuando Delfina marca "presente", el profesional ve un aviso (en cualquier pantalla).
+   Tocás el aviso y desaparece. Se guarda en la clave liviana 'llegadas' (solo las de hoy). ═══ */
+(function(){
+  var PROF_DE = { barbara:'BG', omar:'OB' }, NOM = { BG:'Bárbara', OB:'Omar' };
+  var prev = null, ACK = 'urcym_llegadas_ack';
+  function hoy(){ return new Date().toLocaleDateString('sv-SE', { timeZone:'America/Argentina/Buenos_Aires' }); }
+  function soy(){ return (window._cu && window._cu.secretaria) ? 'SEC' : (PROF_DE[window._su] || ''); }
+  function presentes(T){ var h = hoy(), o = {}; Object.keys(T || {}).forEach(function(k){ var t = T[k]; if(t && t.paciente && !t.video && t.asistencia === 'presente' && k.indexOf(h + '_') === 0) o[k] = 1; }); return o; }
+  window._llegadasHook = function(T){
+    var ahora = presentes(T); if(prev === null){ prev = presentes(window._llegadasBase || {}); }
+    var nuevos = Object.keys(ahora).filter(function(k){ return !prev[k]; }); prev = ahora;
+    var yo = soy(); if(!nuevos.length) return;
+    nuevos = nuevos.filter(function(k){ var pr = k.split('_')[2] || (T[k] && T[k].prof); return pr && pr !== yo; });
+    if(!nuevos.length) return;
+    sbGetAgendaConfig('llegadas').then(function(L){
+      L = (L && typeof L === 'object') ? L : {}; var h = hoy();
+      Object.keys(L).forEach(function(k){ if(k.indexOf(h + '_') !== 0) delete L[k]; });
+      nuevos.forEach(function(k){ var t = T[k], p = k.split('_'); if(!L[k]) L[k] = { prof:p[2] || t.prof, pac:t.paciente, hora:p[1], at:new Date().toISOString(), por:yo === 'SEC' ? 'Delfina' : (NOM[yo] || '') }; });
+      return sbUpsertAgendaConfig('llegadas', L);
+    }).catch(function(e){ console.warn('[llegadas]', e); });
+  };
+  setTimeout(function(){ if(prev === null) prev = presentes(window.turnos || {}); }, 6000);
+
+  // ── Lado del profesional ──
+  function acks(){ try { var a = JSON.parse(localStorage.getItem(ACK) || '{}'); return a.dia === hoy() ? a : { dia:hoy() }; } catch(e){ return { dia:hoy() }; } }
+  function ack(k){ var a = acks(); a[k] = 1; try { localStorage.setItem(ACK, JSON.stringify(a)); } catch(e){} }
+  var avisados = {};
+  function chime(){ try { var c = new (window.AudioContext || window.webkitAudioContext)(), o = c.createOscillator(), g = c.createGain(); o.type = 'sine'; o.frequency.value = 880; g.gain.setValueAtTime(0.0001, c.currentTime); g.gain.exponentialRampToValueAtTime(0.12, c.currentTime + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, c.currentTime + 0.5); o.connect(g); g.connect(c.destination); o.start(); o.stop(c.currentTime + 0.55); } catch(e){} }
+  function pintar(L){
+    var yo = soy(), box = document.getElementById('llegadas-box');
+    if(!yo || yo === 'SEC'){ if(box) box.remove(); return; }
+    var a = acks(), T = window.turnos || {}, h = hoy();
+    var lst = Object.keys(L || {}).filter(function(k){ var x = L[k]; if(k.indexOf(h + '_') !== 0 || x.prof !== yo || a[k]) return false;
+      var t = T[k]; if(t && (t.asistencia === 'atendido' || t.asistencia === 'asistio' || t.asistencia === 'ausente' || t.estado === 'cancelado')) return false; return true; })
+      .sort(function(x, y){ return x.localeCompare(y); });
+    if(!lst.length){ if(box) box.remove(); return; }
+    if(!box){ box = document.createElement('div'); box.id = 'llegadas-box'; document.body.appendChild(box); }
+    var nuevo = lst.some(function(k){ return !avisados[k]; }); lst.forEach(function(k){ avisados[k] = 1; });
+    box.innerHTML = lst.map(function(k){ var x = L[k]; return '<button type="button" class="lleg-it" data-k="' + k + '" title="Tocá para ocultar el aviso">🟢 <b>Llegó ' + String(x.pac).replace(/</g, '&lt;') + '</b> <span>· turno ' + x.hora + '</span><i>✓ visto</i></button>'; }).join('');
+    box.querySelectorAll('.lleg-it').forEach(function(b){ b.onclick = function(){ ack(b.dataset.k); b.classList.add('fuera'); setTimeout(function(){ pintar(window._llegadasUlt || {}); }, 250); }; });
+    if(nuevo){ box.classList.remove('pulso'); void box.offsetWidth; box.classList.add('pulso'); chime(); }
+  }
+  async function poll(){
+    var yo = soy(); if(!yo || yo === 'SEC' || window._readonlyMode) return;
+    try { var L = await sbGetAgendaConfig('llegadas'); window._llegadasUlt = (L && typeof L === 'object') ? L : {}; pintar(window._llegadasUlt); } catch(e){}
+  }
+  setInterval(poll, 20000);
+  setTimeout(poll, 4000);
+  document.addEventListener('visibilitychange', function(){ if(document.visibilityState === 'visible') poll(); });
+  window._llegadasPoll = poll;
+})();
+</script>
+<style>
+#llegadas-box{position:fixed;top:76px;left:50%;transform:translateX(-50%);z-index:99990;display:flex;flex-direction:column;gap:6px;align-items:center;pointer-events:none}
+#llegadas-box .lleg-it{pointer-events:auto;display:flex;align-items:center;gap:8px;background:#ecfdf5;border:2px solid #22c55e;color:#14532d;border-radius:12px;padding:9px 16px;font-size:14px;font-family:inherit;cursor:pointer;box-shadow:0 8px 24px rgba(22,163,74,.25);transition:opacity .25s,transform .25s}
+#llegadas-box .lleg-it span{color:#166534;font-weight:500}
+#llegadas-box .lleg-it i{font-style:normal;font-size:11.5px;color:#15803d;border:1px solid #86efac;background:#fff;border-radius:7px;padding:2px 8px;margin-left:6px}
+#llegadas-box .lleg-it:hover{background:#dcfce7}
+#llegadas-box .lleg-it.fuera{opacity:0;transform:translateY(-8px)}
+#llegadas-box.pulso .lleg-it{animation:llegPulso 1s ease 2}
+@keyframes llegPulso{0%,100%{box-shadow:0 8px 24px rgba(22,163,74,.25)}50%{box-shadow:0 0 0 8px rgba(34,197,94,.25)}}
 </style>
 <script>
 /* Ventanita para cargar un dato (mail o celular) sin prompt: Enter guarda, Esc cancela, botones de dominio para el mail */
