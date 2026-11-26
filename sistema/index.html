@@ -2,7 +2,7 @@
 <html lang="es-AR">
 <head>
   <meta charset="UTF-8" />
-  <script>var URCYM_BUILD = '2026-11-26-0750';</script>
+  <script>var URCYM_BUILD = '2026-11-26-0800';</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Evaluaciones cardiometabólicas — Sistema de Historia Clínica</title>
 
@@ -28639,7 +28639,10 @@ loadLocal();  // async, carga en background y llama renderGrid al final
     }).catch(function(e){console.warn('[URCyM] saveTasks error',e);});
     pintarBadge();
   }
-  function pendingCount(p){ return (tasks[p]||[]).filter(function(t){return !t.done;}).length; }
+  // Delfina ve todo lo de su sección y, en las de los profesionales, solo lo que ella les mandó
+  // (las tareas que cada profesional se anota a sí mismo no las ve)
+  function visibles(p){ var l = tasks[p]||[]; if(quienSoy()==='Delfina' && p!=='SEC') l = l.filter(function(t){ return t.por==='Delfina'; }); return l; }
+  function pendingCount(p){ return visibles(p).filter(function(t){return !t.done;}).length; }
   // Número en el botón ✅ Tareas: lo pendiente de quien está usando el sistema (rojo fuerte si hay urgentes o vencidas)
   function pintarBadge(){
     var b = document.getElementById('ag-btn-tasks'); if(!b) return;
@@ -28738,7 +28741,7 @@ loadLocal();  // async, carga en background y llama renderGrid al final
     var borr = {}; cont.querySelectorAll('.ag-tasks-input').forEach(function(i){ borr[i.dataset.profInput] = i.value; });
     var html = '', h = hoyAR(), hechasHoy = [];
     T_PROFS.forEach(function(p){
-      var list = tasks[p]||[];
+      var list = visibles(p);
       list.forEach(function(t){ if(t.done && t.doneAt && diaAR(t.doneAt)===h) hechasHoy.push({t:t,p:p}); });
       var pending = pendingCount(p);
       var open = openSections[p];
