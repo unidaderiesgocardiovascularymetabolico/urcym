@@ -2,7 +2,7 @@
 <html lang="es-AR">
 <head>
   <meta charset="UTF-8" />
-  <script>var URCYM_BUILD = '2026-11-26-0800';</script>
+  <script>var URCYM_BUILD = '2026-11-26-0930';</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Evaluaciones cardiometabólicas — Sistema de Historia Clínica</title>
 
@@ -5192,7 +5192,7 @@
       </div>
       <div class="form-group">
         <label>Fecha de nacimiento *</label>
-        <input type="date" lang="es-AR" id="f_fecha" onchange="calcularEdad()" style="width:100%;padding:11px 14px;border-radius:12px;border:1.5px solid var(--border);background:var(--gray);font-family:'DM Sans',sans-serif;font-size:14px;color:var(--text);outline:none"/>
+        <input type="date" lang="es-AR" id="f_fecha" onchange="_edadFormPaciente()" style="width:100%;padding:11px 14px;border-radius:12px;border:1.5px solid var(--border);background:var(--gray);font-family:'DM Sans',sans-serif;font-size:14px;color:var(--text);outline:none"/>
         <div class="edad-badge" id="edadBadge"></div>
       </div>
       <div class="form-group">
@@ -8411,7 +8411,7 @@ function elegirEmail(email) {
 }
 
 // ===== EDAD =====
-function calcularEdad() {
+function _edadFormPaciente() {
   const fecha = document.getElementById('f_fecha').value;
   if(!fecha) { document.getElementById('edadBadge').textContent=''; return; }
   const hoy = new Date(); const nac = new Date(fecha);
@@ -9765,7 +9765,7 @@ async function editarPaciente(dni) {
   document.getElementById('f_obra_social_input').value = p.obra_social||'';
   document.getElementById('f_afiliado').value = p.numero_afiliado||'';
   document.getElementById('f_ocupacion').value = p.ocupacion||'';
-  calcularEdad();
+  _edadFormPaciente();
   document.getElementById('formError').style.display='none';
   // Se abre ya con los datos; los profesionales a cargo se completan apenas llegan
   const _pb = document.getElementById('prof_barbara'), _po = document.getElementById('prof_omar');
@@ -43974,24 +43974,117 @@ window._verFotoGrande = function(src){
 (function(){
   function fISO(t){ var m = /^\s*(\d{1,2})[\/\-. ](\d{1,2})[\/\-. ](\d{2,4})\s*$/.exec(t || ''); if(!m) return ''; var y = +m[3]; if(m[3].length === 2) y += y > 40 ? 1900 : 2000; var d = new Date(Date.UTC(y, m[2] - 1, m[1])); if(d.getUTCMonth() !== m[2] - 1) return ''; return d.toISOString().slice(0, 10); }
   function fAR(v){ return /^\d{4}-\d{2}-\d{2}$/.test(v || '') ? v.slice(8, 10) + '/' + v.slice(5, 7) + '/' + v.slice(0, 4) : ''; }
-  function armar(inp){
+  var COMPACTOS = [];
+  function armar(inp, compacto){
     if(inp._esc) return; inp._esc = true;
-    var t = document.createElement('input'); t.type = 'text'; t.className = 'fe-esc'; t.placeholder = 'o escribila: 9/3/2019'; t.value = fAR(inp.value);
+    var t = document.createElement('input'); t.type = 'text'; t.className = 'fe-esc'; t.placeholder = 'dd/mm/aaaa'; t.value = fAR(inp.value);
     t.title = 'Escribí la fecha (día/mes/año) si es vieja y el calendario no llega';
-    inp.insertAdjacentElement('afterend', t);
+    if(/desde|hasta/i.test(inp.id || '')) t._segIni = 1;
+    if(compacto){
+      // El resto de las fechas del sistema: la cajita de texto ocupa el lugar del calendario (mismo aspecto) y el 📅 abre el calendario
+      t.className = (inp.className || '') + ' fe-full'; t.style.cssText = inp.style.cssText; t.style.removeProperty('display'); t.removeAttribute('onchange'); t.title = 'Día/mes/año: escribí de corrido (03112026). Tab o Enter pasan a la parte siguiente sin cambiarla. 📅 abre el calendario.';
+      // Copia el aspecto real del calendario (bordes, relleno, fuente, alto) aunque venga de reglas del contenedor
+      var cs0 = getComputedStyle(inp);
+      ['borderTopWidth','borderRightWidth','borderBottomWidth','borderLeftWidth','borderStyle','borderColor','borderRadius','paddingTop','paddingBottom','paddingLeft','backgroundColor','fontSize','fontFamily','fontWeight','color','height','boxShadow','lineHeight'].forEach(function(k){ if(!inp.style[k]) t.style[k] = cs0[k]; });
+      var w = document.createElement('span'); w.className = 'fe-wrap';
+      var cs = cs0, ancho = inp.style.width || '', wpx = inp.offsetWidth, pw = inp.parentNode ? inp.parentNode.clientWidth : 0;
+      var lleno = /%$/.test(ancho) || (wpx > 0 && pw > 0 && wpx >= pw - 6) || (!wpx && cs.display === 'block' && !/px$/.test(cs.width));
+      if(lleno) { w.style.display = 'flex'; w.style.width = /%$/.test(ancho) ? ancho : '100%'; t.style.width = '100%'; }
+      else { w.style.display = 'inline-flex'; var px = wpx || (/px$/.test(cs.width) ? parseFloat(cs.width) : 0); if(px) t.style.width = Math.max(px, 112) + 'px'; }
+      if(inp.style.flex) { w.style.flex = inp.style.flex; }
+      var bt = document.createElement('button'); bt.type = 'button'; bt.className = 'fe-cal'; bt.tabIndex = -1; bt.textContent = '📅'; bt.title = 'Abrir el calendario';
+      bt.onclick = function(){ inp._mouse = true; try { inp.showPicker(); } catch(_){ inp.focus(); } };
+      inp.parentNode.insertBefore(w, inp); w.appendChild(t); w.appendChild(bt); w.appendChild(inp);
+      inp.classList.add('fe-nat');
+      t._compacto = true; t._wrap = w; COMPACTOS.push([inp, t, w]);
+    } else inp.insertAdjacentElement('afterend', t);
     t.addEventListener('keydown', function(e){ e.stopPropagation(); if(e.key === 'Enter'){ e.preventDefault(); t.blur(); } });
     t.addEventListener('focus', function(){ t._sel = true; try { t.select(); } catch(_){} });
     t.addEventListener('mouseup', function(e){ if(t._sel){ t._sel = false; e.preventDefault(); try { t.select(); } catch(_){} } });
-    t.addEventListener('input', function(){ var v = /\d{4}\s*$/.test(t.value) ? fISO(t.value) : ''; t.classList.remove('mal'); if(v && v !== inp.value){ inp.value = v; inp.dispatchEvent(new Event('input', { bubbles:true })); inp.dispatchEvent(new Event('change', { bubbles:true })); } });
-    t.addEventListener('blur', function(){ var v = fISO(t.value); t.classList.toggle('mal', !!t.value.trim() && !v); if(v){ t.value = fAR(v); if(v !== inp.value){ inp.value = v; inp.dispatchEvent(new Event('input', { bubbles:true })); } }
+    t.addEventListener('input', function(){ if(t._compacto || t._parcial) return; var v = /\d{4}\s*$/.test(t.value) ? fISO(t.value) : ''; t.classList.remove('mal'); if(v && v !== inp.value){ inp.value = v; inp.dispatchEvent(new Event('input', { bubbles:true })); inp.dispatchEvent(new Event('change', { bubbles:true })); } });
+    t.addEventListener('blur', function(){ var v = fISO(t.value); t.classList.toggle('mal', !!t.value.trim() && !v && !/^dd\/mm\/aaaa$/.test(t.value)); if(v){ t.value = fAR(v); if(v !== inp.value){ inp.value = v; inp.dispatchEvent(new Event('input', { bubbles:true })); if(t._compacto) inp.dispatchEvent(new Event('change', { bubbles:true })); } }
+      else if(t._compacto && !t.value.trim() && inp.value){ inp.value = ''; inp.dispatchEvent(new Event('input', { bubbles:true })); inp.dispatchEvent(new Event('change', { bubbles:true })); }
       setTimeout(function(){ if(inp._pend && document.activeElement !== inp){ inp._pend = false; inp.dispatchEvent(new Event('change', { bubbles:true })); } }, 0); });
     inp.addEventListener('change', function(){ if(document.activeElement !== t) t.value = fAR(inp.value); });
     inp.addEventListener('input', function(){ if(document.activeElement !== t) t.value = fAR(inp.value); });
+    mascara(t, inp);
+  }
+  /* Teclado por partes (día → mes → año), como en el calendario pero sin saltos raros:
+     escribís 03 (o 3 y pasa solo si no puede ser 30/31), Tab o Enter pasan al mes sin cambiarlo, y así con el año.
+     El calendario de al lado queda para el mouse; con el teclado se entra siempre por acá. */
+  var SEGS = [[0,2],[3,5],[6,10]], TPL = 'dd/mm/aaaa';
+  function mascara(t, inp){
+    var seg = 0, buf = '';
+    var ok = function(){ return /^(\d\d|dd)\/(\d\d|mm)\/(\d{4}|aaaa)$/.test(t.value); };
+    var asegurar = function(){ if(!t.value.trim() || !ok()){ var v = fISO(t.value) || (/^\d{4}-\d{2}-\d{2}$/.test(inp.value || '') ? inp.value : ''); t.value = v ? fAR(v) : TPL; } };
+    var ir = function(i){ if(t._parcial){ t._parcial = false; t.dispatchEvent(new Event('input', { bubbles:true })); } seg = Math.max(0, Math.min(2, i)); buf = ''; try { t.setSelectionRange(SEGS[seg][0], SEGS[seg][1]); } catch(_){} };
+    var poner = function(txt){ var a = SEGS[seg]; t.value = t.value.slice(0, a[0]) + txt + t.value.slice(a[1]); try { t.setSelectionRange(a[0], a[1]); } catch(_){} t.dispatchEvent(new Event('input', { bubbles:true })); };
+    var segDe = function(pos){ return pos <= 2 ? 0 : pos <= 5 ? 1 : 2; };
+    t.setAttribute('inputmode', 'numeric'); t.setAttribute('autocomplete', 'off');
+    // Año con 2 números: 25 → 2025, 87 → 1987
+    var cerrarAnio = function(){ if(seg === 2 && buf.length > 0 && buf.length < 4){ var y = parseInt(buf, 10), yy = new Date().getFullYear() % 100; var full = buf.length <= 2 ? (y <= yy + 1 ? 2000 + y : 1900 + y) : y; t._parcial = false; poner(String(full).padStart(4, '0')); buf = ''; } t._parcial = false; };
+    t.addEventListener('blur', cerrarAnio, true);
+    t.addEventListener('focus', function(){ if(t._mouseSeg) return; asegurar(); setTimeout(function(){ ir(t._segIni || 0); }, 0); });
+    t.addEventListener('mousedown', function(){ t._mouseSeg = true; });
+    t.addEventListener('click', function(){ t._mouseSeg = false; t._sel = false; asegurar(); var pos = t.selectionStart || 0; setTimeout(function(){ ir(segDe(pos)); }, 0); });
+    t.addEventListener('blur', function(){ t._mouseSeg = false; if(t.value === TPL || /[dma]/.test(t.value) && !fISO(t.value)){ if(/[dma]/.test(t.value) && /\d/.test(t.value)) t.classList.add('mal'); else { t.value = ''; t.classList.remove('mal'); } } }, true);
+    t.addEventListener('keydown', function(e){
+      var k = e.key;
+      if(e.ctrlKey || e.metaKey || e.altKey) return;
+      if(k === 'Tab' || k === 'Enter') cerrarAnio();
+      if(k === 'Tab'){
+        if(!e.shiftKey && seg < 2){ e.preventDefault(); e.stopImmediatePropagation(); ir(seg + 1); }
+        else if(e.shiftKey && seg > 0){ e.preventDefault(); e.stopImmediatePropagation(); ir(seg - 1); }
+        return;
+      }
+      if(k === 'Enter'){ if(seg < 2){ e.preventDefault(); e.stopImmediatePropagation(); ir(seg + 1); } return; }   // en el año, Enter confirma (lo de siempre)
+      if(k === 'ArrowRight' || k === '/' || k === '-' || k === '.' || k === ' '){ e.preventDefault(); e.stopImmediatePropagation(); ir(seg + 1); return; }
+      if(k === 'ArrowLeft'){ e.preventDefault(); e.stopImmediatePropagation(); ir(seg - 1); return; }
+      if(k === 'ArrowUp' || k === 'ArrowDown'){
+        e.preventDefault(); e.stopImmediatePropagation(); asegurar();
+        var a = SEGS[seg], cur = parseInt(t.value.slice(a[0], a[1]), 10), d = k === 'ArrowUp' ? 1 : -1;
+        if(isNaN(cur)) cur = seg === 2 ? new Date().getFullYear() - d : 0;
+        var n = cur + d; if(seg === 0) n = n < 1 ? 31 : n > 31 ? 1 : n; else if(seg === 1) n = n < 1 ? 12 : n > 12 ? 1 : n;
+        poner(seg === 2 ? String(n).padStart(4, '0') : String(n).padStart(2, '0')); return;
+      }
+      if(k === 'Backspace' || k === 'Delete'){ e.preventDefault(); e.stopImmediatePropagation(); asegurar(); poner(TPL.slice(SEGS[seg][0], SEGS[seg][1])); buf = ''; return; }
+      if(/^\d$/.test(k)){
+        e.preventDefault(); e.stopImmediatePropagation(); asegurar();
+        if(t.selectionEnd - t.selectionStart !== SEGS[seg][1] - SEGS[seg][0]) { seg = segDe(t.selectionStart || 0); buf = ''; }
+        buf += k;
+        t._parcial = (seg < 2 && buf.length === 1 && !(seg === 0 ? k > '3' : k > '1')) || (seg === 2 && buf.length < 4);
+        if(seg === 0){ if(buf.length === 1 && k > '3') buf = '0' + k; poner(buf.padStart(2, '0')); if(buf.length >= 2) ir(1); }
+        else if(seg === 1){ if(buf.length === 1 && k > '1') buf = '0' + k; poner(buf.padStart(2, '0')); if(buf.length >= 2) ir(2); }
+        else { if(buf.length > 4) buf = k; poner(buf.padStart(4, '0')); if(buf.length >= 4){ buf = ''; } }
+        return;
+      }
+      if(k.length === 1){ e.preventDefault(); e.stopImmediatePropagation(); }
+    }, true);
+    // El calendario (input nativo) queda para el mouse: con el teclado se entra a la cajita de texto
+    var tab = function(){ inp.tabIndex = inp.type === 'date' ? -1 : 0; t.style.display = inp.type === 'date' ? '' : 'none'; if(document.activeElement !== t){ var f = fAR(inp.value); if(f && t.value !== f && !t.classList.contains('mal')) t.value = f; } };
+    tab(); var iv = setInterval(function(){ if(!t.isConnected){ clearInterval(iv); return; } tab(); }, 1500);
+    inp.addEventListener('mousedown', function(){ inp._mouse = true; });
+    inp.addEventListener('blur', function(){ inp._mouse = false; });
+    inp.addEventListener('focus', function(){ if(!inp._mouse && inp.type === 'date' && t.offsetParent) setTimeout(function(){ t.focus(); }, 0); });
   }
   var SEL = '.lp-fecha, #carga_est_fecha, .pl-t input[type=date], .ec-fecha';
-  function revisar(){ document.querySelectorAll(SEL).forEach(armar); }
+  function revisar(){
+    document.querySelectorAll(SEL).forEach(function(i){ armar(i, false); });
+    document.querySelectorAll('input[type=date]:not(.fe-nat)').forEach(function(i){ if(!i._esc && i.offsetParent && !i.matches(SEL) && !i.closest('#pd-pop')) armar(i, true); });   // se arma recién cuando se ve, para copiar bien su ancho
+  }
+  // Los campos compactos siguen al calendario original: si el sistema lo oculta, lo deshabilita o le cambia la fecha
+  setInterval(function(){
+    for(var j = COMPACTOS.length - 1; j >= 0; j--){
+      var c = COMPACTOS[j], inp = c[0], t = c[1], w = c[2];
+      if(!inp.isConnected){ COMPACTOS.splice(j, 1); continue; }
+      var oc = inp.style.display === 'none' || inp.hidden; if((w.style.display === 'none') !== oc) w.style.display = oc ? 'none' : (w.style.width ? 'flex' : 'inline-flex');
+      t.disabled = inp.disabled; t.readOnly = inp.readOnly;
+      if(document.activeElement !== t){ var f = fAR(inp.value); if(t.value !== f && !(t.classList.contains('mal'))) t.value = f; }
+    }
+  }, 600);
   new MutationObserver(function(){ clearTimeout(revisar._t); revisar._t = setTimeout(revisar, 60); }).observe(document.documentElement, { childList:true, subtree:true });
   if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', revisar); else revisar();
+  setInterval(revisar, 800);
 })();
 </script>
 <style>
@@ -44000,6 +44093,14 @@ window._verFotoGrande = function(src){
 .fe-esc{width:118px;margin-left:6px;padding:5px 8px;border:1.5px dashed #cbd5e1;border-radius:8px;font:12px var(--font-main);color:#334155;background:#fff}
 .fe-esc:focus{border-style:solid;border-color:#93c5fd;outline:none}
 .fe-esc.mal{border-color:#f87171;background:#fef2f2}
+.fe-wrap{position:relative;align-items:center;gap:0;vertical-align:middle;max-width:100%}
+.fe-wrap>.fe-full{margin-left:0;font-variant-numeric:tabular-nums;letter-spacing:.02em;min-width:0;box-sizing:border-box}
+.fe-wrap>.fe-full:not([style*="width"]){width:128px}
+.fe-wrap>.fe-full.mal{border-color:#f87171!important;background:#fef2f2!important}
+.fe-wrap>.fe-cal{position:absolute!important;right:5px!important;top:50%!important;transform:translateY(-50%)!important;border:none!important;background:none!important;box-shadow:none!important;cursor:pointer;font-size:13px!important;padding:2px 3px!important;margin:0!important;opacity:.7;line-height:1!important;width:auto!important;height:auto!important;min-width:0!important}
+.fe-wrap>.fe-cal:hover{opacity:1}
+.fe-wrap>.fe-full{padding-right:26px!important}
+input.fe-nat{position:absolute!important;right:4px;bottom:0;width:1px!important;height:1px!important;min-width:0!important;opacity:0!important;pointer-events:none!important;padding:0!important;border:0!important;margin:0!important}
 </style>
 <script>
 /* ═══ Estudios: lo que se define por convención se marca solo (y se puede cambiar) ═══
