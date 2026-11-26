@@ -2,7 +2,7 @@
 <html lang="es-AR">
 <head>
   <meta charset="UTF-8" />
-  <script>var URCYM_BUILD = '2026-11-25-0110';</script>
+  <script>var URCYM_BUILD = '2026-11-26-0750';</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Evaluaciones cardiometabólicas — Sistema de Historia Clínica</title>
 
@@ -9683,6 +9683,29 @@ function generarPDF(tipo, alListo) {
 }
 
 // ===== MODAL PACIENTE =====
+// Lentitud al tipear en "Nuevo paciente": Chrome (autocompletar) y algunas extensiones revisan TODOS los campos sueltos
+// de la página (son cientos, porque el sistema es una sola página) en cada tecla. Encerrar los campos del modal en su
+// propio <form> con autocompletar apagado hace que solo miren estos pocos.
+(function(){
+  function aislar(id){
+    var ov = document.getElementById(id); if(!ov) return;
+    var md = ov.querySelector('.modal'); if(!md || md.querySelector(':scope > form.form-aislado')) return;
+    var f = document.createElement('form'); f.className = 'form-aislado'; f.setAttribute('autocomplete', 'off'); f.noValidate = true;
+    f.style.margin = '0'; f.addEventListener('submit', function(e){ e.preventDefault(); });
+    while(md.firstChild) f.appendChild(md.firstChild);
+    md.appendChild(f);
+    f.querySelectorAll('button:not([type])').forEach(function(b){ b.type = 'button'; });
+    f.querySelectorAll('input,select,textarea').forEach(function(el, i){
+      if(el.type === 'hidden' || el.type === 'checkbox' || el.type === 'radio') return;
+      el.setAttribute('autocomplete', 'off-urcym-' + i);
+      el.setAttribute('data-lpignore', 'true'); el.setAttribute('data-1p-ignore', ''); el.setAttribute('data-form-type', 'other');
+      el.setAttribute('spellcheck', 'false'); el.setAttribute('autocorrect', 'off'); el.setAttribute('autocapitalize', el.type === 'email' ? 'off' : 'words');
+    });
+  }
+  function todo(){ ['modalPaciente'].forEach(aislar); }
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', todo); else todo();
+  setTimeout(todo, 3000);
+})();
 function cerrarModal(id) { document.getElementById(id).classList.remove('open'); if(id === 'modalPaciente') { _editandoDesdeEvolucion = false; _nombreViejoEnAgenda = null; } }
 
 // Indicaciones y Receta: si hay contenido escrito que no se descargó/envió,
