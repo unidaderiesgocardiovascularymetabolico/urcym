@@ -349,6 +349,7 @@ S.render = function(){ render(); };
 S.onDatos = function(d){
   S.dniOk = d; S.metodo = S.prof.comprobante ? 'comprobante' : 'mercadopago'; S.archivo = null;
   if(S.cob == null) S.cob = (S.pac && S.pac.existe && S.pac.es_osde) ? 'osde' : 'particular';
+  if(soloParticular(S.prof)) S.cob = 'particular';
   if(S.cob === 'osde') S.metodo = 'osde';
   render();
   var ult = $('#seccion-sena'); if(ult && ult.scrollIntoView) ult.scrollIntoView({ behavior:'smooth', block:'start' });
@@ -660,6 +661,7 @@ function engancharAviso(st, alCambiar){
 /* ── Paso 4: seña (o por OSDE: sin seña ni honorarios) ── */
 function horasHastaTurno(){ try { return (new Date(S.fecha + 'T' + S.hora + ':00-03:00').getTime() - Date.now()) / 3600e3; } catch(e){ return 99; } }
 function htmlCobVideo(){
+  if(soloParticular(S.prof)){ S.cob = 'particular'; return '<p class="nota" style="margin:0 0 10px">'+h(S.prof.nombre)+' atiende de forma particular (sin obra social ni prepaga).</p>'; }
   var c = S.cob || 'particular';
   return '<p style="font-size:13px;font-weight:700;color:var(--soft);text-transform:uppercase;letter-spacing:.05em;margin:0 0 6px">Cobertura</p>'
     + '<div class="tabs cob-v" style="margin-bottom:12px"><button type="button" class="tab'+(c==='particular'?' sel':'')+'" data-cobv="particular">💳 Particular</button><button type="button" class="tab'+(c==='osde'?' sel':'')+'" data-cobv="osde">🏥 OSDE</button></div>';
@@ -682,6 +684,7 @@ function htmlSenaOsde(n){
   return x + htmlCancelarSinPago('nuevo-turno') + '</section>';
 }
 function htmlSena(n){
+  if(soloParticular(S.prof) && S.cob === 'osde'){ S.cob = 'particular'; if(S.metodo === 'osde') S.metodo = S.prof.comprobante ? 'comprobante' : 'mercadopago'; }
   if(S.cob === 'osde') return htmlSenaOsde(n);
   var P = S.prof;
   var total = !!(S.total && P.saldo > 0);
@@ -833,7 +836,7 @@ function serviciosDe(id){
 function mostrarMenuProf(){
   var cards = EQUIPO.map(function(p){
     var cp = serviciosDe(p.id);
-    var tags = '<span class="tag">Presencial</span>' + (cp && (cp.video || cp.recetas || cp.consultas) ? ' <span class="tag">Online</span>' : '');
+    var tags = (LUGARES[p.lug] ? '<span class="tag">Presencial</span> ' : '') + (cp && (cp.video || cp.recetas || cp.consultas) ? '<span class="tag">Online</span>' : '') + (soloParticular(p) ? ' <span class="tag">Particular</span>' : '');
     return '<button class="prof card" style="margin:0" data-perfil="'+p.id+'"><div class="avatar">'+h(iniciales(p.nombre))+'</div><div><b>'+h(p.nombre)+'</b><span>'+h(p.esp)+'</span><div>'+tags+'</div></div><span class="flecha">›</span></button>';
   }).join('');
   var otras = OTRAS_PROF.map(function(p){
@@ -907,14 +910,16 @@ var LUGARES = [
 ];
 // Otras especialistas: solo videoconsulta, el turno se pide por mail
 var OTRAS_PROF = [
-  { id:'AS', nombre:'Dra. Ana Saracho', esp:'Especialista en Hígado, con orientación en hígado graso', mail:'drasarachoana@gmail.com' },
   { id:'LA', nombre:'Dra. López Armaretti', esp:'Especialista en enfermedades cerebrovasculares', mail:'dra.lopezarmateretti@gmail.com' }
 ];
 // Equipo URCyM (id = el de la agenda online) + presencial
 var EQUIPO = [
   { id:'BG', nombre:'Dra. Bárbara Guerrero', esp:'Especialista en Hipertensión, Obesidad y Lípidos', lug: 1 },
-  { id:'OB', nombre:'Dr. Omar Bertani', esp:'Especialista en Diabetes e Hipertensión', lug: 0 }
+  { id:'OB', nombre:'Dr. Omar Bertani', esp:'Especialista en Diabetes e Hipertensión', lug: 0 },
+  { id:'AS', nombre:'Dra. Ana Saracho Diez', esp:'Especialista en Hepatología', lug: null }   // solo online y particular
 ];
+/* Profesionales que atienden solo particular (sin OSDE): lo informa la configuración (osde:false) */
+function soloParticular(p){ return !!(p && (p.osde === false || p.id === 'AS')); }
 function linkMailTurno(p){
   return 'mailto:' + p.mail + '?subject=' + encodeURIComponent('Pedido de turno · videoconsulta') + '&body=' + encodeURIComponent('Hola, quisiera pedir un turno por videoconsulta con ' + p.nombre + '.\n\nNombre y apellido:\nDNI:\nTeléfono:\nObra social:\nMotivo de consulta:\n');
 }
@@ -1200,12 +1205,14 @@ function engancharOsdePegar(id, okId){
 }
 /* Cobertura: OSDE (única prepaga con la que se trabaja) o particular */
 function cobQ(){
+  if(soloParticular(Q.prof)) return 'particular';
   if(Q.cob) return Q.cob;
   var p = Q.pac || {};
   return (p.existe && p.es_osde) ? 'osde' : null;
 }
 function esOsdeQ(){ return Q.tipo === 'receta' && cobQ() === 'osde'; }
 function htmlCobertura(){
+  if(soloParticular(Q.prof)) return '<h2 style="font-family:var(--display);font-size:16px;margin:22px 0 2px">Cobertura</h2><p class="nota" style="margin:0 0 10px">'+h(Q.prof.nombre)+' atiende de forma particular (sin obra social ni prepaga).</p>';
   var p = Q.pac || {}, c = cobQ(), regOsde = !!(p.existe && p.es_osde);
   var x = '<h2 style="font-family:var(--display);font-size:16px;margin:22px 0 2px">Cobertura</h2>'
     + '<p class="nota" style="margin:0 0 10px">La única prepaga con la que trabajamos es OSDE.</p>'
@@ -1236,7 +1243,7 @@ function htmlCobertura(){
   }
   return x;
 }
-function precioPedido(){ return Q.tipo === 'receta' ? CFG.receta_precio : CFG.consulta_precio; }
+function precioPedido(){ var P = Q.prof || {}; return Q.tipo === 'receta' ? (P.receta_precio || CFG.receta_precio) : (P.consulta_precio || CFG.consulta_precio); }
 function renderPedido(){
   var paso = !Q.prof ? 1 : !Q.datos ? 2 : !Q.detalleOk ? 3 : 4;
   var x = barraVolver();
@@ -1249,7 +1256,7 @@ function renderPedido(){
   } else {
     x += '<section class="card cerrada"><div class="paso"><div class="avatar" style="width:34px;height:34px;font-size:13px">'+h(iniciales(Q.prof.nombre))+'</div><h2>'+h(Q.prof.nombre)+'</h2></div></section>';
   }
-  if(paso < 4){ var notaH = '<p class="honor">Servicio con honorarios. El valor se informa al final, antes de pagar.' + (Q.tipo === 'receta' ? ' Si es por OSDE, no abonás honorarios.' : '') + '</p>';
+  if(paso < 4){ var notaH = '<p class="honor">Servicio con honorarios. El valor se informa al final, antes de pagar.' + (Q.tipo === 'receta' && !soloParticular(Q.prof) ? ' Si es por OSDE, no abonás honorarios.' : '') + '</p>';
     var iS = x.indexOf('<section'); x = iS < 0 ? x + notaH : x.slice(0, iS) + notaH + x.slice(iS); }
   var n0 = Q.profs.length > 1 ? 1 : 0;
   if(paso < 2) x += cardBloqueada(n0+1, 'Tus datos');
