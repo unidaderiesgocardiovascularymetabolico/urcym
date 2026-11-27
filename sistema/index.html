@@ -2,7 +2,7 @@
 <html lang="es-AR">
 <head>
   <meta charset="UTF-8" />
-  <script>var URCYM_BUILD = '2026-11-26-2030';</script>
+  <script>var URCYM_BUILD = '2026-11-27-1130';</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Evaluaciones cardiometabólicas — Sistema de Historia Clínica</title>
 
@@ -3265,7 +3265,7 @@
         <!-- Banner plata mensual -->
         <div class="fin-plata-banner" id="fin-plata-banner">
           <div class="fin-plata-banner-title">💵 Tu plata del mes</div>
-          <div class="fin-plata-banner-row"><span>Balance neto (ingresos − gastos consultorio)</span><span id="fin-plata-balance">—</span></div>
+          <div class="fin-plata-banner-row"><span>Neto real (plata que entró − gastos consultorio)</span><span id="fin-plata-balance">—</span></div>
           <div class="fin-plata-banner-row"><span>− Gastos personales del panel</span><span id="fin-plata-personal" style="color:#f87171;">—</span></div>
           <div class="fin-plata-banner-total">
             <span class="fin-plata-banner-total-label">= Plata mensual disponible</span>
@@ -3463,9 +3463,9 @@
         <!-- KPIs personales -->
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;margin-bottom:20px;">
           <div style="background:var(--blue-light);border:1.5px solid rgba(48,137,202,.3);border-radius:16px;padding:20px 22px;">
-            <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--blue);margin-bottom:6px;">Ganancia neta consultorio</div>
+            <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--blue);margin-bottom:6px;">Neto real del consultorio</div>
             <div style="font-family:var(--font-display);font-size:26px;font-weight:700;color:var(--blue);line-height:1;" id="fin-pers-kpi-neta">—</div>
-            <div style="font-size:11px;color:var(--blue);opacity:.7;margin-top:4px;">ingresos − gastos operativos</div>
+            <div style="font-size:11px;color:var(--blue);opacity:.7;margin-top:4px;">plata que entró − gastos consultorio</div>
           </div>
           <div style="background:#faf7ff;border:1.5px solid rgba(124,92,191,.25);border-radius:16px;padding:20px 22px;">
             <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#7c5cbf;margin-bottom:6px;">Gastos personales del mes</div>
@@ -30198,12 +30198,14 @@ window.cargarProxConsultas = cargarProxConsultas;
       if(finRangoPer && resultados[6] && resultados[6].data) totalPersonalMes = resultados[6].data.reduce(function(a,g){return a+Number(g.monto||0);},0);
       var _plTit=document.querySelector('.fin-plata-banner-title');
       if(_plTit) _plTit.textContent = finRangoPer ? '💵 Tu plata '+finPeriodoLabel()+' (gastos personales: meses '+mesesEntre(desde,hasta).map(function(x){return x.slice(5,7)+'/'+x.slice(2,4);}).join(', ')+' completos)' : '💵 Tu plata del mes';
-      window._finUltBalance = balance;
+      // Para la plata personal cuenta la plata que REALMENTE entró (cobrado), no lo facturado ni lo que falta cobrar (OSDE, saldos)
+      var netoReal = totalDineroRealMes - totalGas;
+      window._finUltBalance = netoReal;
       window._finUltPersonal = totalPersonalMes;
-      if(window.finActualizarBannerPersonal) window.finActualizarBannerPersonal(balance, totalPersonalMes);
+      if(window.finActualizarBannerPersonal) window.finActualizarBannerPersonal(netoReal, totalPersonalMes);
 
       // Actualizar sección Personal permanente
-      finActualizarSeccionPersonal(balance, totalPersonalMes, persList, mesActual);
+      finActualizarSeccionPersonal(netoReal, totalPersonalMes, persList, mesActual);
 
       // Resumen ingresos por origen — pagado + señas
       var origenes = {};
@@ -30645,7 +30647,7 @@ window.cargarProxConsultas = cargarProxConsultas;
 
     // KPI: ganancia neta
     var elNeta = $id('fin-pers-kpi-neta');
-    if(elNeta) elNeta.textContent = fmt(balanceNeto);
+    if(elNeta) elNeta.textContent = (balanceNeto<0?'−':'')+fmt(balanceNeto);
 
     // KPI: gastos personales
     var elGas = $id('fin-pers-kpi-gastos');
@@ -30726,6 +30728,18 @@ window.cargarProxConsultas = cargarProxConsultas;
     }
   };
 
+  // Enter = pasar al campo siguiente (monto → nota → próximo rubro); en el último, guarda
+  document.addEventListener('keydown', function(e){
+    if(e.key !== 'Enter' || e.shiftKey || e.ctrlKey || e.metaKey) return;
+    var el = e.target; if(!el || !el.closest) return;
+    var tabla = el.closest('.fin-panel .fin-quick-table'); if(!tabla || !/^(INPUT|SELECT)$/.test(el.tagName) || el.type === 'checkbox') return;
+    e.preventDefault();
+    var todos = Array.prototype.filter.call(tabla.querySelectorAll('input:not([type=checkbox]),select'), function(x){ return x.offsetParent && !x.disabled; });
+    var i = todos.indexOf(el);
+    if(i >= 0 && i < todos.length - 1){ todos[i + 1].focus(); if(todos[i + 1].select) try { todos[i + 1].select(); } catch(_){} }
+    else { var pnl = el.closest('.fin-panel'), g = pnl && pnl.querySelector('.fin-btn-guardar-panel'); if(g) g.focus(); }
+  }, true);
+
   // ── PIN protección gastos personales ──
   window.finPersonalVerificarPin = function() {
     var inp = document.getElementById('fin-personal-pin-input');
@@ -30734,6 +30748,7 @@ window.cargarProxConsultas = cargarProxConsultas;
     if(inp.value === '856685') {
       var overlay = document.getElementById('fin-personal-overlay');
       if(overlay) overlay.style.display = 'none';
+      var sp = document.getElementById('fin-section-personal'); if(sp) sp.classList.remove('fin-bloq');
       inp.value = '';
     } else {
       if(err) err.style.display = 'block';
@@ -30750,6 +30765,7 @@ window.cargarProxConsultas = cargarProxConsultas;
     if(inp.value === '856685') {
       var overlay = document.getElementById('fin-consultorio-overlay');
       if(overlay) overlay.style.display = 'none';
+      var sc = document.getElementById('fin-section-consultorio'); if(sc) sc.classList.remove('fin-bloq');
       inp.value = '';
     } else {
       if(err) err.style.display = 'block';
@@ -30762,6 +30778,7 @@ window.cargarProxConsultas = cargarProxConsultas;
   window.finConsultorioLock = function() {
     var overlay = document.getElementById('fin-consultorio-overlay');
     if(overlay) overlay.style.display = 'flex';
+    var sc = document.getElementById('fin-section-consultorio'); if(sc) sc.classList.add('fin-bloq');
     var inp = document.getElementById('fin-consultorio-pin-input');
     if(inp) inp.value = '';
     var err = document.getElementById('fin-consultorio-pin-error');
@@ -30772,17 +30789,66 @@ window.cargarProxConsultas = cargarProxConsultas;
   window.finPersonalLock = function() {
     var overlay = document.getElementById('fin-personal-overlay');
     if(overlay) overlay.style.display = 'flex';
+    var sp = document.getElementById('fin-section-personal'); if(sp) sp.classList.add('fin-bloq');
     var inp = document.getElementById('fin-personal-pin-input');
     if(inp) inp.value = '';
     var err = document.getElementById('fin-personal-pin-error');
     if(err) err.style.display = 'none';
   };
 
+  // Rubros propios: quedan guardados (aparecen todos los meses aunque ese mes no tengan monto) y cualquier rubro se puede borrar
+  var FINP_CFG = { custom: [], ocultos: [] };
+  function finPCfgLocal(){ try { var x = JSON.parse(localStorage.getItem('urcym_fin_pers_cfg') || 'null'); if(x && x.custom) FINP_CFG = x; } catch(e){} }
+  finPCfgLocal();
+  async function finPCfgCargar(){ try { var v = await sbGetAgendaConfig('fin_pers_rubros'); if(v && v.custom){ FINP_CFG = v; localStorage.setItem('urcym_fin_pers_cfg', JSON.stringify(v)); } } catch(e){} }
+  function finPCfgGuardar(){ try { localStorage.setItem('urcym_fin_pers_cfg', JSON.stringify(FINP_CFG)); } catch(e){} try { sbUpsertAgendaConfig('fin_pers_rubros', FINP_CFG); } catch(e){} }
+  function finPNombreDe(cat){ var c = (FINP_CFG.custom || []).find(function(x){ return x.cat === cat; }); if(c) return c.nombre; var r = cat.replace(/^custom_/, '').replace(/_/g, ' '); return r.charAt(0).toUpperCase() + r.slice(1); }
+  function finPFilaCustom(cat, nombre){
+    var tbody = $id('fin-p-tbody'); if(!tbody) return null;
+    var ya = tbody.querySelector('tr[data-cat="' + cat + '"]'); if(ya){ ya.style.display = ''; return ya; }
+    var tr = document.createElement('tr'); tr.setAttribute('data-cat', cat);
+    tr.innerHTML = '<td><div class="fin-cat-cell"><span class="fin-cat-icon">📌</span><div><div class="fin-cat-name">' + String(nombre).replace(/</g, '&lt;') + '</div></div></div></td>'
+      + '<td><input type="number" class="fin-monto-input fin-p-monto" data-cat="' + cat + '" placeholder="—" min="0" step="0.01" oninput="finQActualizar(this,\'p\')"/></td>'
+      + '<td><input type="text" class="fin-nota-input fin-p-nota" data-cat="' + cat + '" placeholder="opcional…"/></td>'
+      + '<td class="fin-p-pagado-cell" data-cat="' + cat + '"></td>';
+    var ph = $id('fin-p-custom-rows'); if(ph) tbody.insertBefore(tr, ph); else tbody.appendChild(tr);
+    finPBotonBorrar(tr); return tr;
+  }
+  function finPBotonBorrar(tr){
+    var cell = tr.querySelector('.fin-cat-cell'); if(!cell || cell.querySelector('.fin-p-del')) return;
+    var b = document.createElement('button'); b.type = 'button'; b.className = 'fin-p-del'; b.title = 'Borrar este rubro'; b.textContent = '🗑'; b.tabIndex = -1;
+    b.onclick = function(e){ e.stopPropagation();
+      if(!b.classList.contains('conf')){ b.classList.add('conf'); b.textContent = '¿Borrar? Sí'; setTimeout(function(){ if(b.isConnected){ b.classList.remove('conf'); b.textContent = '🗑'; } }, 3500); return; }
+      finPBorrarRubro(tr.getAttribute('data-cat'), tr); };
+    cell.appendChild(b);
+  }
+  async function finPBorrarRubro(cat, tr){
+    var mes = finMesActual || hoyYM();
+    if(/^custom_/.test(cat)) FINP_CFG.custom = (FINP_CFG.custom || []).filter(function(x){ return x.cat !== cat; });
+    else if((FINP_CFG.ocultos || []).indexOf(cat) < 0) (FINP_CFG.ocultos = FINP_CFG.ocultos || []).push(cat);
+    finPCfgGuardar();
+    if(tr){ if(/^custom_/.test(cat)) tr.remove(); else { tr.style.display = 'none'; var mi = tr.querySelector('.fin-p-monto'); if(mi){ mi.value = ''; finQActualizar(mi, 'p'); } } }
+    try { await sb.from('urcym_personal').delete().eq('mes', mes).eq('categoria', cat); } catch(e){}   // solo este mes: los meses anteriores quedan como historial
+    finCargar();
+  }
+  window.finPPrepararTabla = function(rowsData){
+    (FINP_CFG.custom || []).forEach(function(c){ finPFilaCustom(c.cat, c.nombre); });
+    (rowsData || []).forEach(function(r){ if(r.categoria && /^custom_/.test(r.categoria) && !document.querySelector('#fin-p-tbody tr[data-cat="' + r.categoria + '"]')){
+      finPFilaCustom(r.categoria, finPNombreDe(r.categoria));
+      if(!(FINP_CFG.custom || []).some(function(x){ return x.cat === r.categoria; })){ FINP_CFG.custom.push({ cat:r.categoria, nombre:finPNombreDe(r.categoria) }); finPCfgGuardar(); } } });
+    document.querySelectorAll('#fin-p-tbody tr[data-cat]').forEach(function(tr){ finPBotonBorrar(tr); var c = tr.getAttribute('data-cat'); if((FINP_CFG.ocultos || []).indexOf(c) >= 0) tr.style.display = 'none'; });
+  };
   window.finPAgregarCategoria = function() {
     var inp=$id('fin-p-new-cat');
     var nombre=inp?inp.value.trim():'';
     if(!nombre) return;
-    var cat='custom_'+nombre.toLowerCase().replace(/\s+/g,'_').replace(/[^a-z0-9_]/g,'');
+    var cat='custom_'+nombre.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,'_').replace(/[^a-z0-9_]/g,'');
+    FINP_CFG.ocultos = (FINP_CFG.ocultos || []).filter(function(x){ return x !== cat; });
+    if(!(FINP_CFG.custom || []).some(function(x){ return x.cat === cat; })){ (FINP_CFG.custom = FINP_CFG.custom || []).push({ cat:cat, nombre:nombre }); finPCfgGuardar(); }
+    var trYa = finPFilaCustom(cat, nombre);
+    if(inp) inp.value='';
+    if(trYa){ trYa.scrollIntoView({behavior:'smooth',block:'nearest'}); var mi = trYa.querySelector('.fin-p-monto'); if(mi) setTimeout(function(){ mi.focus(); }, 150); }
+    return;
     var tbody=$id('fin-p-tbody'); if(!tbody) return;
     var tr=document.createElement('tr');
     tr.setAttribute('data-cat',cat);
@@ -30801,6 +30867,7 @@ window.cargarProxConsultas = cargarProxConsultas;
     var lbl=$id('fin-p-mes-label');
     // Primero renderizar checkboxes según config de fijos
     finRenderizarCheckboxes();
+    await finPCfgCargar();
     var r = await sb.from('urcym_personal').select('*').eq('mes', mes);
     var rows = r.data||[];
     var origen = mes;
@@ -30813,6 +30880,7 @@ window.cargarProxConsultas = cargarProxConsultas;
       rows=rp.data||[];
       origen=rows.length?mesPrev:null;
     }
+    finPPrepararTabla(rows);
     if(lbl){
       if(origen===mes) lbl.textContent='— '+mesLabel(mes);
       else if(origen) lbl.textContent='— '+mesLabel(mes)+' (pre-cargado de '+mesLabel(origen)+')';
@@ -46833,6 +46901,13 @@ body.es-secretaria #nav-borr,body.es-secretaria #borr-aviso,body.es-secretaria #
 .mdpa-mot-btns button:hover{border-color:var(--blue)}
 .mdpa-mot-btns button[data-mot=diagnostico].on{background:var(--blue-light);border-color:var(--blue);color:var(--blue)}
 .mdpa-mot-btns button[data-mot=control_tratamiento].on{background:#ecfdf5;border-color:#1D9E75;color:#1D9E75}
+#fin-section-consultorio.fin-bloq,#fin-section-personal.fin-bloq{max-height:240px;overflow:hidden}
+#fin-consultorio-overlay,#fin-personal-overlay{justify-content:flex-start!important;padding-top:46px!important}
+.fin-p-del{border:none;background:none;cursor:pointer;font-size:12px;opacity:0;margin-left:auto;padding:2px 6px;border-radius:6px;filter:grayscale(1);white-space:nowrap}
+#fin-p-tbody tr:hover .fin-p-del{opacity:.6}.fin-p-del:hover{opacity:1!important;background:#fee2e2;filter:none}
+.fin-p-del.conf{opacity:1!important;filter:none;background:#dc2626;color:#fff;font-weight:700;font-size:11px}
+@media(hover:none){.fin-p-del{opacity:.45}}
+#fin-p-tbody .fin-cat-cell{display:flex;align-items:center;gap:8px}
 #rec-aviso{margin:6px 0 8px;background:#fff7ed;border:1.5px solid #fdba74;color:#9a3412;border-radius:10px;padding:8px 12px;font-size:13px;cursor:pointer;display:flex;gap:6px;align-items:center}
 #rec-aviso u{margin-left:4px}
 .rec-av-x{margin-left:auto;border:none;background:none;color:#c2410c;font-size:14px;cursor:pointer}
