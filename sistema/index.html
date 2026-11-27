@@ -2,7 +2,7 @@
 <html lang="es-AR">
 <head>
   <meta charset="UTF-8" />
-  <script>var URCYM_BUILD = '2026-11-27-1140';</script>
+  <script>var URCYM_BUILD = '2026-11-27-1345';</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Evaluaciones cardiometabólicas — Sistema de Historia Clínica</title>
 
@@ -24493,7 +24493,7 @@ function openReprog(key){
     osde:osdeVal?true:undefined
   };
   // Turnos sacados online: conservar el vínculo con la reserva (Meet, comprobantes)
-  ['autogestion','reserva_id','meet_link','email','telefono','sena_via','saldo_via','reserva_pendiente'].forEach(function(f){
+  ['autogestion','reserva_id','meet_link','email','telefono','sena_via','saldo_via','reserva_pendiente','osde_link','osde_link_at'].forEach(function(f){
     if(_prevTurnoParaCobro[f]!==undefined) turnos[newKey][f]=_prevTurnoParaCobro[f];
   });
 
@@ -26992,6 +26992,11 @@ function _vidItemsMenu(menu,key,mkItem){
   hdr.textContent=t.reserva_pendiente?'🌐 Online · esperando pago MP':'🌐 Turno sacado online';
   menu.appendChild(hdr);
   if(t.meet_link) menu.appendChild(mkItem('🎥 &nbsp;Abrir Meet','#1d9e75',function(){window.open(t.meet_link,'_blank');}));
+  if(t.osde){
+    var _vig=t.osde_link&&t.osde_link_at&&(Date.now()-new Date(t.osde_link_at).getTime())<8*3600e3;
+    if(t.osde_link) menu.appendChild(mkItem('🏥 &nbsp;Credencial OSDE'+(_vig?'':' <span style="color:#b45309;font-size:11px">(puede estar vencida)</span>'),'#0369a1',function(){window.open(t.osde_link,'_blank');}));
+    else { var _sin=document.createElement('div'); _sin.style.cssText='padding:4px 14px;font-size:11.5px;color:#b45309;'; _sin.textContent='🏥 OSDE · todavía no pegó el link de la credencial'; menu.appendChild(_sin); }
+  }
   menu.appendChild(mkItem('📎 &nbsp;Comprobantes / detalle','#374151',function(){_vidDetalle(t.reserva_id);}));
 }
 async function _vidDetalle(id){
@@ -27020,6 +27025,8 @@ function _vidHtmlReserva(r,detalle){
     +((r.sena_comprobante||r.saldo_comprobante)?'<label style="margin-left:auto;display:flex;align-items:center;gap:4px;cursor:pointer;'+(pend?'color:#b45309;font-weight:700;':'color:#6b7280;')+'"><input type="checkbox" class="vid-rev" '+(r.comprobante_revisado?'checked':'')+'> comprobantes revisados</label>':'')
     +'</div>'
     +(r.meet_link?'<div style="margin-top:5px;"><a href="'+_vidEsc(r.meet_link)+'" target="_blank" rel="noopener" style="color:#1d9e75;font-weight:700;">🎥 '+_vidEsc(r.meet_link)+'</a></div>':'')
+    +((r.sena_metodo==='osde'||(r.log||[]).some(function(l){return l.tipo==='osde_res';}))?(function(){ var ls=(r.log||[]).filter(function(l){return l.tipo==='osde'&&l.url;}), u=ls[ls.length-1];
+      return '<div style="margin-top:5px;color:#0369a1;font-weight:600;">🏥 Por OSDE (sin seña) · '+(u?'<a href="'+_vidEsc(u.url)+'" target="_blank" rel="noopener" style="color:#0369a1;">credencial</a> <span style="color:#6b7280;font-weight:400;">recibida '+new Date(u.at).toLocaleString('es-AR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false})+'</span>':'<span style="color:#b45309;">todavía no pegó el link de la credencial</span>')+'</div>'; })():'')
     +((r.estado==='cancelada'||r.estado==='vencida')?'<div style="margin-top:6px;text-align:right;"><button type="button" class="vid-borrar-res" data-id="'+r.id+'" style="border:1px solid #fecaca;background:#fff;color:#b91c1c;border-radius:8px;padding:4px 10px;font-size:12px;cursor:pointer;">🗑 Borrar</button></div>':'');
   if(detalle && r.estado==='confirmada' && r.email){
     var _sp=r.saldo_monto>0&&!r.saldo_pagado_at, _pas=new Date(r.fecha+'T'+(r.hora||'00:00')+':00-03:00')<new Date();
@@ -27232,13 +27239,15 @@ function _vidHtmlOsde(p){
   var h='<div style="margin-top:10px;padding:10px 12px;border:1px solid #bae6fd;background:#f0f9ff;border-radius:10px;">'
     +'<div style="font-weight:700;color:#0369a1;margin-bottom:6px;">🔗 Link de OSDE</div>';
   if(ult){
+    var _urlOs=String(ult.url||'').replace(/[.,;:!?)\]}*_~]+$/,'');
     var vence=new Date(new Date(ult.at).getTime()+8*3600e3), vig=vence>new Date();
     var falta=Math.max(0,Math.round((vence-new Date())/60000));
     h+='<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">'
-      +'<a href="'+_vidEsc(ult.url)+'" target="_blank" rel="noopener" style="padding:7px 14px;border-radius:8px;background:'+(vig?'#0369a1':'#94a3b8')+';color:#fff;font-weight:700;text-decoration:none;">Abrir link de OSDE</a>'
-      +(vig?'<span style="color:#15803d;font-weight:700;">vigente · vence '+_vidFechaHora(vence.toISOString())+' (faltan '+(falta>=60?Math.floor(falta/60)+' h '+(falta%60)+' min':falta+' min')+')</span>'
+      +'<a href="'+_vidEsc(_urlOs)+'" target="_blank" rel="noopener" style="padding:7px 14px;border-radius:8px;background:'+(vig?'#0369a1':'#94a3b8')+';color:#fff;font-weight:700;text-decoration:none;">Abrir link de OSDE</a>'
+      +(vig?'<span style="color:#15803d;font-weight:700;">vence a más tardar '+_vidFechaHora(vence.toISOString())+' (faltan '+(falta>=60?Math.floor(falta/60)+' h '+(falta%60)+' min':falta+' min')+')</span>'
            :'<span style="color:#b91c1c;font-weight:700;">⚠️ vencido ('+_vidFechaHora(vence.toISOString())+')</span>')
-      +'</div><div style="font-size:11.5px;color:#6b7280;margin-top:4px;">Cargado '+_vidFechaHora(ult.at)+(links.length>1?' · '+links.length+' links en total':'')+'</div>';
+      +'</div><div style="font-size:11.5px;color:#6b7280;margin-top:4px;">Cargado '+_vidFechaHora(ult.at)+(links.length>1?' · '+links.length+' links en total':'')+' · las 8 h corren desde que el paciente lo generó en la app de OSDE: si lo había copiado antes, vence antes</div>'
+      +'<div style="font-size:11px;color:#94a3b8;margin-top:2px;word-break:break-all;">'+_vidEsc(_urlOs)+'</div>';
   } else h+='<div style="color:#b45309;">El paciente todavía no cargó el link.</div>';
   if(ultPed && (!ult || ultPed.at>ult.at)) h+='<div style="margin-top:6px;color:#b45309;">📩 Se le pidió un link nuevo '+_vidFechaHora(ultPed.at)+' — esperando que lo cargue.</div>';
   if(p.estado==='pendiente' && !ult) h+='<button type="button" class="vid-reenv-ped" data-id="'+_vidEsc(p.id)+'" data-que="osde" style="margin-top:8px;padding:6px 12px;border-radius:8px;border:1px solid #7B3FC4;background:#fff;color:#7B3FC4;font-weight:700;font-size:12px;cursor:pointer;">📨 Reclamar el link por mail</button>';
