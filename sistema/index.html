@@ -2,7 +2,7 @@
 <html lang="es-AR">
 <head>
   <meta charset="UTF-8" />
-  <script>var URCYM_BUILD = '2026-11-27-2245';</script>
+  <script>var URCYM_BUILD = '2026-11-27-2330';</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Evaluaciones cardiometabólicas — Sistema de Historia Clínica</title>
 
@@ -910,8 +910,10 @@
 #agenda-app.ag-modo-propia #ag-btn-tasks, #agenda-app.ag-modo-propia #ag-btn-wapp, #agenda-app.ag-modo-propia #ag-btn-inst,
 #agenda-app.ag-modo-propia #ag-btn-aranceles, #agenda-app.ag-modo-propia #ag-btn-imp, #agenda-app.ag-modo-propia .ag-legend,
 #agenda-app.ag-modo-propia #ag-prox-panel, #agenda-app.ag-modo-propia #ag-prof-pills, #agenda-app.ag-modo-propia #ag-btn-rec{display:none !important;}
-body.es-propia .dash-finanzas, body.es-propia .vid-cfg-global, body.es-propia #nav-tab-cierre, body.es-propia #nav-tab-finanzas,
-body.es-propia #nav-tab-gestion, body.es-propia #nav-tab-investigacion, body.es-propia #nav-tab-mis-pacientes{display:none !important;}
+body.es-propia .vid-cfg-global, body.es-propia #nav-tab-cierre, body.es-propia #nav-tab-gestion, body.es-propia #nav-tab-mis-pacientes{display:none !important;}
+/* Finanzas de Ana: sin lo de Costa Bucal / OSDE (atiende particular) */
+body.es-propia #page-finanzas [onclick="finAbrirModalOsde()"], body.es-propia #page-finanzas .osde-row, body.es-propia #fin-atendidos,
+body.es-propia .fin-kpi:has(#fin-kpi-osde){display:none !important;}
 #agenda-app .ag-turno.la{background:#FCEBEB;border-left:3px solid #E24B4A;color:#791F1F;}
 #agenda-app .ag-turno.la .ag-badge{background:#F09595;color:#501313;}
 #agenda-app .ag-turno.sa{background:#FAEEDA;border-left:3px solid #EF9F27;color:#633806;}
@@ -3143,7 +3145,7 @@ body.es-propia #nav-tab-gestion, body.es-propia #nav-tab-investigacion, body.es-
         <!-- Header -->
         <div class="fin-header">
           <div>
-            <div class="page-title">💰 Finanzas del Consultorio</div>
+            <div class="page-title" id="fin-titulo-pag">💰 Finanzas del Consultorio</div>
             <div class="page-subtitle">Ingresos y gastos operativos — no incluye gastos personales</div>
           </div>
           <div style="display:flex;gap:8px;flex-wrap:wrap;">
@@ -5674,6 +5676,46 @@ window._roAviso = function(){
   clearTimeout(window._roToastTimer);
   window._roToastTimer = setTimeout(function(){ t.style.opacity = '0'; }, 2600);
 };
+// ── Finanzas de la Dra. Saracho: sus números aparte ──
+// Ingresos, gastos y gastos personales de Ana se guardan en las mismas tablas con la categoría marcada "AS:".
+// Ella ve solo las filas marcadas (y sin la marca); Bárbara y Omar ven solo las demás. Las recetas del consultorio no le aparecen.
+var FIN_SEP_P = 'AS:';
+function _finSepPreparar(url, init){
+  try {
+    url = String(url || ''); init = init || {};
+    var m = /\/rest\/v1\/(urcym_ingresos|urcym_gastos|urcym_personal|urcym_recetas)(\?|$)/.exec(url);
+    if(!m || !window._cu) return null;
+    var tabla = m[1], ana = !!window._cu.propia, met = String(init.method || 'GET').toUpperCase();
+    var u = new URL(url), out = { url:url, init:init, post:null };
+    if(tabla === 'urcym_recetas'){
+      if(ana && met === 'GET'){ u.searchParams.append('id', 'is.null'); out.url = u.toString(); }   // las recetas del consultorio no son de Ana
+      return out;
+    }
+    if(met === 'GET' || met === 'HEAD' || met === 'PATCH' || met === 'DELETE'){
+      var c = u.searchParams.get('categoria');
+      if(c != null){ if(ana && /^eq\./.test(c)) u.searchParams.set('categoria', 'eq.' + FIN_SEP_P + c.slice(3)); }
+      else u.searchParams.append('categoria', ana ? 'like.' + FIN_SEP_P + '*' : 'not.like.' + FIN_SEP_P + '*');
+      out.url = u.toString();
+    }
+    if(ana && (met === 'POST' || met === 'PATCH') && typeof init.body === 'string'){
+      try {
+        var b = JSON.parse(init.body), marcar = function(r){ if(r && r.categoria != null && String(r.categoria).indexOf(FIN_SEP_P) !== 0) r.categoria = FIN_SEP_P + r.categoria; };
+        if(Array.isArray(b)) b.forEach(marcar); else marcar(b);
+        out.init = Object.assign({}, init, { body: JSON.stringify(b) });
+      } catch(e){}
+    }
+    if(ana) out.post = function(res){
+      if(!res || !res.ok) return res;
+      return res.text().then(function(txt){
+        var nuevo = txt;
+        try { var j = JSON.parse(txt), sacar = function(r){ if(r && typeof r.categoria === 'string' && r.categoria.indexOf(FIN_SEP_P) === 0) r.categoria = r.categoria.slice(FIN_SEP_P.length); };
+          if(Array.isArray(j)) j.forEach(sacar); else sacar(j); nuevo = JSON.stringify(j); } catch(e){}
+        return new Response(nuevo, { status: res.status, statusText: res.statusText, headers: res.headers });
+      });
+    };
+    return out;
+  } catch(e){ return null; }
+}
 var sb = createClient(
   'https://qdjzetylyojfjdottjrk.supabase.co',
   'sb_publishable_qe6L1Uc7mRwsen7lzZlllw_DzOXonwL',
@@ -5686,7 +5728,9 @@ var sb = createClient(
       var ctrl = new AbortController(), t = setTimeout(function(){ ctrl.abort(); if(window._avisoConexion) window._avisoConexion(); }, 40000);
       if(init.signal){ if(init.signal.aborted) ctrl.abort(); else init.signal.addEventListener('abort', function(){ ctrl.abort(); }); }
       var _ro = _roBloquea(url, init); if(_ro){ clearTimeout(t); return _ro; }
-      return window._fetchOriginal(url, Object.assign({}, init, { signal: ctrl.signal })).finally(function(){ clearTimeout(t); });
+      var _fs = _finSepPreparar(url, init); if(_fs){ url = _fs.url; init = _fs.init; }
+      var _pr = window._fetchOriginal(url, Object.assign({}, init, { signal: ctrl.signal })).finally(function(){ clearTimeout(t); });
+      return _fs && _fs.post ? _pr.then(_fs.post) : _pr;
     } } }
 );
 window.sb = sb;
@@ -7646,6 +7690,7 @@ function _entrarAlSistema() {
     ['nav-tab-plantillas','nav-tab-online'].forEach(function(id){ var x = document.getElementById(id); if(x) x.style.display = (currentUser.secretaria || currentUser.readonly) ? 'none' : ''; });
     if(window._navOnlineContar) setTimeout(window._navOnlineContar, 1500);
     try { if(window._agMotivosPintar) window._agMotivosPintar(); } catch(e){}
+    try { var _ft = document.getElementById('fin-titulo-pag'); if(_ft && currentUser.propia) _ft.textContent = '💰 Mis finanzas'; } catch(e){}
     if(!currentUser.readonly && !currentUser.propia) setTimeout(function(){ try { window._arancel60k && window._arancel60k(); } catch(e){} }, 4000);
     var _agApp = document.getElementById('agenda-app');
     if(_agApp) _agApp.classList.toggle('ag-modo-secretaria', !!currentUser.secretaria);
@@ -7689,10 +7734,10 @@ function _entrarAlSistema() {
       if(pillsWrap) pillsWrap.style.display = '';
       if(typeof syncPillsUI === 'function') syncPillsUI();
     } else {
-      if(navFinanzas) navFinanzas.style.display = 'none';
+      if(navFinanzas) navFinanzas.style.display = currentUser.propia ? '' : 'none';   // Ana: sus propias finanzas
       if(navMisPacientes) navMisPacientes.style.display = (currentUser.readonly || currentUser.propia) ? 'none' : '';
       if(navGestion) navGestion.style.display = 'none';
-      if(navInvestigacion) navInvestigacion.style.display = 'none';
+      if(navInvestigacion) navInvestigacion.style.display = currentUser.propia ? '' : 'none';
       if(navPacientes) navPacientes.style.display = '';
       // Cierre: lo ven Secretaría y los profesionales; Invitado no.
       if(navCierre) navCierre.style.display = (currentUser.readonly || currentUser.propia) ? 'none' : '';   // Ana no ve el Cierre del consultorio
@@ -8304,11 +8349,11 @@ function marcarTabPacienteActiva(dni) {
 
 async function showPage(page) {
   // Control de acceso: finanzas completa solo para admins
-  if(page === 'finanzas' && currentUser && !currentUser.admin) {
+  if(page === 'finanzas' && currentUser && !currentUser.admin && !currentUser.propia) {
     page = 'mis-pacientes';
   }
   // Dra. Saracho: sin Finanzas, Cierre, Gestión ni Investigación
-  if(currentUser && currentUser.propia && ['finanzas','cierre','gestion','investigacion','mis-pacientes'].indexOf(page) >= 0) page = 'agenda';
+  if(currentUser && currentUser.propia && ['cierre','gestion','mis-pacientes'].indexOf(page) >= 0) page = 'agenda';
   // Control de acceso: Secretaría no tiene acceso a historias clínicas ni
   // a los módulos clínicos/administrativos — solo a Agenda (e Inicio).
   if(currentUser && currentUser.secretaria) {
@@ -8503,8 +8548,7 @@ async function verLabReadonly(dni) {
 // Mapa global: dni → fecha_hora de última evolución (string ISO o null)
 let ultimaEvolucionMap = {};
 
-// Pacientes de la Dra. Saracho: los que la tienen a cargo. Ella ve solo esos; en Costa Bucal no se ven
-// los que están solamente a cargo de ella (si un paciente es compartido, lo ven todos).
+// Historias clínicas compartidas entre Bárbara, Omar y Ana. Se lee quién está a cargo de cada paciente (dato informativo).
 const ANA_NOMBRE_HC = 'Dra. Ana Saracho Diez';
 async function _filtrarPacientesPorProfesional(lista) {
   try {
@@ -8512,11 +8556,9 @@ async function _filtrarPacientesPorProfesional(lista) {
     const m = {};
     filas.forEach(function(x){ var k = String(x.dni_paciente); (m[k] = m[k] || []).push(x.profesional); });
     window._pacProfs = m;
-    if(_esPropia()) return lista.filter(function(p){ return (m[String(p.dni)] || []).indexOf(ANA_NOMBRE_HC) >= 0; });
-    return lista.filter(function(p){ var pr = m[String(p.dni)] || []; return !(pr.length && pr.every(function(x){ return x === ANA_NOMBRE_HC; })); });
+    return lista;   // las historias clínicas son compartidas: Ana, Bárbara y Omar ven a todos los pacientes
   } catch(e) {
-    console.warn('[pacientes] no se pudo leer paciente_profesionales', e);
-    return _esPropia() ? [] : lista;   // ante la duda, Ana no ve pacientes ajenos
+    return lista;
   }
 }
 async function cargarPacientes() {
@@ -10101,15 +10143,13 @@ async function guardarPaciente() {
     if(!error) ultimoDniCargado = dni;
   }
   if(error) {
-    errEl.textContent = error.code==='23505' ? (_esPropia() ? 'Ese DNI ya está cargado en el sistema de URCyM. Pedile a la Dra. Guerrero que te lo comparta (tildándote como profesional a cargo).' : 'Ya existe un paciente con ese DNI.') : 'Error: '+error.message;
+    errEl.textContent = error.code==='23505' ? 'Ya existe un paciente con ese DNI.' : 'Error: '+error.message;
     errEl.style.display='block'; return;
   }
   const profs = [];
   if(document.getElementById('prof_barbara').checked) profs.push({dni_paciente:dni,profesional:'Dra. Bárbara Guerrero'});
   if(document.getElementById('prof_omar').checked) profs.push({dni_paciente:dni,profesional:'Dr. Omar Bertani'});
   if(document.getElementById('prof_ana') && document.getElementById('prof_ana').checked) profs.push({dni_paciente:dni,profesional:ANA_NOMBRE_HC});
-  // Ana siempre queda a cargo de los pacientes que carga o edita ella (si no, dejaría de verlos)
-  if(_esPropia() && !profs.some(function(x){ return x.profesional === ANA_NOMBRE_HC; })) profs.push({dni_paciente:dni,profesional:ANA_NOMBRE_HC});
   // Profesionales a cargo: en segundo plano (la pantalla se actualiza enseguida).
   // Si todavía no habían llegado al abrir (casillas deshabilitadas), no se tocan.
   const _profsListos = !document.getElementById('prof_barbara').disabled;
@@ -26599,7 +26639,7 @@ window._dspAbrirLista=function(){
   function cuenta(b){ return !!(b && !b.ausencia && !b.impId && !b.video && b.label && excluidos(b.prof).indexOf(b.label) < 0); }
   async function excluir(b){ await cargar(true); var k = '_excluir|' + b.prof; D[k] = (D[k] || []).concat([b.label]).filter(function(x, i, a){ return a.indexOf(x) === i; }); await sbUpsertAgendaConfig(KEY, D); }
   function cat(b){ var l = (b.label || '').toLowerCase().trim();
-    if(/^cem\b/.test(l)) return 'cem'; if(/^ceq\b/.test(l)) return 'ceq'; if(/sapiens/.test(l)) return b.prof === 'OB' ? 'sapiens_omar' : 'sapiens_bar';
+    if(/^cem\b/.test(l)) return 'cem'; if(/^ceq\b/.test(l)) return 'ceq'; if(/sapiens/.test(l)) return b.prof === 'OB' ? 'sapiens_omar' : b.prof === 'AS' ? 'sapiens' : 'sapiens_bar';
     if(/^salita/.test(l)) return 'salita'; return b.label; }
   function cargar(forzar){
     if(D && !forzar) return Promise.resolve(D);
@@ -29988,6 +30028,7 @@ window.cargarProxConsultas = cargarProxConsultas;
   // Neto de los cierres en un rango. null si el módulo Cierre no está o falla
   // (en ese caso Finanzas sigue contando consultas y recetas como antes).
   async function finCierres(desde, hasta, turnosData){
+    if(_esPropia()) return null;   // los cierres son de Costa Bucal
     if(!window.cierreFinanzasRango) return null;
     try{ return await window.cierreFinanzasRango(desde, hasta, turnosData); }
     catch(e){ console.warn('[Finanzas] no se pudo leer el cierre', e); return null; }
@@ -29995,7 +30036,7 @@ window.cargarProxConsultas = cargarProxConsultas;
   // ¿Este turno (no OSDE) ya entra a Finanzas por el cierre de su día?
   // Las videollamadas nunca van por el cierre: siempre suman acá como "Videollamadas".
   function finEnCierre(cf, fecha, t){ return !!(cf && !t.video && fecha >= cf.corte && cf.profs[t.prof]); }
-  var CAT_ING_LBL = {costa_bucal_guerrero:'Costa Bucal Guerrero',costa_bucal_bertani:'Costa Bucal Bertani',urcym:'Evaluaciones cardiometabólicas',sapiens_bar:'SAPIENS Bar',sapiens_omar:'SAPIENS Omar',ceq:'CEQ',cem:'CEM',salita:'Salita',otro:'Otros',manual:'Manual',receta_particular:'Receta particular',receta_osde:'Receta OSDE',osde:'OSDE',videollamadas:'Videollamadas',online_receta:'Recetas online',online_consulta:'Consultas por mensaje'};
+  var CAT_ING_LBL = {costa_bucal_guerrero:'Costa Bucal Guerrero',costa_bucal_bertani:'Costa Bucal Bertani',urcym:'Evaluaciones cardiometabólicas',sapiens_bar:'SAPIENS Bar',sapiens_omar:'SAPIENS Omar',sapiens:'SAPIENS',ceq:'CEQ',cem:'CEM',salita:'Salita',otro:'Otros',manual:'Manual',receta_particular:'Receta particular',receta_osde:'Receta OSDE',osde:'OSDE',videollamadas:'Videollamadas',online_receta:'Recetas online',online_consulta:'Consultas por mensaje'};
 
   function $id(id){ return document.getElementById(id); }
   function moneda(n){ return '$'+Number(n||0).toLocaleString('es-AR',{minimumFractionDigits:0,maximumFractionDigits:0}); }
@@ -30119,6 +30160,8 @@ window.cargarProxConsultas = cargarProxConsultas;
       .then(function(r){
         var data = {};
         try { if(r.data && r.data.value) data = JSON.parse(r.data.value); } catch(e){}
+        // cada uno ve la plata de sus turnos: Ana los suyos; Bárbara y Omar, los de Costa Bucal
+        Object.keys(data).forEach(function(k){ var t = data[k]; if(t && !_profVisible(k.split('_')[2] || t.prof)) delete data[k]; });
         return data;
       })
       .catch(function(){ return {}; });
@@ -30177,7 +30220,7 @@ window.cargarProxConsultas = cargarProxConsultas;
         finCargarTarifasOsde(),                                                              // 5
         finRangoPer ? sb.from('urcym_personal').select('monto').in('mes', mesesEntre(desde,hasta)) : Promise.resolve(null), // 6: personales de todos los meses del período
         (typeof sbGetAgendaConfig==='function' ? sbGetAgendaConfig('otros_atendidos').catch(function(){return null;}) : Promise.resolve(null)), // 7: pacientes vistos en otros lugares
-        sb.from('online_pedidos').select('tipo,prof,estado,created_at').gte('created_at',desde+'T00:00:00-03:00').lte('created_at',hasta+'T23:59:59-03:00').then(function(r){return r;},function(){return null;}), // 8: recetas y consultas online
+        _profScopeQ(sb.from('online_pedidos').select('tipo,prof,estado,created_at').gte('created_at',desde+'T00:00:00-03:00').lte('created_at',hasta+'T23:59:59-03:00')).then(function(r){return r;},function(){return null;}), // 8: recetas y consultas online
         (typeof sbGetAgendaConfig==='function' ? sbGetAgendaConfig('recetas_solicitudes').catch(function(){return null;}) : Promise.resolve(null)) // 9: para no contar dos veces las recetas online OSDE (también quedan en urcym_recetas)
       ]);
 
@@ -30243,7 +30286,7 @@ window.cargarProxConsultas = cargarProxConsultas;
       var _atdSrc = (resultados[7] && typeof resultados[7]==='object') ? resultados[7] : {};
       window._finAtd = _atdSrc;
       var _otrosM = {};
-      Object.keys(_atdSrc).forEach(function(k){ if(k.indexOf('ing|')!==0 && k.charAt(0)!=='_') _otrosM[k]=_atdSrc[k]; });
+      Object.keys(_atdSrc).forEach(function(k){ if(k.indexOf('ing|')!==0 && k.charAt(0)!=='_' && _profVisible(k.split('|')[1] || 'BG')) _otrosM[k]=_atdSrc[k]; });
       var _ingIds = {}; ingList.forEach(function(i){ _ingIds[i.id]=i; });
       Object.keys(_atdSrc).forEach(function(k){ if(k.indexOf('ing|')!==0) return; var id=k.slice(4), x=_atdSrc[k], ing=_ingIds[id]; if(!ing||!x) return;
         var pr = x.prof || (ing.categoria==='sapiens_omar'?'OB':ing.categoria==='sapiens_bar'?'BG':'');
@@ -30380,6 +30423,7 @@ window.cargarProxConsultas = cargarProxConsultas;
           {k:'online_consulta', icon:'💬', label:'Consultas por mensaje', sub:'por la web · fuera del cierre'},
           {k:'costa_bucal_guerrero', icon:'🏢', label:'Costa Bucal Guerrero', sub:'cierres · ya descontado el alquiler'},
           {k:'costa_bucal_bertani',  icon:'🏢', label:'Costa Bucal Bertani',  sub:'cierres · ya descontado el alquiler'},
+          {k:'sapiens',     icon:'🏢', label:'SAPIENS',             sub:''},
           {k:'sapiens_bar', icon:'🏢', label:'SAPIENS Bar',         sub:''},
           {k:'sapiens_omar',icon:'🏢', label:'SAPIENS Omar',        sub:''},
           {k:'ceq',         icon:'🏛️', label:'CEQ',                 sub:''},
@@ -30934,6 +30978,7 @@ window.cargarProxConsultas = cargarProxConsultas;
   // Resetear el PIN de consultorio al entrar a finanzas (llamado desde finInit)
   window.finConsultorioLock = function() {
     var overlay = document.getElementById('fin-consultorio-overlay');
+    if(_esPropia()){ if(overlay) overlay.style.display = 'none'; var sc0 = document.getElementById('fin-section-consultorio'); if(sc0) sc0.classList.remove('fin-bloq'); return; }
     if(overlay) overlay.style.display = 'flex';
     var sc = document.getElementById('fin-section-consultorio'); if(sc) sc.classList.add('fin-bloq');
     var inp = document.getElementById('fin-consultorio-pin-input');
@@ -30945,6 +30990,7 @@ window.cargarProxConsultas = cargarProxConsultas;
   // Resetear el PIN al entrar a finanzas (llamado desde finInit)
   window.finPersonalLock = function() {
     var overlay = document.getElementById('fin-personal-overlay');
+    if(_esPropia()){ if(overlay) overlay.style.display = 'none'; var sp0 = document.getElementById('fin-section-personal'); if(sp0) sp0.classList.remove('fin-bloq'); return; }
     if(overlay) overlay.style.display = 'flex';
     var sp = document.getElementById('fin-section-personal'); if(sp) sp.classList.add('fin-bloq');
     var inp = document.getElementById('fin-personal-pin-input');
@@ -30955,10 +31001,12 @@ window.cargarProxConsultas = cargarProxConsultas;
 
   // Rubros propios: quedan guardados (aparecen todos los meses aunque ese mes no tengan monto) y cualquier rubro se puede borrar
   var FINP_CFG = { custom: [], ocultos: [] };
-  function finPCfgLocal(){ try { var x = JSON.parse(localStorage.getItem('urcym_fin_pers_cfg') || 'null'); if(x && x.custom) FINP_CFG = x; } catch(e){} }
+  function _finPSuf(){ return _esPropia() ? '_' + window._su : ''; }
+  function _finPDefecto(){ return _esPropia() ? { custom: [], ocultos: ['tarjeta_bar','tarjeta_omar','cel_omar','cel_bar','caja_medicos'] } : { custom: [], ocultos: [] }; }
+  function finPCfgLocal(){ FINP_CFG = _finPDefecto(); try { var x = JSON.parse(localStorage.getItem('urcym_fin_pers_cfg' + _finPSuf()) || 'null'); if(x && x.custom) FINP_CFG = x; } catch(e){} }
   finPCfgLocal();
-  async function finPCfgCargar(){ try { var v = await sbGetAgendaConfig('fin_pers_rubros'); if(v && v.custom){ FINP_CFG = v; localStorage.setItem('urcym_fin_pers_cfg', JSON.stringify(v)); } } catch(e){} }
-  function finPCfgGuardar(){ try { localStorage.setItem('urcym_fin_pers_cfg', JSON.stringify(FINP_CFG)); } catch(e){} try { sbUpsertAgendaConfig('fin_pers_rubros', FINP_CFG); } catch(e){} }
+  async function finPCfgCargar(){ finPCfgLocal(); try { var v = await sbGetAgendaConfig('fin_pers_rubros' + _finPSuf()); if(v && v.custom){ FINP_CFG = v; localStorage.setItem('urcym_fin_pers_cfg' + _finPSuf(), JSON.stringify(v)); } } catch(e){} }
+  function finPCfgGuardar(){ try { localStorage.setItem('urcym_fin_pers_cfg' + _finPSuf(), JSON.stringify(FINP_CFG)); } catch(e){} try { sbUpsertAgendaConfig('fin_pers_rubros' + _finPSuf(), FINP_CFG); } catch(e){} }
   function finPNombreDe(cat){ var c = (FINP_CFG.custom || []).find(function(x){ return x.cat === cat; }); if(c) return c.nombre; var r = cat.replace(/^custom_/, '').replace(/_/g, ' '); return r.charAt(0).toUpperCase() + r.slice(1); }
   function finPFilaCustom(cat, nombre){
     var tbody = $id('fin-p-tbody'); if(!tbody) return null;
@@ -31230,12 +31278,13 @@ window.cargarProxConsultas = cargarProxConsultas;
 
   // ── Opciones de categoría ingresos
   var FIN_ING_CATS = [
-    {v:'sapiens_bar',  icon:'🏢', l:'SAPIENS Bar'},
-    {v:'sapiens_omar', icon:'🏢', l:'SAPIENS Omar'},
-    {v:'ceq',          icon:'🏛️', l:'CEQ'},
-    {v:'cem',          icon:'🏛️', l:'CEM'},
-    {v:'salita',       icon:'🏠', l:'Salita'},
-    {v:'osde',         icon:'🏥', l:'OSDE (cobrado)'},
+    {v:'sapiens',      icon:'🏢', l:'SAPIENS', solo:'propia'},
+    {v:'sapiens_bar',  icon:'🏢', l:'SAPIENS Bar', cb:1},
+    {v:'sapiens_omar', icon:'🏢', l:'SAPIENS Omar', cb:1},
+    {v:'ceq',          icon:'🏛️', l:'CEQ', cb:1},
+    {v:'cem',          icon:'🏛️', l:'CEM', cb:1},
+    {v:'salita',       icon:'🏠', l:'Salita', cb:1},
+    {v:'osde',         icon:'🏥', l:'OSDE (cobrado)', cb:1},
     {v:'otro',         icon:'💰', l:'Otros'},
     {v:'ajuste',       icon:'⚠️', l:'Ajuste / Error (resta)'},
   ];
@@ -31275,8 +31324,9 @@ window.cargarProxConsultas = cargarProxConsultas;
 
     finIngFilaIdx++;
     var idx = finIngFilaIdx;
-    var catOpts = FIN_ING_CATS.map(function(c) {
-      return '<option value="' + c.v + '"' + (c.v === (cat || 'sapiens_bar') ? ' selected' : '') + '>' + c.icon + ' ' + c.l + '</option>';
+    var _prop = _esPropia();
+    var catOpts = FIN_ING_CATS.filter(function(c){ return _prop ? !c.cb : c.solo !== 'propia'; }).map(function(c) {
+      return '<option value="' + c.v + '"' + (c.v === (cat || (_prop ? 'sapiens' : 'sapiens_bar')) ? ' selected' : '') + '>' + c.icon + ' ' + c.l + '</option>';
     }).join('');
 
     var isAjuste = cat === 'ajuste';
