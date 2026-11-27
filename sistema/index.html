@@ -2,7 +2,7 @@
 <html lang="es-AR">
 <head>
   <meta charset="UTF-8" />
-  <script>var URCYM_BUILD = '2026-11-27-2130';</script>
+  <script>var URCYM_BUILD = '2026-11-27-2245';</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Evaluaciones cardiometabólicas — Sistema de Historia Clínica</title>
 
@@ -7645,6 +7645,8 @@ function _entrarAlSistema() {
     var navCierre = document.getElementById('nav-tab-cierre');
     ['nav-tab-plantillas','nav-tab-online'].forEach(function(id){ var x = document.getElementById(id); if(x) x.style.display = (currentUser.secretaria || currentUser.readonly) ? 'none' : ''; });
     if(window._navOnlineContar) setTimeout(window._navOnlineContar, 1500);
+    try { if(window._agMotivosPintar) window._agMotivosPintar(); } catch(e){}
+    if(!currentUser.readonly && !currentUser.propia) setTimeout(function(){ try { window._arancel60k && window._arancel60k(); } catch(e){} }, 4000);
     var _agApp = document.getElementById('agenda-app');
     if(_agApp) _agApp.classList.toggle('ag-modo-secretaria', !!currentUser.secretaria);
     document.body.classList.toggle('es-secretaria', !!currentUser.secretaria);
@@ -25314,7 +25316,7 @@ window._dspAbrirLista=function(){
   var vig = function(b){ return unico(b) ? (b.startDate || '') >= hoy() : (!b.endDate || b.endDate >= hoy()); };
   // Otros lugares de trabajo: las videollamadas viven en dispBlocks (video:true, porque ofrecen turnos online);
   // el resto (Sapiens, CEM, CEQ, gimnasio, clases…) en nlBlocks. Acá se ven y se editan juntos.
-  var LUGARES = { BG: ['Sapiens', 'CEM'], OB: ['Sapiens', 'CEQ'], MA: [], AS: [] };
+  var LUGARES = { BG: ['Sapiens', 'CEM'], OB: ['Sapiens', 'CEQ'], MA: [], AS: ['Sapiens'] };
   var LUG_NOMBRE = { Sapiens: 'Sapiens · San Bernardo', CEM: 'CEM · San Clemente', CEQ: 'CEQ · Mar de Ajó' };
   // Lugares fijos que agrega cada profesional (se guardan en la nube: 'lugares_extra' = { BG:[{nombre, loc, color}], OB:[…] })
   var EXTRA_COL = ['#0EA5E9', '#84CC16', '#F97316', '#8B5CF6', '#06B6D4', '#E11D48', '#A16207', '#0F766E'];
@@ -28159,6 +28161,27 @@ function saveAranceles() {
   })();
 }
 
+// Videoconsultas de Bárbara y Omar: $60.000 desde el 27/11/2026 (lo presencial NO cambia acá: se maneja en 💲 Aranceles).
+// Se aplica una sola vez (marca 'migr_video_60k'): después, si cambian el valor en Online › Configuración, se respeta.
+// Si una versión anterior llegó a agregar $60.000 en Aranceles desde el 28/11, se saca (era solo para video).
+window._arancel60k = async function(){
+  try {
+    var hecho = await sbGetAgendaConfig('migr_video_60k');
+    if(hecho) return;
+    var vc = (await sbGetAgendaConfig('video_config')) || {};
+    vc.profs = vc.profs || {};
+    ['BG','OB'].forEach(function(p){ vc.profs[p] = vc.profs[p] || {}; vc.profs[p].arancel_video = 60000; });
+    var ok = await sbUpsertAgendaConfig('video_config', vc);
+    if(!ok) return;
+    try {
+      var r = await sb.from('urcym_agenda_config').select('value').eq('key', 'aranceles').maybeSingle();
+      var a = r && r.data && r.data.value ? JSON.parse(r.data.value) : null, saco = false;
+      if(a) ['BG','OB'].forEach(function(p){ if(Array.isArray(a[p])){ var n = a[p].length; a[p] = a[p].filter(function(x){ return !(x && x.desde === '2026-11-28' && Number(x.monto) === 60000); }); if(a[p].length !== n) saco = true; } });
+      if(saco){ var w = await sb.from('urcym_agenda_config').upsert({ key:'aranceles', value:JSON.stringify(a) }, { onConflict:'key' }); if(!w.error){ aranceles = a; _migrarAranceles(); try { localStorage.setItem(LS_ARAN, JSON.stringify(aranceles)); } catch(e){} } }
+    } catch(e){}
+    await sbUpsertAgendaConfig('migr_video_60k', { at:new Date().toISOString(), monto:60000 });
+  } catch(e){ console.warn('[video 60.000] no se pudo actualizar', e); }
+};
 // Devuelve el arancel vigente de un profesional para una fecha dada
 // (por defecto, hoy). Si hay varios precios cargados, usa el que tenga
 // la fecha "desde" más reciente que no sea posterior a la fecha pedida;
@@ -40532,10 +40555,13 @@ function _cargaEstPrec(p){
     ['Hipertensión en el embarazo', []],
     ['Hígado graso / Esteatosis / MAFLD', ['Hígado graso']]
   ];
+  // Dra. Saracho: sus propios motivos (hepatología)
+  var GRUPOS_AS = [['Hígado graso', []], ['Esteatosis hepática', []], ['Enfermedades relacionadas al hígado', []], ['Interconsulta a hepatología', []]];
   var box = $('ag-f-motivos');
   if(box){
-    box.innerHTML = GRUPOS.map(function(g){ return '<label class="ag-motivo-chip ag-mot2"><input type="checkbox" value="' + esc(g[0]) + '" data-mot> ' + esc(g[0]) + '</label>'; }).join('');
-    var aGrupo = function(v){ var g = GRUPOS.find(function(x){ return x[0] === v || x[1].indexOf(v) >= 0; }); return g ? g[0] : v; };
+    var pintarMot = function(){ var G = (window._esPropia && window._esPropia()) ? GRUPOS_AS : GRUPOS; box.innerHTML = G.map(function(g){ return '<label class="ag-motivo-chip ag-mot2"><input type="checkbox" value="' + esc(g[0]) + '" data-mot> ' + esc(g[0]) + '</label>'; }).join(''); };
+    pintarMot(); window._agMotivosPintar = pintarMot;
+    var aGrupo = function(v){ if(window._esPropia && window._esPropia()) return v; var g = GRUPOS.find(function(x){ return x[0] === v || x[1].indexOf(v) >= 0; }); return g ? g[0] : v; };
     // hasta 3 motivos
     box.addEventListener('change', function(ev){ var cb = ev.target; if(!cb || cb.type !== 'checkbox') return;
       var n = box.querySelectorAll('input:checked').length; if(n > 3){ cb.checked = false; n = 3; }
