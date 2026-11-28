@@ -347,6 +347,11 @@ document.addEventListener('click', function(e){
 var S = { cfg:null, prof:null, dias:[], fecha:null, hora:null, pac:null, dniOk:null, otroMail:false, metodo:null, archivo:null, enviando:false };
 S.render = function(){ render(); };
 S.onDatos = function(d){
+  // la deuda anterior es por profesional: si cambió de profesional después de poner el DNI, se vuelve a consultar
+  if(S.pac && S.pac.existe && S.prof && S.pac.prof_deuda !== S.prof.id){
+    var pac = S.pac, pid = S.prof.id; pac.deuda = null; pac.prof_deuda = pid;
+    api({ accion:'dni', dni:pac.dni, prof:pid }).then(function(r){ if(S.pac === pac && S.prof && S.prof.id === pid){ pac.deuda = r.deuda || null; render(); } }).catch(function(){});
+  }
   S.dniOk = d; S.metodo = S.prof.comprobante ? 'comprobante' : 'mercadopago'; S.archivo = null;
   if(S.cob == null) S.cob = (S.pac && S.pac.existe && S.pac.es_osde) ? 'osde' : 'particular';
   if(soloParticular(S.prof)) S.cob = 'particular';
@@ -542,9 +547,9 @@ function engancharDatos(st){
     var mio = st._busqN = (st._busqN || 0) + 1;   // si el paciente escribe otro DNI mientras busca, esta respuesta se descarta
     b.disabled = true; b.innerHTML = '<div class="spin" style="border-top-color:#fff;border-color:rgba(255,255,255,.35)"></div>';
     try{
-      var r = await api({ accion:'dni', dni:dni });
+      var r = await api(st === S && S.prof ? { accion:'dni', dni:dni, prof:S.prof.id } : { accion:'dni', dni:dni });
       if(mio !== st._busqN) return;
-      r.dni = dni; st.pac = r; st.otroMail = false;
+      r.dni = dni; if(st === S && S.prof) r.prof_deuda = S.prof.id; st.pac = r; st.otroMail = false;
       if(r.existe) recordarPaciente(dni, r.nombre);
       st.render();
       var foco = $('#f-nombre') || $('#f-email') || $('#b-datos'); if(foco) foco.focus();
@@ -668,19 +673,14 @@ function htmlCobVideo(){
   return '<p style="font-size:13px;font-weight:700;color:var(--soft);text-transform:uppercase;letter-spacing:.05em;margin:0 0 6px">Cobertura</p>'
     + '<div class="tabs cob-v" style="margin-bottom:12px"><button type="button" class="tab'+(c==='particular'?' sel':'')+'" data-cobv="particular">💳 Particular</button><button type="button" class="tab'+(c==='osde'?' sel':'')+'" data-cobv="osde">🏥 OSDE</button></div>';
 }
+/* El link de la credencial de OSDE dura 8 h: se pide recién en el recordatorio, unas 3 h antes de la consulta (no al reservar) */
+var OSDE_PEDIR_H = 3;
 function htmlSenaOsde(n){
-  var hoy = horasHastaTurno() <= 7;   // el link de la credencial de OSDE dura unas horas
+  S.osdeLink = '';
   var x = '<section class="card" id="seccion-sena"><div class="paso"><div class="n">'+n+'</div><h2>Confirmar turno</h2></div>' + htmlCobVideo()
     + '<div class="montos"><div><small>Videoconsulta</small><div class="grande" style="font-size:22px">Por tu cobertura de OSDE</div><small>No abonás seña ni honorarios.</small></div></div>'
-    + '<div class="aviso azul" id="osde-box" style="margin:12px 0 0"><b>🔗 Link de tu credencial de OSDE</b>';
-  if(hoy){
-    x += '<ol style="margin:6px 0 8px 18px;padding:0;font-size:14px;line-height:1.5"><li>Entrá a la <b>app de OSDE</b> y abrí tu <b>credencial</b>.</li><li>Tocá <b>Compartir</b> → <b>Copiar</b>.</li><li>Volvé acá y pegalo (podés cerrar la app y volver: lo que cargaste queda guardado).</li></ol>'
-      + '<button type="button" class="btn sec osde-pegar-btn" data-pegar="f-osdev">📋 Pegar lo que copiaste</button>'
-      + '<textarea id="f-osdev" class="osde-pegar" rows="3" placeholder="…o mantené apretado acá y elegí «Pegar»" autocomplete="off" spellcheck="false">'+h(S.osdeLink||'')+'</textarea><p class="nota osde-ok" id="osdev-ok"></p>'
-      + '<p class="nota" style="margin:4px 0 0">Si ahora no podés, lo pegás más tarde desde el link de tu turno.</p>';
-  } else {
-    x += '<p style="font-size:14px;margin:6px 0 0">El link de OSDE dura unas horas, así que <b>te lo pedimos el día de la consulta</b>: un rato antes de conectarte lo pegás en el link de tu turno (te lo recordamos por mail).</p>';
-  }
+    + '<div class="aviso azul" id="osde-box" style="margin:12px 0 0"><b>🔗 Link de tu credencial de OSDE</b>'
+    + '<p style="font-size:14px;margin:6px 0 0">Ahora no hace falta: <b>tu horario queda reservado</b>. Unas <b>' + OSDE_PEDIR_H + ' horas antes de la consulta</b> te mandamos un mail para que nos pases el link de tu credencial (el de OSDE dura 8 horas, por eso no te lo pedimos antes).</p>';
   x += '</div>' + htmlAviso('video', S) + '<div class="falta" id="falta-sena"></div><div class="error" id="e-sena"></div><button class="btn" id="b-confirmar" disabled>Confirmar turno por OSDE</button>'
     + '<p class="nota centro">Al confirmar, el turno queda reservado y te llega un mail.</p>';
   return x + htmlCancelarSinPago('nuevo-turno') + '</section>';
@@ -690,13 +690,15 @@ function htmlSena(n){
   if(S.cob === 'osde') return htmlSenaOsde(n);
   var P = S.prof;
   var total = !!(S.total && P.saldo > 0);
-  var monto = total ? P.arancel : P.sena;
+  var deuda = (S.pac && S.pac.deuda && S.pac.deuda.monto > 0 && S.pac.prof_deuda === P.id) ? S.pac.deuda : null;   // saldo de una videoconsulta anterior
+  var monto = (total ? P.arancel : P.sena) + (deuda ? deuda.monto : 0);
   var x = '<section class="card" id="seccion-sena"><div class="paso"><div class="n">'+n+'</div><h2>'+(total ? 'Pago de la consulta' : 'Seña para confirmar')+'</h2></div>' + htmlCobVideo();
+  if(deuda) x += '<div class="aviso amber" style="margin:0 0 12px"><b>Saldo pendiente: '+pesos(deuda.monto)+'</b><br>Nos figura sin pagar el resto de tu videoconsulta del '+deuda.detalle.map(function(z){ return z.fecha.split('-').reverse().join('/'); }).join(' y del ')+'. Se suma a este pago.</div>';
   if(P.saldo > 0) x += '<p style="font-size:13px;font-weight:700;color:var(--soft);text-transform:uppercase;letter-spacing:.05em;margin:0 0 6px">¿Cuánto pagás ahora?</p>'
-    + '<div class="tabs" style="margin-bottom:12px"><button class="tab'+(total?'':' sel')+'" data-total="0">Solo la seña · '+pesos(P.sena)+'</button><button class="tab'+(total?' sel':'')+'" data-total="1">Todo · '+pesos(P.arancel)+'</button></div>';
+    + '<div class="tabs" style="margin-bottom:12px"><button class="tab'+(total?'':' sel')+'" data-total="0">Solo la seña · '+pesos(P.sena + (deuda ? deuda.monto : 0))+'</button><button class="tab'+(total?' sel':'')+'" data-total="1">Todo · '+pesos(P.arancel + (deuda ? deuda.monto : 0))+'</button></div>';
   x += total
-    ? '<div class="montos"><div><small>Consulta completa</small><div class="grande">'+pesos(P.arancel)+'</div></div><div style="text-align:right"><small>Seña '+pesos(P.sena)+' + saldo '+pesos(P.saldo)+'</small><small>No pagás nada después ✓</small></div></div>'
-    : '<div class="montos"><div><small>Seña ('+S.cfg.sena_pct+'%)</small><div class="grande">'+pesos(P.sena)+'</div></div>'
+    ? '<div class="montos"><div><small>Consulta completa'+(deuda ? ' + saldo pendiente' : '')+'</small><div class="grande">'+pesos(P.arancel + (deuda ? deuda.monto : 0))+'</div></div><div style="text-align:right"><small>Seña '+pesos(P.sena)+' + saldo '+pesos(P.saldo)+'</small><small>No pagás nada después ✓</small></div></div>'
+    : '<div class="montos"><div><small>Seña ('+S.cfg.sena_pct+'%)'+(deuda ? ' + saldo pendiente' : '')+'</small><div class="grande">'+pesos(P.sena + (deuda ? deuda.monto : 0))+'</div></div>'
       + '<div style="text-align:right"><small>Consulta '+pesos(P.arancel)+'</small><small>'+(P.saldo>0 ? 'El resto ('+pesos(P.saldo)+') cuando quieras, antes de la consulta' : '')+'</small></div></div>';
   x += '<p class="nota" style="font-size:13.5px;margin:-4px 0 12px">✓ Con '+(total ? 'el pago' : 'la seña')+' tu turno queda <b>confirmado</b>.</p>';
   var metodos = [];
@@ -710,7 +712,7 @@ function htmlSena(n){
   } else {
     x += '<p style="font-size:14.5px">Vas a pagar <b>'+pesos(monto)+'</b> con Mercado Pago (tarjeta, dinero en cuenta, etc.). Cuando se acredite, el turno se confirma solo y te llega un mail.</p>'
       + '<p class="nota">Tenés '+S.cfg.mp_vencimiento_min+' minutos para pagar; si no, el horario se libera.</p>'
-      + htmlAviso('video', S) + '<div class="falta" id="falta-sena"></div><div class="error" id="e-sena"></div><button class="btn mp" id="b-confirmar">'+(total ? 'Pagar '+pesos(monto)+' con Mercado Pago' : 'Pagar la seña con Mercado Pago')+'</button>';
+      + htmlAviso('video', S) + '<div class="falta" id="falta-sena"></div><div class="error" id="e-sena"></div><button class="btn mp" id="b-confirmar">'+(total || deuda ? 'Pagar '+pesos(monto)+' con Mercado Pago' : 'Pagar la seña con Mercado Pago')+'</button>';
   }
   return x + htmlCancelarSinPago('nuevo-turno') + '</section>';
 }
@@ -1855,10 +1857,11 @@ function pintarReserva(opt){
     + '<tr><td>Modalidad</td><td>Videollamada · Google Meet</td></tr>'
     + (d.osde ? '<tr><td>Cobertura</td><td><b>OSDE</b> · sin seña ni honorarios</td></tr>' : '<tr><td>Seña</td><td>'+pesos(d.sena)+(d.sena_pagada?' <span style="color:var(--green);font-weight:700">· pagada</span>':'')+'</td></tr>')
     + (d.saldo>0 ? '<tr><td>Saldo</td><td>'+pesos(d.saldo)+(d.saldo_pagado?' <span style="color:var(--green);font-weight:700">· pagado</span>':' <span style="color:var(--amber);font-weight:700">· pendiente</span>')+'</td></tr>' : '')
+    + (d.deuda ? '<tr><td>Saldo anterior</td><td>'+pesos(d.deuda.monto)+' <span class="nota">(videoconsulta del '+d.deuda.detalle.map(function(z){ return z.fecha.split('-').reverse().join('/'); }).join(' y del ')+')</span>'+(d.sena_pagada?' <span style="color:var(--green);font-weight:700">· pagado</span>':'')+'</td></tr>' : '')
     + '</table>';
   if(d.estado === 'pendiente_pago'){
     x += '<div class="aviso amber"><div class="cargando" style="padding:0"><div class="spin"></div><span>Estamos esperando la confirmación de Mercado Pago. Si ya pagaste, en unos segundos se actualiza solo.</span></div></div>'
-      + (d.pago.mp ? '<div class="error" id="e-mp"></div><button class="btn mp" id="b-mp-sena">Ir a pagar la seña</button>' : '');
+      + (d.pago.mp ? '<div class="error" id="e-mp"></div><button class="btn mp" id="b-mp-sena">Ir a pagar '+(d.deuda ? pesos(d.sena + d.deuda.monto) : 'la seña')+'</button>' : '');
   }
   if(d.estado === 'vencida') x += '<div class="aviso amber">No recibimos el pago a tiempo y el horario se liberó. Si pagaste y ves este mensaje, escribinos y lo resolvemos.</div><a class="btn" href="'+location.pathname+'">Sacar un turno nuevo</a>';
   if(d.estado === 'cancelada') x += (d.cancelo_paciente
@@ -1889,10 +1892,10 @@ function pintarReserva(opt){
 /* Videoconsulta por OSDE: el link de la credencial se pega cerca de la consulta (dura unas horas) */
 function htmlOsdeReserva(d){
   var o = d.osde || {}, vig = o.vence_at && new Date(o.vence_at) > new Date();
-  var hrs = (new Date(d.fecha + 'T' + d.hora + ':00-03:00').getTime() - Date.now()) / 3600e3, esHoy = hrs <= 10;
+  var hrs = (new Date(d.fecha + 'T' + d.hora + ':00-03:00').getTime() - Date.now()) / 3600e3, esHoy = hrs <= OSDE_PEDIR_H;
   var x = '<section class="card" id="sec-osde"><div class="paso"><div class="n">🏥</div><h2>Credencial de OSDE</h2></div>';
   if(vig) x += '<p style="font-size:14.5px;margin:0 0 8px">✓ Recibimos el link de tu credencial (vale hasta las <b>'+new Date(o.vence_at).toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit',hour12:false,timeZone:'America/Argentina/Buenos_Aires'})+' h</b>). Si se vence antes de la consulta, pegá uno nuevo.</p>';
-  else if(!esHoy) return x + '<p style="font-size:14.5px;margin:0">El día de la consulta, un rato antes de conectarte, volvé a esta página y pegá el link de tu <b>credencial de OSDE</b> (app de OSDE → credencial → <b>Compartir</b> → <b>Copiar</b>). Te lo recordamos por mail.</p></section>';
+  else if(!esHoy) return x + '<p style="font-size:14.5px;margin:0"><b>Tu horario está reservado.</b> Unas ' + OSDE_PEDIR_H + ' horas antes de la consulta te mandamos un mail para que pegues acá el link de tu <b>credencial de OSDE</b> (el link dura 8 horas, por eso no te lo pedimos antes).</p></section>';
   else x += '<div class="aviso amber" style="margin:0 0 10px"><b>Pegá el link de tu credencial de OSDE</b> antes de conectarte: app de OSDE → credencial → <b>Compartir</b> → <b>Copiar</b>, y volvé acá.</div>';
   return x + '<button type="button" class="btn sec osde-pegar-btn" data-pegar="f-osder">📋 Pegar lo que copiaste</button>'
     + '<textarea id="f-osder" class="osde-pegar" rows="3" placeholder="…o mantené apretado acá y elegí «Pegar»" autocomplete="off" spellcheck="false"></textarea><p class="nota osde-ok" id="osder-ok"></p>'
